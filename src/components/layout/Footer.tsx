@@ -1,7 +1,6 @@
 import Link from 'next/link'
 import type { FC } from 'react'
 import { OrnamentDivider } from '@/components/ui/OrnamentDivider'
-import { Logo } from '@/components/ui/Logo'
 
 const footerLinks = {
   Недвижимость: [
@@ -33,7 +32,20 @@ export const Footer: FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-10">
           {/* Brand column */}
           <div>
-            <Logo size={32} className="mb-4" />
+            <a href="/" className="flex items-center gap-2 mb-4">
+              <svg width="32" height="32" viewBox="0 0 512 512" fill="none" style={{ color: 'var(--n15-gold)' }}>
+                <circle cx="256" cy="256" r="240" stroke="currentColor" strokeWidth="8" />
+                <circle cx="256" cy="256" r="200" stroke="currentColor" strokeWidth="3" opacity="0.4" />
+                <circle cx="256" cy="256" r="24" fill="currentColor" />
+                {[0, 45, 90, 135, 180, 225, 270, 315].map((angle) => {
+                  const rad = (angle * Math.PI) / 180
+                  const cx = 256 + 220 * Math.cos(rad)
+                  const cy = 256 + 220 * Math.sin(rad)
+                  return <circle key={angle} cx={cx} cy={cy} r="8" fill="currentColor" />
+                })}
+              </svg>
+              <span className="text-lg tracking-[0.25em] font-bold text-[var(--n15-white)]" style={{ fontFamily: 'Inter, sans-serif' }}>N15</span>
+            </a>
             <p className="text-sm text-[var(--n15-muted)] leading-relaxed">
               Премиальное агентство недвижимости.
               <br />
