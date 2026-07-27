@@ -9,15 +9,26 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   href?: string
 }
 
-const variantClasses: Record<ButtonVariant, string> = {
-  primary:
-    'bg-[var(--n15-gold)] text-[var(--n15-black)] hover:bg-[var(--n15-gold-light)] font-medium',
-  secondary:
-    'bg-[var(--n15-charcoal)] text-[var(--n15-white)] border border-[var(--n15-gold)]/30 hover:border-[var(--n15-gold)]/60',
-  outline:
-    'bg-transparent text-[var(--n15-gold)] border border-[var(--n15-gold)]/40 hover:bg-[var(--n15-gold)]/8',
-  ghost:
-    'bg-transparent text-[var(--n15-silver)] hover:text-[var(--n15-white)] hover:bg-[var(--n15-charcoal)]',
+const variantStyles: Record<ButtonVariant, React.CSSProperties> = {
+  primary: {
+    backgroundColor: '#C8A44E',
+    color: '#0D0D0F',
+    fontWeight: 500,
+  },
+  secondary: {
+    backgroundColor: '#1A1A1E',
+    color: '#F5F5F7',
+    border: '1px solid rgba(200, 164, 78, 0.3)',
+  },
+  outline: {
+    backgroundColor: 'transparent',
+    color: '#C8A44E',
+    border: '1px solid rgba(200, 164, 78, 0.4)',
+  },
+  ghost: {
+    backgroundColor: 'transparent',
+    color: '#C8C8CC',
+  },
 }
 
 const sizeClasses: Record<ButtonSize, string> = {
@@ -26,33 +37,32 @@ const sizeClasses: Record<ButtonSize, string> = {
   lg: 'px-8 py-4 text-base',
 }
 
+const baseClasses =
+  'inline-flex items-center justify-center gap-2 rounded-sm transition-all duration-300 ease-out tracking-wider uppercase'
+
 export const Button: FC<ButtonProps> = ({
   variant = 'primary',
   size = 'md',
   className = '',
   children,
   href,
+  style,
   ...props
 }) => {
-  const classes = `
-    inline-flex items-center justify-center gap-2 rounded-sm
-    transition-all duration-300 ease-out
-    tracking-wider uppercase
-    ${variantClasses[variant]}
-    ${sizeClasses[size]}
-    ${className}
-  `.trim()
+  const mergedStyle = { ...variantStyles[variant], ...style }
+
+  const classes = `${baseClasses} btn-${variant} ${sizeClasses[size]} ${className}`.trim()
 
   if (href) {
     return (
-      <a href={href} className={classes}>
+      <a href={href} className={classes} style={mergedStyle}>
         {children}
       </a>
     )
   }
 
   return (
-    <button className={classes} {...props}>
+    <button className={classes} style={mergedStyle} {...props}>
       {children}
     </button>
   )

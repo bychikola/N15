@@ -85,6 +85,22 @@ a:hover {
   color: var(--n15-gold-light);
 }
 
+/* ── Button hover styles ───────────────────────── */
+
+.btn-primary:hover {
+  background-color: var(--n15-gold-light) !important;
+}
+.btn-secondary:hover {
+  border-color: rgba(200, 164, 78, 0.6) !important;
+}
+.btn-outline:hover {
+  background-color: rgba(200, 164, 78, 0.08) !important;
+}
+.btn-ghost:hover {
+  color: var(--n15-white) !important;
+  background-color: var(--n15-charcoal) !important;
+}
+
 /* ── N15 Utility Classes ───────────────────────── */
 
 .n15-container {

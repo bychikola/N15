@@ -11,15 +11,22 @@ export const Logo: FC<LogoProps> = ({ size = 40, showText = true, className = ''
   return (
     <Link href="/" className={`flex items-center gap-3 group ${className}`}>
       <div
-        className="flex-shrink-0 transition-transform duration-500 group-hover:scale-105"
-        style={{
-          width: size,
-          height: size,
-          backgroundColor: 'var(--n15-gold)',
-          WebkitMask: `url(/logo.png) no-repeat center / contain`,
-          mask: `url(/logo.png) no-repeat center / contain`,
-        }}
-      />
+        className="flex-shrink-0 overflow-hidden transition-transform duration-500 group-hover:scale-105"
+        style={{ width: size, height: size }}
+      >
+        <img
+          src="/logo.png"
+          alt="N15"
+          width={size}
+          height={size}
+          style={{
+            width: '100%',
+            height: '100%',
+            objectFit: 'contain',
+            filter: 'brightness(0) sepia(1) saturate(5) hue-rotate(350deg)',
+          }}
+        />
+      </div>
       {showText && (
         <span className="text-xl tracking-[0.3em] font-[family-name:var(--font-display)] text-[var(--n15-white)]">
           N15
