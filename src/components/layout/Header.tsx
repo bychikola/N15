@@ -2,6 +2,7 @@
 
 import { useState, type FC } from 'react'
 import Link from 'next/link'
+import { Logo } from '@/components/ui/Logo'
 
 const navLinks = [
   { href: '/catalog', label: 'Каталог' },
@@ -17,28 +18,8 @@ export const Header: FC = () => {
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-[var(--n15-black)]/80 backdrop-blur-md border-b border-[var(--n15-gold)]/10">
       <div className="n15-container flex items-center justify-between h-20">
-        {/* Logo — solar rosette + N15 */}
-        <Link href="/" className="flex items-center gap-3 group">
-          <svg
-            width="40"
-            height="40"
-            viewBox="0 0 40 40"
-            fill="none"
-            xmlns="http://www.w3.org/2000/svg"
-            className="transition-transform duration-500 group-hover:rotate-90"
-          >
-            <circle cx="20" cy="20" r="18" stroke="#C8A44E" strokeWidth="1" />
-            <circle cx="20" cy="20" r="12" stroke="#C8A44E" strokeWidth="0.5" />
-            <circle cx="20" cy="20" r="4" fill="#C8A44E" />
-            <line x1="20" y1="2" x2="20" y2="38" stroke="#C8A44E" strokeWidth="0.3" />
-            <line x1="2" y1="20" x2="38" y2="20" stroke="#C8A44E" strokeWidth="0.3" />
-            <line x1="7" y1="7" x2="33" y2="33" stroke="#C8A44E" strokeWidth="0.3" />
-            <line x1="33" y1="7" x2="7" y2="33" stroke="#C8A44E" strokeWidth="0.3" />
-          </svg>
-          <span className="text-xl tracking-[0.3em] font-[family-name:var(--font-display)] text-[var(--n15-white)]">
-            N15
-          </span>
-        </Link>
+        {/* Logo */}
+        <Logo />
 
         {/* Desktop nav */}
         <nav className="hidden lg:flex items-center gap-8">

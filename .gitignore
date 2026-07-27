@@ -54,3 +54,6 @@ n15-*.png
 catalog-*.png
 *-snapshot.md
 .playwright-mcp/
+
+# source images (use public/ for web)
+src/img/

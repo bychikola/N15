@@ -9,6 +9,9 @@ export const metadata: Metadata = {
   description:
     'Премиальное агентство недвижимости N15. Квартиры, дома, коммерческая недвижимость. Северная Осетия.',
   keywords: ['недвижимость', 'Владикавказ', 'Осетия', 'квартиры', 'дома', 'N15'],
+  icons: {
+    icon: '/logo.png',
+  },
   openGraph: {
     type: 'website',
     locale: 'ru_RU',

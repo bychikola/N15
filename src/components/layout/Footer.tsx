@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import type { FC } from 'react'
 import { OrnamentDivider } from '@/components/ui/OrnamentDivider'
+import { Logo } from '@/components/ui/Logo'
 
 const footerLinks = {
   Недвижимость: [
@@ -32,15 +33,7 @@ export const Footer: FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-10">
           {/* Brand column */}
           <div>
-            <div className="flex items-center gap-3 mb-4">
-              <svg width="32" height="32" viewBox="0 0 40 40" fill="none">
-                <circle cx="20" cy="20" r="18" stroke="#C8A44E" strokeWidth="1" />
-                <circle cx="20" cy="20" r="4" fill="#C8A44E" />
-              </svg>
-              <span className="text-lg tracking-[0.25em] font-[family-name:var(--font-display)] text-[var(--n15-white)]">
-                N15
-              </span>
-            </div>
+            <Logo size={32} className="mb-4" />
             <p className="text-sm text-[var(--n15-muted)] leading-relaxed">
               Премиальное агентство недвижимости.
               <br />
