@@ -82,7 +82,7 @@ export const HeroSection: FC = () => {
       </div>
 
       {/* Scroll indicator */}
-      <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-2 animate-bounce">
+      <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-1 animate-bounce">
         <span className="text-[10px] tracking-[0.3em] uppercase text-[var(--n15-gold)]/50">
           Листай вниз
         </span>
