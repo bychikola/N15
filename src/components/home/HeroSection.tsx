@@ -81,8 +81,18 @@ export const HeroSection: FC = () => {
         </div>
       </div>
 
+      {/* Scroll indicator */}
+      <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-2 animate-bounce">
+        <span className="text-[10px] tracking-[0.3em] uppercase text-[var(--n15-gold)]/50">
+          Листай вниз
+        </span>
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" className="text-[var(--n15-gold)]/40">
+          <path d="M3 7 L10 14 L17 7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </div>
+
       {/* Bottom fade */}
-      <div className="absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-[var(--n15-black)] to-transparent pointer-events-none" />
+      <div className="absolute bottom-0 left-0 right-0 h-40 bg-gradient-to-t from-[var(--n15-black)] to-transparent pointer-events-none" />
     </section>
   )
 }
