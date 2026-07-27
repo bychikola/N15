@@ -42,7 +42,7 @@ export const Logo: FC<LogoProps> = ({ size = 40, showText = true, className = ''
         <circle cx="256" cy="256" r="24" fill="currentColor" />
       </svg>
       {showText && (
-        <span className="text-xl tracking-[0.3em] font-[family-name:var(--font-display)] text-[var(--n15-white)]">
+        <span className="text-xl tracking-[0.25em] font-bold text-[var(--n15-white)]" style={{ fontFamily: 'Inter, sans-serif' }}>
           N15
         </span>
       )}
