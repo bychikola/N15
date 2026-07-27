@@ -1,0 +1,194 @@
+- generic [active] [ref=e1]:
+  - banner [ref=e2]:
+    - generic [ref=e3]:
+      - link "N15" [ref=e4] [cursor=pointer]:
+        - /url: /
+      - navigation [ref=e12]:
+        - link "Каталог" [ref=e13] [cursor=pointer]:
+          - /url: /catalog
+        - link "Услуги" [ref=e14] [cursor=pointer]:
+          - /url: /services
+        - link "Об агентстве" [ref=e15] [cursor=pointer]:
+          - /url: /about
+        - link "Блог" [ref=e16] [cursor=pointer]:
+          - /url: /blog
+        - link "Контакты" [ref=e17] [cursor=pointer]:
+          - /url: /contacts
+        - link "Личный кабинет" [ref=e18] [cursor=pointer]:
+          - /url: /lk
+  - main [ref=e19]:
+    - generic [ref=e21]:
+      - heading "Каталог объектов" [level=1] [ref=e22]
+      - paragraph [ref=e23]: Найдите свой идеальный дом или инвестицию. От квартир в центре Владикавказа до домов с видом на Кавказский хребет.
+    - generic [ref=e25]:
+      - generic [ref=e26]:
+        - generic [ref=e27]: "Сделка:"
+        - button "Все" [ref=e28] [cursor=pointer]
+        - button "Продажа" [ref=e29] [cursor=pointer]
+        - button "Аренда" [ref=e30] [cursor=pointer]
+        - generic [ref=e32]: "Тип:"
+        - button "Все" [ref=e33] [cursor=pointer]
+        - button "Квартира" [ref=e34] [cursor=pointer]
+        - button "Дом" [ref=e35] [cursor=pointer]
+        - button "Таунхаус" [ref=e36] [cursor=pointer]
+        - button "Коммерческая" [ref=e37] [cursor=pointer]
+        - button "Участок" [ref=e38] [cursor=pointer]
+      - paragraph [ref=e39]: "Найдено: 9 объектов"
+      - generic [ref=e40]:
+        - link "Premium Продажа Квартира Просторная квартира в центре ул. Коста Хетагурова, 42 8 500 000 ₽ 95 м² • 3 комн." [ref=e41] [cursor=pointer]:
+          - /url: /catalog/1
+          - generic [ref=e55]:
+            - generic [ref=e60]:
+              - generic [ref=e61]: Premium
+              - generic [ref=e62]: Продажа
+              - generic [ref=e63]: Квартира
+            - heading "Просторная квартира в центре" [level=3] [ref=e64]
+            - paragraph [ref=e65]: ул. Коста Хетагурова, 42
+            - generic [ref=e66]:
+              - generic [ref=e67]: 8 500 000 ₽
+              - generic [ref=e68]: 95 м² • 3 комн.
+        - link "Premium Продажа Дом Дом с видом на горы пос. Верхний Фиагдон 25 000 000 ₽ 180 м² • 5 комн." [ref=e69] [cursor=pointer]:
+          - /url: /catalog/2
+          - generic [ref=e83]:
+            - generic [ref=e88]:
+              - generic [ref=e89]: Premium
+              - generic [ref=e90]: Продажа
+              - generic [ref=e91]: Дом
+            - heading "Дом с видом на горы" [level=3] [ref=e92]
+            - paragraph [ref=e93]: пос. Верхний Фиагдон
+            - generic [ref=e94]:
+              - generic [ref=e95]: 25 000 000 ₽
+              - generic [ref=e96]: 180 м² • 5 комн.
+        - link "Продажа Квартира Студия в новостройке пр. Мира, 15 4 200 000 ₽ 38 м² • 1 комн." [ref=e97] [cursor=pointer]:
+          - /url: /catalog/3
+          - generic [ref=e99]:
+            - generic [ref=e104]:
+              - generic [ref=e105]: Продажа
+              - generic [ref=e106]: Квартира
+            - heading "Студия в новостройке" [level=3] [ref=e107]
+            - paragraph [ref=e108]: пр. Мира, 15
+            - generic [ref=e109]:
+              - generic [ref=e110]: 4 200 000 ₽
+              - generic [ref=e111]: 38 м² • 1 комн.
+        - link "Продажа Квартира 2-комнатная с ремонтом ул. Горького, 8 6 200 000 ₽ 65 м² • 2 комн." [ref=e112] [cursor=pointer]:
+          - /url: /catalog/4
+          - generic [ref=e114]:
+            - generic [ref=e119]:
+              - generic [ref=e120]: Продажа
+              - generic [ref=e121]: Квартира
+            - heading "2-комнатная с ремонтом" [level=3] [ref=e122]
+            - paragraph [ref=e123]: ул. Горького, 8
+            - generic [ref=e124]:
+              - generic [ref=e125]: 6 200 000 ₽
+              - generic [ref=e126]: 65 м² • 2 комн.
+        - link "Аренда Коммерческая Коммерческое помещение пр. Коста, 55 120 000 ₽/мес 120 м² • 1 комн." [ref=e127] [cursor=pointer]:
+          - /url: /catalog/5
+          - generic [ref=e129]:
+            - generic [ref=e134]:
+              - generic [ref=e135]: Аренда
+              - generic [ref=e136]: Коммерческая
+            - heading "Коммерческое помещение" [level=3] [ref=e137]
+            - paragraph [ref=e138]: пр. Коста, 55
+            - generic [ref=e139]:
+              - generic [ref=e140]: 120 000 ₽/мес
+              - generic [ref=e141]: 120 м² • 1 комн.
+        - link "Продажа Участок Участок в центре ул. Тамаева, 12 3 500 000 ₽ 600 м²" [ref=e142] [cursor=pointer]:
+          - /url: /catalog/6
+          - generic [ref=e144]:
+            - generic [ref=e149]:
+              - generic [ref=e150]: Продажа
+              - generic [ref=e151]: Участок
+            - heading "Участок в центре" [level=3] [ref=e152]
+            - paragraph [ref=e153]: ул. Тамаева, 12
+            - generic [ref=e154]:
+              - generic [ref=e155]: 3 500 000 ₽
+              - generic [ref=e156]: 600 м²
+        - link "Аренда Дом Коттедж в горах пос. Цей 80 000 ₽/мес 150 м² • 4 комн." [ref=e157] [cursor=pointer]:
+          - /url: /catalog/7
+          - generic [ref=e159]:
+            - generic [ref=e164]:
+              - generic [ref=e165]: Аренда
+              - generic [ref=e166]: Дом
+            - heading "Коттедж в горах" [level=3] [ref=e167]
+            - paragraph [ref=e168]: пос. Цей
+            - generic [ref=e169]:
+              - generic [ref=e170]: 80 000 ₽/мес
+              - generic [ref=e171]: 150 м² • 4 комн.
+        - link "Продажа Таунхаус Таунхаус у реки ул. Набережная, 3 12 000 000 ₽ 130 м² • 3 комн." [ref=e172] [cursor=pointer]:
+          - /url: /catalog/8
+          - generic [ref=e174]:
+            - generic [ref=e179]:
+              - generic [ref=e180]: Продажа
+              - generic [ref=e181]: Таунхаус
+            - heading "Таунхаус у реки" [level=3] [ref=e182]
+            - paragraph [ref=e183]: ул. Набережная, 3
+            - generic [ref=e184]:
+              - generic [ref=e185]: 12 000 000 ₽
+              - generic [ref=e186]: 130 м² • 3 комн.
+        - link "Аренда Коммерческая Офис в бизнес-центре пр. Коста, 70 65 000 ₽/мес 55 м² • 2 комн." [ref=e187] [cursor=pointer]:
+          - /url: /catalog/9
+          - generic [ref=e189]:
+            - generic [ref=e194]:
+              - generic [ref=e195]: Аренда
+              - generic [ref=e196]: Коммерческая
+            - heading "Офис в бизнес-центре" [level=3] [ref=e197]
+            - paragraph [ref=e198]: пр. Коста, 70
+            - generic [ref=e199]:
+              - generic [ref=e200]: 65 000 ₽/мес
+              - generic [ref=e201]: 55 м² • 2 комн.
+  - contentinfo [ref=e202]:
+    - generic [ref=e206]:
+      - generic [ref=e207]:
+        - generic [ref=e208]:
+          - generic [ref=e209]: N15
+          - paragraph [ref=e214]: Премиальное агентство недвижимости.Северная Осетия — Алания.
+        - generic [ref=e215]:
+          - heading "Недвижимость" [level=4] [ref=e216]
+          - list [ref=e217]:
+            - listitem [ref=e218]:
+              - link "Купить" [ref=e219] [cursor=pointer]:
+                - /url: /catalog?type=sale
+            - listitem [ref=e220]:
+              - link "Арендовать" [ref=e221] [cursor=pointer]:
+                - /url: /catalog?type=rent
+            - listitem [ref=e222]:
+              - link "Квартиры" [ref=e223] [cursor=pointer]:
+                - /url: /catalog?category=apartment
+            - listitem [ref=e224]:
+              - link "Дома" [ref=e225] [cursor=pointer]:
+                - /url: /catalog?category=house
+        - generic [ref=e226]:
+          - heading "Услуги" [level=4] [ref=e227]
+          - list [ref=e228]:
+            - listitem [ref=e229]:
+              - link "Покупка" [ref=e230] [cursor=pointer]:
+                - /url: /services/buy
+            - listitem [ref=e231]:
+              - link "Продажа" [ref=e232] [cursor=pointer]:
+                - /url: /services/sell
+            - listitem [ref=e233]:
+              - link "Ипотека" [ref=e234] [cursor=pointer]:
+                - /url: /services/mortgage
+            - listitem [ref=e235]:
+              - link "Аренда" [ref=e236] [cursor=pointer]:
+                - /url: /services/rent
+        - generic [ref=e237]:
+          - heading "Компания" [level=4] [ref=e238]
+          - list [ref=e239]:
+            - listitem [ref=e240]:
+              - link "Об агентстве" [ref=e241] [cursor=pointer]:
+                - /url: /about
+            - listitem [ref=e242]:
+              - link "Агенты" [ref=e243] [cursor=pointer]:
+                - /url: /about/agents
+            - listitem [ref=e244]:
+              - link "Блог" [ref=e245] [cursor=pointer]:
+                - /url: /blog
+            - listitem [ref=e246]:
+              - link "Контакты" [ref=e247] [cursor=pointer]:
+                - /url: /contacts
+      - generic [ref=e248]:
+        - paragraph [ref=e249]: © 2026 N15. Все права защищены.
+        - paragraph [ref=e250]: Сделано с осетинским характером • Владикавказ
+  - button "Open Next.js Dev Tools" [ref=e256] [cursor=pointer]
+  - alert [ref=e260]
