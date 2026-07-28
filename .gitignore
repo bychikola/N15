@@ -57,3 +57,6 @@ catalog-*.png
 
 # source images (use public/ for web)
 src/img/
+
+# temp files
+*.zip
