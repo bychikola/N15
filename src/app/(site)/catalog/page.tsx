@@ -17,6 +17,8 @@ interface ObjectItem {
   rooms?: number
   address?: { city?: string; street?: string; house?: string }
   isPremium?: boolean
+  primaryImage?: { url?: string; alt?: string }
+  images?: { url?: string }[]
 }
 
 const typeLabels: Record<string, string> = { sale: 'Продажа', rent: 'Аренда' }
@@ -45,11 +47,18 @@ function CatalogContent() {
 
   useEffect(() => {
     setLoading(true)
-    const params = new URLSearchParams({ limit: '50', depth: '1' })
+    const params = new URLSearchParams({ limit: '50', depth: '2' })
     if (activeType) params.set('where', JSON.stringify({ type: { equals: activeType } }))
     fetch(`/api/objects?${params}`, { credentials: 'include' })
       .then((r) => r.json())
-      .then((data) => setObjects(data.docs || []))
+      .then((data) => {
+        const docs = (data.docs || []).map((d: Record<string, unknown>) => ({
+          ...d,
+          primaryImage: typeof d.primaryImage === 'object' ? d.primaryImage : null,
+          images: Array.isArray(d.images) ? d.images.filter((i: unknown) => typeof i === 'object') : [],
+        }))
+        setObjects(docs)
+      })
       .catch(() => setObjects([]))
       .finally(() => setLoading(false))
   }, [activeType])
@@ -63,31 +72,24 @@ function CatalogContent() {
 
   return (
     <SectionWrapper variant="charcoal">
-      {/* Filters */}
       <div className="flex flex-wrap gap-2 mb-10 p-6 border border-[var(--n15-gold)]/10 bg-[var(--n15-black)]/30">
         <span className="text-[10px] tracking-[0.2em] uppercase text-[var(--n15-muted)] self-center mr-2">Сделка:</span>
         <button onClick={() => setActiveType('')} className={`${baseBtn} border ${activeType === '' ? btnActive : btnInactive}`}>Все</button>
         {['sale', 'rent'].map((t) => (
-          <button key={t} onClick={() => setActiveType(activeType === t ? '' : t)} className={`${baseBtn} border ${activeType === t ? btnActive : btnInactive}`}>
-            {typeLabels[t]}
-          </button>
+          <button key={t} onClick={() => setActiveType(activeType === t ? '' : t)} className={`${baseBtn} border ${activeType === t ? btnActive : btnInactive}`}>{typeLabels[t]}</button>
         ))}
         <div className="w-px bg-[var(--n15-gold)]/20 mx-3 self-stretch" />
         <span className="text-[10px] tracking-[0.2em] uppercase text-[var(--n15-muted)] self-center mr-2">Тип:</span>
         <button onClick={() => setActiveCategory('')} className={`${baseBtn} border ${activeCategory === '' ? btnActive : btnInactive}`}>Все</button>
         {Object.entries(categoryLabels).map(([k, v]) => (
-          <button key={k} onClick={() => setActiveCategory(activeCategory === k ? '' : k)} className={`${baseBtn} border ${activeCategory === k ? btnActive : btnInactive}`}>
-            {v}
-          </button>
+          <button key={k} onClick={() => setActiveCategory(activeCategory === k ? '' : k)} className={`${baseBtn} border ${activeCategory === k ? btnActive : btnInactive}`}>{v}</button>
         ))}
       </div>
 
       <p className="text-xs text-[var(--n15-muted)] mb-6">
         Найдено: <span className="text-[var(--n15-gold)]">{loading ? '...' : filtered.length}</span> объектов
         {(activeType || activeCategory) && (
-          <button onClick={() => { setActiveType(''); setActiveCategory('') }} className="ml-4 text-[var(--n15-gold)] hover:text-[var(--n15-gold-light)] underline">
-            Сбросить фильтры
-          </button>
+          <button onClick={() => { setActiveType(''); setActiveCategory('') }} className="ml-4 text-[var(--n15-gold)] underline">Сбросить фильтры</button>
         )}
       </p>
 
@@ -100,10 +102,14 @@ function CatalogContent() {
               <OrnamentBorder cornerOrnament={obj.isPremium}>
                 <div className="p-6 group">
                   <div className="aspect-[4/3] bg-[var(--n15-black)] mb-4 flex items-center justify-center overflow-hidden">
-                    <svg width="64" height="64" viewBox="0 0 64 64" fill="none" className="opacity-20 group-hover:opacity-40 transition-opacity">
-                      <rect x="4" y="12" width="56" height="44" stroke="#C8A44E" strokeWidth="1" />
-                      <path d="M4 36 L24 20 L40 32 L60 12" stroke="#C8A44E" strokeWidth="1" />
-                    </svg>
+                    {obj.primaryImage?.url ? (
+                      <img src={obj.primaryImage.url} alt={obj.title} className="w-full h-full object-cover" />
+                    ) : (
+                      <svg width="64" height="64" viewBox="0 0 64 64" fill="none" className="opacity-20 group-hover:opacity-40 transition-opacity">
+                        <rect x="4" y="12" width="56" height="44" stroke="#C8A44E" strokeWidth="1" />
+                        <path d="M4 36 L24 20 L40 32 L60 12" stroke="#C8A44E" strokeWidth="1" />
+                      </svg>
+                    )}
                   </div>
                   <div className="flex items-center gap-2 mb-2">
                     {obj.isPremium && <span className="text-[10px] tracking-[0.2em] uppercase text-[var(--n15-gold)] border border-[var(--n15-gold)]/30 px-2 py-0.5">Premium</span>}
@@ -124,7 +130,7 @@ function CatalogContent() {
       ) : (
         <div className="text-center py-20">
           <p className="text-[var(--n15-muted)] text-lg mb-4">Ничего не найдено</p>
-          <button onClick={() => { setActiveType(''); setActiveCategory('') }} className="text-sm text-[var(--n15-gold)] hover:text-[var(--n15-gold-light)] underline">Сбросить все фильтры</button>
+          <button onClick={() => { setActiveType(''); setActiveCategory('') }} className="text-sm text-[var(--n15-gold)] underline">Сбросить все фильтры</button>
         </div>
       )}
     </SectionWrapper>
