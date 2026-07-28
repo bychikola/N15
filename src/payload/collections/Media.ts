@@ -5,6 +5,12 @@ export const Media: CollectionConfig = {
   admin: {
     group: 'Система',
   },
+  access: {
+    read: () => true,
+    create: ({ req: { user } }) => !!user,
+    update: ({ req: { user } }) => !!user,
+    delete: ({ req: { user } }) => user?.role === 'admin',
+  },
   upload: {
     staticDir: 'media',
     imageSizes: [

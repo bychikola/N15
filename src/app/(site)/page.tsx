@@ -22,6 +22,8 @@ interface ObjectDoc {
   isPremium?: boolean
   isExclusive?: boolean
   slug?: string
+  primaryImage?: { id: number; url?: string; alt?: string; filename?: string }
+  images?: { id: number; url?: string; alt?: string }[]
 }
 
 interface BlogDoc {
@@ -106,11 +108,17 @@ export default async function Home() {
                 <OrnamentBorder cornerOrnament={obj.isPremium}>
                   <div className="p-6 group">
                     <div className="aspect-[4/3] bg-[var(--n15-black)] mb-4 flex items-center justify-center overflow-hidden">
-                      <svg width="64" height="64" viewBox="0 0 64 64" fill="none" className="opacity-20 group-hover:opacity-40 transition-opacity duration-500">
-                        <rect x="4" y="12" width="56" height="44" stroke="#C8A44E" strokeWidth="1" />
-                        <path d="M4 36 L24 20 L40 32 L60 12" stroke="#C8A44E" strokeWidth="1" />
-                        <circle cx="44" cy="22" r="4" stroke="#C8A44E" strokeWidth="1" />
-                      </svg>
+                      {obj.primaryImage?.url ? (
+                        <img src={obj.primaryImage.url} alt={obj.primaryImage.alt || obj.title} className="w-full h-full object-cover" />
+                      ) : obj.images?.[0]?.url ? (
+                        <img src={obj.images[0].url} alt={obj.images[0].alt || obj.title} className="w-full h-full object-cover" />
+                      ) : (
+                        <svg width="64" height="64" viewBox="0 0 64 64" fill="none" className="opacity-20 group-hover:opacity-40 transition-opacity">
+                          <rect x="4" y="12" width="56" height="44" stroke="#C8A44E" strokeWidth="1" />
+                          <path d="M4 36 L24 20 L40 32 L60 12" stroke="#C8A44E" strokeWidth="1" />
+                          <circle cx="44" cy="22" r="4" stroke="#C8A44E" strokeWidth="1" />
+                        </svg>
+                      )}
                     </div>
 
                     {obj.isPremium && (

@@ -7,6 +7,12 @@ export const Blog: CollectionConfig = {
     group: 'Контент',
     defaultColumns: ['title', 'category', 'publishedAt', 'isFeatured'],
   },
+  access: {
+    read: () => true,
+    create: ({ req: { user } }) => !!user,
+    update: ({ req: { user } }) => !!user,
+    delete: ({ req: { user } }) => user?.role === 'admin',
+  },
   fields: [
     {
       name: 'title',

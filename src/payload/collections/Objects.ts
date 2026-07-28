@@ -7,6 +7,12 @@ export const Objects: CollectionConfig = {
     group: 'Недвижимость',
     defaultColumns: ['title', 'type', 'category', 'price', 'status'],
   },
+  access: {
+    read: () => true,
+    create: ({ req: { user } }) => !!user,
+    update: ({ req: { user } }) => !!user,
+    delete: ({ req: { user } }) => user?.role === 'admin',
+  },
   fields: [
     {
       name: 'title',

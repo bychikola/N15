@@ -61,7 +61,7 @@ export default function AdminAddPage() {
       }
       if (primaryImageId) objectData.primaryImage = primaryImageId
 
-      const res = await fetch('/api/objects', {
+      const res = await fetch('/api/create-object', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(objectData),
