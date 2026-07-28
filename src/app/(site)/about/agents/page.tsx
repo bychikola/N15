@@ -5,6 +5,8 @@ import { Footer } from '@/components/layout/Footer'
 import { SectionWrapper } from '@/components/ui/SectionWrapper'
 import { Button } from '@/components/ui/Button'
 
+export const dynamic = 'force-dynamic'
+
 export default async function AgentsPage() {
   const payload = await getPayload({ config })
   const { docs: agents } = await payload.find({

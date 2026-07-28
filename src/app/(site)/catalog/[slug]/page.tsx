@@ -3,6 +3,8 @@ import config from '@payload-config'
 import { notFound } from 'next/navigation'
 import { Header } from '@/components/layout/Header'
 import { Footer } from '@/components/layout/Footer'
+
+export const dynamic = 'force-dynamic'
 import { SectionWrapper } from '@/components/ui/SectionWrapper'
 import { OrnamentDivider } from '@/components/ui/OrnamentDivider'
 import { OrnamentBorder } from '@/components/ui/OrnamentBorder'
