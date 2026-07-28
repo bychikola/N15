@@ -1,0 +1,74 @@
+- generic [active] [ref=f1e1]:
+  - generic [ref=f1e2]:
+    - button "Close Menu" [ref=f1e4] [cursor=pointer]:
+      - generic "Collapse" [ref=f1e6]
+    - generic [ref=f1e9]:
+      - complementary [ref=f1e10]:
+        - navigation [ref=f1e12]:
+          - generic [ref=f1e13]:
+            - button "Система" [ref=f1e14] [cursor=pointer]
+            - generic [ref=f1e21]:
+              - link "Users" [ref=f1e22] [cursor=pointer]:
+                - /url: /admin/collections/users
+              - link "Media" [ref=f1e24] [cursor=pointer]:
+                - /url: /admin/collections/media
+              - link "Site Settings" [ref=f1e27] [cursor=pointer]:
+                - /url: /admin/globals/site-settings
+          - generic [ref=f1e29]:
+            - button "Недвижимость" [ref=f1e30] [cursor=pointer]
+            - link "Objects" [ref=f1e38] [cursor=pointer]:
+              - /url: /admin/collections/objects
+          - generic [ref=f1e40]:
+            - button "Агентство" [ref=f1e41] [cursor=pointer]
+            - generic [ref=f1e48]:
+              - link "Agents" [ref=f1e49] [cursor=pointer]:
+                - /url: /admin/collections/agents
+              - link "Applications" [ref=f1e51] [cursor=pointer]:
+                - /url: /admin/collections/applications
+          - generic [ref=f1e53]:
+            - button "Контент" [ref=f1e54] [cursor=pointer]
+            - generic [ref=f1e61]:
+              - link "Blogs" [ref=f1e62] [cursor=pointer]:
+                - /url: /admin/collections/blog
+              - link "Pages" [ref=f1e64] [cursor=pointer]:
+                - /url: /admin/collections/pages
+          - link "Log out" [ref=f1e67] [cursor=pointer]:
+            - /url: /admin/logout
+      - generic [ref=f1e72]:
+        - banner [ref=f1e73]:
+          - generic [ref=f1e76]:
+            - navigation [ref=f1e122]:
+              - link [ref=f1e123] [cursor=pointer]:
+                - /url: /admin
+                - generic "Dashboard" [ref=f1e124]
+              - generic [ref=f1e128]: /
+              - link "Media" [ref=f1e129] [cursor=pointer]:
+                - /url: /admin/collections/media
+              - generic [ref=f1e131]: /
+              - generic [ref=f1e132]: Create New
+            - link "Account" [ref=f1e84] [cursor=pointer]:
+              - /url: /admin/account
+              - img "yas" [ref=f1e85]
+        - heading "[Untitled]" [level=1] [ref=f1e88]
+        - main [ref=f1e89]:
+          - generic [ref=f1e90]:
+            - generic [ref=f1e92]:
+              - list [ref=f1e94]:
+                - listitem [ref=f1e95]:
+                  - paragraph [ref=f1e96]: Creating new Media
+              - button "Save" [ref=f1e100] [cursor=pointer]
+            - generic [ref=f1e106]:
+              - generic [ref=f1e108]:
+                - generic [ref=f1e139]:
+                  - textbox "logo.png" [ref=f1e140]
+                  - button "Edit Image" [ref=f1e142] [cursor=pointer]
+                - button [ref=f1e143] [cursor=pointer]
+              - generic [ref=f1e117]:
+                - generic [ref=f1e118]:
+                  - text: Alt-текст
+                  - generic [ref=f1e119]: "*"
+                - textbox "Alt-текст *" [ref=f1e121]
+        - status [ref=f1e133]
+  - status [ref=f1e134]
+  - region "Notifications alt+T"
+  - alert [ref=f1e135]

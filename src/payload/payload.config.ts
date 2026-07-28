@@ -1,6 +1,7 @@
 import { buildConfig } from 'payload'
 import { sqliteAdapter } from '@payloadcms/db-sqlite'
 import { lexicalEditor } from '@payloadcms/richtext-lexical'
+import sharp from 'sharp'
 
 import { Objects } from './collections/Objects'
 import { Agents } from './collections/Agents'
@@ -13,7 +14,7 @@ import { SiteSettings } from './globals/SiteSettings'
 
 export default buildConfig({
   secret: process.env.PAYLOAD_SECRET || 'n15-dev-secret-change-in-production',
-  serverURL: process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3000',
+  serverURL: process.env.NEXT_PUBLIC_SERVER_URL || process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3001',
   admin: {
     user: Users.slug,
     importMap: {
@@ -31,4 +32,5 @@ export default buildConfig({
   typescript: {
     outputFile: './src/payload-types.ts',
   },
+  sharp,
 })
