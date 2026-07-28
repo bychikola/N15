@@ -3,13 +3,13 @@
 import config from '@payload-config'
 import '@payloadcms/next/css'
 import type { ServerFunctionClient } from 'payload'
-import { handleServerFunctions, metadata, RootLayout } from '@payloadcms/next/layouts'
+import { handleServerFunctions, metadata as payloadMetadata, RootLayout } from '@payloadcms/next/layouts'
 import React from 'react'
 
 import { importMap } from './admin/importMap.js'
 import './custom.css'
 
-export { metadata }
+export { payloadMetadata as metadata }
 
 type Args = {
   children: React.ReactNode

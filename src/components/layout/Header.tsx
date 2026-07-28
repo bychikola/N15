@@ -43,7 +43,7 @@ export const Header: FC = () => {
             })}
             <circle cx="256" cy="256" r="24" fill="currentColor" />
           </svg>
-          <span className="text-xl tracking-[0.3em] font-bold text-[var(--n15-white)]" style={{ fontFamily: 'Inter, sans-serif' }}>
+          <span className="text-xl tracking-[0.2em] text-[var(--n15-white)]" style={{ fontFamily: "'New Standard', serif" }}>
             N15
           </span>
         </Link>

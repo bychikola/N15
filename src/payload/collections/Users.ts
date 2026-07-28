@@ -7,6 +7,12 @@ export const Users: CollectionConfig = {
     useAsTitle: 'email',
     group: 'Система',
   },
+  access: {
+    create: () => true,       // Anyone can register
+    read: ({ req: { user } }) => !!user,  // Only logged-in users can read
+    update: ({ req: { user } }) => !!user,
+    delete: ({ req: { user } }) => user?.role === 'admin',
+  },
   fields: [
     {
       name: 'name',

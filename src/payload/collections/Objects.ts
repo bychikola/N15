@@ -15,6 +15,30 @@ export const Objects: CollectionConfig = {
       required: true,
     },
     {
+      name: 'slug',
+      type: 'text',
+      label: 'URL-путь',
+      unique: true,
+      admin: {
+        position: 'sidebar',
+      },
+      hooks: {
+        beforeValidate: [
+          ({ data }) => {
+            if (data?.slug) return data.slug
+            if (data?.title) {
+              return data.title
+                .toLowerCase()
+                .replace(/[^a-zа-яё0-9\s]/g, '')
+                .replace(/\s+/g, '-')
+                .replace(/-+/g, '-')
+                .replace(/^-|-$/g, '')
+            }
+          },
+        ],
+      },
+    },
+    {
       name: 'status',
       type: 'select',
       label: 'Статус',

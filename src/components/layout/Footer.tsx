@@ -44,7 +44,7 @@ export const Footer: FC = () => {
                   return <circle key={angle} cx={cx} cy={cy} r="8" fill="currentColor" />
                 })}
               </svg>
-              <span className="text-lg tracking-[0.25em] font-bold text-[var(--n15-white)]" style={{ fontFamily: 'Inter, sans-serif' }}>N15</span>
+              <span className="text-lg tracking-[0.2em] text-[var(--n15-white)]" style={{ fontFamily: "'New Standard', serif" }}>N15</span>
             </a>
             <p className="text-sm text-[var(--n15-muted)] leading-relaxed">
               Премиальное агентство недвижимости.
