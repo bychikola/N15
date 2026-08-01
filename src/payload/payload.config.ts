@@ -14,7 +14,7 @@ import { SiteSettings } from './globals/SiteSettings'
 
 export default buildConfig({
   secret: process.env.PAYLOAD_SECRET || 'n15-dev-secret-change-in-production',
-  serverURL: process.env.NEXT_PUBLIC_SERVER_URL || process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3001',
+  serverURL: process.env.NEXT_PUBLIC_SERVER_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000'),
   admin: {
     user: Users.slug,
     importMap: {

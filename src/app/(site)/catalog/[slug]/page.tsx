@@ -9,6 +9,7 @@ import { SectionWrapper } from '@/components/ui/SectionWrapper'
 import { OrnamentDivider } from '@/components/ui/OrnamentDivider'
 import { OrnamentBorder } from '@/components/ui/OrnamentBorder'
 import { Button } from '@/components/ui/Button'
+import { ImageSlider } from '@/components/ui/ImageSlider'
 
 interface PageProps {
   params: Promise<{ slug: string }>
@@ -47,22 +48,31 @@ export default async function ObjectPage({ params }: PageProps) {
     features?: { feature?: string }[]
     isPremium?: boolean; isExclusive?: boolean
     agent?: { id: number; name?: string }
+    primaryImage?: { id: number; url?: string; alt?: string; filename?: string }
+    images?: { id: number; url?: string; alt?: string; filename?: string }[]
   }
 
   const features = obj.features?.map((f: { feature?: string }) => f.feature).filter(Boolean) || []
   const pricePerMeter = obj.area ? Math.round(obj.price / obj.area) : null
+  const gallery = obj.images?.filter((i) => i.url) || []
+
+  // Merge all images for slider: primaryImage first, then the rest
+  const allSlides: { url: string; alt: string }[] = []
+  if (obj.primaryImage?.url) allSlides.push({ url: obj.primaryImage.url, alt: obj.primaryImage.alt || obj.title })
+  for (const img of gallery) {
+    if (!allSlides.some((s) => s.url === img.url)) {
+      allSlides.push({ url: img.url!, alt: img.alt || obj.title })
+    }
+  }
 
   return (
     <>
       <Header />
       <main className="pt-20">
         <SectionWrapper variant="dark">
-          <div className="aspect-[21/9] bg-[var(--n15-charcoal)] flex items-center justify-center mb-8 border border-[var(--n15-gold)]/10">
-            <svg width="80" height="80" viewBox="0 0 80 80" fill="none" className="opacity-20">
-              <rect x="6" y="16" width="68" height="54" stroke="#C8A44E" strokeWidth="1" />
-              <path d="M6 46 L30 26 L50 40 L74 16" stroke="#C8A44E" strokeWidth="1" />
-              <circle cx="54" cy="28" r="5" stroke="#C8A44E" strokeWidth="1" />
-            </svg>
+          {/* Image slider */}
+          <div className="mb-8">
+            <ImageSlider slides={allSlides} />
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
@@ -115,6 +125,7 @@ export default async function ObjectPage({ params }: PageProps) {
                   </div>
                 </div>
               )}
+
             </div>
 
             <div className="lg:col-span-1">

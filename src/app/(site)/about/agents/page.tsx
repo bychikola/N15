@@ -16,10 +16,15 @@ export default async function AgentsPage() {
     depth: 1,
   })
 
-  const agentsList = agents as unknown as {
+  const agentsList = (agents as unknown as {
     id: number; name: string; position?: string; phone?: string
+    email?: string; telegram?: string; whatsapp?: string
     objectsSold?: number; experience?: number
-  }[]
+    photo?: { url?: string; alt?: string }
+  }[]).map((a) => ({
+    ...a,
+    initials: a.name.split(' ').map((n) => n[0]).join('').slice(0, 2),
+  }))
 
   return (
     <>
@@ -32,12 +37,16 @@ export default async function AgentsPage() {
 
         <SectionWrapper variant="charcoal">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {agentsList.map((agent) => (
+            {agentsList.filter((a) => a.name && a.name.trim()).map((agent) => (
               <div key={agent.id} className="group p-6 border border-[var(--n15-gold)]/10 hover:border-[var(--n15-gold)]/30 transition-all duration-300">
-                <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-[var(--n15-charcoal)] border border-[var(--n15-gold)]/20 flex items-center justify-center group-hover:border-[var(--n15-gold)]/50 transition-colors">
-                  <span className="text-2xl font-[family-name:var(--font-display)] text-[var(--n15-gold)]">
-                    {agent.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
-                  </span>
+                <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-[var(--n15-charcoal)] border border-[var(--n15-gold)]/20 flex items-center justify-center group-hover:border-[var(--n15-gold)]/50 transition-colors overflow-hidden">
+                  {agent.photo?.url ? (
+                    <img src={agent.photo.url} alt={agent.photo.alt || agent.name} className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="text-2xl font-[family-name:var(--font-display)] text-[var(--n15-gold)]">
+                      {agent.initials}
+                    </span>
+                  )}
                 </div>
                 <h3 className="text-sm text-[var(--n15-white)] text-center mb-1">{agent.name}</h3>
                 {agent.position && <p className="text-xs text-[var(--n15-muted)] text-center mb-3">{agent.position}</p>}
@@ -45,7 +54,23 @@ export default async function AgentsPage() {
                   {agent.objectsSold != null && <span>{agent.objectsSold} сделок</span>}
                   {agent.experience != null && <span>{agent.experience} лет</span>}
                 </div>
-                {agent.phone && <Button variant="outline" size="sm" className="w-full text-xs">{agent.phone}</Button>}
+                <div className="flex flex-col gap-2">
+                  {agent.phone && (
+                    <a href={`tel:${agent.phone.replace(/\D/g, '')}`} className="block text-center">
+                      <Button variant="outline" size="sm" className="w-full text-xs">{agent.phone}</Button>
+                    </a>
+                  )}
+                  {agent.whatsapp && (
+                    <a href={`https://wa.me/${agent.whatsapp.replace(/\D/g, '')}`} target="_blank" rel="noreferrer" className="block text-center">
+                      <Button variant="ghost" size="sm" className="w-full text-xs">WhatsApp</Button>
+                    </a>
+                  )}
+                  {agent.telegram && (
+                    <a href={`https://t.me/${agent.telegram.replace('@', '')}`} target="_blank" rel="noreferrer" className="block text-center">
+                      <Button variant="ghost" size="sm" className="w-full text-xs">Telegram</Button>
+                    </a>
+                  )}
+                </div>
               </div>
             ))}
           </div>
