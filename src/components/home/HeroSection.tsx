@@ -1,7 +1,8 @@
 import type { FC } from 'react'
 import { Button } from '@/components/ui/Button'
+import type { Dict } from '@/i18n/dictionaries'
 
-export const HeroSection: FC = () => {
+export const HeroSection: FC<{ lang: string; t: Dict }> = ({ lang, t }) => {
   return (
     <section className="relative min-h-screen flex items-center justify-center overflow-hidden bg-[var(--n15-black)]">
       {/* Solar rosette watermark */}
@@ -41,33 +42,32 @@ export const HeroSection: FC = () => {
       {/* Content */}
       <div className="relative z-10 text-center px-4 max-w-4xl mx-auto">
         <h1 className="text-4xl sm:text-5xl md:text-7xl font-[family-name:var(--font-display)] text-[var(--n15-white)] mb-6 leading-tight tracking-tight">
-          Ваш дом —{' '}
+          {t.hero.title1} —{' '}
           <span className="text-[var(--n15-gold)]">
-            наша забота
+            {t.hero.title2}
           </span>
         </h1>
 
         <p className="text-lg sm:text-xl text-[var(--n15-muted)] max-w-2xl mx-auto mb-10 leading-relaxed font-light">
-          N15 — премиальное агентство недвижимости. Мы находим исключительные
-          объекты и сопровождаем сделку от поиска до ключей.
+          {t.hero.subtitle}
         </p>
 
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
-          <Button variant="primary" size="lg" href="/catalog">
-            Смотреть объекты
+          <Button variant="primary" size="lg" href={`/${lang}/catalog`}>
+            {t.hero.ctaObjects}
           </Button>
-          <Button variant="outline" size="lg" href="/contacts">
-            Связаться с нами
+          <Button variant="outline" size="lg" href={`/${lang}/contacts`}>
+            {t.hero.ctaContacts}
           </Button>
         </div>
 
         {/* Stats row */}
         <div className="mt-20 grid grid-cols-2 md:grid-cols-4 gap-8">
           {[
-            { value: '12+', label: 'Лет опыта' },
-            { value: '850+', label: 'Сделок' },
-            { value: '200+', label: 'Объектов' },
-            { value: '98%', label: 'Довольных клиентов' },
+            { value: '12+', label: t.hero.statYears },
+            { value: '850+', label: t.hero.statDeals },
+            { value: '200+', label: t.hero.statObjects },
+            { value: '98%', label: t.hero.statClients },
           ].map((stat) => (
             <div key={stat.label} className="text-center">
               <div className="text-3xl md:text-4xl font-[family-name:var(--font-display)] text-[var(--n15-gold)] mb-1">
@@ -84,7 +84,7 @@ export const HeroSection: FC = () => {
       {/* Scroll indicator */}
       <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-1 animate-bounce">
         <span className="text-[10px] tracking-[0.3em] uppercase text-[var(--n15-gold)]/50">
-          Листай вниз
+          {t.hero.scroll}
         </span>
         <svg width="20" height="20" viewBox="0 0 20 20" fill="none" className="text-[var(--n15-gold)]/40">
           <path d="M3 7 L10 14 L17 7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />

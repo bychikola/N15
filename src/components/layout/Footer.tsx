@@ -1,29 +1,34 @@
+'use client'
+
 import Link from 'next/link'
 import type { FC } from 'react'
 import { OrnamentDivider } from '@/components/ui/OrnamentDivider'
-
-const footerLinks = {
-  Недвижимость: [
-    { href: '/catalog?type=sale', label: 'Купить' },
-    { href: '/catalog?type=rent', label: 'Арендовать' },
-    { href: '/catalog?category=apartment', label: 'Квартиры' },
-    { href: '/catalog?category=house', label: 'Дома' },
-  ],
-  Услуги: [
-    { href: '/services/buy', label: 'Покупка' },
-    { href: '/services/sell', label: 'Продажа' },
-    { href: '/services/mortgage', label: 'Ипотека' },
-    { href: '/services/rent', label: 'Аренда' },
-  ],
-  Компания: [
-    { href: '/about', label: 'Об агентстве' },
-    { href: '/about/agents', label: 'Агенты' },
-    { href: '/blog', label: 'Блог' },
-    { href: '/contacts', label: 'Контакты' },
-  ],
-}
+import { useI18n } from '@/i18n/i18n-provider'
 
 export const Footer: FC = () => {
+  const { lang, t } = useI18n()
+
+  const footerLinks = {
+    [t.footer.realty]: [
+      { href: `/${lang}/catalog?type=sale`, label: t.footer.buy },
+      { href: `/${lang}/catalog?type=rent`, label: t.footer.rent },
+      { href: `/${lang}/catalog?category=apartment`, label: t.footer.flats },
+      { href: `/${lang}/catalog?category=house`, label: t.footer.houses },
+    ],
+    [t.footer.services]: [
+      { href: `/${lang}/services/buy`, label: t.footer.purchase },
+      { href: `/${lang}/services/sell`, label: t.footer.sale },
+      { href: `/${lang}/services/mortgage`, label: t.footer.mortgage },
+      { href: `/${lang}/services/rent`, label: t.footer.rentService },
+    ],
+    [t.footer.company]: [
+      { href: `/${lang}/about`, label: t.footer.about },
+      { href: `/${lang}/about/agents`, label: t.footer.agents },
+      { href: `/${lang}/blog`, label: t.footer.blog },
+      { href: `/${lang}/contacts`, label: t.footer.contacts },
+    ],
+  }
+
   return (
     <footer className="bg-[var(--n15-charcoal)] border-t border-[var(--n15-gold)]/10">
       <OrnamentDivider variant="woven" />
@@ -32,7 +37,7 @@ export const Footer: FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-10">
           {/* Brand column */}
           <div>
-            <a href="/" className="flex items-center gap-2 mb-4">
+            <a href={`/${lang}`} className="flex items-center gap-2 mb-4">
               <svg width="32" height="32" viewBox="0 0 512 512" fill="none" style={{ color: 'var(--n15-gold)' }}>
                 <circle cx="256" cy="256" r="240" stroke="currentColor" strokeWidth="8" />
                 <circle cx="256" cy="256" r="200" stroke="currentColor" strokeWidth="3" opacity="0.4" />
@@ -47,9 +52,9 @@ export const Footer: FC = () => {
               <span className="text-lg tracking-[0.2em] text-[var(--n15-white)]" style={{ fontFamily: "'New Standard', serif" }}>N15</span>
             </a>
             <p className="text-sm text-[var(--n15-muted)] leading-relaxed">
-              Премиальное агентство недвижимости.
+              {t.footer.brand1}
               <br />
-              Северная Осетия — Алания.
+              {t.footer.brand2}
             </p>
           </div>
 
@@ -78,10 +83,10 @@ export const Footer: FC = () => {
         {/* Bottom bar */}
         <div className="mt-12 pt-6 border-t border-[var(--n15-gold)]/10 flex flex-col sm:flex-row items-center justify-between gap-4">
           <p className="text-xs text-[var(--n15-muted)]">
-            &copy; {new Date().getFullYear()} N15. Все права защищены.
+            &copy; {new Date().getFullYear()} N15. {t.footer.rights}
           </p>
           <p className="text-xs text-[var(--n15-muted)]">
-            Сделано с осетинским характером &bull; Владикавказ
+            {t.footer.made}
           </p>
         </div>
       </div>

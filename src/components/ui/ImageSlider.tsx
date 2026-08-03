@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useCallback, useEffect, useRef, type FC } from 'react'
+import { useI18n } from '@/i18n/i18n-provider'
 
 interface Slide {
   url: string
@@ -12,6 +13,7 @@ interface Props {
 }
 
 export const ImageSlider: FC<Props> = ({ slides }) => {
+  const { t } = useI18n()
   const [current, setCurrent] = useState(0)
   const [lightbox, setLightbox] = useState(false)
   const [lightboxIdx, setLightboxIdx] = useState(0)
@@ -100,7 +102,7 @@ export const ImageSlider: FC<Props> = ({ slides }) => {
         <button
           onClick={() => openLightbox(current)}
           className="w-full h-full cursor-pointer"
-          aria-label="Открыть фото на весь экран"
+          aria-label={t.slider.openFullscreen}
         >
           <img
             src={slides[current].url}
@@ -115,7 +117,7 @@ export const ImageSlider: FC<Props> = ({ slides }) => {
             <button
               onClick={(e) => { e.stopPropagation(); goTo(-1) }}
               className="absolute left-3 top-1/2 -translate-y-1/2 w-10 h-10 flex items-center justify-center bg-[var(--n15-black)]/70 hover:bg-[var(--n15-black)]/90 text-[var(--n15-gold)] border border-[var(--n15-gold)]/20 hover:border-[var(--n15-gold)]/50 transition-all opacity-0 group-hover:opacity-100 z-10"
-              aria-label="Предыдущее фото"
+              aria-label={t.slider.prev}
             >
               <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
                 <path d="M12 4 L6 10 L12 16" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
@@ -124,7 +126,7 @@ export const ImageSlider: FC<Props> = ({ slides }) => {
             <button
               onClick={(e) => { e.stopPropagation(); goTo(1) }}
               className="absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 flex items-center justify-center bg-[var(--n15-black)]/70 hover:bg-[var(--n15-black)]/90 text-[var(--n15-gold)] border border-[var(--n15-gold)]/20 hover:border-[var(--n15-gold)]/50 transition-all opacity-0 group-hover:opacity-100 z-10"
-              aria-label="Следующее фото"
+              aria-label={t.slider.next}
             >
               <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
                 <path d="M8 4 L14 10 L8 16" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
@@ -175,7 +177,7 @@ export const ImageSlider: FC<Props> = ({ slides }) => {
             <button
               onClick={closeLightbox}
               className="w-10 h-10 flex items-center justify-center text-[var(--n15-gold)] hover:text-[var(--n15-white)] transition-colors border border-[var(--n15-gold)]/20 hover:border-[var(--n15-gold)]/50"
-              aria-label="Закрыть"
+              aria-label={t.slider.close}
             >
               <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
                 <line x1="3" y1="3" x2="15" y2="15" stroke="currentColor" strokeWidth="1.5" />
@@ -222,7 +224,7 @@ export const ImageSlider: FC<Props> = ({ slides }) => {
               <button
                 onClick={(e) => { e.stopPropagation(); lightboxPrev() }}
                 className="absolute left-3 top-1/2 -translate-y-1/2 w-12 h-12 flex items-center justify-center bg-[var(--n15-black)]/50 hover:bg-[var(--n15-black)]/80 text-[var(--n15-gold)] border border-[var(--n15-gold)]/20 hover:border-[var(--n15-gold)]/50 transition-all"
-                aria-label="Предыдущее фото"
+                aria-label={t.slider.prev}
               >
                 <svg width="22" height="22" viewBox="0 0 20 20" fill="none">
                   <path d="M12 4 L6 10 L12 16" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
@@ -231,7 +233,7 @@ export const ImageSlider: FC<Props> = ({ slides }) => {
               <button
                 onClick={(e) => { e.stopPropagation(); lightboxNext() }}
                 className="absolute right-3 top-1/2 -translate-y-1/2 w-12 h-12 flex items-center justify-center bg-[var(--n15-black)]/50 hover:bg-[var(--n15-black)]/80 text-[var(--n15-gold)] border border-[var(--n15-gold)]/20 hover:border-[var(--n15-gold)]/50 transition-all"
-                aria-label="Следующее фото"
+                aria-label={t.slider.next}
               >
                 <svg width="22" height="22" viewBox="0 0 20 20" fill="none">
                   <path d="M8 4 L14 10 L8 16" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
@@ -243,7 +245,7 @@ export const ImageSlider: FC<Props> = ({ slides }) => {
           {/* Bottom hint */}
           <div className="absolute bottom-1 left-0 right-0 text-center pointer-events-none">
             <span className="text-[8px] tracking-[0.15em] uppercase text-[var(--n15-muted)]/50">
-              ← → листать &bull; Esc закрыть
+              {t.slider.hint}
             </span>
           </div>
         </div>

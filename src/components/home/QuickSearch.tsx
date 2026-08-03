@@ -2,42 +2,44 @@
 
 import { useState, type FC } from 'react'
 import { Button } from '@/components/ui/Button'
-
-const dealTypes = [
-  { value: '', label: 'Тип сделки' },
-  { value: 'sale', label: 'Продажа' },
-  { value: 'rent', label: 'Аренда' },
-]
-
-const categories = [
-  { value: '', label: 'Категория' },
-  { value: 'apartment', label: 'Квартира' },
-  { value: 'house', label: 'Дом' },
-  { value: 'townhouse', label: 'Таунхаус' },
-  { value: 'commercial', label: 'Коммерческая' },
-  { value: 'land', label: 'Участок' },
-]
-
-const cities = [
-  { value: '', label: 'Город' },
-  { value: 'vladikavkaz', label: 'Владикавказ' },
-  { value: 'beslan', label: 'Беслан' },
-  { value: 'mozdok', label: 'Моздок' },
-  { value: 'alagir', label: 'Алагир' },
-  { value: 'ardon', label: 'Ардон' },
-]
+import { useI18n } from '@/i18n/i18n-provider'
 
 export const QuickSearch: FC = () => {
+  const { lang, t } = useI18n()
   const [dealType, setDealType] = useState('')
   const [category, setCategory] = useState('')
   const [city, setCity] = useState('')
+
+  const dealTypes = [
+    { value: '', label: t.search.dealType },
+    { value: 'sale', label: t.search.sale },
+    { value: 'rent', label: t.search.rent },
+  ]
+
+  const categories = [
+    { value: '', label: t.search.category },
+    { value: 'apartment', label: t.search.apartment },
+    { value: 'house', label: t.search.house },
+    { value: 'townhouse', label: t.search.townhouse },
+    { value: 'commercial', label: t.search.commercial },
+    { value: 'land', label: t.search.land },
+  ]
+
+  const cities = [
+    { value: '', label: t.search.city },
+    { value: 'vladikavkaz', label: t.search.vladikavkaz },
+    { value: 'beslan', label: t.search.beslan },
+    { value: 'mozdok', label: t.search.mozdok },
+    { value: 'alagir', label: t.search.alagir },
+    { value: 'ardon', label: t.search.ardon },
+  ]
 
   const buildUrl = () => {
     const params = new URLSearchParams()
     if (dealType) params.set('type', dealType)
     if (category) params.set('category', category)
     if (city) params.set('city', city)
-    return `/catalog?${params.toString()}`
+    return `/${lang}/catalog?${params.toString()}`
   }
 
   const selectClass = `
@@ -85,7 +87,7 @@ export const QuickSearch: FC = () => {
       </select>
 
       <Button variant="primary" href={buildUrl()}>
-        Найти
+        {t.search.find}
       </Button>
     </div>
   )

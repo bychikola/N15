@@ -2,23 +2,26 @@
 
 import { useState, type FC } from 'react'
 import Link from 'next/link'
-
-const navLinks = [
-  { href: '/catalog', label: 'Каталог' },
-  { href: '/services', label: 'Услуги' },
-  { href: '/about', label: 'Об агентстве' },
-  { href: '/blog', label: 'Блог' },
-  { href: '/contacts', label: 'Контакты' },
-]
+import { useI18n } from '@/i18n/i18n-provider'
+import { LangSwitcher } from '@/i18n/lang-switcher'
 
 export const Header: FC = () => {
   const [isOpen, setIsOpen] = useState(false)
+  const { lang, t } = useI18n()
+
+  const navLinks = [
+    { href: `/${lang}/catalog`, label: t.nav.catalog },
+    { href: `/${lang}/services`, label: t.nav.services },
+    { href: `/${lang}/about`, label: t.nav.about },
+    { href: `/${lang}/blog`, label: t.nav.blog },
+    { href: `/${lang}/contacts`, label: t.nav.contacts },
+  ]
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-[var(--n15-black)]/80 backdrop-blur-md border-b border-[var(--n15-gold)]/10">
       <div className="n15-container flex items-center justify-between h-20">
         {/* Logo */}
-        <Link href="/" className="flex items-center gap-3 group">
+        <Link href={`/${lang}`} className="flex items-center gap-3 group">
           <svg
             width="40"
             height="40"
@@ -60,18 +63,19 @@ export const Header: FC = () => {
             </Link>
           ))}
           <Link
-            href="/lk"
+            href={`/${lang}/lk`}
             className="ml-4 px-5 py-2 text-sm tracking-wider uppercase border border-[var(--n15-gold)]/30 text-[var(--n15-gold)] hover:bg-[var(--n15-gold)]/8 transition-all duration-300"
           >
-            Личный кабинет
+            {t.nav.cabinet}
           </Link>
+          <LangSwitcher className="ml-3" />
         </nav>
 
         {/* Mobile hamburger */}
         <button
           className="lg:hidden flex flex-col gap-1.5 p-2"
           onClick={() => setIsOpen(!isOpen)}
-          aria-label="Меню"
+          aria-label={t.nav.menu}
         >
           <span className={`block w-6 h-px bg-[var(--n15-gold)] transition-all duration-300 ${isOpen ? 'rotate-45 translate-y-[5px]' : ''}`} />
           <span className={`block w-6 h-px bg-[var(--n15-gold)] transition-all duration-300 ${isOpen ? 'opacity-0' : ''}`} />
@@ -94,12 +98,15 @@ export const Header: FC = () => {
               </Link>
             ))}
             <Link
-              href="/lk"
+              href={`/${lang}/lk`}
               className="mt-2 px-5 py-3 text-sm tracking-wider uppercase border border-[var(--n15-gold)]/30 text-[var(--n15-gold)] text-center"
               onClick={() => setIsOpen(false)}
             >
-              Личный кабинет
+              {t.nav.cabinet}
             </Link>
+            <div className="flex justify-center pt-1">
+              <LangSwitcher onNavigate={() => setIsOpen(false)} />
+            </div>
           </nav>
         </div>
       )}
