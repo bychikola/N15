@@ -1,0 +1,17 @@
+# Caddy автоматически получает и продлевает SSL-сертификаты (Let's Encrypt)
+# для указанных доменов. Никакой ручной certbot не нужен.
+
+n15-realty.ru, www.n15-realty.ru {
+	# Максимальный размер загрузки (админка: фото объектов)
+	request_body {
+		max_size 50MB
+	}
+
+	reverse_proxy app:3000
+
+	# Кэш статики
+	@static path /_next/static/* /media/* /public/* /favicon.ico /logo.svg
+	header @static Cache-Control "public, max-age=604800"
+
+	encode gzip
+}
