@@ -50,6 +50,7 @@ test-results/
 
 # snapshots & screenshots
 *.yml
+!docker-compose.yml
 n15-*.png
 catalog-*.png
 *-snapshot.md
