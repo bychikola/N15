@@ -27,14 +27,48 @@ if [ -n "$DATABASE_URI" ]; then
   done
   echo "PostgreSQL is up."
 
-  # Первичная инициализация схемы (только если нет таблиц миграций)
-  echo "Checking migrations..."
-  if ! npx payload migrate:status >/dev/null 2>&1; then
-    echo "No migrations table — creating initial migration and applying..."
-    npx payload migrate:create initial --force-accept-warning >/dev/null 2>&1 || echo "  (migration create skipped or already exists)"
+  # Инициализация схемы: Payload в production НЕ создаёт таблицы автоматически,
+  # а CLI миграций (payload migrate) падает с ERR_REQUIRE_ASYNC_MODULE в этом
+  # окружении (tsx vs ESM-модуль lexical). Надёжный способ — запустить dev-сервер
+  # с NODE_ENV=development на время: Payload выполнит pushDevSchema и создаст
+  # все таблицы. Затем восстанавливаем production-сборку из .next-prod.
+  echo "Checking if schema exists..."
+  if ! node -e "
+    const { Client } = require('pg');
+    const c = new Client({ connectionString: process.env.DATABASE_URI });
+    c.connect()
+      .then(() => c.query(\"SELECT to_regclass('public.objects') AS t\"))
+      .then((r) => { process.exit(r.rows[0] && r.rows[0].t ? 0 : 1); })
+      .catch(() => process.exit(1));
+  "; then
+    echo "Schema missing — starting dev server to create tables..."
+    NODE_ENV=development node_modules/.bin/next dev -p 3001 >/tmp/dev-init.log 2>&1 &
+    DEV_PID=$!
+    INIT_OK=0
+    i=0
+    while [ "$i" -lt 90 ]; do
+      i=$((i+1))
+      # Запрос к REST API заставляет Payload инициализироваться и выполнить push
+      if node -e "fetch('http://localhost:3001/api/objects?limit=1').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))" 2>/dev/null; then
+        INIT_OK=1
+        break
+      fi
+      sleep 2
+    done
+    kill "$DEV_PID" 2>/dev/null || true
+    wait "$DEV_PID" 2>/dev/null || true
+    # Восстанавливаем production-сборку
+    rm -rf .next
+    cp -r .next-prod .next
+    if [ "$INIT_OK" != "1" ]; then
+      echo "Schema init failed. Dev log:" >&2
+      tail -60 /tmp/dev-init.log >&2
+      exit 1
+    fi
+    echo "Schema created."
+  else
+    echo "Schema already exists."
   fi
-  npx payload migrate || echo "  (migrate: no pending migrations)"
-  echo "Migrations applied."
 fi
 
 echo "Starting Next.js server..."
