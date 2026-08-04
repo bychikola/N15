@@ -34,7 +34,7 @@ export const LangSwitcher: FC<{ onNavigate?: () => void; className?: string }> =
   const segClass = (active: boolean) =>
     `px-2 py-1 text-[10px] tracking-wider uppercase transition-colors duration-300 cursor-pointer select-none ${
       active
-        ? 'text-[var(--n15-black)] bg-[var(--n15-gold)]'
+        ? 'text-[var(--on-accent)] bg-[var(--n15-gold)]'
         : 'text-[var(--n15-muted)] hover:text-[var(--n15-gold)]'
     }`
 

@@ -166,17 +166,17 @@ export const ImageSlider: FC<Props> = ({ slides }) => {
       {/* ── Fullscreen Lightbox ── */}
       {lightbox && (
         <div
-          className="fixed inset-0 z-[9999] bg-[var(--n15-black)]/97 backdrop-blur-sm select-none"
+          className="fixed inset-0 z-[9999] bg-[var(--lightbox-bg)] backdrop-blur-sm select-none"
           onClick={(e) => { if (e.target === e.currentTarget) closeLightbox() }}
         >
           {/* Top bar */}
           <div className="absolute top-0 left-0 right-0 z-10 flex items-center justify-between px-4 md:px-6 py-3 md:py-4">
-            <span className="text-sm text-[var(--n15-silver)]">
+            <span className="text-sm text-[var(--lightbox-fg)]">
               {lightboxIdx + 1} / {count}
             </span>
             <button
               onClick={closeLightbox}
-              className="w-10 h-10 flex items-center justify-center text-[var(--n15-gold)] hover:text-[var(--n15-white)] transition-colors border border-[var(--n15-gold)]/20 hover:border-[var(--n15-gold)]/50"
+              className="w-10 h-10 flex items-center justify-center text-[var(--n15-gold)] hover:text-[var(--lightbox-fg)] transition-colors border border-[var(--n15-gold)]/20 hover:border-[var(--n15-gold)]/50"
               aria-label={t.slider.close}
             >
               <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
@@ -199,7 +199,7 @@ export const ImageSlider: FC<Props> = ({ slides }) => {
           {/* Thumbnail strip at bottom */}
           {count > 1 && (
             <div className="absolute bottom-8 left-0 right-0 flex justify-center z-10">
-              <div ref={lightboxThumbRef} className="flex gap-1.5 overflow-x-auto pb-1 px-4 max-w-full bg-[var(--n15-black)]/60 backdrop-blur-sm py-2 rounded-sm border-t border-b border-[var(--n15-gold)]/10">
+              <div ref={lightboxThumbRef} className="flex gap-1.5 overflow-x-auto pb-1 px-4 max-w-full bg-[var(--lightbox-bg)]/60 backdrop-blur-sm py-2 rounded-sm border-t border-b border-[var(--n15-gold)]/10">
                 {slides.map((slide, i) => (
                   <button
                     key={i}
@@ -223,7 +223,7 @@ export const ImageSlider: FC<Props> = ({ slides }) => {
             <>
               <button
                 onClick={(e) => { e.stopPropagation(); lightboxPrev() }}
-                className="absolute left-3 top-1/2 -translate-y-1/2 w-12 h-12 flex items-center justify-center bg-[var(--n15-black)]/50 hover:bg-[var(--n15-black)]/80 text-[var(--n15-gold)] border border-[var(--n15-gold)]/20 hover:border-[var(--n15-gold)]/50 transition-all"
+                className="absolute left-3 top-1/2 -translate-y-1/2 w-12 h-12 flex items-center justify-center bg-[var(--lightbox-bg)]/50 hover:bg-[var(--lightbox-bg)]/80 text-[var(--n15-gold)] border border-[var(--n15-gold)]/20 hover:border-[var(--n15-gold)]/50 transition-all"
                 aria-label={t.slider.prev}
               >
                 <svg width="22" height="22" viewBox="0 0 20 20" fill="none">
@@ -244,7 +244,7 @@ export const ImageSlider: FC<Props> = ({ slides }) => {
 
           {/* Bottom hint */}
           <div className="absolute bottom-1 left-0 right-0 text-center pointer-events-none">
-            <span className="text-[8px] tracking-[0.15em] uppercase text-[var(--n15-muted)]/50">
+            <span className="text-[8px] tracking-[0.15em] uppercase text-[var(--lightbox-fg)]/50">
               {t.slider.hint}
             </span>
           </div>

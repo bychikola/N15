@@ -39,6 +39,9 @@ export const ru = {
     all: 'Все',
     currency: '₽',
   },
+  theme: {
+    toggle: 'Переключить тему',
+  },
   hero: {
     title1: 'Ваш дом',
     title2: 'наша забота',
@@ -368,6 +371,9 @@ const os: Dict = {
     loading: 'Æвæрды цæуы...',
     all: 'Æппæт',
     currency: '₽',
+  },
+  theme: {
+    toggle: 'Темæ раивын',
   },
   hero: {
     title1: 'Уæ хæдзар',

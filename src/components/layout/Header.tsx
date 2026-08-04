@@ -4,6 +4,7 @@ import { useState, type FC } from 'react'
 import Link from 'next/link'
 import { useI18n } from '@/i18n/i18n-provider'
 import { LangSwitcher } from '@/i18n/lang-switcher'
+import { ThemeSwitcher } from '@/components/ui/ThemeSwitcher'
 
 export const Header: FC = () => {
   const [isOpen, setIsOpen] = useState(false)
@@ -69,6 +70,7 @@ export const Header: FC = () => {
             {t.nav.cabinet}
           </Link>
           <LangSwitcher className="ml-3" />
+          <ThemeSwitcher className="ml-3" />
         </nav>
 
         {/* Mobile hamburger */}
@@ -104,8 +106,9 @@ export const Header: FC = () => {
             >
               {t.nav.cabinet}
             </Link>
-            <div className="flex justify-center pt-1">
+            <div className="flex justify-center items-center gap-3 pt-1">
               <LangSwitcher onNavigate={() => setIsOpen(false)} />
+              <ThemeSwitcher />
             </div>
           </nav>
         </div>

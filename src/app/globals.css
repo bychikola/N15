@@ -12,21 +12,24 @@
 
 /* ── N15 Design Tokens ─────────────────────────── */
 
+/* СВЕТЛАЯ ТЕМА (по умолчанию) — тёплый кремовый ivory.
+   ВАЖНО: имена переменных сохраняют «тёмные» названия эпохи:
+   в светлой теме "black" = фон-ivory, "white" = тёмный текст. */
 :root {
   /* Background palette */
-  --n15-black:       #0D0D0F;
-  --n15-charcoal:    #1A1A1E;
-  --n15-navy:        #1B2A3B;
+  --n15-black:       #F6F2E9;   /* фон страницы — тёплый ivory */
+  --n15-charcoal:    #EFE8D9;   /* карточки / футер / меню — кремовый */
+  --n15-navy:        #3A4A5A;
 
   /* Text palette */
-  --n15-white:       #F5F5F7;
-  --n15-silver:      #C8C8CC;
-  --n15-muted:       #8E8E93;
+  --n15-white:       #2B2B28;   /* заголовки — тёплый почти-чёрный */
+  --n15-silver:      #45423C;   /* основной текст — тёплый тёмно-серый */
+  --n15-muted:       #8A8377;   /* вторичный текст — тёплый серый */
 
   /* Accent palette */
-  --n15-gold:        #C8A44E;
-  --n15-gold-light:  #E0C878;
-  --n15-gold-dim:    #A88A3E;
+  --n15-gold:        #B08D3E;   /* античное золото (контраст на ivory) */
+  --n15-gold-light:  #C8A44E;
+  --n15-gold-dim:    #8A6D2E;
   --n15-burgundy:    #722F37;
   --n15-burgundy-light: #8E3A44;
 
@@ -37,8 +40,13 @@
   --accent: var(--n15-gold);
   --accent-hover: var(--n15-gold-light);
   --muted: var(--n15-muted);
-  --border: rgba(200, 164, 78, 0.12);
+  --border: rgba(176, 141, 62, 0.12);
   --card-bg: var(--n15-charcoal);
+
+  /* Theme-independent */
+  --on-accent: #0D0D0F;                     /* текст на золотых поверхностях (обе темы) */
+  --lightbox-bg: rgba(13, 13, 15, 0.97);    /* лайтбокс фото всегда тёмный */
+  --lightbox-fg: #C8C8CC;
 
   /* Typography */
   --font-display: 'New Standard', serif;
@@ -47,6 +55,40 @@
   /* Spacing */
   --section-gap: 6rem;
   --content-width: 1280px;
+
+  color-scheme: light;
+}
+
+/* ТЁМНАЯ ТЕМА — прежняя палитра */
+html[data-theme='dark'] {
+  --n15-black:       #0D0D0F;
+  --n15-charcoal:    #1A1A1E;
+  --n15-navy:        #1B2A3B;
+
+  --n15-white:       #F5F5F7;
+  --n15-silver:      #C8C8CC;
+  --n15-muted:       #8E8E93;
+
+  --n15-gold:        #C8A44E;
+  --n15-gold-light:  #E0C878;
+  --n15-gold-dim:    #A88A3E;
+  --n15-burgundy:    #722F37;
+  --n15-burgundy-light: #8E3A44;
+
+  --background: var(--n15-black);
+  --foreground: var(--n15-silver);
+  --heading: var(--n15-white);
+  --accent: var(--n15-gold);
+  --accent-hover: var(--n15-gold-light);
+  --muted: var(--n15-muted);
+  --border: rgba(200, 164, 78, 0.12);
+  --card-bg: var(--n15-charcoal);
+
+  --on-accent: #0D0D0F;
+  --lightbox-bg: rgba(13, 13, 15, 0.97);
+  --lightbox-fg: #C8C8CC;
+
+  color-scheme: dark;
 }
 
 @theme inline {
@@ -100,10 +142,10 @@ a:hover {
   background-color: var(--n15-gold-light) !important;
 }
 .btn-secondary:hover {
-  border-color: rgba(200, 164, 78, 0.6) !important;
+  border-color: color-mix(in srgb, var(--n15-gold) 60%, transparent) !important;
 }
 .btn-outline:hover {
-  background-color: rgba(200, 164, 78, 0.08) !important;
+  background-color: color-mix(in srgb, var(--n15-gold) 8%, transparent) !important;
 }
 .btn-ghost:hover {
   color: var(--n15-white) !important;
@@ -123,7 +165,7 @@ a:hover {
 }
 
 .n15-gold-border {
-  border: 1px solid rgba(200, 164, 78, 0.3);
+  border: 1px solid color-mix(in srgb, var(--n15-gold) 30%, transparent);
 }
 
 .n15-gold-divider {
@@ -174,3 +216,9 @@ a:hover {
   background: rgba(200, 164, 78, 0.25);
   color: var(--n15-white);
 }
+
+/* ── Theme switcher icons ──────────────────────── */
+
+.theme-icon-moon { display: none; }
+html[data-theme='dark'] .theme-icon-sun  { display: none; }
+html[data-theme='dark'] .theme-icon-moon { display: block; }
