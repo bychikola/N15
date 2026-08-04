@@ -1,0 +1,16 @@
+node_modules
+.next
+media
+*.db
+*.db-journal
+.env
+.env.local
+.env.production
+.git
+playwright-report
+test-results
+.playwright-mcp
+*-snapshot.md
+n15-*.png
+catalog-*.png
+*.tgz
