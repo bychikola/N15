@@ -3,27 +3,29 @@ set -e
 
 echo "=== N15 container starting ==="
 
-# Ждём готовности Postgres (если DATABASE_URI задан)
+# Ждём готовности Postgres (если DATABASE_URI задан).
+# Используем node для TCP-проверки: /dev/tcp — фича bash, в sh (dash) не работает.
 if [ -n "$DATABASE_URI" ]; then
   echo "Waiting for PostgreSQL..."
-  # извлекаем host:port из postgres://user:pass@host:port/db
-  DB_HOST=$(echo "$DATABASE_URI" | sed -E 's#postgres(ql)?://[^@]*@([^:/]+):?([0-9]*)/.*#\2#' )
-  DB_PORT=$(echo "$DATABASE_URI" | sed -E 's#postgres(ql)?://[^@]*@([^:/]+):?([0-9]*)/.*#\3#')
-  DB_PORT=${DB_PORT:-5432}
-  if [ -n "$DB_HOST" ]; then
-    i=0
-    until (exec 3<>"/dev/tcp/$DB_HOST/$DB_PORT") 2>/dev/null; do
-      i=$((i+1))
-      if [ "$i" -gt 60 ]; then
-        echo "PostgreSQL not reachable after 60s, giving up." >&2
-        exit 1
-      fi
-      echo "  ...waiting ($i)"
-      sleep 2
-    done
-    exec 3>&- 3<&-
-    echo "PostgreSQL is up."
-  fi
+  i=0
+  until node -e "
+    const u = new URL(process.env.DATABASE_URI);
+    const net = require('net');
+    const port = Number(u.port || 5432);
+    const s = net.connect(port, u.hostname);
+    s.on('connect', () => { s.end(); process.exit(0); });
+    s.on('error', () => process.exit(1));
+    s.setTimeout(3000, () => { s.destroy(); process.exit(1); });
+  "; do
+    i=$((i+1))
+    if [ "$i" -gt 60 ]; then
+      echo "PostgreSQL not reachable after 60s, giving up." >&2
+      exit 1
+    fi
+    echo "  ...waiting ($i)"
+    sleep 2
+  done
+  echo "PostgreSQL is up."
 
   # Первичная инициализация схемы (только если нет таблиц миграций)
   echo "Checking migrations..."
