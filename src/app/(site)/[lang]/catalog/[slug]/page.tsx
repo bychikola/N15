@@ -10,6 +10,7 @@ import { OrnamentDivider } from '@/components/ui/OrnamentDivider'
 import { OrnamentBorder } from '@/components/ui/OrnamentBorder'
 import { Button } from '@/components/ui/Button'
 import { ImageSlider } from '@/components/ui/ImageSlider'
+import { ObjectMap } from '@/components/ui/ObjectMap'
 import { getDictionary, type Dict } from '@/i18n/dictionaries'
 
 interface PageProps {
@@ -47,6 +48,7 @@ export default async function ObjectPage({ params }: PageProps) {
     rooms?: number; floor?: number; totalFloors?: number
     buildingType?: string; condition?: string; heating?: string; balcony?: string
     address?: { city?: string; district?: string; street?: string; house?: string; apartment?: string }
+    coordinates?: { lat?: number; lng?: number }
     description?: { root?: { children?: unknown[] } }
     features?: { feature?: string }[]
     isPremium?: boolean; isExclusive?: boolean
@@ -67,6 +69,16 @@ export default async function ObjectPage({ params }: PageProps) {
       allSlides.push({ url: img.url!, alt: img.alt || obj.title })
     }
   }
+
+  // Map inputs: manual coordinates (priority) or geocode by address.
+  const mapLat = obj.coordinates?.lat
+  const mapLng = obj.coordinates?.lng
+  // district excluded — it can reduce geocode accuracy.
+  const mapAddress = [obj.address?.city, obj.address?.street, obj.address?.house].filter(Boolean).join(', ')
+  const hasValidCoords =
+    typeof mapLat === 'number' && Number.isFinite(mapLat) && mapLat >= -90 && mapLat <= 90 &&
+    typeof mapLng === 'number' && Number.isFinite(mapLng) && mapLng >= -180 && mapLng <= 180
+  const showMap = mapAddress.length > 0 || hasValidCoords
 
   return (
     <>
@@ -90,6 +102,13 @@ export default async function ObjectPage({ params }: PageProps) {
               <p className="text-[var(--n15-muted)] mb-6">
                 {[obj.address?.city, obj.address?.district, obj.address?.street, obj.address?.house].filter(Boolean).join(', ')}
               </p>
+
+              {showMap && (
+                <div className="mb-8">
+                  <h2 className="text-xl font-[family-name:var(--font-display)] text-[var(--n15-white)] mb-4">{t.map.title}</h2>
+                  <ObjectMap address={mapAddress} lat={mapLat} lng={mapLng} />
+                </div>
+              )}
 
               <div className="text-3xl text-[var(--n15-gold)] font-[family-name:var(--font-display)] mb-8">
                 {obj.price.toLocaleString(t.locale)} {obj.type === 'rent' ? t.object.perMonth : t.object.currency}
