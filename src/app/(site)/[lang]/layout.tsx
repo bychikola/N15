@@ -42,11 +42,12 @@ export default async function SiteLayout({ children, params }: LayoutProps) {
 
   return (
     <html lang={lang} data-theme={theme} className="h-full antialiased" suppressHydrationWarning>
-      {/* Google Material Symbols (иконки Material Design). Список icon_names расширяем по мере добавления иконок.
-          precedence обязателен для <link> вне <head> в React 19 — без него ошибка гидрации. */}
+      {/* Google Material Symbols (иконки Material Design).
+          Полный шрифт без icon_names: API отдаёт subset только по ПЕРВОМУ имени
+          (несколько icon_names игнорируются), а лигатуры без subset не работают. */}
       <link
         rel="stylesheet"
-        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=favorite&icon_names=dark_mode&icon_names=sunny"
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200"
         precedence="default"
       />
       <body className="min-h-full bg-[var(--n15-black)] text-[var(--n15-silver)] font-[family-name:var(--font-body)] flex flex-col">
