@@ -164,7 +164,7 @@ export default async function ObjectPage({ params }: PageProps) {
               </p>
 
               {/* Hero price */}
-              <div className="text-[32px] leading-tight text-[var(--n15-gold)] font-[family-name:var(--font-display)] font-semibold mb-8">
+              <div className="text-[32px] leading-tight text-[var(--n15-gold)] font-[family-name:var(--font-display)] font-semibold mb-4">
                 {obj.price.toLocaleString(t.locale)} {obj.type === 'rent' ? t.object.perMonth : t.object.currency}
                 {pricePerMeter && <span className="text-sm text-[var(--n15-muted)] ml-2">({pricePerMeter.toLocaleString(t.locale)} {t.object.perMeter})</span>}
               </div>
