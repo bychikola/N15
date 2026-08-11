@@ -185,7 +185,7 @@ function CatalogContent() {
         <p className="text-center py-20 text-[var(--n15-muted)]">{t.catalog.loading}</p>
       ) : objects.length > 0 ? (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-6 gap-y-8">
             {objects.map((obj) => <ObjectCard key={obj.id} obj={obj} lang={lang} t={t} />)}
           </div>
           {showMore && (
