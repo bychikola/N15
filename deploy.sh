@@ -41,10 +41,14 @@ for svc in nginx apache2 httpd caddy; do
         sudo systemctl disable "$svc" 2>/dev/null || true
     fi
 done
-# Если что-то всё ещё слушает 80/443 — убиваем
-sudo fuser -k 80/tcp 2>/dev/null || true
-sudo fuser -k 443/tcp 2>/dev/null || true
-echo "  Порт 80/443 свободен."
+# Если что-то всё ещё слушает 80/443 — убиваем. НО только когда Caddy-контейнер
+# не запущен: при повторном деплое docker-proxy держит порты, и fuser -k уронит
+# работающий сайт вместе с ним.
+if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -qi caddy; then
+    sudo fuser -k 80/tcp 2>/dev/null || true
+    sudo fuser -k 443/tcp 2>/dev/null || true
+fi
+echo "  Порт 80/443 свободен (или занят Caddy — не трогаем)."
 
 # ---------- 2. Установить Docker ----------
 echo "[2/6] Проверяю Docker..."
@@ -85,6 +89,7 @@ if [ ! -f .env ]; then
     POSTGRES_PASSWORD=$(openssl rand -hex 24)
     cat > .env <<EOF
 # Сгенерировано deploy.sh $(date +%F)
+DOMAIN=$DOMAIN
 PAYLOAD_SECRET=$PAYLOAD_SECRET
 POSTGRES_USER=n15
 POSTGRES_PASSWORD=$POSTGRES_PASSWORD
@@ -96,6 +101,11 @@ EOF
     echo "  .env создан."
 else
     echo "  .env уже существует — пропускаю (замени при необходимости)."
+    # Для старых развёртываний без DOMAIN (домен раньше был захардкожен):
+    if ! grep -q '^DOMAIN=' .env; then
+        echo "  Добавляю DOMAIN=$DOMAIN в существующий .env..."
+        echo "DOMAIN=$DOMAIN" >> .env
+    fi
 fi
 
 # ---------- 5. Сборка и запуск ----------

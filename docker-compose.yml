@@ -18,7 +18,7 @@ services:
     build:
       context: .
       args:
-        NEXT_PUBLIC_SERVER_URL: ${NEXT_PUBLIC_SERVER_URL:-https://n15-realty.ru}
+        NEXT_PUBLIC_SERVER_URL: ${NEXT_PUBLIC_SERVER_URL:-https://${DOMAIN:-n15-realty.ru}}
         NEXT_PUBLIC_YANDEX_MAPS_API_KEY: ${NEXT_PUBLIC_YANDEX_MAPS_API_KEY:?set NEXT_PUBLIC_YANDEX_MAPS_API_KEY in .env}
     restart: unless-stopped
     depends_on:
@@ -28,7 +28,7 @@ services:
       NODE_ENV: production
       PAYLOAD_SECRET: ${PAYLOAD_SECRET:?set PAYLOAD_SECRET in .env}
       DATABASE_URI: postgres://${POSTGRES_USER:-n15}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-n15}
-      NEXT_PUBLIC_SERVER_URL: ${NEXT_PUBLIC_SERVER_URL:-https://n15-realty.ru}
+      NEXT_PUBLIC_SERVER_URL: ${NEXT_PUBLIC_SERVER_URL:-https://${DOMAIN:-n15-realty.ru}}
       NEXT_PUBLIC_YANDEX_MAPS_API_KEY: ${NEXT_PUBLIC_YANDEX_MAPS_API_KEY}
     volumes:
       - media:/app/media
@@ -47,6 +47,8 @@ services:
     ports:
       - "80:80"
       - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in .env}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
