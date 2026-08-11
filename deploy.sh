@@ -120,16 +120,35 @@ POSTGRES_DB=n15
 NEXT_PUBLIC_SERVER_URL=https://$DOMAIN
 NEXT_PUBLIC_YANDEX_MAPS_API_KEY=$YANDEX_MAPS_API_KEY
 EOF
-    # Хеш отдельной строкой: содержит $, heredoc бы его раскрыл
-    echo "ADMIN_PASSWORD_HASH=$ADMIN_PASSWORD_HASH" >> .env
+    # Хеш отдельной строкой: содержит $, heredoc бы его раскрыл.
+    # $ -> $$ : docker compose раскрывает $ в значениях .env, без экранирования хеш сломается.
+    echo "ADMIN_PASSWORD_HASH=$(printf '%s' "$ADMIN_PASSWORD_HASH" | sed 's/\$/$$/g')" >> .env
     chmod 600 .env
     echo "  .env создан."
 else
-    echo "  .env уже существует — пропускаю (замени при необходимости)."
+    echo "  .env уже существует — дописываю недостающие ключи (старые установки)."
     # Для старых развёртываний без DOMAIN (домен раньше был захардкожен):
     if ! grep -q '^DOMAIN=' .env; then
         echo "  Добавляю DOMAIN=$DEFAULT_DOMAIN в существующий .env..."
         echo "DOMAIN=$DEFAULT_DOMAIN" >> .env
+    fi
+    # Защита админки для старых установок (Basic Auth на Caddy):
+    if ! grep -q '^ADMIN_ROUTE=' .env; then
+        ADMIN_ROUTE="${ADMIN_ROUTE:-/admin}"
+        echo "ADMIN_ROUTE=$ADMIN_ROUTE" >> .env
+    fi
+    if ! grep -q '^ADMIN_USER=' .env; then
+        ADMIN_USER="${ADMIN_USER:-admin}"
+        echo "ADMIN_USER=$ADMIN_USER" >> .env
+    fi
+    if ! grep -q '^ADMIN_PASSWORD_HASH=' .env; then
+        if [ -z "$ADMIN_PASSWORD" ]; then
+            read -rsp "  Пароль для защиты админки (Basic Auth): " ADMIN_PASSWORD
+            echo ""
+        fi
+        ADMIN_PASSWORD_HASH=$(docker run --rm caddy:2-alpine caddy hash-password --plaintext "$ADMIN_PASSWORD" | tail -1)
+        echo "ADMIN_PASSWORD_HASH=$(printf '%s' "$ADMIN_PASSWORD_HASH" | sed 's/\$/$$/g')" >> .env
+        echo "  Админка защищена (логин: ${ADMIN_USER:-admin})."
     fi
 fi
 # Домен и админка для вывода в итоге: из .env (или как заданы выше)
