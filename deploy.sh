@@ -93,6 +93,9 @@ if [ ! -f .env ]; then
         read -rp "  Путь админки (Enter = /admin): " ADMIN_ROUTE
         ADMIN_ROUTE="${ADMIN_ROUTE:-/admin}"
     fi
+    # Нормализация: путь обязан начинаться со слэша (n15-adminka -> /n15-adminka)
+    ADMIN_ROUTE="/${ADMIN_ROUTE#/}"
+    ADMIN_ROUTE="${ADMIN_ROUTE%/}"
     if [ -z "$ADMIN_USER" ]; then
         read -rp "  Логин админки (Enter = admin): " ADMIN_USER
         ADMIN_USER="${ADMIN_USER:-admin}"
@@ -134,7 +137,8 @@ else
     fi
     # Защита админки для старых установок (Basic Auth на Caddy):
     if ! grep -q '^ADMIN_ROUTE=' .env; then
-        ADMIN_ROUTE="${ADMIN_ROUTE:-/admin}"
+        ADMIN_ROUTE="/${ADMIN_ROUTE:-admin}"
+        ADMIN_ROUTE="${ADMIN_ROUTE%/}"
         echo "ADMIN_ROUTE=$ADMIN_ROUTE" >> .env
     fi
     if ! grep -q '^ADMIN_USER=' .env; then
