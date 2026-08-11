@@ -107,7 +107,7 @@ export const ImageSlider: FC<Props> = ({ slides }) => {
           <img
             src={slides[current].url}
             alt={slides[current].alt}
-            className="w-full h-full object-contain"
+            className="w-full h-full object-cover"
           />
         </button>
 

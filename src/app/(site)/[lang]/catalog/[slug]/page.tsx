@@ -146,7 +146,6 @@ export default async function ObjectPage({ params }: PageProps) {
               <div className="flex flex-wrap items-center gap-3 mb-4">
                 {obj.isPremium && <span className="text-[10px] tracking-[0.2em] uppercase text-[var(--n15-gold)] border border-[var(--n15-gold)]/30 px-3 py-1">{t.catalog.premium}</span>}
                 {obj.isExclusive && <span className="text-[10px] tracking-[0.2em] uppercase text-[var(--n15-burgundy)] border border-[var(--n15-burgundy)]/30 px-3 py-1">{t.object.exclusive}</span>}
-                <span className="object-card__pill relative top-0 left-0">{obj.type === 'sale' ? t.object.sale : t.object.rent}</span>
               </div>
 
               <h1 className="text-3xl md:text-4xl font-[family-name:var(--font-display)] text-[var(--n15-white)] mb-3">{obj.title}</h1>
