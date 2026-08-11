@@ -1,5 +1,6 @@
 import '@/app/globals.css'
 import { notFound } from 'next/navigation'
+import { cookies } from 'next/headers'
 import type { Metadata } from 'next'
 import { getDictionary, isLocale, locales } from '@/i18n/dictionaries'
 import { I18nProvider } from '@/i18n/i18n-provider'
@@ -34,14 +35,14 @@ export default async function SiteLayout({ children, params }: LayoutProps) {
   if (!isLocale(lang)) notFound()
   const t = getDictionary(lang)
 
+  // Тема известна на сервере из cookie — data-theme ставится прямо в HTML,
+  // без клиентского скрипта: нет FOUC и нет React-ворнинга про <script>.
+  const cookieStore = await cookies()
+  const theme = cookieStore.get('n15_theme')?.value === 'dark' ? 'dark' : 'light'
+
   return (
-    <html lang={lang} className="h-full antialiased" suppressHydrationWarning>
+    <html lang={lang} data-theme={theme} className="h-full antialiased" suppressHydrationWarning>
       <body className="min-h-full bg-[var(--n15-black)] text-[var(--n15-silver)] font-[family-name:var(--font-body)] flex flex-col">
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `(function(){try{var m=(document.cookie.match(/(?:^|; )n15_theme=([^;]*)/)||[])[1];document.documentElement.setAttribute('data-theme',m==='dark'?'dark':'light')}catch(e){document.documentElement.setAttribute('data-theme','light')}})();`,
-          }}
-        />
         <I18nProvider lang={lang} dict={t}>
           {children}
         </I18nProvider>
