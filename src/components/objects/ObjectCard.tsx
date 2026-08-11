@@ -38,7 +38,7 @@ export default function ObjectCard({ obj, lang, t }: ObjectCardProps) {
   const href = `/${lang}/catalog/${obj.id}`
 
   return (
-    <a href={href} className="group block">
+    <a href={href} className="group block bg-[var(--search-bg)]">
       <div className="object-card__media bg-[var(--n15-charcoal)]">
         {obj.primaryImage?.url ? (
           <img
@@ -64,7 +64,7 @@ export default function ObjectCard({ obj, lang, t }: ObjectCardProps) {
         </div>
       </div>
 
-      <div className="pt-4">
+      <div className="px-4 pt-4 pb-4">
         <h3 className="text-lg font-[family-name:var(--font-display)] text-[var(--n15-white)] mb-1.5 group-hover:text-[var(--n15-gold)] transition-colors">
           {obj.title}
         </h3>
