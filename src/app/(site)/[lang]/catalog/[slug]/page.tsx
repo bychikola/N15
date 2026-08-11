@@ -11,6 +11,7 @@ import { OrnamentBorder } from '@/components/ui/OrnamentBorder'
 import { Button } from '@/components/ui/Button'
 import { ImageSlider } from '@/components/ui/ImageSlider'
 import { ObjectMap } from '@/components/ui/ObjectMap'
+import ObjectCard, { type ObjectListItem } from '@/components/objects/ObjectCard'
 import { getDictionary, type Dict } from '@/i18n/dictionaries'
 
 interface PageProps {
@@ -52,7 +53,15 @@ export default async function ObjectPage({ params }: PageProps) {
     description?: { root?: { children?: unknown[] } }
     features?: { feature?: string }[]
     isPremium?: boolean; isExclusive?: boolean
-    agent?: { id: number; name?: string }
+    agent?: {
+      id: number
+      name?: string
+      position?: string
+      phone?: string
+      telegram?: string
+      whatsapp?: string
+      photo?: { url?: string }
+    }
     primaryImage?: { id: number; url?: string; alt?: string; filename?: string }
     images?: { id: number; url?: string; alt?: string; filename?: string }[]
   }
@@ -69,6 +78,35 @@ export default async function ObjectPage({ params }: PageProps) {
       allSlides.push({ url: img.url!, alt: img.alt || obj.title })
     }
   }
+
+  // Similar objects: same category, exclude current, limit 3
+  const { docs: similarDocs } = await payload.find({
+    collection: 'objects',
+    where: {
+      and: [
+        { category: { equals: obj.category } },
+        { id: { not_equals: obj.id } },
+        { status: { equals: 'published' } },
+      ],
+    },
+    limit: 3,
+    depth: 1,
+  })
+  const similar: ObjectListItem[] = (similarDocs || []).map((d) => ({
+    id: d.id as number,
+    slug: (d as Record<string, unknown>).slug as string | undefined,
+    title: d.title as string,
+    type: d.type as 'sale' | 'rent',
+    category: d.category as string,
+    price: d.price as number,
+    area: d.area as number | undefined,
+    rooms: d.rooms as number | undefined,
+    floor: d.floor as number | undefined,
+    totalFloors: d.totalFloors as number | undefined,
+    address: d.address as ObjectListItem['address'],
+    primaryImage: d.primaryImage as ObjectListItem['primaryImage'],
+    agent: d.agent as ObjectListItem['agent'],
+  }))
 
   // Map inputs: manual coordinates (priority) or geocode by address.
   const mapLat = obj.coordinates?.lat
@@ -92,16 +130,32 @@ export default async function ObjectPage({ params }: PageProps) {
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
             <div className="lg:col-span-2">
+              {/* Breadcrumbs */}
+              <nav aria-label="Breadcrumb" className="mb-4">
+                <a href={`/${lang}/catalog`} className="text-xs uppercase tracking-[0.2em] text-[var(--n15-muted)] hover:text-[var(--n15-gold)] transition-colors">
+                  {t.object.breadcrumbCatalog}
+                </a>
+                <span className="text-xs uppercase tracking-[0.2em] text-[var(--n15-muted)] mx-2">/</span>
+                <span className="text-xs uppercase tracking-[0.2em] text-[var(--n15-muted)]">{obj.title}</span>
+              </nav>
+
+              {/* Badges */}
               <div className="flex flex-wrap items-center gap-3 mb-4">
                 {obj.isPremium && <span className="text-[10px] tracking-[0.2em] uppercase text-[var(--n15-gold)] border border-[var(--n15-gold)]/30 px-3 py-1">{t.catalog.premium}</span>}
                 {obj.isExclusive && <span className="text-[10px] tracking-[0.2em] uppercase text-[var(--n15-burgundy)] border border-[var(--n15-burgundy)]/30 px-3 py-1">{t.object.exclusive}</span>}
-                <span className="text-xs tracking-wider uppercase text-[var(--n15-muted)]">{obj.type === 'sale' ? t.object.sale : t.object.rent} • {obj.category}</span>
+                <span className="object-card__pill relative top-0 left-0">{obj.type === 'sale' ? t.object.sale : t.object.rent}</span>
               </div>
 
               <h1 className="text-3xl md:text-4xl font-[family-name:var(--font-display)] text-[var(--n15-white)] mb-3">{obj.title}</h1>
-              <p className="text-[var(--n15-muted)] mb-6">
+              <p className="text-[var(--n15-muted)] mb-4">
                 {[obj.address?.city, obj.address?.district, obj.address?.street, obj.address?.house].filter(Boolean).join(', ')}
               </p>
+
+              {/* Hero price */}
+              <div className="text-[32px] leading-tight text-[var(--n15-gold)] font-[family-name:var(--font-display)] font-semibold mb-8">
+                {obj.price.toLocaleString(t.locale)} {obj.type === 'rent' ? t.object.perMonth : t.object.currency}
+                {pricePerMeter && <span className="text-sm text-[var(--n15-muted)] ml-2">({pricePerMeter.toLocaleString(t.locale)} {t.object.perMeter})</span>}
+              </div>
 
               {showMap && (
                 <div className="mb-8">
@@ -109,11 +163,6 @@ export default async function ObjectPage({ params }: PageProps) {
                   <ObjectMap address={mapAddress} lat={mapLat} lng={mapLng} />
                 </div>
               )}
-
-              <div className="text-3xl text-[var(--n15-gold)] font-[family-name:var(--font-display)] mb-8">
-                {obj.price.toLocaleString(t.locale)} {obj.type === 'rent' ? t.object.perMonth : t.object.currency}
-                {pricePerMeter && <span className="text-sm text-[var(--n15-muted)] ml-2">({pricePerMeter.toLocaleString(t.locale)} {t.object.perMeter})</span>}
-              </div>
 
               <OrnamentDivider variant="simple" />
 
@@ -127,6 +176,7 @@ export default async function ObjectPage({ params }: PageProps) {
                   { label: t.object.buildingType, value: buildTypeLabel(t, obj.buildingType) },
                   { label: t.object.condition, value: conditionLabel(t, obj.condition) },
                   { label: t.object.heating, value: obj.heating },
+                  { label: t.object.balcony, value: obj.balcony ? t.object.balconyOptions[obj.balcony as keyof typeof t.object.balconyOptions] : undefined },
                 ].filter((f) => f.value).map((f) => (
                   <div key={f.label}>
                     <div className="text-xs tracking-wider uppercase text-[var(--n15-muted)] mb-1">{f.label}</div>
@@ -157,18 +207,39 @@ export default async function ObjectPage({ params }: PageProps) {
                     <div className="p-6">
                       <h3 className="text-sm tracking-wider uppercase text-[var(--n15-gold)] mb-4">{t.object.yourAgent}</h3>
                       <div className="flex items-center gap-4 mb-4">
-                        <div className="w-14 h-14 rounded-full bg-[var(--n15-charcoal)] border border-[var(--n15-gold)]/20 flex items-center justify-center">
-                          <span className="text-lg font-[family-name:var(--font-display)] text-[var(--n15-gold)]">
-                            {obj.agent.name?.split(' ').map((n) => n[0]).join('').slice(0, 2) || 'АК'}
-                          </span>
-                        </div>
+                        {obj.agent.photo?.url ? (
+                          <img src={obj.agent.photo.url} alt={obj.agent.name || ''} className="w-14 h-14 rounded-full object-cover border border-[var(--n15-gold)]/20" />
+                        ) : (
+                          <div className="w-14 h-14 rounded-full bg-[var(--n15-charcoal)] border border-[var(--n15-gold)]/20 flex items-center justify-center">
+                            <span className="text-lg font-[family-name:var(--font-display)] text-[var(--n15-gold)]">
+                              {obj.agent.name?.split(' ').map((n) => n[0]).join('').slice(0, 2) || 'АК'}
+                            </span>
+                          </div>
+                        )}
                         <div>
                           <div className="text-sm text-[var(--n15-white)]">{obj.agent.name}</div>
-                          <div className="text-xs text-[var(--n15-muted)]">{t.object.leadingExpert}</div>
+                          <div className="text-xs text-[var(--n15-muted)]">{obj.agent.position || t.object.leadingExpert}</div>
                         </div>
                       </div>
-                      <Button variant="primary" size="sm" className="w-full mb-2">+7 (8672) 12-34-56</Button>
-                      <Button variant="outline" size="sm" className="w-full">{t.object.whatsapp}</Button>
+                      <div className="flex flex-col gap-2">
+                        {obj.agent.phone && (
+                          <Button variant="primary" size="sm" className="w-full" href={`tel:${obj.agent.phone.replace(/\s+/g, '')}`}>
+                            {obj.agent.phone}
+                          </Button>
+                        )}
+                        {obj.agent.telegram && (
+                          <Button variant="outline" size="sm" className="w-full"
+                            href={obj.agent.telegram.startsWith('http') ? obj.agent.telegram : `https://t.me/${obj.agent.telegram}`}>
+                            {t.object.telegram}
+                          </Button>
+                        )}
+                        {obj.agent.whatsapp && (
+                          <Button variant="outline" size="sm" className="w-full"
+                            href={obj.agent.whatsapp.startsWith('http') ? obj.agent.whatsapp : `https://wa.me/${obj.agent.whatsapp.replace(/\D/g, '')}`}>
+                            {t.object.whatsapp}
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   </OrnamentBorder>
                 )}
@@ -185,6 +256,18 @@ export default async function ObjectPage({ params }: PageProps) {
               </div>
             </div>
           </div>
+
+          {similar.length > 0 && (
+            <div className="mt-16">
+              <div className="flex items-end justify-between mb-6">
+                <h2 className="text-2xl font-[family-name:var(--font-display)] text-[var(--n15-white)]">{t.object.similarTitle}</h2>
+                <a href={`/${lang}/catalog`} className="text-sm text-[var(--n15-gold)] hover:underline">{t.object.allCatalog} →</a>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-10">
+                {similar.map((s) => <ObjectCard key={s.id} obj={s} lang={lang} t={t} />)}
+              </div>
+            </div>
+          )}
         </SectionWrapper>
       </main>
       <Footer />
