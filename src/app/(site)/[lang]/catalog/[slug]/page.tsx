@@ -209,17 +209,17 @@ export default async function ObjectPage({ params }: PageProps) {
                 )}
               </div>
 
-              <OrnamentDivider variant="simple" />
-
-              {/* Описание — над картой, как на alaniadom */}
+              {/* Описание — под особенностями, над разделителем */}
               {obj.description?.root?.children?.length ? (
-                <div className="my-10">
+                <div className="mt-10">
                   <h2 className="text-xl font-[family-name:var(--font-display)] text-[var(--n15-white)] mb-4">{t.object.description}</h2>
                   <div className="text-[var(--n15-silver)] leading-relaxed [&_a]:text-[var(--n15-gold)] [&_a]:underline">
                     <RichText data={obj.description as never} />
                   </div>
                 </div>
               ) : null}
+
+              <OrnamentDivider variant="simple" />
 
               {showMap && (
                 <div className="mb-8">
