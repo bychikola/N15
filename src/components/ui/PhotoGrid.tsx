@@ -15,13 +15,20 @@ interface Props {
 /**
  * Мозаика-плитки фотографий как на alaniadom.ru:
  * первая плитка — большая (2×2), остальные — по 1×1, всё object-cover.
+ * Показываются первые 6 плиток (3 ряда); если фото больше — на последней
+ * видимой плитке оверлей «+N», клик раскрывает остальные.
  * Клик по плитке открывает полноэкранный лайтбокс.
  */
 export const PhotoGrid: FC<Props> = ({ slides }) => {
   const { t } = useI18n()
   const [lightbox, setLightbox] = useState(false)
   const [lightboxIdx, setLightboxIdx] = useState(0)
+  const [expanded, setExpanded] = useState(false)
   const count = slides.length
+
+  const COLLAPSE_AT = 6
+  const hiddenCount = expanded ? 0 : Math.max(0, count - COLLAPSE_AT)
+  const visibleSlides = hiddenCount > 0 ? slides.slice(0, COLLAPSE_AT) : slides
 
   const openLightbox = (idx: number) => {
     setLightboxIdx(idx)
@@ -73,23 +80,27 @@ export const PhotoGrid: FC<Props> = ({ slides }) => {
   return (
     <div>
       <div className="grid grid-cols-2 md:grid-cols-3 auto-rows-[170px] md:auto-rows-[200px] gap-3">
-        {slides.map((slide, i) => (
-          <button
-            key={i}
-            onClick={() => openLightbox(i)}
-            className={`relative overflow-hidden bg-[var(--n15-black)] border border-[var(--n15-gold)]/10 group cursor-pointer ${
-              i === 0 ? 'col-span-2 row-span-2' : ''
-            }`}
-            aria-label={`${t.slider.openFullscreen} ${i + 1}`}
-          >
-            <img
-              src={slide.url}
-              alt={slide.alt}
-              loading={i === 0 ? 'eager' : 'lazy'}
-              className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-            />
-          </button>
-        ))}
+        {visibleSlides.map((slide, i) => {
+          const isCollapseTile = hiddenCount > 0 && i === COLLAPSE_AT - 1
+          return (
+            <button
+              key={i}
+              onClick={() => (isCollapseTile ? setExpanded(true) : openLightbox(i))}
+              data-more-count={isCollapseTile ? `+${hiddenCount}` : undefined}
+              className={`photo-grid__tile relative overflow-hidden bg-[var(--n15-black)] border border-[var(--n15-gold)]/10 group cursor-pointer ${
+                i === 0 ? 'col-span-2 row-span-2' : ''
+              }`}
+              aria-label={isCollapseTile ? `+${hiddenCount}` : `${t.slider.openFullscreen} ${i + 1}`}
+            >
+              <img
+                src={slide.url}
+                alt={slide.alt}
+                loading={i === 0 ? 'eager' : 'lazy'}
+                className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+              />
+            </button>
+          )
+        })}
       </div>
 
       {/* ── Fullscreen Lightbox (как в ImageSlider) ── */}
