@@ -12,6 +12,11 @@ import { defaultLocale, locales, isLocale } from '@/i18n/dictionaries'
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
 
+  // Админка Payload — пропускаем локализацию (секретный путь из .env,
+  // локально — /admin). Без этого /n15-adminka редиректился бы на /ru/... и падал в 404.
+  const adminRoute = process.env.ADMIN_ROUTE || '/admin'
+  if (pathname === adminRoute || pathname.startsWith(`${adminRoute}/`)) return
+
   // Уже локализованный путь — пропускаем.
   if (locales.some((l) => pathname === `/${l}` || pathname.startsWith(`/${l}/`))) return
 
