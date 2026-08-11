@@ -22,6 +22,10 @@ export default buildConfig({
       baseDir: './src',
     },
   },
+  // Секретный маршрут админки (задаётся в .env на сервере; локально — /admin)
+  routes: {
+    admin: process.env.ADMIN_ROUTE || '/admin',
+  },
   collections: [Users, Media, Objects, Agents, Applications, Blog, Pages],
   globals: [SiteSettings],
   editor: lexicalEditor(),

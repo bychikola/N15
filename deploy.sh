@@ -88,6 +88,21 @@ if [ ! -f .env ]; then
         DOMAIN="${DOMAIN:-$DEFAULT_DOMAIN}"
     fi
     echo "  Домен: $DOMAIN"
+    # Защита админки: секретный путь + логин/пароль (Basic Auth на Caddy)
+    if [ -z "$ADMIN_ROUTE" ]; then
+        read -rp "  Путь админки (Enter = /admin): " ADMIN_ROUTE
+        ADMIN_ROUTE="${ADMIN_ROUTE:-/admin}"
+    fi
+    if [ -z "$ADMIN_USER" ]; then
+        read -rp "  Логин админки (Enter = admin): " ADMIN_USER
+        ADMIN_USER="${ADMIN_USER:-admin}"
+    fi
+    if [ -z "$ADMIN_PASSWORD" ]; then
+        read -rsp "  Пароль админки (Basic Auth): " ADMIN_PASSWORD
+        echo ""
+    fi
+    echo "  Генерирую bcrypt-хеш пароля (Caddy)..."
+    ADMIN_PASSWORD_HASH=$(docker run --rm caddy:2-alpine caddy hash-password --plaintext "$ADMIN_PASSWORD" | tail -1)
     if [ -z "$YANDEX_MAPS_API_KEY" ]; then
         read -rp "  Введи ключ Яндекс.Карт (JavaScript API): " YANDEX_MAPS_API_KEY
     fi
@@ -96,6 +111,8 @@ if [ ! -f .env ]; then
     cat > .env <<EOF
 # Сгенерировано deploy.sh $(date +%F)
 DOMAIN=$DOMAIN
+ADMIN_ROUTE=$ADMIN_ROUTE
+ADMIN_USER=$ADMIN_USER
 PAYLOAD_SECRET=$PAYLOAD_SECRET
 POSTGRES_USER=n15
 POSTGRES_PASSWORD=$POSTGRES_PASSWORD
@@ -103,6 +120,8 @@ POSTGRES_DB=n15
 NEXT_PUBLIC_SERVER_URL=https://$DOMAIN
 NEXT_PUBLIC_YANDEX_MAPS_API_KEY=$YANDEX_MAPS_API_KEY
 EOF
+    # Хеш отдельной строкой: содержит $, heredoc бы его раскрыл
+    echo "ADMIN_PASSWORD_HASH=$ADMIN_PASSWORD_HASH" >> .env
     chmod 600 .env
     echo "  .env создан."
 else
@@ -113,9 +132,17 @@ else
         echo "DOMAIN=$DEFAULT_DOMAIN" >> .env
     fi
 fi
-# Домен для вывода в итоге: из .env (или как задан выше)
+# Домен и админка для вывода в итоге: из .env (или как заданы выше)
 if [ -z "$DOMAIN" ]; then
     DOMAIN=$(grep -E '^DOMAIN=' .env | head -1 | cut -d= -f2-)
+fi
+if [ -z "$ADMIN_ROUTE" ]; then
+    ADMIN_ROUTE=$(grep -E '^ADMIN_ROUTE=' .env | head -1 | cut -d= -f2-)
+    ADMIN_ROUTE="${ADMIN_ROUTE:-/admin}"
+fi
+if [ -z "$ADMIN_USER" ]; then
+    ADMIN_USER=$(grep -E '^ADMIN_USER=' .env | head -1 | cut -d= -f2-)
+    ADMIN_USER="${ADMIN_USER:-admin}"
 fi
 
 # ---------- 5. Сборка и запуск ----------
@@ -136,10 +163,11 @@ echo "======================================"
 echo "  ✅ Сайт развёрнут!"
 echo ""
 echo "  Домен:  https://$DOMAIN"
-echo "  Админ:  https://$DOMAIN/admin"
+echo "  Админ:  https://$DOMAIN$ADMIN_ROUTE"
+echo "          (защищён Basic Auth: логин '$ADMIN_USER' + заданный пароль)"
 echo ""
 echo "  Первый админ создаётся через админку:"
-echo "    открой https://$DOMAIN/admin и нажми 'Create First User'"
+echo "    открой https://$DOMAIN$ADMIN_ROUTE и нажми 'Create First User'"
 echo ""
 echo "  SSL-сертификат ставит Caddy автоматически"
 echo "  (первые ~30 секунд может быть ошибка сертификата — подожди и обнови)."

@@ -8,6 +8,13 @@
 		max_size 50MB
 	}
 
+	# Защита админки: HTTP Basic Auth до запроса к приложению.
+	# Логин/пароль задаются при установке (deploy.sh) и живут в .env.
+	@admin path {$ADMIN_ROUTE}*
+	basic_auth @admin {
+		{$ADMIN_USER} {$ADMIN_PASSWORD_HASH}
+	}
+
 	reverse_proxy app:3000
 
 	# Кэш статики

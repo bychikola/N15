@@ -49,6 +49,9 @@ services:
       - "443:443"
     environment:
       DOMAIN: ${DOMAIN:?set DOMAIN in .env}
+      ADMIN_ROUTE: ${ADMIN_ROUTE:-/admin}
+      ADMIN_USER: ${ADMIN_USER:-admin}
+      ADMIN_PASSWORD_HASH: ${ADMIN_PASSWORD_HASH:-}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
