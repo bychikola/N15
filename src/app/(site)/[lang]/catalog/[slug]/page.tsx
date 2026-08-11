@@ -170,23 +170,31 @@ export default async function ObjectPage({ params }: PageProps) {
 
               <OrnamentDivider variant="simple" />
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-6 my-10">
-                {[
-                  { label: t.object.area, value: obj.area ? `${obj.area} ${t.catalog.sqm}` : null },
-                  { label: t.object.living, value: obj.livingArea ? `${obj.livingArea} ${t.catalog.sqm}` : null },
-                  { label: t.object.kitchen, value: obj.kitchenArea ? `${obj.kitchenArea} ${t.catalog.sqm}` : null },
-                  { label: t.object.rooms, value: obj.rooms?.toString() },
-                  { label: t.object.floor, value: obj.floor || obj.totalFloors ? `${obj.floor || '?'} / ${obj.totalFloors || '?'}` : null },
-                  { label: t.object.buildingType, value: buildTypeLabel(t, obj.buildingType) },
-                  { label: t.object.condition, value: conditionLabel(t, obj.condition) },
-                  { label: t.object.heating, value: obj.heating },
-                  { label: t.object.balcony, value: obj.balcony ? t.object.balconyOptions[obj.balcony as keyof typeof t.object.balconyOptions] : undefined },
-                ].filter((f) => f.value).map((f) => (
-                  <div key={f.label}>
-                    <div className="text-xs tracking-wider uppercase text-[var(--n15-muted)] mb-1">{f.label}</div>
-                    <div className="text-sm text-[var(--n15-white)]">{f.value}</div>
-                  </div>
-                ))}
+              {/* Параметры — парами «лейбл: значение» в 2 колонки, как на alaniadom */}
+              <div className="my-10">
+                <h2 className="text-xl font-[family-name:var(--font-display)] text-[var(--n15-white)] mb-4">{t.object.params}</h2>
+                <dl className="grid grid-cols-1 md:grid-cols-2 border-t border-[var(--n15-gold)]/15">
+                  {[
+                    { label: t.object.objectType, value: obj.category ? t.categoryLabels[obj.category as keyof typeof t.categoryLabels] : null },
+                    { label: t.object.area, value: obj.area ? `${obj.area} ${t.catalog.sqm}` : null },
+                    { label: t.object.living, value: obj.livingArea ? `${obj.livingArea} ${t.catalog.sqm}` : null },
+                    { label: t.object.kitchen, value: obj.kitchenArea ? `${obj.kitchenArea} ${t.catalog.sqm}` : null },
+                    { label: t.object.rooms, value: obj.rooms?.toString() },
+                    { label: t.object.floor, value: obj.floor || obj.totalFloors ? `${obj.floor || '?'} / ${obj.totalFloors || '?'}` : null },
+                    { label: t.object.buildingType, value: buildTypeLabel(t, obj.buildingType) },
+                    { label: t.object.condition, value: conditionLabel(t, obj.condition) },
+                    { label: t.object.heating, value: obj.heating ? t.object.heatingOptions[obj.heating as keyof typeof t.object.heatingOptions] : null },
+                    { label: t.object.balcony, value: obj.balcony ? t.object.balconyOptions[obj.balcony as keyof typeof t.object.balconyOptions] : null },
+                  ].filter((f) => f.value).map((f, i) => (
+                    <div key={f.label}
+                      className={`flex justify-between items-baseline gap-4 py-4 border-b border-[var(--n15-gold)]/15 ${
+                        i % 2 === 0 ? 'md:pr-5 md:border-r md:border-[var(--n15-gold)]/15' : 'md:pl-5'
+                      }`}>
+                      <dt className="text-xs uppercase tracking-[0.16em] text-[var(--n15-muted)] font-semibold">{f.label}</dt>
+                      <dd className="font-[family-name:var(--font-display)] font-semibold text-[var(--n15-white)] text-base text-right">{f.value}</dd>
+                    </div>
+                  ))}
+                </dl>
               </div>
 
               <OrnamentDivider variant="simple" />
