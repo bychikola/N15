@@ -64,11 +64,19 @@ export const ObjectActions: FC<Props> = ({ objectId, shareUrl }) => {
   return (
     <div className="flex gap-2 mb-4">
       <button type="button" onClick={toggleFav} aria-pressed={isFav}
-        className={`${btnBase} ${
+        className={`${btnBase} flex items-center justify-center gap-1.5 ${
           isFav
             ? 'border-[var(--n15-gold)] text-[var(--n15-gold)] bg-[var(--n15-gold)]/8'
             : 'border-[var(--n15-gold)]/30 text-[var(--n15-silver)] hover:border-[var(--n15-gold)]/60 hover:text-[var(--n15-gold)]'
         }`}>
+        {/* Material Symbols: favorite — контур, заливка при «В избранном» */}
+        <span
+          className="material-symbols-outlined text-base leading-none"
+          style={{ fontVariationSettings: isFav ? "'FILL' 1, 'wght' 400" : "'FILL' 0, 'wght' 400" }}
+          aria-hidden="true"
+        >
+          favorite
+        </span>
         {isFav ? t.object.inFavorites : t.object.favorite}
       </button>
       <button type="button" onClick={() => void share()}

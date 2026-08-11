@@ -244,6 +244,23 @@ a:hover {
   color: var(--muted);
 }
 
+/* ── Google Material Symbols (иконки) ──────────── */
+
+.material-symbols-outlined {
+  font-family: 'Material Symbols Outlined';
+  font-weight: normal;
+  font-style: normal;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  font-feature-settings: 'liga';
+  -webkit-font-smoothing: antialiased;
+}
+
 /* Collapsed gallery: оверлей «+N» на последней видимой плитке (как на alaniadom) */
 .photo-grid__tile[data-more-count]::after {
   content: attr(data-more-count);
