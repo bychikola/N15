@@ -47,11 +47,11 @@ services:
     ports:
       - "80:80"
       - "443:443"
+    # env_file передаёт значения БЕЗ интерполяции $ — bcrypt-хеш ($2a$...) доходит
+    # до Caddy нетронутым (передача через environment ломала его на compose v5).
+    env_file: .env
     environment:
       DOMAIN: ${DOMAIN:?set DOMAIN in .env}
-      ADMIN_ROUTE: ${ADMIN_ROUTE:-/admin}
-      ADMIN_USER: ${ADMIN_USER:-admin}
-      ADMIN_PASSWORD_HASH: ${ADMIN_PASSWORD_HASH:-}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
