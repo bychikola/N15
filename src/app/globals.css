@@ -326,6 +326,8 @@ html[data-theme='dark'] .object-card {
 
 /* ── Theme switcher icons ──────────────────────── */
 
-.theme-icon-moon { display: none; }
-html[data-theme='dark'] .theme-icon-sun  { display: none; }
-html[data-theme='dark'] .theme-icon-moon { display: block; }
+/* Специфичность выше, чем у .material-symbols-outlined (иначе каскад Tailwind 4
+   оставляет обе иконки видимыми) */
+span.theme-icon-moon { display: none; }
+html[data-theme='dark'] span.theme-icon-sun  { display: none; }
+html[data-theme='dark'] span.theme-icon-moon { display: block; }
