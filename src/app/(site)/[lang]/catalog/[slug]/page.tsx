@@ -83,15 +83,6 @@ export default async function ObjectPage({ params }: PageProps) {
     }
   }
 
-  // Company contacts for the «Связаться с нами» block (like alaniadom)
-  const site = await payload.findGlobal({ slug: 'site-settings', depth: 0 })
-  const sitePhones = ((site as Record<string, unknown>).phones as { phone?: string; label?: string }[] | undefined) || []
-  const siteSocials = ((site as Record<string, unknown>).socialLinks as { platform?: string; url?: string }[] | undefined) || []
-  const companyPhone = sitePhones[0]?.phone
-  const companyWhatsapp = siteSocials.find((s) => /whatsapp/i.test(s.platform || ''))?.url
-  const companyTelegram = siteSocials.find((s) => /telegram/i.test(s.platform || ''))?.url
-  const hasCompanyContacts = Boolean(companyPhone || companyWhatsapp || companyTelegram)
-
   // Similar objects: same category, exclude current, limit 3
   const { docs: similarDocs } = await payload.find({
     collection: 'objects',
@@ -270,26 +261,6 @@ export default async function ObjectPage({ params }: PageProps) {
                       </div>
                     </div>
                   </OrnamentBorder>
-                )}
-
-                {/* СВЯЗАТЬСЯ С НАМИ — контакты компании */}
-                {hasCompanyContacts && (
-                  <div className="mt-6 p-6 bg-[var(--n15-charcoal)] border border-[var(--n15-gold)]/10">
-                    <h3 className="text-sm tracking-wider uppercase text-[var(--n15-white)] mb-4">{t.object.contactUs}</h3>
-                    <div className="flex flex-col gap-2">
-                      {companyPhone && (
-                        <Button variant="outline" size="sm" className="w-full" href={`tel:${companyPhone.replace(/\s+/g, '')}`}>
-                          {companyPhone}
-                        </Button>
-                      )}
-                      {companyWhatsapp && (
-                        <Button variant="outline" size="sm" className="w-full" href={companyWhatsapp}>{t.object.whatsapp}</Button>
-                      )}
-                      {companyTelegram && (
-                        <Button variant="outline" size="sm" className="w-full" href={companyTelegram}>{t.object.telegram}</Button>
-                      )}
-                    </div>
-                  </div>
                 )}
 
                 {/* Запросить просмотр */}
