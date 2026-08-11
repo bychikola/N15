@@ -213,12 +213,7 @@ export default async function ObjectPage({ params }: PageProps) {
             <div className="lg:col-span-1">
               <div className="sticky top-24">
                 {/* В избранное / Поделиться — как на alaniadom */}
-                <ObjectActions
-                  objectId={obj.id}
-                  shareTitle={obj.title}
-                  shareText={`${obj.price.toLocaleString(t.locale)} ${obj.type === 'rent' ? t.object.perMonth : t.object.currency} — ${[obj.address?.city, obj.address?.street, obj.address?.house].filter(Boolean).join(', ')}`}
-                  shareUrl={`/${lang}/catalog/${obj.id}`}
-                />
+                <ObjectActions objectId={obj.id} shareUrl={`/${lang}/catalog/${obj.id}`} />
 
                 {/* ПОЗВОНИТЬ — прямой телефон менеджера */}
                 {obj.agent?.phone && (

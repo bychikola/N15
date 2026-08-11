@@ -5,8 +5,6 @@ import { useI18n } from '@/i18n/i18n-provider'
 
 interface Props {
   objectId: number
-  shareTitle: string
-  shareText: string
   shareUrl: string
 }
 
@@ -25,7 +23,7 @@ function readFavorites(): number[] {
  * Избранное хранится в localStorage (ключ n15_favorites).
  * Поделиться — Web Share API с fallback на копирование ссылки.
  */
-export const ObjectActions: FC<Props> = ({ objectId, shareTitle, shareText, shareUrl }) => {
+export const ObjectActions: FC<Props> = ({ objectId, shareUrl }) => {
   const { t } = useI18n()
   const [isFav, setIsFav] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -51,21 +49,14 @@ export const ObjectActions: FC<Props> = ({ objectId, shareTitle, shareText, shar
   }
 
   const share = async () => {
-    if (navigator.share) {
-      try {
-        await navigator.share({ title: shareTitle, text: shareText, url: shareUrl })
-        return
-      } catch {
-        // Пользователь отменил — пробуем fallback ниже
-      }
-    }
+    // Пока так: копируем ссылку и показываем «Скопировано» в кнопке с анимацией.
     try {
       await navigator.clipboard.writeText(shareUrl)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
     } catch {
-      // нет доступа к буферу — молча игнорируем
+      // нет доступа к буферу — анимацию всё равно показываем
     }
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
   }
 
   const btnBase = 'flex-1 px-4 py-2.5 text-xs tracking-wider uppercase border transition-all duration-300 cursor-pointer'
@@ -81,8 +72,21 @@ export const ObjectActions: FC<Props> = ({ objectId, shareTitle, shareText, shar
         {isFav ? t.object.inFavorites : t.object.favorite}
       </button>
       <button type="button" onClick={() => void share()}
-        className={`${btnBase} border-[var(--n15-gold)]/30 text-[var(--n15-silver)] hover:border-[var(--n15-gold)]/60 hover:text-[var(--n15-gold)]`}>
-        {copied ? t.object.copied : t.object.share}
+        className={`${btnBase} flex items-center justify-center gap-1.5 ${
+          copied
+            ? 'border-[var(--n15-gold)] bg-[var(--n15-gold)] text-[var(--on-accent)] scale-[1.03]'
+            : 'border-[var(--n15-gold)]/30 text-[var(--n15-silver)] hover:border-[var(--n15-gold)]/60 hover:text-[var(--n15-gold)]'
+        }`}>
+        {copied ? (
+          <>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="m4 12.5 5.5 5.5L20 6.5" />
+            </svg>
+            {t.object.copied}
+          </>
+        ) : (
+          t.object.share
+        )}
       </button>
     </div>
   )
