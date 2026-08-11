@@ -46,7 +46,7 @@ export default async function SiteLayout({ children, params }: LayoutProps) {
           precedence обязателен для <link> вне <head> в React 19 — без него ошибка гидрации. */}
       <link
         rel="stylesheet"
-        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=favorite"
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=favorite&icon_names=dark_mode&icon_names=sunny"
         precedence="default"
       />
       <body className="min-h-full bg-[var(--n15-black)] text-[var(--n15-silver)] font-[family-name:var(--font-body)] flex flex-col">
