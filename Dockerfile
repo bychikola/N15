@@ -8,11 +8,14 @@ RUN npm ci
 FROM node:22-slim AS builder
 WORKDIR /app
 
-# NEXT_PUBLIC_* инлайнятся при сборке
+# NEXT_PUBLIC_* и ADMIN_ROUTE инлайнятся при сборке (Next подставляет process.env
+# в серверный код на этапе build — рантайм-переменные для них не работают)
 ARG NEXT_PUBLIC_SERVER_URL
 ARG NEXT_PUBLIC_YANDEX_MAPS_API_KEY
+ARG ADMIN_ROUTE
 ENV NEXT_PUBLIC_SERVER_URL=$NEXT_PUBLIC_SERVER_URL
 ENV NEXT_PUBLIC_YANDEX_MAPS_API_KEY=$NEXT_PUBLIC_YANDEX_MAPS_API_KEY
+ENV ADMIN_ROUTE=$ADMIN_ROUTE
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 
