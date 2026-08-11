@@ -1,10 +1,11 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 @import "tailwindcss";
 
-/* ── New Standard font (Ossetian-supporting serif) ── */
+/* ── New Standard font (Ossetian-supporting serif) ──
+   WOFF2 вместо OTF: браузерный OTS отклонял CFF CharStrings исходного .otf. */
 @font-face {
   font-family: 'New Standard';
-  src: url('/fonts/NewStandard-Regular.otf') format('opentype');
+  src: url('/fonts/NewStandard-Regular.woff2') format('woff2');
   font-weight: normal;
   font-style: normal;
   font-display: swap;
