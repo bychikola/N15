@@ -1,137 +1,211 @@
 'use client'
 
-import { Suspense, useState, useMemo, useEffect } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { Suspense, useState, useMemo, useEffect, useRef, useCallback } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Header } from '@/components/layout/Header'
 import { Footer } from '@/components/layout/Footer'
 import { SectionWrapper } from '@/components/ui/SectionWrapper'
-import { OrnamentBorder } from '@/components/ui/OrnamentBorder'
 import { useI18n } from '@/i18n/i18n-provider'
+import ObjectCard, { type ObjectListItem } from '@/components/objects/ObjectCard'
+import CatalogFilters, { buildWhere, emptyFilters, type FiltersState } from '@/components/objects/CatalogFilters'
 
-interface ObjectItem {
-  id: number
-  title: string
-  type: 'sale' | 'rent'
-  category: string
-  price: number
-  area?: number
-  rooms?: number
-  address?: { city?: string; street?: string; house?: string }
-  isPremium?: boolean
-  primaryImage?: { url?: string; alt?: string }
-  images?: { url?: string }[]
-}
-
-const baseBtn = 'px-4 py-2 text-xs tracking-wider uppercase transition-all duration-300 cursor-pointer'
-const btnActive = 'border-[var(--n15-gold)] text-[var(--n15-gold)] bg-[var(--n15-gold)]/8'
-const btnInactive = 'border-[var(--n15-gold)]/20 text-[var(--n15-muted)] hover:border-[var(--n15-gold)]/40 hover:text-[var(--n15-silver)]'
+const PAGE_SIZE = 12
 
 function CatalogContent() {
   const searchParams = useSearchParams()
+  const router = useRouter()
   const { lang, t } = useI18n()
-  const typeLabels: Record<string, string> = { sale: t.typeLabels.sale, rent: t.typeLabels.rent }
-  const categoryLabels: Record<string, string> = {
-    apartment: t.categoryLabels.apartment, house: t.categoryLabels.house, townhouse: t.categoryLabels.townhouse,
-    commercial: t.categoryLabels.commercial, land: t.categoryLabels.land,
-  }
-  const [objects, setObjects] = useState<ObjectItem[]>([])
+
+  const [objects, setObjects] = useState<ObjectListItem[]>([])
+  const [totalDocs, setTotalDocs] = useState(0)
+  const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
-  const [activeType, setActiveType] = useState('')
-  const [activeCategory, setActiveCategory] = useState('')
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [q, setQ] = useState(searchParams.get('q') ?? '')
+  const [sort, setSort] = useState(searchParams.get('sort') ?? '')
+  const [filters, setFilters] = useState<FiltersState>(() => ({
+    type: searchParams.get('type') ?? '',
+    category: searchParams.get('category') ?? '',
+    rooms: searchParams.get('rooms') ?? '',
+    priceMin: searchParams.get('price_min') ?? '',
+    priceMax: searchParams.get('price_max') ?? '',
+    areaMin: searchParams.get('area_min') ?? '',
+  }))
 
+  const where = useMemo(() => buildWhere(filters, q), [filters, q])
+  const sortParam = sort || '-createdAt'
+
+  // Debounced search: write q to URL after 300ms (only q — filters/sort handled below)
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined)
   useEffect(() => {
-    const type = searchParams.get('type')
-    const category = searchParams.get('category')
-    if (type) setActiveType(type)
-    if (category) setActiveCategory(category)
-  }, [searchParams])
+    clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => {
+      const params = new URLSearchParams(searchParams.toString())
+      if (q) {
+        params.set('q', q)
+      } else {
+        params.delete('q')
+      }
+      params.delete('page')
+      router.replace(`/${lang}/catalog?${params.toString()}`, { scroll: false })
+    }, 300)
+    return () => clearTimeout(debounceRef.current)
+  }, [q, lang, router, searchParams])
 
+  // Sync filter/sort changes to URL
   useEffect(() => {
-    setLoading(true)
-    const params = new URLSearchParams({ limit: '50', depth: '2' })
-    if (activeType) params.set('where', JSON.stringify({ type: { equals: activeType } }))
-    fetch(`/api/objects?${params}`, { credentials: 'include' })
-      .then((r) => r.json())
-      .then((data) => {
-        const docs = (data.docs || []).map((d: Record<string, unknown>) => ({
-          ...d,
-          primaryImage: typeof d.primaryImage === 'object' ? d.primaryImage : null,
-          images: Array.isArray(d.images) ? d.images.filter((i: unknown) => typeof i === 'object') : [],
-        }))
-        setObjects(docs)
-      })
-      .catch(() => setObjects([]))
-      .finally(() => setLoading(false))
-  }, [activeType])
-
-  const filtered = useMemo(() => {
-    return objects.filter((obj) => {
-      if (activeCategory && obj.category !== activeCategory) return false
-      return true
+    const params = new URLSearchParams(searchParams.toString())
+    Object.entries(filters).forEach(([k, v]) => {
+      if (v) {
+        params.set(k, v)
+      } else {
+        params.delete(k)
+      }
     })
-  }, [objects, activeCategory])
+    if (sort) {
+      params.set('sort', sort)
+    } else {
+      params.delete('sort')
+    }
+    params.delete('page')
+    router.replace(`/${lang}/catalog?${params.toString()}`, { scroll: false })
+  }, [filters, sort, lang, router, searchParams])
+
+  const mapDocs = (d: Record<string, unknown>): ObjectListItem => ({
+    id: d.id as number,
+    title: d.title as string,
+    type: d.type as 'sale' | 'rent',
+    category: d.category as string,
+    price: d.price as number,
+    slug: d.slug as string | undefined,
+    area: d.area as number | undefined,
+    rooms: d.rooms as number | undefined,
+    floor: d.floor as number | undefined,
+    totalFloors: d.totalFloors as number | undefined,
+    address: d.address as ObjectListItem['address'],
+    primaryImage: (d.primaryImage && typeof d.primaryImage === 'object'
+      ? d.primaryImage
+      : undefined) as ObjectListItem['primaryImage'],
+    agent: d.agent as ObjectListItem['agent'],
+  })
+
+  // (re)load first page on filter/sort/search change.
+  // All setState calls happen after await, so no synchronous setState in the effect body.
+  useEffect(() => {
+    let cancelled = false
+    async function run() {
+      try {
+        const params = new URLSearchParams({ limit: String(PAGE_SIZE), page: '1', depth: '2', sort: sortParam })
+        if (Object.keys(where).length) params.set('where', JSON.stringify(where))
+        const res = await fetch(`/api/objects?${params}`, { credentials: 'include' })
+        const data = await res.json()
+        if (cancelled) return
+        setObjects((data.docs || []).map(mapDocs))
+        setTotalDocs(data.totalDocs ?? 0)
+        setPage(1)
+      } catch {
+        if (!cancelled) setObjects([])
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    void run()
+    return () => { cancelled = true }
+  }, [where, sortParam])
+
+  const loadMore = useCallback(async () => {
+    setLoadingMore(true)
+    try {
+      const params = new URLSearchParams({ limit: String(PAGE_SIZE), page: String(page + 1), depth: '2', sort: sortParam })
+      if (Object.keys(where).length) params.set('where', JSON.stringify(where))
+      const res = await fetch(`/api/objects?${params}`, { credentials: 'include' })
+      const data = await res.json()
+      setObjects((prev) => [...prev, ...(data.docs || []).map(mapDocs)])
+      setTotalDocs(data.totalDocs ?? 0)
+      setPage(page + 1)
+    } finally {
+      setLoadingMore(false)
+    }
+  }, [where, sortParam, page])
+
+  const onChangeFilters = useCallback((patch: Partial<FiltersState>) => {
+    setFilters((prev) => ({ ...prev, ...patch }))
+    setLoading(true)
+  }, [])
+
+  const hasFilters = useMemo(() => Object.values(filters).some(Boolean) || q !== '', [filters, q])
+  const showMore = objects.length < totalDocs
 
   return (
     <SectionWrapper variant="charcoal">
-      <div className="flex flex-wrap gap-2 mb-10 p-6 border border-[var(--n15-gold)]/10 bg-[var(--n15-black)]/30">
-        <span className="text-[10px] tracking-[0.2em] uppercase text-[var(--n15-muted)] self-center mr-2">{t.catalog.dealLabel}</span>
-        <button onClick={() => setActiveType('')} className={`${baseBtn} border ${activeType === '' ? btnActive : btnInactive}`}>{t.common.all}</button>
-        {(['sale', 'rent'] as const).map((typeKey) => (
-          <button key={typeKey} onClick={() => setActiveType(activeType === typeKey ? '' : typeKey)} className={`${baseBtn} border ${activeType === typeKey ? btnActive : btnInactive}`}>{typeLabels[typeKey]}</button>
-        ))}
-        <div className="w-px bg-[var(--n15-gold)]/20 mx-3 self-stretch" />
-        <span className="text-[10px] tracking-[0.2em] uppercase text-[var(--n15-muted)] self-center mr-2">{t.catalog.typeLabel}</span>
-        <button onClick={() => setActiveCategory('')} className={`${baseBtn} border ${activeCategory === '' ? btnActive : btnInactive}`}>{t.common.all}</button>
-        {Object.entries(categoryLabels).map(([k, v]) => (
-          <button key={k} onClick={() => setActiveCategory(activeCategory === k ? '' : k)} className={`${baseBtn} border ${activeCategory === k ? btnActive : btnInactive}`}>{v}</button>
-        ))}
+      {/* Search pill */}
+      <div className="catalog-search max-w-xl mb-6">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-[var(--n15-muted)] shrink-0" aria-hidden="true">
+          <circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" />
+        </svg>
+        <input
+          type="search"
+          value={q}
+          onChange={(e) => { setQ(e.target.value); setLoading(true) }}
+          placeholder={t.catalog.searchPlaceholder}
+          aria-label={t.catalog.searchPlaceholder}
+        />
       </div>
 
-      <p className="text-xs text-[var(--n15-muted)] mb-6">
-        {t.catalog.found} <span className="text-[var(--n15-gold)]">{loading ? '...' : filtered.length}</span> {t.catalog.foundObjects}
-        {(activeType || activeCategory) && (
-          <button onClick={() => { setActiveType(''); setActiveCategory('') }} className="ml-4 text-[var(--n15-gold)] underline">{t.catalog.resetFilters}</button>
-        )}
-      </p>
+      <CatalogFilters state={filters} onChange={onChangeFilters} t={t} />
+
+      {/* Count + sort */}
+      <div className="flex flex-wrap items-center justify-between gap-3 my-6">
+        <p className="text-xs text-[var(--n15-muted)]">
+          {t.catalog.found} <span className="text-[var(--n15-gold)]">{loading ? '...' : totalDocs}</span> {t.catalog.foundObjects}
+          {hasFilters && (
+            <button onClick={() => { setFilters(emptyFilters); setQ(''); setSort('') }}
+              className="ml-4 text-[var(--n15-gold)] underline">
+              {t.catalog.resetFilters}
+            </button>
+          )}
+        </p>
+        <label className="text-xs text-[var(--n15-muted)] flex items-center gap-2">
+          <span className="text-[10px] tracking-[0.2em] uppercase">{t.catalog.sortDefault.split(':')[0]}:</span>
+          <select
+            value={sort}
+            onChange={(e) => { setSort(e.target.value); setLoading(true) }}
+            className="bg-[var(--n15-charcoal)] border border-[var(--n15-gold)]/20 px-3 py-2 text-sm text-[var(--n15-silver)] focus:outline-none focus:border-[var(--n15-gold)]/50"
+          >
+            <option value="">{t.catalog.sortDefault}</option>
+            <option value="price">{t.catalog.sortPriceAsc}</option>
+            <option value="-price">{t.catalog.sortPriceDesc}</option>
+            <option value="-area">{t.catalog.sortAreaDesc}</option>
+          </select>
+        </label>
+      </div>
 
       {loading ? (
         <p className="text-center py-20 text-[var(--n15-muted)]">{t.catalog.loading}</p>
-      ) : filtered.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filtered.map((obj) => (
-            <a key={obj.id} href={`/${lang}/catalog/${obj.id}`}>
-              <OrnamentBorder cornerOrnament={obj.isPremium}>
-                <div className="p-6 group">
-                  <div className="aspect-[4/3] bg-[var(--n15-black)] mb-4 flex items-center justify-center overflow-hidden">
-                    {obj.primaryImage?.url ? (
-                      <img src={obj.primaryImage.url} alt={obj.title} className="w-full h-full object-cover" />
-                    ) : (
-                      <svg width="64" height="64" viewBox="0 0 64 64" fill="none" className="opacity-20 group-hover:opacity-40 transition-opacity">
-                        <rect x="4" y="12" width="56" height="44" stroke="#C8A44E" strokeWidth="1" />
-                        <path d="M4 36 L24 20 L40 32 L60 12" stroke="#C8A44E" strokeWidth="1" />
-                      </svg>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2 mb-2">
-                    {obj.isPremium && <span className="text-[10px] tracking-[0.2em] uppercase text-[var(--n15-gold)] border border-[var(--n15-gold)]/30 px-2 py-0.5">{t.catalog.premium}</span>}
-                    <span className="text-[10px] tracking-[0.2em] uppercase text-[var(--n15-muted)]">{typeLabels[obj.type]}</span>
-                    <span className="text-[10px] tracking-[0.2em] uppercase text-[var(--n15-muted)]">{categoryLabels[obj.category] || obj.category}</span>
-                  </div>
-                  <h3 className="text-lg font-[family-name:var(--font-display)] text-[var(--n15-white)] mb-2 group-hover:text-[var(--n15-gold)] transition-colors">{obj.title}</h3>
-                  <p className="text-xs text-[var(--n15-muted)] mb-3">{obj.address ? [obj.address.street, obj.address.house].filter(Boolean).join(', ') : ''}</p>
-                  <div className="flex items-center justify-between">
-                    <span className="text-lg text-[var(--n15-gold)] font-medium">{obj.price?.toLocaleString(t.locale)} {obj.type === 'rent' ? t.catalog.perMonth : t.catalog.currency}</span>
-                    <span className="text-xs text-[var(--n15-muted)]">{obj.area && `${obj.area} ${t.catalog.sqm}`}{obj.rooms ? ` • ${obj.rooms} ${t.catalog.rooms}` : ''}</span>
-                  </div>
-                </div>
-              </OrnamentBorder>
-            </a>
-          ))}
-        </div>
+      ) : objects.length > 0 ? (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-10">
+            {objects.map((obj) => <ObjectCard key={obj.id} obj={obj} lang={lang} t={t} />)}
+          </div>
+          {showMore && (
+            <div className="text-center mt-12">
+              <button
+                onClick={() => void loadMore()}
+                disabled={loadingMore}
+                className="px-6 py-3 text-sm uppercase tracking-wider border border-[var(--n15-gold)] text-[var(--n15-gold)] hover:bg-[var(--n15-gold)]/8 transition-colors disabled:opacity-50 cursor-pointer"
+              >
+                {loadingMore ? t.common.loading : t.catalog.showMore}
+              </button>
+            </div>
+          )}
+        </>
       ) : (
         <div className="text-center py-20">
           <p className="text-[var(--n15-muted)] text-lg mb-4">{t.catalog.nothingFound}</p>
-          <button onClick={() => { setActiveType(''); setActiveCategory('') }} className="text-sm text-[var(--n15-gold)] underline">{t.catalog.resetAll}</button>
+          <button onClick={() => { setFilters(emptyFilters); setQ(''); setSort('') }}
+            className="text-sm text-[var(--n15-gold)] underline">
+            {t.catalog.resetAll}
+          </button>
         </div>
       )}
     </SectionWrapper>
