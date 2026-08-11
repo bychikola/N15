@@ -54,7 +54,7 @@
 
   /* Hybrid catalog tokens */
   --card-gradient: linear-gradient(to top, rgba(176, 141, 62, .68), rgba(176, 141, 62, 0) 60%);
-  --card-price-fg: var(--on-accent);
+  --card-price-fg: #F6F2E9;
   --pill-bg: rgba(246, 242, 233, .92);
   --pill-fg: #722F37;
   --search-bg: rgba(255, 255, 255, .6);
@@ -98,7 +98,7 @@ html[data-theme='dark'] {
 
   /* Hybrid catalog tokens */
   --card-gradient: linear-gradient(to top, rgba(200, 164, 78, .68), rgba(200, 164, 78, 0) 60%);
-  --card-price-fg: var(--on-accent);
+  --card-price-fg: #F5F5F7;
   --pill-bg: rgba(245, 245, 247, .92);
   --pill-fg: #722F37;
   --search-bg: rgba(26, 26, 30, .6);
