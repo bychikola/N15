@@ -1,5 +1,6 @@
 import { getPayload } from 'payload'
 import config from '@payload-config'
+import { RichText } from '@payloadcms/richtext-lexical/react'
 import { notFound } from 'next/navigation'
 import { Header } from '@/components/layout/Header'
 import { Footer } from '@/components/layout/Footer'
@@ -167,13 +168,6 @@ export default async function ObjectPage({ params }: PageProps) {
                 {pricePerMeter && <span className="text-sm text-[var(--n15-muted)] ml-2">({pricePerMeter.toLocaleString(t.locale)} {t.object.perMeter})</span>}
               </div>
 
-              {showMap && (
-                <div className="mb-8">
-                  <h2 className="text-xl font-[family-name:var(--font-display)] text-[var(--n15-white)] mb-4">{t.map.title}</h2>
-                  <ObjectMap address={mapAddress} lat={mapLat} lng={mapLng} />
-                </div>
-              )}
-
               <OrnamentDivider variant="simple" />
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-6 my-10">
@@ -205,6 +199,23 @@ export default async function ObjectPage({ params }: PageProps) {
                       <span key={f} className="text-xs px-3 py-1.5 border border-[var(--n15-gold)]/20 text-[var(--n15-silver)]">{f}</span>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {/* Описание — над картой, как на alaniadom */}
+              {obj.description?.root?.children?.length ? (
+                <div className="my-10">
+                  <h2 className="text-xl font-[family-name:var(--font-display)] text-[var(--n15-white)] mb-4">{t.object.description}</h2>
+                  <div className="text-[var(--n15-silver)] leading-relaxed [&_a]:text-[var(--n15-gold)] [&_a]:underline">
+                    <RichText data={obj.description as never} />
+                  </div>
+                </div>
+              ) : null}
+
+              {showMap && (
+                <div className="mb-8">
+                  <h2 className="text-xl font-[family-name:var(--font-display)] text-[var(--n15-white)] mb-4">{t.map.title}</h2>
+                  <ObjectMap address={mapAddress} lat={mapLat} lng={mapLng} />
                 </div>
               )}
 
