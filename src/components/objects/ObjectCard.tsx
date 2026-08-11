@@ -38,7 +38,7 @@ export default function ObjectCard({ obj, lang, t }: ObjectCardProps) {
   const href = `/${lang}/catalog/${obj.id}`
 
   return (
-    <a href={href} className="group block bg-[var(--search-bg)]">
+    <a href={href} className="object-card group block bg-[var(--search-bg)]">
       <div className="object-card__media bg-[var(--n15-charcoal)]">
         {obj.primaryImage?.url ? (
           <img

@@ -245,6 +245,11 @@ a:hover {
   color: var(--muted);
 }
 
+/* В тёмной теме края карточек видны за счёт золотой обводки */
+html[data-theme='dark'] .object-card {
+  border: 1px solid color-mix(in srgb, var(--n15-gold) 35%, transparent);
+}
+
 /* ── Google Material Symbols (иконки) ──────────── */
 
 .material-symbols-outlined {
