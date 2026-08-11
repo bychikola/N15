@@ -19,7 +19,8 @@ set -e
 REPO="https://github.com/bychikola/N15.git"
 BRANCH="master"
 APP_DIR="$HOME/n15"              # папка сайта (меняй на любой путь, например /var/www/n15)
-DOMAIN="n15-realty.ru"           # твой домен
+# Домен спрашивается при первой установке (можно передать заранее: DOMAIN=my.ru bash deploy.sh)
+DEFAULT_DOMAIN="n15-realty.ru"
 # NEXT_PUBLIC_YANDEX_MAPS_API_KEY — если не задан ниже, скрипт спросит
 YANDEX_MAPS_API_KEY="${NEXT_PUBLIC_YANDEX_MAPS_API_KEY:-}"
 # ---------------------------------
@@ -28,7 +29,6 @@ echo ""
 echo "======================================"
 echo "  N15 — развёртывание на VPS"
 echo "  Папка: $APP_DIR"
-echo "  Домен: $DOMAIN"
 echo "======================================"
 echo ""
 
@@ -82,6 +82,12 @@ fi
 echo "[4/6] Настраиваю .env..."
 if [ ! -f .env ]; then
     echo "  Создаю .env (сохранится один раз)..."
+    # Домен: спрашиваем при первой установке, если не передан заранее
+    if [ -z "$DOMAIN" ]; then
+        read -rp "  Домен сайта (Enter = $DEFAULT_DOMAIN): " DOMAIN
+        DOMAIN="${DOMAIN:-$DEFAULT_DOMAIN}"
+    fi
+    echo "  Домен: $DOMAIN"
     if [ -z "$YANDEX_MAPS_API_KEY" ]; then
         read -rp "  Введи ключ Яндекс.Карт (JavaScript API): " YANDEX_MAPS_API_KEY
     fi
@@ -103,9 +109,13 @@ else
     echo "  .env уже существует — пропускаю (замени при необходимости)."
     # Для старых развёртываний без DOMAIN (домен раньше был захардкожен):
     if ! grep -q '^DOMAIN=' .env; then
-        echo "  Добавляю DOMAIN=$DOMAIN в существующий .env..."
-        echo "DOMAIN=$DOMAIN" >> .env
+        echo "  Добавляю DOMAIN=$DEFAULT_DOMAIN в существующий .env..."
+        echo "DOMAIN=$DEFAULT_DOMAIN" >> .env
     fi
+fi
+# Домен для вывода в итоге: из .env (или как задан выше)
+if [ -z "$DOMAIN" ]; then
+    DOMAIN=$(grep -E '^DOMAIN=' .env | head -1 | cut -d= -f2-)
 fi
 
 # ---------- 5. Сборка и запуск ----------
