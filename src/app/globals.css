@@ -53,8 +53,8 @@
   --font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
 
   /* Hybrid catalog tokens */
-  --card-gradient: linear-gradient(to top, rgba(114, 47, 55, .92), transparent 72%);
-  --card-price-fg: #F6F2E9;
+  --card-gradient: linear-gradient(to top, rgba(176, 141, 62, .95), rgba(176, 141, 62, 0) 70%);
+  --card-price-fg: var(--on-accent);
   --pill-bg: rgba(246, 242, 233, .92);
   --pill-fg: #722F37;
   --search-bg: rgba(255, 255, 255, .6);
@@ -97,8 +97,8 @@ html[data-theme='dark'] {
   --lightbox-fg: #C8C8CC;
 
   /* Hybrid catalog tokens */
-  --card-gradient: linear-gradient(to top, rgba(114, 47, 55, .92), transparent 72%);
-  --card-price-fg: #F5F5F7;
+  --card-gradient: linear-gradient(to top, rgba(200, 164, 78, .95), rgba(200, 164, 78, 0) 70%);
+  --card-price-fg: var(--on-accent);
   --pill-bg: rgba(245, 245, 247, .92);
   --pill-fg: #722F37;
   --search-bg: rgba(26, 26, 30, .6);

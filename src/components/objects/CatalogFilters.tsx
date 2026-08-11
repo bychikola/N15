@@ -82,7 +82,7 @@ export default function CatalogFilters({ state, onChange, t }: CatalogFiltersPro
   const hasFilters = state.type || state.category || state.rooms || state.priceMin || state.priceMax || state.areaMin
 
   return (
-    <div className="flex flex-wrap items-end gap-4 p-6 border border-[var(--n15-gold)]/10 bg-[var(--n15-black)]/30">
+    <div className="flex flex-wrap items-end gap-3 p-4 border border-[var(--n15-gold)]/10 bg-[var(--n15-black)]/30">
       <div className="w-48">
         <Dropdown label={t.catalog.dealLabel} value={state.type} options={typeOptions}
           onSelect={(v) => onChange({ type: v })} />

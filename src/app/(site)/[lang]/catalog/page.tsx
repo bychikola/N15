@@ -137,9 +137,10 @@ function CatalogContent() {
   const showMore = objects.length < totalDocs
 
   return (
-    <SectionWrapper variant="charcoal">
+    <section className="bg-[var(--n15-charcoal)] py-8">
+      <div className="n15-container">
       {/* Search pill */}
-      <div className="catalog-search max-w-xl mb-6">
+      <div className="catalog-search max-w-xl mb-4">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-[var(--n15-muted)] shrink-0" aria-hidden="true">
           <circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" />
         </svg>
@@ -155,7 +156,7 @@ function CatalogContent() {
       <CatalogFilters state={filters} onChange={onChangeFilters} t={t} />
 
       {/* Count + sort */}
-      <div className="flex flex-wrap items-center justify-between gap-3 my-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 my-4">
         <p className="text-xs text-[var(--n15-muted)]">
           {t.catalog.found} <span className="text-[var(--n15-gold)]">{loading ? '...' : totalDocs}</span> {t.catalog.foundObjects}
           {hasFilters && (
@@ -184,7 +185,7 @@ function CatalogContent() {
         <p className="text-center py-20 text-[var(--n15-muted)]">{t.catalog.loading}</p>
       ) : objects.length > 0 ? (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-10">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-8">
             {objects.map((obj) => <ObjectCard key={obj.id} obj={obj} lang={lang} t={t} />)}
           </div>
           {showMore && (
@@ -208,7 +209,8 @@ function CatalogContent() {
           </button>
         </div>
       )}
-    </SectionWrapper>
+      </div>
+    </section>
   )
 }
 
@@ -218,11 +220,13 @@ export default function CatalogPage() {
     <>
       <Header />
       <main className="pt-20">
-        <SectionWrapper variant="dark" ornament="solar">
-          <h1 className="text-4xl md:text-5xl font-[family-name:var(--font-display)] text-[var(--n15-white)] mb-4">{t.catalog.title}</h1>
-          <p className="text-[var(--n15-muted)] max-w-xl">{t.catalog.subtitle}</p>
-        </SectionWrapper>
-        <Suspense fallback={<SectionWrapper variant="charcoal"><p className="text-[var(--n15-muted)] text-center py-20">{t.catalog.loading}</p></SectionWrapper>}>
+        <section className="bg-[var(--n15-black)] py-10">
+          <div className="n15-container">
+            <h1 className="text-3xl md:text-4xl font-[family-name:var(--font-display)] text-[var(--n15-white)]">{t.catalog.title}</h1>
+            <p className="text-[var(--n15-muted)] max-w-xl mt-2">{t.catalog.subtitle}</p>
+          </div>
+        </section>
+        <Suspense fallback={<section className="bg-[var(--n15-charcoal)] py-8"><p className="text-[var(--n15-muted)] text-center py-20">{t.catalog.loading}</p></section>}>
           <CatalogContent />
         </Suspense>
       </main>
