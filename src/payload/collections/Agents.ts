@@ -45,11 +45,17 @@ export const Agents: CollectionConfig = {
       name: 'telegram',
       type: 'text',
       label: 'Telegram',
+      admin: {
+        description: 'Ссылка или юзернейм: https://t.me/username или @username. Оставьте пустым, чтобы скрыть кнопку.',
+      },
     },
     {
       name: 'whatsapp',
       type: 'text',
       label: 'WhatsApp',
+      admin: {
+        description: 'Номер или ссылка: https://wa.me/79281112233. Если пусто — возьмётся номер из «Телефон».',
+      },
     },
     {
       name: 'bio',
