@@ -195,20 +195,21 @@ export default async function ObjectPage({ params }: PageProps) {
                     </div>
                   ))}
                 </dl>
+
+                {/* Особенности — под параметрами, над разделителем */}
+                {features.length > 0 && (
+                  <div className="mt-8">
+                    <h2 className="text-xl font-[family-name:var(--font-display)] text-[var(--n15-white)] mb-4">{t.object.features}</h2>
+                    <div className="flex flex-wrap gap-2">
+                      {features.map((f) => (
+                        <span key={f} className="text-sm px-4 py-2 border border-[var(--n15-gold)]/30 text-[var(--n15-white)]">{f}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               <OrnamentDivider variant="simple" />
-
-              {features.length > 0 && (
-                <div className="my-10">
-                  <h2 className="text-xl font-[family-name:var(--font-display)] text-[var(--n15-white)] mb-4">{t.object.features}</h2>
-                  <div className="flex flex-wrap gap-2">
-                    {features.map((f) => (
-                      <span key={f} className="text-xs px-3 py-1.5 border border-[var(--n15-gold)]/20 text-[var(--n15-silver)]">{f}</span>
-                    ))}
-                  </div>
-                </div>
-              )}
 
               {/* Описание — над картой, как на alaniadom */}
               {obj.description?.root?.children?.length ? (
