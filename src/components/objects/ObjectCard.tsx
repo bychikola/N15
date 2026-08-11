@@ -33,7 +33,9 @@ export default function ObjectCard({ obj, lang, t }: ObjectCardProps) {
     ? obj.agent.name.split(' ').map((n) => n[0]).join('').slice(0, 2)
     : ''
 
-  const href = `/${lang}/catalog/${obj.slug || obj.id}`
+  // Ссылка по id: кириллические slug-сегменты не матчатся роутером этой сборки
+  // Next.js (дают 404), числовой id работает всегда. Роут [slug] умеет оба вида.
+  const href = `/${lang}/catalog/${obj.id}`
 
   return (
     <a href={href} className="group block">

@@ -33,9 +33,12 @@ export default async function ObjectPage({ params }: PageProps) {
   const t = getDictionary(lang)
   const payload = await getPayload({ config })
 
+  // Ссылки на объекты бывают двух видов: /catalog/<id> (число) и /catalog/<slug>.
+  // parseInt от slug даёт NaN — такие значения в where не отправляем.
+  const numericId = /^\d+$/.test(slug) ? parseInt(slug, 10) : null
   const { docs } = await payload.find({
     collection: 'objects',
-    where: { id: { equals: parseInt(slug) } },
+    where: numericId ? { id: { equals: numericId } } : { slug: { equals: slug } },
     limit: 1,
     depth: 2,
   })
