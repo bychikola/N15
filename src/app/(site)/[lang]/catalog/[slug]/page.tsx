@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/Button'
 import { PhotoGrid } from '@/components/ui/PhotoGrid'
 import { ObjectMap } from '@/components/ui/ObjectMap'
 import ObjectCard, { type ObjectListItem } from '@/components/objects/ObjectCard'
+import { ObjectActions } from '@/components/objects/ObjectActions'
 import { getDictionary, type Dict } from '@/i18n/dictionaries'
 
 interface PageProps {
@@ -81,6 +82,15 @@ export default async function ObjectPage({ params }: PageProps) {
       allSlides.push({ url: img.url!, alt: img.alt || obj.title })
     }
   }
+
+  // Company contacts for the «Связаться с нами» block (like alaniadom)
+  const site = await payload.findGlobal({ slug: 'site-settings', depth: 0 })
+  const sitePhones = ((site as Record<string, unknown>).phones as { phone?: string; label?: string }[] | undefined) || []
+  const siteSocials = ((site as Record<string, unknown>).socialLinks as { platform?: string; url?: string }[] | undefined) || []
+  const companyPhone = sitePhones[0]?.phone
+  const companyWhatsapp = siteSocials.find((s) => /whatsapp/i.test(s.platform || ''))?.url
+  const companyTelegram = siteSocials.find((s) => /telegram/i.test(s.platform || ''))?.url
+  const hasCompanyContacts = Boolean(companyPhone || companyWhatsapp || companyTelegram)
 
   // Similar objects: same category, exclude current, limit 3
   const { docs: similarDocs } = await payload.find({
@@ -204,6 +214,22 @@ export default async function ObjectPage({ params }: PageProps) {
 
             <div className="lg:col-span-1">
               <div className="sticky top-24">
+                {/* В избранное / Поделиться — как на alaniadom */}
+                <ObjectActions
+                  objectId={obj.id}
+                  shareTitle={obj.title}
+                  shareText={`${obj.price.toLocaleString(t.locale)} ${obj.type === 'rent' ? t.object.perMonth : t.object.currency} — ${[obj.address?.city, obj.address?.street, obj.address?.house].filter(Boolean).join(', ')}`}
+                  shareUrl={`/${lang}/catalog/${obj.id}`}
+                />
+
+                {/* ПОЗВОНИТЬ — прямой телефон менеджера */}
+                {obj.agent?.phone && (
+                  <Button variant="primary" size="sm" className="w-full mb-4" href={`tel:${obj.agent.phone.replace(/\s+/g, '')}`}>
+                    {t.object.phone.toUpperCase()}: {obj.agent.phone}
+                  </Button>
+                )}
+
+                {/* ВАШ МЕНЕДЖЕР */}
                 {obj.agent && (
                   <OrnamentBorder cornerOrnament>
                     <div className="p-6">
@@ -225,7 +251,7 @@ export default async function ObjectPage({ params }: PageProps) {
                       </div>
                       <div className="flex flex-col gap-2">
                         {obj.agent.phone && (
-                          <Button variant="primary" size="sm" className="w-full" href={`tel:${obj.agent.phone.replace(/\s+/g, '')}`}>
+                          <Button variant="outline" size="sm" className="w-full" href={`tel:${obj.agent.phone.replace(/\s+/g, '')}`}>
                             {obj.agent.phone}
                           </Button>
                         )}
@@ -246,8 +272,30 @@ export default async function ObjectPage({ params }: PageProps) {
                   </OrnamentBorder>
                 )}
 
+                {/* СВЯЗАТЬСЯ С НАМИ — контакты компании */}
+                {hasCompanyContacts && (
+                  <div className="mt-6 p-6 bg-[var(--n15-charcoal)] border border-[var(--n15-gold)]/10">
+                    <h3 className="text-sm tracking-wider uppercase text-[var(--n15-white)] mb-4">{t.object.contactUs}</h3>
+                    <div className="flex flex-col gap-2">
+                      {companyPhone && (
+                        <Button variant="outline" size="sm" className="w-full" href={`tel:${companyPhone.replace(/\s+/g, '')}`}>
+                          {companyPhone}
+                        </Button>
+                      )}
+                      {companyWhatsapp && (
+                        <Button variant="outline" size="sm" className="w-full" href={companyWhatsapp}>{t.object.whatsapp}</Button>
+                      )}
+                      {companyTelegram && (
+                        <Button variant="outline" size="sm" className="w-full" href={companyTelegram}>{t.object.telegram}</Button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Запросить просмотр */}
                 <div className="mt-6 p-6 bg-[var(--n15-charcoal)] border border-[var(--n15-gold)]/10">
-                  <h3 className="text-sm tracking-wider uppercase text-[var(--n15-white)] mb-4">{t.object.viewTitle}</h3>
+                  <h3 className="text-sm tracking-wider uppercase text-[var(--n15-white)] mb-1">{t.object.viewTitle}</h3>
+                  <p className="text-xs text-[var(--n15-muted)] mb-4">{t.object.viewSubtitle}</p>
                   <form className="flex flex-col gap-3">
                     <input type="text" placeholder={t.object.namePlaceholder} className="bg-[var(--n15-black)] border border-[var(--n15-gold)]/20 px-4 py-2.5 text-sm text-[var(--n15-silver)] placeholder:text-[var(--n15-muted)] focus:outline-none focus:border-[var(--n15-gold)]/50" />
                     <input type="tel" placeholder={t.object.phonePlaceholder} className="bg-[var(--n15-black)] border border-[var(--n15-gold)]/20 px-4 py-2.5 text-sm text-[var(--n15-silver)] placeholder:text-[var(--n15-muted)] focus:outline-none focus:border-[var(--n15-gold)]/50" />
