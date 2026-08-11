@@ -124,8 +124,9 @@ NEXT_PUBLIC_SERVER_URL=https://$DOMAIN
 NEXT_PUBLIC_YANDEX_MAPS_API_KEY=$YANDEX_MAPS_API_KEY
 EOF
     # Хеш отдельной строкой: содержит $, heredoc бы его раскрыл.
-    # Экранирование НЕ нужно: caddy получает его через env_file (значения идут вербатим).
-    echo "ADMIN_PASSWORD_HASH=$ADMIN_PASSWORD_HASH" >> .env
+    # $ -> $$ : docker compose v5 интерполирует значения .env и съедает одиночные $
+    # (и для environment, и для env_file); двойные $$ превращаются обратно в $.
+    echo "ADMIN_PASSWORD_HASH=$(printf '%s' "$ADMIN_PASSWORD_HASH" | sed 's/\$/$$/g')" >> .env
     chmod 600 .env
     echo "  .env создан."
 else
@@ -151,7 +152,7 @@ else
             echo ""
         fi
         ADMIN_PASSWORD_HASH=$(docker run --rm caddy:2-alpine caddy hash-password --plaintext "$ADMIN_PASSWORD" | tail -1)
-        echo "ADMIN_PASSWORD_HASH=$ADMIN_PASSWORD_HASH" >> .env
+        echo "ADMIN_PASSWORD_HASH=$(printf '%s' "$ADMIN_PASSWORD_HASH" | sed 's/\$/$$/g')" >> .env
         echo "  Админка защищена (логин: ${ADMIN_USER:-admin})."
     fi
 fi
