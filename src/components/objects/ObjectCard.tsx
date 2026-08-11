@@ -58,7 +58,7 @@ export default function ObjectCard({ obj, lang, t }: ObjectCardProps) {
         <span className="object-card__pill">{obj.type === 'sale' ? t.object.sale : t.object.rent}</span>
         <div className="object-card__overlay" />
         <div className="absolute bottom-3 left-4 right-4 z-10">
-          <div className="text-[26px] leading-tight font-[family-name:var(--font-display)] font-semibold text-[var(--card-price-fg)]">
+          <div className="text-[30px] leading-tight font-[family-name:var(--font-display)] font-semibold text-[var(--card-price-fg)]">
             {obj.price?.toLocaleString(t.locale)} {obj.type === 'rent' ? t.catalog.perMonth : t.catalog.currency}
           </div>
         </div>
