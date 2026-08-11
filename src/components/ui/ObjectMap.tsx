@@ -13,6 +13,7 @@ interface ObjectMapProps {
 
 type Status = 'loading' | 'ready' | 'error'
 // Типы Яндекса не установлены; достаточно `any` для изолированного компонента.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Ymaps = any
 
 const LOAD_TIMEOUT_MS = 15_000
@@ -81,19 +82,16 @@ export const ObjectMap: FC<ObjectMapProps> = ({ address, lat, lng }) => {
   const { t } = useI18n()
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<Ymaps | null>(null)
-  const [status, setStatus] = useState<Status>('loading')
-
   const apiKey = process.env.NEXT_PUBLIC_YANDEX_MAPS_API_KEY
 
   const hasManualCoords = isValidCoord(lat, -90, 90) && isValidCoord(lng, -180, 180)
   const canGeocode = address.trim().length > 0
   const showFallback = !apiKey || (!hasManualCoords && !canGeocode)
 
+  const [status, setStatus] = useState<Status>(showFallback ? 'error' : 'loading')
+
   useEffect(() => {
-    if (showFallback) {
-      setStatus('error')
-      return
-    }
+    if (showFallback) return
     const el = containerRef.current
     if (!el) return
 
