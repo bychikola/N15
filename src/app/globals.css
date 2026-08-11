@@ -252,8 +252,8 @@ a:hover {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(114, 47, 55, .7);
-  color: #F6F2E9;
+  background: color-mix(in srgb, var(--n15-gold) 78%, transparent);
+  color: var(--on-accent);
   font-family: var(--font-display);
   font-weight: 700;
   font-size: clamp(1.6rem, 3vw, 2.4rem);
@@ -261,7 +261,7 @@ a:hover {
   transition: background 300ms ease;
 }
 .photo-grid__tile[data-more-count]:hover::after {
-  background: rgba(114, 47, 55, .85);
+  background: color-mix(in srgb, var(--n15-gold) 92%, transparent);
 }
 
 /* ── Ornament keyframes ────────────────────────── */
