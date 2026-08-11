@@ -96,6 +96,13 @@ export default async function ObjectPage({ params }: PageProps) {
     limit: 3,
     depth: 1,
   })
+  // WhatsApp: номер из поля whatsapp, при пустом — из phone агента (защита от «https://wa.me/» без номера)
+  const agentWaNumber = obj.agent?.whatsapp
+    ? obj.agent.whatsapp.replace(/\D/g, '') || (obj.agent.phone || '').replace(/\D/g, '')
+    : ''
+  // Telegram: юзернейм после t.me/ (защита от пустой ссылки «https://t.me/»)
+  const agentTgHandle = (obj.agent?.telegram || '').replace(/^https?:\/\/(www\.)?t\.me\//, '').replace(/^@/, '')
+
   const similar: ObjectListItem[] = (similarDocs || []).map((d) => ({
     id: d.id as number,
     slug: (d as Record<string, unknown>).slug as string | undefined,
@@ -246,15 +253,13 @@ export default async function ObjectPage({ params }: PageProps) {
                             {obj.agent.phone}
                           </Button>
                         )}
-                        {obj.agent.telegram && (
-                          <Button variant="outline" size="sm" className="w-full"
-                            href={obj.agent.telegram.startsWith('http') ? obj.agent.telegram : `https://t.me/${obj.agent.telegram}`}>
+                        {agentTgHandle && (
+                          <Button variant="outline" size="sm" className="w-full" href={`https://t.me/${agentTgHandle}`}>
                             {t.object.telegram}
                           </Button>
                         )}
-                        {obj.agent.whatsapp && (
-                          <Button variant="outline" size="sm" className="w-full"
-                            href={obj.agent.whatsapp.startsWith('http') ? obj.agent.whatsapp : `https://wa.me/${obj.agent.whatsapp.replace(/\D/g, '')}`}>
+                        {agentWaNumber && (
+                          <Button variant="outline" size="sm" className="w-full" href={`https://wa.me/${agentWaNumber}`}>
                             {t.object.whatsapp}
                           </Button>
                         )}
