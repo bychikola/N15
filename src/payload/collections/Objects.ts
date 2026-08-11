@@ -152,6 +152,54 @@ export const Objects: CollectionConfig = {
       ],
     },
     {
+      name: 'water',
+      type: 'select',
+      label: 'Вода',
+      options: [
+        { label: 'Нет', value: 'none' },
+        { label: 'Центральная', value: 'central' },
+        { label: 'Своя', value: 'own' },
+      ],
+    },
+    {
+      name: 'sewerage',
+      type: 'select',
+      label: 'Канализация',
+      options: [
+        { label: 'Нет', value: 'none' },
+        { label: 'Центральная', value: 'central' },
+        { label: 'Септик', value: 'septic' },
+      ],
+    },
+    {
+      name: 'electricity',
+      type: 'select',
+      label: 'Электричество',
+      options: [
+        { label: 'Нет', value: 'none' },
+        { label: 'Есть', value: 'yes' },
+      ],
+    },
+    {
+      name: 'gas',
+      type: 'select',
+      label: 'Газ',
+      options: [
+        { label: 'Нет', value: 'none' },
+        { label: 'Магистральный', value: 'main' },
+        { label: 'Баллонный', value: 'bottled' },
+      ],
+    },
+    {
+      name: 'internet',
+      type: 'select',
+      label: 'Интернет',
+      options: [
+        { label: 'Нет', value: 'none' },
+        { label: 'Есть', value: 'yes' },
+      ],
+    },
+    {
       name: 'balcony',
       type: 'select',
       label: 'Балкон',

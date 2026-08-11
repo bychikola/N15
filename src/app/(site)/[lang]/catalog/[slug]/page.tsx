@@ -53,6 +53,7 @@ export default async function ObjectPage({ params }: PageProps) {
     price: number; area?: number; livingArea?: number; kitchenArea?: number
     rooms?: number; floor?: number; totalFloors?: number
     buildingType?: string; condition?: string; heating?: string; balcony?: string
+    water?: string; sewerage?: string; electricity?: string; gas?: string; internet?: string
     address?: { city?: string; district?: string; street?: string; house?: string; apartment?: string }
     coordinates?: { lat?: number; lng?: number }
     description?: { root?: { children?: unknown[] } }
@@ -184,6 +185,11 @@ export default async function ObjectPage({ params }: PageProps) {
                     { label: t.object.buildingType, value: buildTypeLabel(t, obj.buildingType) },
                     { label: t.object.condition, value: conditionLabel(t, obj.condition) },
                     { label: t.object.heating, value: obj.heating ? t.object.heatingOptions[obj.heating as keyof typeof t.object.heatingOptions] : null },
+                    { label: t.object.water, value: obj.water ? t.object.utilityOptions[obj.water as keyof typeof t.object.utilityOptions] : null },
+                    { label: t.object.sewerage, value: obj.sewerage ? t.object.utilityOptions[obj.sewerage as keyof typeof t.object.utilityOptions] : null },
+                    { label: t.object.electricity, value: obj.electricity ? t.object.utilityOptions[obj.electricity as keyof typeof t.object.utilityOptions] : null },
+                    { label: t.object.gas, value: obj.gas ? t.object.utilityOptions[obj.gas as keyof typeof t.object.utilityOptions] : null },
+                    { label: t.object.internet, value: obj.internet ? t.object.utilityOptions[obj.internet as keyof typeof t.object.utilityOptions] : null },
                     { label: t.object.balcony, value: obj.balcony ? t.object.balconyOptions[obj.balcony as keyof typeof t.object.balconyOptions] : null },
                   ].filter((f) => f.value).map((f, i) => (
                     <div key={f.label}
