@@ -9,7 +9,7 @@ import { SectionWrapper } from '@/components/ui/SectionWrapper'
 import { OrnamentDivider } from '@/components/ui/OrnamentDivider'
 import { OrnamentBorder } from '@/components/ui/OrnamentBorder'
 import { Button } from '@/components/ui/Button'
-import { ImageSlider } from '@/components/ui/ImageSlider'
+import { PhotoGrid } from '@/components/ui/PhotoGrid'
 import { ObjectMap } from '@/components/ui/ObjectMap'
 import ObjectCard, { type ObjectListItem } from '@/components/objects/ObjectCard'
 import { getDictionary, type Dict } from '@/i18n/dictionaries'
@@ -128,7 +128,7 @@ export default async function ObjectPage({ params }: PageProps) {
         <SectionWrapper variant="dark">
           {/* Image slider */}
           <div className="mb-8">
-            <ImageSlider slides={allSlides} />
+            <PhotoGrid slides={allSlides} />
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
