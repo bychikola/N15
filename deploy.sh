@@ -88,14 +88,13 @@ if [ ! -f .env ]; then
         DOMAIN="${DOMAIN:-$DEFAULT_DOMAIN}"
     fi
     echo "  Домен: $DOMAIN"
-    # Защита админки: секретный путь + логин/пароль (Basic Auth на Caddy)
-    if [ -z "$ADMIN_ROUTE" ]; then
-        read -rp "  Путь админки (Enter = /admin): " ADMIN_ROUTE
-        ADMIN_ROUTE="${ADMIN_ROUTE:-/admin}"
+    # Защита админки: поддомен + логин/пароль (Basic Auth на Caddy)
+    if [ -z "$ADMIN_SUBDOMAIN" ]; then
+        read -rp "  Поддомен админки (Enter = admin): " ADMIN_SUBDOMAIN
+        ADMIN_SUBDOMAIN="${ADMIN_SUBDOMAIN:-admin}"
     fi
-    # Нормализация: путь обязан начинаться со слэша (n15-adminka -> /n15-adminka)
-    ADMIN_ROUTE="/${ADMIN_ROUTE#/}"
-    ADMIN_ROUTE="${ADMIN_ROUTE%/}"
+    # Нормализация: только буквы/цифры/дефис, без точек и слешей
+    ADMIN_SUBDOMAIN=$(printf '%s' "$ADMIN_SUBDOMAIN" | tr -cd 'a-zA-Z0-9-')
     if [ -z "$ADMIN_USER" ]; then
         read -rp "  Логин админки (Enter = admin): " ADMIN_USER
         ADMIN_USER="${ADMIN_USER:-admin}"
@@ -114,7 +113,7 @@ if [ ! -f .env ]; then
     cat > .env <<EOF
 # Сгенерировано deploy.sh $(date +%F)
 DOMAIN=$DOMAIN
-ADMIN_ROUTE=$ADMIN_ROUTE
+ADMIN_SUBDOMAIN=$ADMIN_SUBDOMAIN
 ADMIN_USER=$ADMIN_USER
 PAYLOAD_SECRET=$PAYLOAD_SECRET
 POSTGRES_USER=n15
@@ -137,10 +136,8 @@ else
         echo "DOMAIN=$DEFAULT_DOMAIN" >> .env
     fi
     # Защита админки для старых установок (Basic Auth на Caddy):
-    if ! grep -q '^ADMIN_ROUTE=' .env; then
-        ADMIN_ROUTE="/${ADMIN_ROUTE:-admin}"
-        ADMIN_ROUTE="${ADMIN_ROUTE%/}"
-        echo "ADMIN_ROUTE=$ADMIN_ROUTE" >> .env
+    if ! grep -q '^ADMIN_SUBDOMAIN=' .env; then
+        echo "ADMIN_SUBDOMAIN=${ADMIN_SUBDOMAIN:-admin}" >> .env
     fi
     if ! grep -q '^ADMIN_USER=' .env; then
         ADMIN_USER="${ADMIN_USER:-admin}"
@@ -160,9 +157,9 @@ fi
 if [ -z "$DOMAIN" ]; then
     DOMAIN=$(grep -E '^DOMAIN=' .env | head -1 | cut -d= -f2-)
 fi
-if [ -z "$ADMIN_ROUTE" ]; then
-    ADMIN_ROUTE=$(grep -E '^ADMIN_ROUTE=' .env | head -1 | cut -d= -f2-)
-    ADMIN_ROUTE="${ADMIN_ROUTE:-/admin}"
+if [ -z "$ADMIN_SUBDOMAIN" ]; then
+    ADMIN_SUBDOMAIN=$(grep -E '^ADMIN_SUBDOMAIN=' .env | head -1 | cut -d= -f2-)
+    ADMIN_SUBDOMAIN="${ADMIN_SUBDOMAIN:-admin}"
 fi
 if [ -z "$ADMIN_USER" ]; then
     ADMIN_USER=$(grep -E '^ADMIN_USER=' .env | head -1 | cut -d= -f2-)
@@ -187,11 +184,11 @@ echo "======================================"
 echo "  ✅ Сайт развёрнут!"
 echo ""
 echo "  Домен:  https://$DOMAIN"
-echo "  Админ:  https://$DOMAIN$ADMIN_ROUTE"
+echo "  Админ:  https://$ADMIN_SUBDOMAIN.$DOMAIN/admin"
 echo "          (защищён Basic Auth: логин '$ADMIN_USER' + заданный пароль)"
 echo ""
 echo "  Первый админ создаётся через админку:"
-echo "    открой https://$DOMAIN$ADMIN_ROUTE и нажми 'Create First User'"
+echo "    открой https://$ADMIN_SUBDOMAIN.$DOMAIN/admin и нажми 'Create First User'"
 echo ""
 echo "  SSL-сертификат ставит Caddy автоматически"
 echo "  (первые ~30 секунд может быть ошибка сертификата — подожди и обнови)."

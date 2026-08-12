@@ -1,19 +1,16 @@
 # Caddy автоматически получает и продлевает SSL-сертификаты (Let's Encrypt).
-# Домен берётся из переменной окружения DOMAIN (задаётся в .env через deploy.sh,
-# в compose передаётся в контейнер caddy).
+# Домен берётся из переменной окружения DOMAIN (задаётся в .env через deploy.sh).
 
+# ── Основной домен: сайт. Админка скрыта (404). ──
 {$DOMAIN}, www.{$DOMAIN} {
 	# Максимальный размер загрузки (админка: фото объектов)
 	request_body {
 		max_size 50MB
 	}
 
-	# Защита админки: HTTP Basic Auth до запроса к приложению.
-	# Логин/пароль задаются при установке (deploy.sh) и живут в .env.
-	@admin path {$ADMIN_ROUTE}*
-	basic_auth @admin {
-		{$ADMIN_USER} {$ADMIN_PASSWORD_HASH}
-	}
+	# Пути админки на основном домене — не существуют (только на поддомене)
+	@blocked path /admin* /n15-adminka*
+	respond @blocked 404
 
 	reverse_proxy app:3000
 
@@ -22,4 +19,18 @@
 	header @static Cache-Control "public, max-age=604800"
 
 	encode gzip
+}
+
+# ── Поддомен админки: защищён Basic Auth, проксируется на Payload. ──
+{$ADMIN_SUBDOMAIN}.{$DOMAIN} {
+	# Логин/пароль задаются при установке (deploy.sh) и живут в .env
+	basic_auth {
+		{$ADMIN_USER} {$ADMIN_PASSWORD_HASH}
+	}
+
+	request_body {
+		max_size 50MB
+	}
+
+	reverse_proxy app:3000
 }

@@ -54,6 +54,7 @@ services:
     env_file: .env
     environment:
       DOMAIN: ${DOMAIN:?set DOMAIN in .env}
+      ADMIN_SUBDOMAIN: ${ADMIN_SUBDOMAIN:-admin}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
