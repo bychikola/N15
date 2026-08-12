@@ -13,6 +13,22 @@ export const Users: CollectionConfig = {
     update: ({ req: { user } }) => !!user,
     delete: ({ req: { user } }) => user?.role === 'admin',
   },
+  hooks: {
+    beforeChange: [
+      // Первый созданный пользователь автоматически становится администратором,
+      // иначе «Create First User» создаёт аккаунт с ролью 'user' и админка
+      // отвечает «You are not allowed to perform this action».
+      async ({ data, req }) => {
+        if (data && !data.id) {
+          const { totalDocs } = await req.payload.count({ collection: 'users' })
+          if (totalDocs === 0) {
+            data.role = 'admin'
+          }
+        }
+        return data
+      },
+    ],
+  },
   fields: [
     {
       name: 'name',
