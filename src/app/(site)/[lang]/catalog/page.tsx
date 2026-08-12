@@ -71,6 +71,28 @@ function CatalogContent() {
     router.replace(`/${lang}/catalog?${params.toString()}`, { scroll: false })
   }, [filters, sort, lang, router, searchParams])
 
+  // Чтение изменений URL извне (ссылки футера «Купить/Квартиры/…», шаринг-ссылки).
+  // q не трогаем: он живёт в state и пишется в URL с debounce — иначе ввод ломается.
+  useEffect(() => {
+    setFilters((prev) => {
+      const next: FiltersState = {
+        type: searchParams.get('type') ?? '',
+        category: searchParams.get('category') ?? '',
+        rooms: searchParams.get('rooms') ?? '',
+        priceMin: searchParams.get('price_min') ?? '',
+        priceMax: searchParams.get('price_max') ?? '',
+        areaMin: searchParams.get('area_min') ?? '',
+      }
+      return Object.entries(next).every(([k, v]) => prev[k as keyof FiltersState] === v)
+        ? prev
+        : next
+    })
+    setSort((prev) => {
+      const v = searchParams.get('sort') ?? ''
+      return prev === v ? prev : v
+    })
+  }, [searchParams])
+
   const mapDocs = (d: Record<string, unknown>): ObjectListItem => ({
     id: d.id as number,
     title: d.title as string,

@@ -14,6 +14,8 @@ export const Footer: FC = () => {
       { href: `/${lang}/catalog?type=rent`, label: t.footer.rent },
       { href: `/${lang}/catalog?category=apartment`, label: t.footer.flats },
       { href: `/${lang}/catalog?category=house`, label: t.footer.houses },
+      { href: `/${lang}/catalog?category=land`, label: t.footer.lands },
+      { href: `/${lang}/catalog?category=commercial`, label: t.footer.commercial },
     ],
     [t.footer.services]: [
       { href: `/${lang}/services/buy`, label: t.footer.purchase },
