@@ -37,19 +37,14 @@ export const Footer: FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-10">
           {/* Brand column */}
           <div>
-            <a href={`/${lang}`} className="flex items-center gap-2 mb-4">
-              <svg width="32" height="32" viewBox="0 0 512 512" fill="none" style={{ color: 'var(--n15-gold)' }}>
-                <circle cx="256" cy="256" r="240" stroke="currentColor" strokeWidth="8" />
-                <circle cx="256" cy="256" r="200" stroke="currentColor" strokeWidth="3" opacity="0.4" />
-                <circle cx="256" cy="256" r="24" fill="currentColor" />
-                {[0, 45, 90, 135, 180, 225, 270, 315].map((angle) => {
-                  const rad = (angle * Math.PI) / 180
-                  const cx = 256 + 220 * Math.cos(rad)
-                  const cy = 256 + 220 * Math.sin(rad)
-                  return <circle key={angle} cx={cx} cy={cy} r="8" fill="currentColor" />
-                })}
-              </svg>
-              <span className="text-lg tracking-[0.2em] text-[var(--n15-white)]" style={{ fontFamily: "'New Standard', serif" }}>N15</span>
+            <a href={`/${lang}`} className="flex items-center mb-4" aria-label="N15 — на главную">
+              <img
+                src="/logo.png"
+                alt="N15"
+                width={48}
+                height={32}
+                className="h-8 w-auto"
+              />
             </a>
             <p className="text-sm text-[var(--n15-muted)] leading-relaxed">
               {t.footer.brand1}
