@@ -35,7 +35,7 @@ export const Footer: FC = () => {
     <footer className="bg-[var(--n15-charcoal)] border-t border-[var(--n15-gold)]/10">
       <OrnamentDivider variant="woven" />
 
-      <div className="n15-container py-16">
+      <div className="n15-container" style={{ paddingTop: '4rem', paddingBottom: '2rem' }}>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-10">
           {/* Brand column */}
           <div>
