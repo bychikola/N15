@@ -7,6 +7,14 @@ export const Applications: CollectionConfig = {
     group: 'Агентство',
     defaultColumns: ['clientName', 'type', 'status', 'createdAt'],
   },
+  // Без явного access Payload запрещает ВСЁ — админка показывала
+  // «You are not allowed to perform this action».
+  access: {
+    read: () => true,
+    create: ({ req: { user } }) => !!user,
+    update: ({ req: { user } }) => !!user,
+    delete: ({ req: { user } }) => user?.role === 'admin',
+  },
   fields: [
     {
       name: 'type',
