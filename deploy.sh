@@ -88,23 +88,13 @@ if [ ! -f .env ]; then
         DOMAIN="${DOMAIN:-$DEFAULT_DOMAIN}"
     fi
     echo "  Домен: $DOMAIN"
-    # Защита админки: поддомен + логин/пароль (Basic Auth на Caddy)
+    # Админка живёт на отдельном поддомене (скрыта с основного домена)
     if [ -z "$ADMIN_SUBDOMAIN" ]; then
         read -rp "  Поддомен админки (Enter = admin): " ADMIN_SUBDOMAIN
         ADMIN_SUBDOMAIN="${ADMIN_SUBDOMAIN:-admin}"
     fi
     # Нормализация: только буквы/цифры/дефис, без точек и слешей
     ADMIN_SUBDOMAIN=$(printf '%s' "$ADMIN_SUBDOMAIN" | tr -cd 'a-zA-Z0-9-')
-    if [ -z "$ADMIN_USER" ]; then
-        read -rp "  Логин админки (Enter = admin): " ADMIN_USER
-        ADMIN_USER="${ADMIN_USER:-admin}"
-    fi
-    if [ -z "$ADMIN_PASSWORD" ]; then
-        read -rsp "  Пароль админки (Basic Auth): " ADMIN_PASSWORD
-        echo ""
-    fi
-    echo "  Генерирую bcrypt-хеш пароля (Caddy)..."
-    ADMIN_PASSWORD_HASH=$(docker run --rm caddy:2-alpine caddy hash-password --plaintext "$ADMIN_PASSWORD" | tail -1)
     if [ -z "$YANDEX_MAPS_API_KEY" ]; then
         read -rp "  Введи ключ Яндекс.Карт (JavaScript API): " YANDEX_MAPS_API_KEY
     fi
@@ -114,7 +104,6 @@ if [ ! -f .env ]; then
 # Сгенерировано deploy.sh $(date +%F)
 DOMAIN=$DOMAIN
 ADMIN_SUBDOMAIN=$ADMIN_SUBDOMAIN
-ADMIN_USER=$ADMIN_USER
 PAYLOAD_SECRET=$PAYLOAD_SECRET
 POSTGRES_USER=n15
 POSTGRES_PASSWORD=$POSTGRES_PASSWORD
@@ -122,10 +111,6 @@ POSTGRES_DB=n15
 NEXT_PUBLIC_SERVER_URL=https://$DOMAIN
 NEXT_PUBLIC_YANDEX_MAPS_API_KEY=$YANDEX_MAPS_API_KEY
 EOF
-    # Хеш отдельной строкой: содержит $, heredoc бы его раскрыл.
-    # $ -> $$ : docker compose v5 интерполирует значения .env и съедает одиночные $
-    # (и для environment, и для env_file); двойные $$ превращаются обратно в $.
-    echo "ADMIN_PASSWORD_HASH=$(printf '%s' "$ADMIN_PASSWORD_HASH" | sed 's/\$/$$/g')" >> .env
     chmod 600 .env
     echo "  .env создан."
 else
@@ -135,22 +120,9 @@ else
         echo "  Добавляю DOMAIN=$DEFAULT_DOMAIN в существующий .env..."
         echo "DOMAIN=$DEFAULT_DOMAIN" >> .env
     fi
-    # Защита админки для старых установок (Basic Auth на Caddy):
+    # Админка на поддомене для старых установок:
     if ! grep -q '^ADMIN_SUBDOMAIN=' .env; then
         echo "ADMIN_SUBDOMAIN=${ADMIN_SUBDOMAIN:-admin}" >> .env
-    fi
-    if ! grep -q '^ADMIN_USER=' .env; then
-        ADMIN_USER="${ADMIN_USER:-admin}"
-        echo "ADMIN_USER=$ADMIN_USER" >> .env
-    fi
-    if ! grep -q '^ADMIN_PASSWORD_HASH=' .env; then
-        if [ -z "$ADMIN_PASSWORD" ]; then
-            read -rsp "  Пароль для защиты админки (Basic Auth): " ADMIN_PASSWORD
-            echo ""
-        fi
-        ADMIN_PASSWORD_HASH=$(docker run --rm caddy:2-alpine caddy hash-password --plaintext "$ADMIN_PASSWORD" | tail -1)
-        echo "ADMIN_PASSWORD_HASH=$(printf '%s' "$ADMIN_PASSWORD_HASH" | sed 's/\$/$$/g')" >> .env
-        echo "  Админка защищена (логин: ${ADMIN_USER:-admin})."
     fi
 fi
 # Домен и админка для вывода в итоге: из .env (или как заданы выше)
@@ -160,10 +132,6 @@ fi
 if [ -z "$ADMIN_SUBDOMAIN" ]; then
     ADMIN_SUBDOMAIN=$(grep -E '^ADMIN_SUBDOMAIN=' .env | head -1 | cut -d= -f2-)
     ADMIN_SUBDOMAIN="${ADMIN_SUBDOMAIN:-admin}"
-fi
-if [ -z "$ADMIN_USER" ]; then
-    ADMIN_USER=$(grep -E '^ADMIN_USER=' .env | head -1 | cut -d= -f2-)
-    ADMIN_USER="${ADMIN_USER:-admin}"
 fi
 
 # ---------- 5. Сборка и запуск ----------
@@ -185,7 +153,7 @@ echo "  ✅ Сайт развёрнут!"
 echo ""
 echo "  Домен:  https://$DOMAIN"
 echo "  Админ:  https://$ADMIN_SUBDOMAIN.$DOMAIN/admin"
-echo "          (защищён Basic Auth: логин '$ADMIN_USER' + заданный пароль)"
+echo "          (недоступен с основного домена — только по этому адресу)"
 echo ""
 echo "  Первый админ создаётся через админку:"
 echo "    открой https://$ADMIN_SUBDOMAIN.$DOMAIN/admin и нажми 'Create First User'"

@@ -21,13 +21,8 @@
 	encode gzip
 }
 
-# ── Поддомен админки: защищён Basic Auth, проксируется на Payload. ──
+# ── Поддомен админки: недоступен с основного домена, проксируется на Payload. ──
 {$ADMIN_SUBDOMAIN}.{$DOMAIN} {
-	# Логин/пароль задаются при установке (deploy.sh) и живут в .env
-	basic_auth {
-		{$ADMIN_USER} {$ADMIN_PASSWORD_HASH}
-	}
-
 	request_body {
 		max_size 50MB
 	}
