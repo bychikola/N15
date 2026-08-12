@@ -12,7 +12,7 @@ import { OrnamentBorder } from '@/components/ui/OrnamentBorder'
 import { Button } from '@/components/ui/Button'
 import { PhotoGrid } from '@/components/ui/PhotoGrid'
 import { ObjectMap } from '@/components/ui/ObjectMap'
-import ObjectCard, { type ObjectListItem } from '@/components/objects/ObjectCard'
+import ObjectCard, { focalPosition, type ObjectListItem } from '@/components/objects/ObjectCard'
 import { ObjectActions } from '@/components/objects/ObjectActions'
 import { getDictionary, type Dict } from '@/i18n/dictionaries'
 
@@ -66,7 +66,7 @@ export default async function ObjectPage({ params }: PageProps) {
       phone?: string
       telegram?: string
       whatsapp?: string
-      photo?: { url?: string }
+      photo?: { url?: string; focalPoint?: { x?: number; y?: number } }
     }
     primaryImage?: { id: number; url?: string; alt?: string; filename?: string }
     images?: { id: number; url?: string; alt?: string; filename?: string }[]
@@ -255,7 +255,7 @@ export default async function ObjectPage({ params }: PageProps) {
                       <h3 className="text-sm tracking-wider uppercase text-[var(--n15-gold)] mb-4">{t.object.yourAgent}</h3>
                       <div className="flex items-center gap-4 mb-4">
                         {obj.agent.photo?.url ? (
-                          <img src={obj.agent.photo.url} alt={obj.agent.name || ''} className="w-14 h-14 rounded-full object-cover border border-[var(--n15-gold)]/20" />
+                          <img src={obj.agent.photo.url} alt={obj.agent.name || ''} style={focalPosition(obj.agent.photo.focalPoint)} className="w-14 h-14 rounded-full object-cover border border-[var(--n15-gold)]/20" />
                         ) : (
                           <div className="w-14 h-14 rounded-full bg-[var(--n15-charcoal)] border border-[var(--n15-gold)]/20 flex items-center justify-center">
                             <span className="text-lg font-[family-name:var(--font-display)] text-[var(--n15-gold)]">

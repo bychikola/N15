@@ -12,8 +12,15 @@ export interface ObjectListItem {
   floor?: number
   totalFloors?: number
   address?: { city?: string; street?: string; house?: string }
-  primaryImage?: { url?: string; alt?: string }
-  agent?: { name?: string; photo?: { url?: string } }
+  primaryImage?: { url?: string; alt?: string; focalPoint?: { x?: number; y?: number } }
+  agent?: { name?: string; photo?: { url?: string; focalPoint?: { x?: number; y?: number } } }
+}
+
+// Фокальная точка из админки (кроп при загрузке) — object-position для object-cover,
+// чтобы лицо/важная часть не обрезалась при любом соотношении сторон.
+export function focalPosition(f?: { x?: number; y?: number }): React.CSSProperties | undefined {
+  if (!f || f.x === undefined || f.y === undefined) return undefined
+  return { objectPosition: `${f.x * 100}% ${f.y * 100}%` }
 }
 
 interface ObjectCardProps {
@@ -45,6 +52,7 @@ export default function ObjectCard({ obj, lang, t }: ObjectCardProps) {
             src={obj.primaryImage.url}
             alt={obj.primaryImage.alt || obj.title}
             loading="lazy"
+            style={focalPosition(obj.primaryImage.focalPoint)}
             className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
           />
         ) : (
@@ -75,7 +83,7 @@ export default function ObjectCard({ obj, lang, t }: ObjectCardProps) {
         {obj.agent?.name && (
           <div className="flex items-center gap-2">
             {obj.agent.photo?.url ? (
-              <img src={obj.agent.photo.url} alt={obj.agent.name} className="w-7 h-7 rounded-full object-cover" />
+              <img src={obj.agent.photo.url} alt={obj.agent.name} style={focalPosition(obj.agent.photo.focalPoint)} className="w-7 h-7 rounded-full object-cover" />
             ) : (
               <span className="w-7 h-7 rounded-full bg-[var(--n15-charcoal)] border border-[var(--n15-gold)]/20 flex items-center justify-center text-[10px] font-[family-name:var(--font-display)] text-[var(--n15-gold)]">
                 {agentInitials}

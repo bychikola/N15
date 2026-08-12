@@ -13,6 +13,8 @@ export const Media: CollectionConfig = {
   },
   upload: {
     staticDir: 'media',
+    // Кроп + фокальная точка при загрузке (можно выбрать, какую часть фото брать)
+    crop: true,
     imageSizes: [
       {
         name: 'thumbnail',
