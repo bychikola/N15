@@ -36,12 +36,24 @@ export const Media: CollectionConfig = {
     adminThumbnail: 'thumbnail',
     mimeTypes: ['image/*'],
   },
+  hooks: {
+    beforeChange: [
+      // Alt необязателен: при массовой загрузке фото не блокируем,
+      // а автозаполняем именем файла (a11y не страдает)
+      ({ data }) => {
+        if (data && !data.alt && data.filename) {
+          data.alt = String(data.filename).replace(/\.[^.]+$/, '')
+        }
+        return data
+      },
+    ],
+  },
   fields: [
     {
       name: 'alt',
       type: 'text',
       label: 'Alt-текст',
-      required: true,
+      required: false,
     },
   ],
 }
