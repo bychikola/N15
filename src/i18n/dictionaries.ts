@@ -326,6 +326,8 @@ export const ru = {
   },
   lk: {
     title: 'Личный кабинет',
+    home: 'Обзор',
+    cabinetWord: 'Личный кабинет',
     loading: 'Загрузка...',
     logout: 'Выйти',
     welcome: 'Добро пожаловать,',
@@ -731,6 +733,8 @@ const os: Dict = {
   },
   lk: {
     title: 'Хиуарт кабинет',
+    home: 'Æвзæрст',
+    cabinetWord: 'Хиуарт кабинет',
     loading: 'Æвæрды цæуы...',
     logout: 'Рацæуын',
     welcome: 'Хæрзбайраг,',

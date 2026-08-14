@@ -157,21 +157,26 @@ export default function ChatThread({ applicationId, lang }: { applicationId: num
   }
 
   return (
-    <div className="flex flex-col min-h-[60vh]">
-      {/* Шапка: объект + собеседник */}
-      <div className="flex flex-wrap items-center justify-between gap-3 pb-4 mb-4 border-b border-[var(--n15-gold)]/10">
-        {objectInfo.id ? (
-          <Link href={`/${lang}/catalog/${objectInfo.id}`} className="text-sm text-[var(--n15-gold)] hover:underline">
-            {objectInfo.title}
-          </Link>
-        ) : (
-          <span className="text-sm text-[var(--n15-muted)]">{t.lkChat.requestCard} #{applicationId}</span>
-        )}
-        <div className="flex items-center gap-3">
-          {personName && <span className="text-sm text-[var(--n15-white)]">{personName}</span>}
+    <div className="flex flex-col min-h-[65vh] bg-[var(--n15-charcoal)] border border-[var(--n15-gold)]/15">
+      {/* Шапка досье: объект + собеседник */}
+      <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4 border-b border-[var(--n15-gold)]/15 bg-[var(--n15-black)]/40">
+        <div className="min-w-0">
+          {objectInfo.id ? (
+            <Link href={`/${lang}/catalog/${objectInfo.id}`} className="text-sm text-[var(--n15-gold)] hover:underline truncate">
+              {objectInfo.title}
+            </Link>
+          ) : (
+            <span className="text-sm text-[var(--n15-muted)]">{t.lkChat.requestCard} #{applicationId}</span>
+          )}
+          {personName && (
+            <div className="text-[10px] tracking-[0.15em] uppercase text-[var(--n15-muted)] mt-1">{personName}</div>
+          )}
+        </div>
+        <div className="flex items-center gap-3 shrink-0">
           {personPhone && (
             <a href={`tel:${personPhone.replace(/\s+/g, '')}`}
-              className="text-xs uppercase tracking-wider border border-[var(--n15-gold)]/40 text-[var(--n15-gold)] px-3 py-1.5 hover:bg-[var(--n15-gold)]/8 transition-colors">
+              className="inline-flex items-center gap-1.5 text-xs uppercase tracking-wider border border-[var(--n15-gold)]/40 text-[var(--n15-gold)] px-4 py-2 hover:bg-[var(--n15-gold)]/8 transition-colors">
+              <span className="material-symbols-outlined text-sm leading-none" aria-hidden="true">call</span>
               {t.lkChat.call}
             </a>
           )}
@@ -179,7 +184,7 @@ export default function ChatThread({ applicationId, lang }: { applicationId: num
       </div>
 
       {/* Сообщения */}
-      <div className="flex-1 flex flex-col gap-3 py-2">
+      <div className="flex-1 flex flex-col gap-3 px-6 py-6">
         {messages.length === 0 && (
           <p className="text-sm text-[var(--n15-muted)] text-center py-10">{t.lkChat.empty}</p>
         )}
@@ -189,17 +194,19 @@ export default function ChatThread({ applicationId, lang }: { applicationId: num
           return (
             <div key={m.id}>
               {showDay && (
-                <div className="text-center text-[10px] uppercase tracking-[0.2em] text-[var(--n15-muted)] my-3">
+                <div className="flex items-center gap-3 text-[10px] uppercase tracking-[0.2em] text-[var(--n15-muted)] my-4">
+                  <span className="flex-1 h-px bg-[var(--n15-gold)]/10" />
                   {dayLabel(m.createdAt, t, t.locale)}
+                  <span className="flex-1 h-px bg-[var(--n15-gold)]/10" />
                 </div>
               )}
-              <div className={`max-w-[75%] px-4 py-2.5 text-sm leading-relaxed ${
+              <div className={`max-w-[75%] px-4 py-3 text-sm leading-relaxed ${
                 mine
-                  ? 'ml-auto border border-[var(--n15-gold)]/40 text-[var(--n15-white)]'
-                  : 'mr-auto bg-[var(--n15-charcoal)] text-[var(--n15-silver)]'
+                  ? 'ml-auto border border-[var(--n15-gold)]/50 bg-[var(--n15-gold)]/8 text-[var(--n15-white)]'
+                  : 'mr-auto bg-[var(--n15-black)] border border-[var(--n15-gold)]/15 text-[var(--n15-silver)]'
               }`}>
                 <div>{m.text}</div>
-                <div className="text-[10px] mt-1 flex items-center justify-end gap-1 text-[var(--n15-muted)]">
+                <div className="text-[10px] mt-1.5 flex items-center justify-end gap-1 text-[var(--n15-muted)]">
                   {new Date(m.createdAt).toLocaleTimeString(t.locale, { hour: '2-digit', minute: '2-digit' })}
                   {mine && m.read && (
                     <span className="material-symbols-outlined text-[12px] text-[var(--n15-gold)]" title={t.lkChat.readMark}>done_all</span>
@@ -213,8 +220,8 @@ export default function ChatThread({ applicationId, lang }: { applicationId: num
       </div>
 
       {/* Инпут */}
-      <div className="sticky bottom-0 pt-3 mt-3 border-t border-[var(--n15-gold)]/10 bg-[var(--n15-black)]">
-        <div className="flex gap-2">
+      <div className="px-6 py-4 border-t border-[var(--n15-gold)]/15 bg-[var(--n15-black)]/40">
+        <div className="flex gap-3 items-end">
           <textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
@@ -226,13 +233,14 @@ export default function ChatThread({ applicationId, lang }: { applicationId: num
             }}
             placeholder={t.lkChat.placeholder}
             rows={2}
-            className="flex-1 bg-[var(--n15-black)] border border-[var(--n15-gold)]/20 px-4 py-2.5 text-sm text-[var(--n15-silver)] placeholder:text-[var(--n15-muted)] focus:outline-none focus:border-[var(--n15-gold)]/50 resize-none"
+            className="flex-1 bg-[var(--n15-black)] border border-[var(--n15-gold)]/25 px-4 py-3 text-sm text-[var(--n15-silver)] placeholder:text-[var(--n15-muted)] focus:outline-none focus:border-[var(--n15-gold)]/60 resize-none"
           />
           <button
             onClick={() => void send()}
             disabled={sending || !text.trim()}
-            className="self-end px-5 py-2.5 text-xs uppercase tracking-wider bg-[var(--n15-gold)] text-[var(--on-accent)] font-medium transition-all hover:brightness-110 disabled:opacity-50 cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-5 py-3 text-xs uppercase tracking-wider bg-[var(--n15-gold)] text-[var(--on-accent)] font-medium transition-all hover:brightness-110 disabled:opacity-50 cursor-pointer"
           >
+            <span className="material-symbols-outlined text-sm leading-none" aria-hidden="true">send</span>
             {sending ? t.lkChat.sending : t.lkChat.send}
           </button>
         </div>
