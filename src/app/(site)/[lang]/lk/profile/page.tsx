@@ -57,7 +57,6 @@ export default function ProfilePage() {
       <Header />
       <main className="pt-20 min-h-screen">
         <LkShell active="profile">
-          <p className="text-[10px] tracking-[0.25em] uppercase text-[var(--n15-gold)] mb-3">{t.lk.cabinetWord}</p>
           <h1 className="text-3xl font-[family-name:var(--font-display)] text-[var(--n15-white)] mb-8">{t.lkProfile.title}</h1>
 
           {loading ? (

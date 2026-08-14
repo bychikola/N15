@@ -85,7 +85,6 @@ export default function LKDashboard() {
         <LkShell active="home">
           {/* Hero */}
           <div className="mb-8">
-            <p className="text-[10px] tracking-[0.25em] uppercase text-[var(--n15-gold)] mb-3">{t.lk.cabinetWord}</p>
             <h1 className="text-3xl md:text-4xl font-[family-name:var(--font-display)] text-[var(--n15-white)]">
               {t.lk.welcome} {user.name || user.email}
             </h1>
