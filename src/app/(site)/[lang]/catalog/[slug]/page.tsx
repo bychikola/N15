@@ -244,7 +244,8 @@ export default async function ObjectPage({ params }: PageProps) {
 
                 {/* ПОЗВОНИТЬ — прямой телефон менеджера */}
                 {obj.agent?.phone && (
-                  <Button variant="primary" size="sm" className="w-full mb-4" href={`tel:${obj.agent.phone.replace(/\s+/g, '')}`}>
+                  <Button variant="primary" size="sm" className="w-full mb-4" href={`tel:${obj.agent.phone.replace(/\s+/g, '')}`}
+                    style={{ color: 'var(--card-price-fg)' }}>
                     {t.object.phone.toUpperCase()}: {obj.agent.phone}
                   </Button>
                 )}
