@@ -20,7 +20,16 @@ export const Applications: CollectionConfig = {
       return where
     },
     create: () => true, // форма на сайте — любой, в т.ч. аноним
-    update: ({ req: { user } }) => !!user && (user.role === 'admin' || user.role === 'agent'),
+    update: ({ req: { user } }) => {
+      if (!user) return false
+      if (user.role === 'admin') return true
+      if (user.role === 'agent') {
+        // Агент правит только назначенные ему заявки
+        const where: Where = { 'agent.user': { equals: user.id } }
+        return where
+      }
+      return false
+    },
     delete: ({ req: { user } }) => user?.role === 'admin',
   },
   fields: [
@@ -70,9 +79,12 @@ export const Applications: CollectionConfig = {
       label: 'Статус',
       options: [
         { label: 'Новая', value: 'new' },
-        { label: 'В обработке', value: 'processing' },
-        { label: 'Завершена', value: 'completed' },
-        { label: 'Отменена', value: 'cancelled' },
+        { label: 'Звонок', value: 'call' },
+        { label: 'Показ', value: 'showing' },
+        { label: 'Переговоры', value: 'negotiation' },
+        { label: 'Сделка', value: 'deal' },
+        { label: 'Закрыто', value: 'closed' },
+        { label: 'Отказ', value: 'rejected' },
       ],
       defaultValue: 'new',
       required: true,

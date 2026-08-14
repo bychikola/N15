@@ -71,5 +71,21 @@ if [ -n "$DATABASE_URI" ]; then
   fi
 fi
 
+# Миграция статусов заявок (CRM-воронка): старые значения -> новые
+if [ -n "$DATABASE_URI" ]; then
+  node -e "
+    const { Client } = require('pg');
+    const c = new Client({ connectionString: process.env.DATABASE_URI });
+    const mapping = [['processing','call'],['completed','closed'],['cancelled','rejected']];
+    (async () => {
+      await c.connect();
+      for (const [oldV, newV] of mapping) {
+        await c.query('UPDATE applications SET status=\$1 WHERE status=\$2', [newV, oldV]);
+      }
+      await c.end();
+    })().catch(() => process.exit(1));
+  " || echo "status migration skipped"
+fi
+
 echo "Starting Next.js server..."
 exec node_modules/.bin/next start --hostname 0.0.0.0 --port 3000
