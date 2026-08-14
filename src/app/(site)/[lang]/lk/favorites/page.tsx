@@ -16,30 +16,48 @@ export default function FavoritesPage() {
   useEffect(() => {
     let cancelled = false
     async function load() {
-      const meRes = await fetch('/api/users/me?depth=2', { credentials: 'include' })
+      // me без глубины — только id избранных; сами объекты грузим отдельным
+      // запросом с depth=2, чтобы фото агента пришло заполненным (а не сырым id).
+      const meRes = await fetch('/api/users/me', { credentials: 'include' })
       const meData = await meRes.json()
       const me = meData?.user
       if (!me) return
-      const favs = (me.favorites as Record<string, unknown>[] | undefined) || []
+      const favIds = ((me.favorites as { id?: number }[] | number[] | undefined) || [])
+        .map((f) => (typeof f === 'object' && f ? (f.id as number) : (f as number)))
+        .filter((n): n is number => Number.isFinite(n))
+      if (cancelled || favIds.length === 0) {
+        if (!cancelled) {
+          setItems([])
+          setLoading(false)
+        }
+        return
+      }
+      const res = await fetch(
+        `/api/objects?${new URLSearchParams({
+          where: JSON.stringify({ id: { in: favIds } }),
+          depth: '2',
+          limit: '50',
+        })}`,
+        { credentials: 'include' },
+      )
+      const data = await res.json()
       if (cancelled) return
       setItems(
-        favs
-          .filter((f) => f && typeof f === 'object')
-          .map((f) => ({
-            id: f.id as number,
-            slug: f.slug as string | undefined,
-            title: f.title as string,
-            type: f.type as 'sale' | 'rent',
-            category: f.category as string,
-            price: f.price as number,
-            area: f.area as number | undefined,
-            rooms: f.rooms as number | undefined,
-            floor: f.floor as number | undefined,
-            totalFloors: f.totalFloors as number | undefined,
-            address: f.address as ObjectListItem['address'],
-            primaryImage: f.primaryImage as ObjectListItem['primaryImage'],
-            agent: f.agent as ObjectListItem['agent'],
-          })),
+        ((data.docs || []) as Record<string, unknown>[]).map((f) => ({
+          id: f.id as number,
+          slug: f.slug as string | undefined,
+          title: f.title as string,
+          type: f.type as 'sale' | 'rent',
+          category: f.category as string,
+          price: f.price as number,
+          area: f.area as number | undefined,
+          rooms: f.rooms as number | undefined,
+          floor: f.floor as number | undefined,
+          totalFloors: f.totalFloors as number | undefined,
+          address: f.address as ObjectListItem['address'],
+          primaryImage: f.primaryImage as ObjectListItem['primaryImage'],
+          agent: f.agent as ObjectListItem['agent'],
+        })),
       )
       setLoading(false)
     }
