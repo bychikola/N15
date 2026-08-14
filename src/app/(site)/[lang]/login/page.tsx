@@ -37,6 +37,16 @@ export default function LoginPage() {
         return
       }
 
+      // Слияние гостевого избранного (localStorage) в серверное
+      if (data?.user?.id) {
+        try {
+          const { mergeLocalFavorites } = await import('@/components/objects/ObjectActions')
+          await mergeLocalFavorites(data.user.id as number)
+        } catch {
+          // слияние не критично — не блокируем вход
+        }
+      }
+
       router.push(`/${lang}/lk`)
       router.refresh()
     } catch {

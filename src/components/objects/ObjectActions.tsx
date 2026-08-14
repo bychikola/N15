@@ -18,34 +18,86 @@ function readFavorites(): number[] {
   }
 }
 
+function writeFavorites(ids: number[]) {
+  localStorage.setItem(FAVORITES_KEY, JSON.stringify(ids))
+}
+
+/** Слияние гостевого localStorage-избранного в серверное после входа. */
+export async function mergeLocalFavorites(userId: number): Promise<void> {
+  const local = readFavorites()
+  if (local.length === 0) return
+  const meRes = await fetch('/api/users/me?depth=1', { credentials: 'include' })
+  const meData = await meRes.json()
+  const serverFavs = ((meData?.user?.favorites as { id?: number }[] | number[] | undefined) || []).map(
+    (f) => (typeof f === 'object' && f ? (f.id as number) : (f as number)),
+  )
+  const merged = Array.from(new Set([...serverFavs, ...local]))
+  await fetch(`/api/users/${userId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ favorites: merged }),
+  })
+  localStorage.removeItem(FAVORITES_KEY)
+}
+
 /**
- * Кнопки «В избранное / В избранном» и «Поделиться» — как на alaniadom.
- * Избранное хранится в localStorage (ключ n15_favorites).
- * Поделиться — Web Share API с fallback на копирование ссылки.
+ * Кнопки «В избранное / В избранном» и «Поделиться».
+ * Избранное: залогинен — сервер (Users.favorites), гость — localStorage,
+ * слияние происходит при входе (mergeLocalFavorites).
  */
 export const ObjectActions: FC<Props> = ({ objectId, shareUrl }) => {
   const { t } = useI18n()
   const [isFav, setIsFav] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [userId, setUserId] = useState<number | null>(null)
+  const [serverFavs, setServerFavs] = useState<number[]>([])
 
-  // Синхронизация с localStorage (внешняя система) — асинхронно, без
-  // синхронного setState в эффекте (правило react-hooks/set-state-in-effect).
   useEffect(() => {
-    const id = setTimeout(() => {
-      setIsFav(readFavorites().includes(objectId))
-    }, 0)
-    return () => clearTimeout(id)
+    let cancelled = false
+    async function init() {
+      const local = readFavorites().includes(objectId)
+      try {
+        const meRes = await fetch('/api/users/me?depth=1', { credentials: 'include' })
+        const meData = await meRes.json()
+        const me = meData?.user
+        if (cancelled) return
+        if (me?.id) {
+          const favs = ((me.favorites as { id?: number }[] | number[] | undefined) || []).map(
+            (f) => (typeof f === 'object' && f ? (f.id as number) : (f as number)),
+          )
+          setUserId(me.id as number)
+          setServerFavs(favs)
+          setIsFav(favs.includes(objectId))
+          return
+        }
+      } catch {
+        // гость
+      }
+      if (!cancelled) setIsFav(local)
+    }
+    void init()
+    return () => { cancelled = true }
   }, [objectId])
 
-  const toggleFav = () => {
-    // Без функционального апдейтера: StrictMode вызывает его дважды и дублирует id.
-    const favs = readFavorites()
-    const isNowFav = favs.includes(objectId)
-    localStorage.setItem(
-      FAVORITES_KEY,
-      JSON.stringify(isNowFav ? favs.filter((f) => f !== objectId) : [...favs, objectId]),
-    )
-    setIsFav(!isNowFav)
+  const toggleFav = async () => {
+    const next = !isFav
+    setIsFav(next)
+    if (userId !== null) {
+      const merged = next
+        ? Array.from(new Set([...serverFavs, objectId]))
+        : serverFavs.filter((f) => f !== objectId)
+      setServerFavs(merged)
+      await fetch(`/api/users/${userId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ favorites: merged }),
+      })
+    } else {
+      const favs = readFavorites()
+      writeFavorites(next ? [...favs, objectId] : favs.filter((f) => f !== objectId))
+    }
   }
 
   const share = async () => {
@@ -63,7 +115,7 @@ export const ObjectActions: FC<Props> = ({ objectId, shareUrl }) => {
 
   return (
     <div className="flex gap-2 mb-4">
-      <button type="button" onClick={toggleFav} aria-pressed={isFav}
+      <button type="button" onClick={() => void toggleFav()} aria-pressed={isFav}
         className={`${btnBase} flex items-center justify-center gap-1.5 ${
           isFav
             ? 'border-[var(--n15-gold)] text-[var(--n15-gold)] bg-[var(--n15-gold)]/8'

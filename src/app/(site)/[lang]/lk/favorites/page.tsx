@@ -1,22 +1,51 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { Header } from '@/components/layout/Header'
 import { Footer } from '@/components/layout/Footer'
 import { SectionWrapper } from '@/components/ui/SectionWrapper'
-import { OrnamentBorder } from '@/components/ui/OrnamentBorder'
-import Link from 'next/link'
-import { getDictionary } from '@/i18n/dictionaries'
+import ObjectCard, { type ObjectListItem } from '@/components/objects/ObjectCard'
+import { useI18n } from '@/i18n/i18n-provider'
 
-interface PageProps {
-  params: Promise<{ lang: string }>
-}
+export default function FavoritesPage() {
+  const { lang, t } = useI18n()
+  const [items, setItems] = useState<ObjectListItem[]>([])
+  const [loading, setLoading] = useState(true)
 
-const favorites = [
-  { id: 1, title: 'Просторная квартира в центре', price: 8500000, area: 95, rooms: 3, address: 'ул. Коста Хетагурова, 42' },
-  { id: 2, title: 'Дом с видом на горы', price: 25000000, area: 180, rooms: 5, address: 'пос. Верхний Фиагдон' },
-]
-
-export default async function FavoritesPage({ params }: PageProps) {
-  const { lang } = await params
-  const t = getDictionary(lang)
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      const meRes = await fetch('/api/users/me?depth=2', { credentials: 'include' })
+      const meData = await meRes.json()
+      const me = meData?.user
+      if (!me) return
+      const favs = (me.favorites as Record<string, unknown>[] | undefined) || []
+      if (cancelled) return
+      setItems(
+        favs
+          .filter((f) => f && typeof f === 'object')
+          .map((f) => ({
+            id: f.id as number,
+            slug: f.slug as string | undefined,
+            title: f.title as string,
+            type: f.type as 'sale' | 'rent',
+            category: f.category as string,
+            price: f.price as number,
+            area: f.area as number | undefined,
+            rooms: f.rooms as number | undefined,
+            floor: f.floor as number | undefined,
+            totalFloors: f.totalFloors as number | undefined,
+            address: f.address as ObjectListItem['address'],
+            primaryImage: f.primaryImage as ObjectListItem['primaryImage'],
+            agent: f.agent as ObjectListItem['agent'],
+          })),
+      )
+      setLoading(false)
+    }
+    void load()
+    return () => { cancelled = true }
+  }, [])
 
   return (
     <>
@@ -30,27 +59,18 @@ export default async function FavoritesPage({ params }: PageProps) {
           </div>
           <h1 className="text-3xl font-[family-name:var(--font-display)] text-[var(--n15-white)] mb-8">{t.lkFavorites.title}</h1>
 
-          {favorites.length === 0 ? (
-            <p className="text-[var(--n15-muted)]">{t.lkFavorites.empty}</p>
+          {loading ? (
+            <p className="text-[var(--n15-muted)]">{t.lk.loading}</p>
+          ) : items.length === 0 ? (
+            <div>
+              <p className="text-[var(--n15-muted)] mb-6">{t.lkFavorites.empty}</p>
+              <Link href={`/${lang}/catalog`} className="text-sm text-[var(--n15-gold)] underline">
+                {t.lkFavorites.viewCatalog}
+              </Link>
+            </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {favorites.map((obj) => (
-                <Link key={obj.id} href={`/${lang}/catalog/${obj.id}`}>
-                  <OrnamentBorder>
-                    <div className="p-6 group">
-                      <div className="aspect-[4/3] bg-[var(--n15-black)] mb-4 flex items-center justify-center">
-                        <svg width="48" height="48" viewBox="0 0 48 48" fill="none" className="opacity-20 group-hover:opacity-40 transition-opacity">
-                          <rect x="3" y="9" width="42" height="33" stroke="#C8A44E" strokeWidth="1" />
-                          <path d="M3 27 L18 15 L30 24 L45 9" stroke="#C8A44E" strokeWidth="1" />
-                        </svg>
-                      </div>
-                      <h3 className="text-sm text-[var(--n15-white)] group-hover:text-[var(--n15-gold)] transition-colors">{obj.title}</h3>
-                      <p className="text-xs text-[var(--n15-muted)] mt-1 mb-2">{obj.address}</p>
-                      <span className="text-sm text-[var(--n15-gold)]">{obj.price.toLocaleString(t.locale)} {t.lkFavorites.currency}</span>
-                    </div>
-                  </OrnamentBorder>
-                </Link>
-              ))}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-8">
+              {items.map((obj) => <ObjectCard key={obj.id} obj={obj} lang={lang} t={t} />)}
             </div>
           )}
         </SectionWrapper>
