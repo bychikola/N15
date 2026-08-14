@@ -267,6 +267,16 @@ html[data-theme='dark'] .object-card {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Стрелки воронки: видны только на сенсорных устройствах */
+.funnel-arrows {
+  display: none;
+}
+@media (pointer: coarse) {
+  .funnel-arrows {
+    display: block;
+  }
+}
+
 /* Collapsed gallery: оверлей «+N» на последней видимой плитке (как на alaniadom) */
 .photo-grid__tile[data-more-count]::after {
   content: attr(data-more-count);
