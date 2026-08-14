@@ -1,4 +1,4 @@
-import type { CollectionConfig } from 'payload'
+import type { CollectionConfig, Where } from 'payload'
 
 export const Applications: CollectionConfig = {
   slug: 'applications',
@@ -7,12 +7,20 @@ export const Applications: CollectionConfig = {
     group: 'Агентство',
     defaultColumns: ['clientName', 'type', 'status', 'createdAt'],
   },
-  // Без явного access Payload запрещает ВСЁ — админка показывала
-  // «You are not allowed to perform this action».
   access: {
-    read: () => true,
-    create: ({ req: { user } }) => !!user,
-    update: ({ req: { user } }) => !!user,
+    read: ({ req: { user } }) => {
+      if (!user) return false
+      if (user.role === 'admin') return true
+      const where: Where = {
+        or: [
+          { user: { equals: user.id } },
+          { 'agent.user': { equals: user.id } },
+        ],
+      }
+      return where
+    },
+    create: () => true, // форма на сайте — любой, в т.ч. аноним
+    update: ({ req: { user } }) => !!user && (user.role === 'admin' || user.role === 'agent'),
     delete: ({ req: { user } }) => user?.role === 'admin',
   },
   fields: [
@@ -74,6 +82,15 @@ export const Applications: CollectionConfig = {
       type: 'relationship',
       label: 'Назначенный агент',
       relationTo: 'agents',
+    },
+    {
+      name: 'user',
+      type: 'relationship',
+      label: 'Пользователь (владелец заявки)',
+      relationTo: 'users',
+      admin: {
+        description: 'Заполняется автоматически, если заявка отправлена авторизованным пользователем',
+      },
     },
   ],
 }

@@ -83,5 +83,14 @@ export const Agents: CollectionConfig = {
       type: 'number',
       label: 'Порядок сортировки',
     },
+    {
+      name: 'user',
+      type: 'relationship',
+      label: 'Учётная запись агента',
+      relationTo: 'users',
+      admin: {
+        description: 'Связь с аккаунтом на сайте (role=agent) — для чатов с клиентами',
+      },
+    },
   ],
 }
