@@ -29,7 +29,7 @@ export default function ChatThread({ applicationId, lang }: { applicationId: num
   const [messages, setMessages] = useState<MessageItem[]>([])
   const [meId, setMeId] = useState<number | null>(null)
   const [meRole, setMeRole] = useState<string>('user')
-  const [objectInfo, setObjectInfo] = useState<{ id?: number; title?: string; agentName?: string; agentPhone?: string; clientName?: string }>({})
+  const [objectInfo, setObjectInfo] = useState<{ id?: number; title?: string; agentName?: string; agentPhone?: string; agentPhoto?: string; clientName?: string }>({})
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -65,6 +65,10 @@ export default function ChatThread({ applicationId, lang }: { applicationId: num
       title: (obj?.title as string) || undefined,
       agentName: (agent?.name as string) || undefined,
       agentPhone: (agent?.phone as string) || undefined,
+      agentPhoto:
+        agent?.photo && typeof agent.photo === 'object'
+          ? ((agent.photo as Record<string, unknown>).url as string) || undefined
+          : undefined,
       clientName: (clientUser?.name as string) || (app.clientName as string) || undefined,
     })
 
@@ -191,6 +195,11 @@ export default function ChatThread({ applicationId, lang }: { applicationId: num
         {messages.map((m, i) => {
           const mine = m.senderId === meId
           const showDay = i === 0 || dayLabel(messages[i - 1].createdAt, t, t.locale) !== dayLabel(m.createdAt, t, t.locale)
+          // Аватар и имя входящего: для агента — его фото, для клиента — инициалы
+          const incomingPhoto = !mine && meRole === 'user' ? objectInfo.agentPhoto : undefined
+          const incomingInitials = !mine && m.senderName
+            ? m.senderName.split(' ').map((n) => n[0]).join('').slice(0, 2)
+            : ''
           return (
             <div key={m.id}>
               {showDay && (
@@ -200,17 +209,33 @@ export default function ChatThread({ applicationId, lang }: { applicationId: num
                   <span className="flex-1 h-px bg-[var(--n15-gold)]/10" />
                 </div>
               )}
-              <div className={`max-w-[75%] px-4 py-3 text-sm leading-relaxed ${
-                mine
-                  ? 'ml-auto border border-[var(--n15-gold)]/50 bg-[var(--n15-gold)]/8 text-[var(--n15-white)]'
-                  : 'mr-auto bg-[var(--n15-black)] border border-[var(--n15-gold)]/15 text-[var(--n15-silver)]'
-              }`}>
-                <div>{m.text}</div>
-                <div className="text-[10px] mt-1.5 flex items-center justify-end gap-1 text-[var(--n15-muted)]">
-                  {new Date(m.createdAt).toLocaleTimeString(t.locale, { hour: '2-digit', minute: '2-digit' })}
-                  {mine && m.read && (
-                    <span className="material-symbols-outlined text-[12px] text-[var(--n15-gold)]" title={t.lkChat.readMark}>done_all</span>
+              <div className={`flex items-end gap-2.5 ${mine ? 'justify-end' : 'justify-start'}`}>
+                {!mine && (
+                  <div className="w-9 h-9 shrink-0 rounded-full overflow-hidden bg-[var(--n15-black)] border border-[var(--n15-gold)]/25 flex items-center justify-center">
+                    {incomingPhoto ? (
+                      <img src={incomingPhoto} alt={m.senderName} className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="text-[11px] font-[family-name:var(--font-display)] text-[var(--n15-gold)]">{incomingInitials}</span>
+                    )}
+                  </div>
+                )}
+                <div className={`max-w-[70%] ${mine ? '' : ''}`}>
+                  {!mine && m.senderName && (
+                    <div className="text-[10px] tracking-[0.12em] uppercase text-[var(--n15-gold)] mb-1">{m.senderName}</div>
                   )}
+                  <div className={`px-4 py-3 text-sm leading-relaxed ${
+                    mine
+                      ? 'border border-[var(--n15-gold)]/50 bg-[var(--n15-gold)]/8 text-[var(--n15-white)]'
+                      : 'bg-[var(--n15-black)] border border-[var(--n15-gold)]/15 text-[var(--n15-silver)]'
+                  }`}>
+                    <div>{m.text}</div>
+                    <div className="text-[10px] mt-1.5 flex items-center justify-end gap-1 text-[var(--n15-muted)]">
+                      {new Date(m.createdAt).toLocaleTimeString(t.locale, { hour: '2-digit', minute: '2-digit' })}
+                      {mine && m.read && (
+                        <span className="material-symbols-outlined text-[12px] text-[var(--n15-gold)]" title={t.lkChat.readMark}>done_all</span>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
