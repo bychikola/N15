@@ -22,9 +22,12 @@ const typeKeys: Record<string, string> = {
 
 const statusStyles: Record<string, string> = {
   new: 'border-[var(--n15-gold)]/50 text-[var(--n15-gold)]',
-  processing: 'border-blue-400/50 text-blue-400',
-  completed: 'border-green-400/50 text-green-400',
-  cancelled: 'border-[var(--n15-muted)]/40 text-[var(--n15-muted)]',
+  call: 'border-blue-400/50 text-blue-400',
+  showing: 'border-blue-400/50 text-blue-400',
+  negotiation: 'border-blue-400/50 text-blue-400',
+  deal: 'border-blue-400/50 text-blue-400',
+  closed: 'border-green-400/50 text-green-400',
+  rejected: 'border-[var(--n15-muted)]/40 text-[var(--n15-muted)]',
 }
 
 export default function ApplicationsPage() {
@@ -34,9 +37,12 @@ export default function ApplicationsPage() {
 
   const statusLabels: Record<string, string> = {
     new: t.lkApplications.statusNew,
-    processing: t.lkApplications.statusProcessing,
-    completed: t.lkApplications.statusCompleted,
-    cancelled: t.lkApplications.statusCancelled,
+    call: t.lkApplications.statusCall,
+    showing: t.lkApplications.statusShowing,
+    negotiation: t.lkApplications.statusNegotiation,
+    deal: t.lkApplications.statusDeal,
+    closed: t.lkApplications.statusClosed,
+    rejected: t.lkApplications.statusRejected,
   }
 
   useEffect(() => {
