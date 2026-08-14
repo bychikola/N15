@@ -14,6 +14,7 @@ import { PhotoGrid } from '@/components/ui/PhotoGrid'
 import { ObjectMap } from '@/components/ui/ObjectMap'
 import ObjectCard, { focalPosition, type ObjectListItem } from '@/components/objects/ObjectCard'
 import { ObjectActions } from '@/components/objects/ObjectActions'
+import { ViewRequestForm } from '@/components/objects/ViewRequestForm'
 import { getDictionary, type Dict } from '@/i18n/dictionaries'
 
 interface PageProps {
@@ -293,12 +294,7 @@ export default async function ObjectPage({ params }: PageProps) {
                 <div className="mt-6 p-6 bg-[var(--n15-charcoal)] border border-[var(--n15-gold)]/10">
                   <h3 className="text-sm tracking-wider uppercase text-[var(--n15-white)] mb-1">{t.object.viewTitle}</h3>
                   <p className="text-xs text-[var(--n15-muted)] mb-4">{t.object.viewSubtitle}</p>
-                  <form className="flex flex-col gap-3">
-                    <input type="text" placeholder={t.object.namePlaceholder} className="bg-[var(--n15-black)] border border-[var(--n15-gold)]/20 px-4 py-2.5 text-sm text-[var(--n15-silver)] placeholder:text-[var(--n15-muted)] focus:outline-none focus:border-[var(--n15-gold)]/50" />
-                    <input type="tel" placeholder={t.object.phonePlaceholder} className="bg-[var(--n15-black)] border border-[var(--n15-gold)]/20 px-4 py-2.5 text-sm text-[var(--n15-silver)] placeholder:text-[var(--n15-muted)] focus:outline-none focus:border-[var(--n15-gold)]/50" />
-                    <textarea placeholder={t.object.messagePlaceholder} rows={3} className="bg-[var(--n15-black)] border border-[var(--n15-gold)]/20 px-4 py-2.5 text-sm text-[var(--n15-silver)] placeholder:text-[var(--n15-muted)] focus:outline-none focus:border-[var(--n15-gold)]/50 resize-none" />
-                    <Button variant="primary" size="md" className="w-full">{t.object.submit}</Button>
-                  </form>
+                  <ViewRequestForm objectId={obj.id} lang={lang} />
                 </div>
               </div>
             </div>
