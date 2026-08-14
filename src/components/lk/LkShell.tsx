@@ -88,7 +88,7 @@ export const LkShell: FC<{ children: ReactNode; active?: string }> = ({ children
   }
 
   return (
-    <div className="n15-container flex flex-col lg:flex-row gap-8 py-10">
+    <div className="n15-container flex flex-col lg:flex-row gap-8" style={{ paddingTop: '2.5rem', paddingBottom: '2.5rem' }}>
       {/* ── Боковая панель ── */}
       <aside className="lg:w-64 shrink-0">
         <div className="bg-[var(--n15-charcoal)] border border-[var(--n15-gold)]/15 p-6 lg:sticky lg:top-24">
