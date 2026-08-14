@@ -15,6 +15,7 @@ export default function LKDashboard() {
   const { lang, t } = useI18n()
   const [user, setUser] = useState<{ name?: string; email?: string } | null>(null)
   const [loading, setLoading] = useState(true)
+  const [counts, setCounts] = useState<{ favorites: number; applications: number; unread: number } | null>(null)
 
   const navItems = [
     { href: `/${lang}/lk/favorites`, label: t.lk.favorites, desc: t.lk.favoritesDesc },
@@ -24,17 +25,48 @@ export default function LKDashboard() {
   ]
 
   useEffect(() => {
-    fetch('/api/users/me', { credentials: 'include' })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data?.user) {
-          setUser(data.user)
-        } else {
-          router.push(`/${lang}/login`)
-        }
+    let cancelled = false
+    async function load() {
+      const res = await fetch('/api/users/me?depth=1', { credentials: 'include' })
+      const data = res.ok ? await res.json() : null
+      const me = data?.user
+      if (!me) {
+        router.push(`/${lang}/login`)
+        return
+      }
+      if (cancelled) return
+      setUser(me)
+      setLoading(false)
+
+      const favCount = Array.isArray(me.favorites) ? me.favorites.length : 0
+      const appsRes = await fetch(
+        `/api/applications?${new URLSearchParams({ where: JSON.stringify({ user: { equals: me.id } }), limit: '0' })}`,
+        { credentials: 'include' },
+      )
+      const appsData = await appsRes.json()
+      const unreadRes = await fetch(
+        `/api/messages?${new URLSearchParams({
+          where: JSON.stringify({
+            and: [
+              { 'application.user': { equals: me.id } },
+              { read: { equals: false } },
+              { 'sender.id': { not_equals: me.id } },
+            ],
+          }),
+          limit: '0',
+        })}`,
+        { credentials: 'include' },
+      )
+      const unreadData = await unreadRes.json()
+      if (cancelled) return
+      setCounts({
+        favorites: favCount,
+        applications: appsData.totalDocs ?? 0,
+        unread: unreadData.totalDocs ?? 0,
       })
-      .catch(() => router.push(`/${lang}/login`))
-      .finally(() => setLoading(false))
+    }
+    void load().catch(() => router.push(`/${lang}/login`))
+    return () => { cancelled = true }
   }, [router, lang])
 
   const handleLogout = async () => {
@@ -80,6 +112,13 @@ export default function LKDashboard() {
                       {item.label}
                     </h3>
                     <p className="text-xs text-[var(--n15-muted)] mt-2">{item.desc}</p>
+                    {counts && (
+                      <span className="text-xs text-[var(--n15-gold)] mt-1">
+                        {item.href.includes('favorites') && counts.favorites > 0 && counts.favorites}
+                        {item.href.includes('applications') && counts.applications > 0 && counts.applications}
+                        {item.href.includes('messages') && counts.unread > 0 && `${counts.unread} ${t.lk.unread}`}
+                      </span>
+                    )}
                   </div>
                 </OrnamentBorder>
               </Link>

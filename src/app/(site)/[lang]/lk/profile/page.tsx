@@ -1,17 +1,57 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { Header } from '@/components/layout/Header'
 import { Footer } from '@/components/layout/Footer'
 import { SectionWrapper } from '@/components/ui/SectionWrapper'
 import { Button } from '@/components/ui/Button'
-import Link from 'next/link'
-import { getDictionary } from '@/i18n/dictionaries'
+import { useI18n } from '@/i18n/i18n-provider'
 
-interface PageProps {
-  params: Promise<{ lang: string }>
-}
+export default function ProfilePage() {
+  const { lang, t } = useI18n()
+  const [userId, setUserId] = useState<number | null>(null)
+  const [name, setName] = useState('')
+  const [phone, setPhone] = useState('')
+  const [email, setEmail] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
 
-export default async function ProfilePage({ params }: PageProps) {
-  const { lang } = await params
-  const t = getDictionary(lang)
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      const res = await fetch('/api/users/me', { credentials: 'include' })
+      const data = await res.json()
+      const me = data?.user
+      if (cancelled || !me) return
+      setUserId(me.id as number)
+      setName((me.name as string) || '')
+      setPhone((me.phone as string) || '')
+      setEmail((me.email as string) || '')
+      setLoading(false)
+    }
+    void load()
+    return () => { cancelled = true }
+  }, [])
+
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (saving || userId === null) return
+    setSaving(true)
+    await fetch(`/api/users/${userId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ name, phone }),
+    })
+    setSaving(false)
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2000)
+  }
+
+  const initials = name ? name.split(' ').map((n) => n[0]).join('').slice(0, 2) : '–'
+  const inputCls = 'bg-[var(--n15-black)] border border-[var(--n15-gold)]/20 px-4 py-2.5 text-sm text-[var(--n15-silver)] placeholder:text-[var(--n15-muted)] focus:outline-none focus:border-[var(--n15-gold)]/50'
 
   return (
     <>
@@ -25,24 +65,30 @@ export default async function ProfilePage({ params }: PageProps) {
           </div>
           <h1 className="text-3xl font-[family-name:var(--font-display)] text-[var(--n15-white)] mb-8">{t.lkProfile.title}</h1>
 
-          <div className="max-w-lg">
-            <div className="flex items-center gap-6 mb-8">
-              <div className="w-16 h-16 rounded-full bg-[var(--n15-charcoal)] border border-[var(--n15-gold)]/20 flex items-center justify-center">
-                <span className="text-xl font-[family-name:var(--font-display)] text-[var(--n15-gold)]">АК</span>
+          {loading ? (
+            <p className="text-[var(--n15-muted)]">{t.lk.loading}</p>
+          ) : (
+            <div className="max-w-lg">
+              <div className="flex items-center gap-6 mb-8">
+                <div className="w-16 h-16 rounded-full bg-[var(--n15-charcoal)] border border-[var(--n15-gold)]/20 flex items-center justify-center">
+                  <span className="text-xl font-[family-name:var(--font-display)] text-[var(--n15-gold)]">{initials}</span>
+                </div>
+                <div>
+                  <div className="text-sm text-[var(--n15-white)]">{name}</div>
+                  <div className="text-xs text-[var(--n15-muted)]">{email}</div>
+                </div>
               </div>
-              <div>
-                <div className="text-sm text-[var(--n15-white)]">Алан Караев</div>
-                <div className="text-xs text-[var(--n15-muted)]">al@n15-realty.ru</div>
-              </div>
-            </div>
 
-            <form className="flex flex-col gap-4">
-              <input type="text" defaultValue="Алан" placeholder={t.lkProfile.name} className="bg-[var(--n15-black)] border border-[var(--n15-gold)]/20 px-4 py-2.5 text-sm text-[var(--n15-silver)] focus:outline-none focus:border-[var(--n15-gold)]/50" />
-              <input type="tel" defaultValue="+7 (928) 123-45-67" placeholder={t.lkProfile.phone} className="bg-[var(--n15-black)] border border-[var(--n15-gold)]/20 px-4 py-2.5 text-sm text-[var(--n15-silver)] focus:outline-none focus:border-[var(--n15-gold)]/50" />
-              <input type="email" defaultValue="al@n15-realty.ru" placeholder={t.lkProfile.email} className="bg-[var(--n15-black)] border border-[var(--n15-gold)]/20 px-4 py-2.5 text-sm text-[var(--n15-silver)] focus:outline-none focus:border-[var(--n15-gold)]/50" />
-              <Button variant="primary" size="md" className="mt-2">{t.lkProfile.save}</Button>
-            </form>
-          </div>
+              <form onSubmit={(e) => void save(e)} className="flex flex-col gap-4">
+                <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder={t.lkProfile.name} className={inputCls} />
+                <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder={t.lkProfile.phone} className={inputCls} />
+                <input type="email" value={email} readOnly className={`${inputCls} opacity-50 cursor-not-allowed`} />
+                <Button variant="primary" size="md" className="mt-2" disabled={saving}>
+                  {saved ? `${t.lkProfile.saved} ✓` : saving ? t.lk.loading : t.lkProfile.save}
+                </Button>
+              </form>
+            </div>
+          )}
         </SectionWrapper>
       </main>
       <Footer />

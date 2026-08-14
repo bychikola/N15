@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useI18n } from '@/i18n/i18n-provider'
 import { LangSwitcher } from '@/i18n/lang-switcher'
 import { ThemeSwitcher } from '@/components/ui/ThemeSwitcher'
+import CabinetBadge from '@/components/layout/CabinetBadge'
 
 export const Header: FC = () => {
   const [isOpen, setIsOpen] = useState(false)
@@ -45,9 +46,10 @@ export const Header: FC = () => {
           ))}
           <Link
             href={`/${lang}/lk`}
-            className="ml-4 px-5 py-2 text-sm tracking-wider uppercase border border-[var(--n15-gold)]/30 text-[var(--n15-gold)] hover:bg-[var(--n15-gold)]/8 transition-all duration-300"
+            className="ml-4 px-5 py-2 text-sm tracking-wider uppercase border border-[var(--n15-gold)]/30 text-[var(--n15-gold)] hover:bg-[var(--n15-gold)]/8 transition-all duration-300 inline-flex items-center"
           >
             {t.nav.cabinet}
+            <CabinetBadge />
           </Link>
           <LangSwitcher className="ml-3" />
           <ThemeSwitcher className="ml-3" />
