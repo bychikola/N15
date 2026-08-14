@@ -4,7 +4,6 @@ import { Suspense, useState, useMemo, useEffect, useRef, useCallback } from 'rea
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Header } from '@/components/layout/Header'
 import { Footer } from '@/components/layout/Footer'
-import { SectionWrapper } from '@/components/ui/SectionWrapper'
 import { useI18n } from '@/i18n/i18n-provider'
 import ObjectCard, { type ObjectListItem } from '@/components/objects/ObjectCard'
 import CatalogFilters, { buildWhere, emptyFilters, type FiltersState } from '@/components/objects/CatalogFilters'
@@ -72,26 +71,28 @@ function CatalogContent() {
   }, [filters, sort, lang, router, searchParams])
 
   // Чтение изменений URL извне (ссылки футера «Купить/Квартиры/…», шаринг-ссылки).
+  // Паттерн React «adjusting state when props change» — setState во время рендера,
+  // а не в эффекте (правило react-hooks/set-state-in-effect).
   // q не трогаем: он живёт в state и пишется в URL с debounce — иначе ввод ломается.
-  useEffect(() => {
-    setFilters((prev) => {
-      const next: FiltersState = {
-        type: searchParams.get('type') ?? '',
-        category: searchParams.get('category') ?? '',
-        rooms: searchParams.get('rooms') ?? '',
-        priceMin: searchParams.get('price_min') ?? '',
-        priceMax: searchParams.get('price_max') ?? '',
-        areaMin: searchParams.get('area_min') ?? '',
-      }
-      return Object.entries(next).every(([k, v]) => prev[k as keyof FiltersState] === v)
+  const [prevSearchParams, setPrevSearchParams] = useState(searchParams)
+  if (prevSearchParams !== searchParams) {
+    setPrevSearchParams(searchParams)
+    const next: FiltersState = {
+      type: searchParams.get('type') ?? '',
+      category: searchParams.get('category') ?? '',
+      rooms: searchParams.get('rooms') ?? '',
+      priceMin: searchParams.get('price_min') ?? '',
+      priceMax: searchParams.get('price_max') ?? '',
+      areaMin: searchParams.get('area_min') ?? '',
+    }
+    setFilters((prev) =>
+      Object.entries(next).every(([k, v]) => prev[k as keyof FiltersState] === v)
         ? prev
-        : next
-    })
-    setSort((prev) => {
-      const v = searchParams.get('sort') ?? ''
-      return prev === v ? prev : v
-    })
-  }, [searchParams])
+        : next,
+    )
+    const nextSort = searchParams.get('sort') ?? ''
+    setSort((prev) => (prev === nextSort ? prev : nextSort))
+  }
 
   const mapDocs = (d: Record<string, unknown>): ObjectListItem => ({
     id: d.id as number,
