@@ -53,6 +53,7 @@ export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) =>
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [modalOpen, setModalOpen] = useState(false)
+  const [saveError, setSaveError] = useState('')
 
   const load = useCallback(async () => {
     const [objectsRes, agentsRes] = await Promise.all([
@@ -95,10 +96,12 @@ export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) =>
     setEditId(null)
     setPhotos([])
     setFeatures([])
+    setSaveError('')
   }
 
   const startEdit = (o: Record<string, unknown>) => {
     setModalOpen(true)
+    setSaveError('')
     const addr = o.address as Record<string, unknown> | undefined
     const coords = o.coordinates as Record<string, unknown> | undefined
     const agentRel = o.agent as Record<string, unknown> | undefined
@@ -181,7 +184,12 @@ export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) =>
 
   const save = async () => {
     if (saving || !form.title.trim()) return
+    if (!form.price) {
+      setSaveError(t.crm.objPriceRequired)
+      return
+    }
     setSaving(true)
+    setSaveError('')
     const mediaIds = photos.map((p) => p.id).filter((id): id is number => id !== null)
     const body: Record<string, unknown> = {
       title: form.title.trim(),
@@ -234,6 +242,11 @@ export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) =>
       resetForm()
       setModalOpen(false)
       await load()
+    } else {
+      // Показываем причину ошибки — раньше неудача была безмолвной
+      const errData = await res.json().catch(() => null) as { errors?: { message?: string }[] } | null
+      const serverMsg = errData?.errors?.[0]?.message
+      setSaveError(serverMsg ? `${t.crm.objSaveError} (${serverMsg})` : t.crm.objSaveError)
     }
   }
 
@@ -287,15 +300,60 @@ export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) =>
           <Field label={t.crm.objRooms}><input type="number" value={form.rooms} onChange={(e) => set('rooms', e.target.value)} style={inputStyle} /></Field>
           <Field label={t.crm.objFloor}><input type="number" value={form.floor} onChange={(e) => set('floor', e.target.value)} style={inputStyle} /></Field>
           <Field label={t.crm.objTotalFloors}><input type="number" value={form.totalFloors} onChange={(e) => set('totalFloors', e.target.value)} style={inputStyle} /></Field>
-          <Field label={t.crm.objBuildingType}><input value={form.buildingType} onChange={(e) => set('buildingType', e.target.value)} style={inputStyle} /></Field>
-          <Field label={t.crm.objCondition}><input value={form.condition} onChange={(e) => set('condition', e.target.value)} style={inputStyle} /></Field>
-          <Field label={t.crm.objHeating}><input value={form.heating} onChange={(e) => set('heating', e.target.value)} style={inputStyle} /></Field>
-          <Field label={t.crm.objBalcony}><input value={form.balcony} onChange={(e) => set('balcony', e.target.value)} style={inputStyle} /></Field>
-          <Field label={t.crm.objWater}><input value={form.water} onChange={(e) => set('water', e.target.value)} style={inputStyle} /></Field>
-          <Field label={t.crm.objSewerage}><input value={form.sewerage} onChange={(e) => set('sewerage', e.target.value)} style={inputStyle} /></Field>
-          <Field label={t.crm.objElectricity}><input value={form.electricity} onChange={(e) => set('electricity', e.target.value)} style={inputStyle} /></Field>
-          <Field label={t.crm.objGas}><input value={form.gas} onChange={(e) => set('gas', e.target.value)} style={inputStyle} /></Field>
-          <Field label={t.crm.objInternet}><input value={form.internet} onChange={(e) => set('internet', e.target.value)} style={inputStyle} /></Field>
+          <Field label={t.crm.objBuildingType}>
+            <select value={form.buildingType} onChange={(e) => set('buildingType', e.target.value)} style={inputStyle}>
+              <option value="">—</option>
+              <option value="brick">Кирпичный</option><option value="monolith">Монолитный</option><option value="panel">Панельный</option><option value="stalin">Сталинский</option><option value="historic">Исторический</option>
+            </select>
+          </Field>
+          <Field label={t.crm.objCondition}>
+            <select value={form.condition} onChange={(e) => set('condition', e.target.value)} style={inputStyle}>
+              <option value="">—</option>
+              <option value="new">Новостройка</option><option value="excellent">Отличное</option><option value="good">Хорошее</option><option value="needsRepair">Требует ремонта</option><option value="shell">Свободная планировка</option>
+            </select>
+          </Field>
+          <Field label={t.crm.objHeating}>
+            <select value={form.heating} onChange={(e) => set('heating', e.target.value)} style={inputStyle}>
+              <option value="">—</option>
+              <option value="central">Центральное</option><option value="autonomous">Автономное</option><option value="gas">Газовое</option><option value="electric">Электрическое</option>
+            </select>
+          </Field>
+          <Field label={t.crm.objBalcony}>
+            <select value={form.balcony} onChange={(e) => set('balcony', e.target.value)} style={inputStyle}>
+              <option value="">—</option>
+              <option value="none">Нет</option><option value="balcony">Балкон</option><option value="loggia">Лоджия</option><option value="several">Несколько</option>
+            </select>
+          </Field>
+          <Field label={t.crm.objWater}>
+            <select value={form.water} onChange={(e) => set('water', e.target.value)} style={inputStyle}>
+              <option value="">—</option>
+              <option value="none">Нет</option><option value="central">Центральная</option><option value="own">Своя</option>
+            </select>
+          </Field>
+          <Field label={t.crm.objSewerage}>
+            <select value={form.sewerage} onChange={(e) => set('sewerage', e.target.value)} style={inputStyle}>
+              <option value="">—</option>
+              <option value="none">Нет</option><option value="central">Центральная</option><option value="septic">Септик</option>
+            </select>
+          </Field>
+          <Field label={t.crm.objElectricity}>
+            <select value={form.electricity} onChange={(e) => set('electricity', e.target.value)} style={inputStyle}>
+              <option value="">—</option>
+              <option value="none">Нет</option><option value="yes">Есть</option>
+            </select>
+          </Field>
+          <Field label={t.crm.objGas}>
+            <select value={form.gas} onChange={(e) => set('gas', e.target.value)} style={inputStyle}>
+              <option value="">—</option>
+              <option value="none">Нет</option><option value="main">Магистральный</option><option value="bottled">Баллонный</option>
+            </select>
+          </Field>
+          <Field label={t.crm.objInternet}>
+            <select value={form.internet} onChange={(e) => set('internet', e.target.value)} style={inputStyle}>
+              <option value="">—</option>
+              <option value="none">Нет</option><option value="yes">Есть</option>
+            </select>
+          </Field>
 
           <div className="span-2" style={{ gridColumn: '1 / -1', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr', gap: 10 }}>
             <Field label={t.crm.objCity}><input value={form.city} onChange={(e) => set('city', e.target.value)} style={inputStyle} /></Field>
@@ -384,6 +442,7 @@ export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) =>
               {saving ? t.crm.objSaving : editId ? t.crm.objEdit : t.crm.objAdd}
             </button>
             {saved && <p style={{ margin: 0, color: '#8b683f', fontSize: 11 }}>{t.crm.objSaved} ✓</p>}
+            {saveError && <p style={{ margin: 0, color: '#9b4e43', fontSize: 11 }}>{saveError}</p>}
           </div>
             </div>
           </div>
