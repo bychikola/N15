@@ -73,7 +73,7 @@ export default function FeaturedObjects({ objects, t, lang, filterSummary }: Pro
         {filterSummary && (
           <div className="lp-featured-filter">
             <span className="lp-featured-filter-summary">{filterSummary}</span>
-            <a className="lp-featured-filter-reset" href={`/${lang}`}>
+            <a className="lp-featured-filter-reset" href={`/${lang}/catalog`}>
               {t.landing.featuredShowAll}
             </a>
           </div>
