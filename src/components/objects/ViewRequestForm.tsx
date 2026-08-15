@@ -55,6 +55,20 @@ export const ViewRequestForm: FC<Props> = ({ objectId, lang }) => {
         setError(t.lkProfile.save + ' ✕')
         return
       }
+      const appData = await res.json()
+
+      // Текст заявки становится первым сообщением в чате (для авторизованных)
+      if (userId && message.trim()) {
+        const appId = appData?.doc?.id
+        if (appId) {
+          await fetch('/api/messages', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ application: appId, sender: userId, text: message.trim() }),
+          })
+        }
+      }
       setSent(true)
     } finally {
       setSending(false)
