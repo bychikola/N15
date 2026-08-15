@@ -17,6 +17,7 @@ export const ViewRequestForm: FC<Props> = ({ objectId, lang }) => {
   const [message, setMessage] = useState('')
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
+  const [sentAsUser, setSentAsUser] = useState(false)
   const [error, setError] = useState('')
 
   const submit = async (e: React.FormEvent) => {
@@ -69,6 +70,7 @@ export const ViewRequestForm: FC<Props> = ({ objectId, lang }) => {
           })
         }
       }
+      setSentAsUser(!!userId)
       setSent(true)
     } finally {
       setSending(false)
@@ -76,6 +78,19 @@ export const ViewRequestForm: FC<Props> = ({ objectId, lang }) => {
   }
 
   if (sent) {
+    // Гость без аккаунта не может смотреть ЛК — вместо ссылки на чат
+    // показываем, что агент позвонит, и предлагаем зарегистрироваться
+    if (!sentAsUser) {
+      return (
+        <div className="text-center py-4">
+          <p className="text-sm text-[var(--n15-white)] mb-2">{t.object.requestAcceptedGuest}</p>
+          <p className="text-xs text-[var(--n15-muted)] mb-3">{t.object.guestRegisterHint}</p>
+          <Link href={`/${lang}/register`} className="text-xs text-[var(--n15-gold)] underline">
+            {t.object.guestRegisterCta} →
+          </Link>
+        </div>
+      )
+    }
     return (
       <div className="text-center py-4">
         <p className="text-sm text-[var(--n15-white)] mb-2">{t.object.requestAccepted}</p>
