@@ -24,16 +24,17 @@ function dayLabel(iso: string, t: { lkChat: { today: string; yesterday: string }
   return d.toLocaleDateString(locale, { day: 'numeric', month: 'long' })
 }
 
-export default function ChatThread({ applicationId, lang }: { applicationId: number; lang: string }) {
+export default function ChatThread({ applicationId, lang, variant = 'lk' }: { applicationId: number; lang: string; variant?: 'lk' | 'crm' }) {
   const { t } = useI18n()
   const [messages, setMessages] = useState<MessageItem[]>([])
   const [meId, setMeId] = useState<number | null>(null)
   const [meRole, setMeRole] = useState<string>('user')
-  const [objectInfo, setObjectInfo] = useState<{ id?: number; title?: string; agentName?: string; agentPhone?: string; agentPhoto?: string; clientName?: string }>({})
+  const [objectInfo, setObjectInfo] = useState<{ id?: number; title?: string; agentName?: string; agentPhone?: string; agentPhoto?: string; clientName?: string; clientPhone?: string }>({})
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
   const [loading, setLoading] = useState(true)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const isCrm = variant === 'crm'
 
   const load = useCallback(async () => {
     const meRes = await fetch('/api/users/me', { credentials: 'include' })
@@ -70,25 +71,39 @@ export default function ChatThread({ applicationId, lang }: { applicationId: num
           ? ((agent.photo as Record<string, unknown>).url as string) || undefined
           : undefined,
       clientName: (clientUser?.name as string) || (app.clientName as string) || undefined,
+      clientPhone: (clientUser?.phone as string) || (app.clientPhone as string) || undefined,
     })
 
     const msgData = await msgRes.json()
     const docs = (msgData.docs || []) as Record<string, unknown>[]
-    setMessages(
-      docs.map((m) => {
-        const sender = m.sender as Record<string, unknown> | number | undefined
-        const senderId = typeof sender === 'object' && sender ? (sender.id as number) : (sender as number)
-        const senderName = typeof sender === 'object' && sender ? ((sender.name as string) || '') : ''
-        return {
-          id: m.id as number,
-          text: m.text as string,
-          read: m.read as boolean,
-          createdAt: m.createdAt as string,
-          senderId,
-          senderName,
-        }
-      }),
-    )
+    const mapped = docs.map((m) => {
+      const sender = m.sender as Record<string, unknown> | number | undefined
+      const senderId = typeof sender === 'object' && sender ? (sender.id as number) : (sender as number)
+      const senderName = typeof sender === 'object' && sender ? ((sender.name as string) || '') : ''
+      return {
+        id: m.id as number,
+        text: m.text as string,
+        read: m.read as boolean,
+        createdAt: m.createdAt as string,
+        senderId,
+        senderName,
+      }
+    })
+
+    // Фолбэк: текст заявки как первое сообщение, если сообщений в чате нет
+    // (гостевая заявка или старая, созданная до появления Messages-записи)
+    if (mapped.length === 0 && typeof app.message === 'string' && app.message.trim()) {
+      const clientId = typeof app.user === 'object' && app.user ? (app.user as Record<string, unknown>).id as number : 0
+      mapped.push({
+        id: -1,
+        text: app.message.trim(),
+        read: false,
+        createdAt: app.createdAt as string,
+        senderId: clientId,
+        senderName: (clientUser?.name as string) || (app.clientName as string) || '',
+      })
+    }
+    setMessages(mapped)
     setLoading(false)
 
     // Пометить входящие непрочитанные прочитанными
@@ -154,32 +169,42 @@ export default function ChatThread({ applicationId, lang }: { applicationId: num
   }
 
   const personName = meRole === 'agent' ? objectInfo.clientName : objectInfo.agentName
-  const personPhone = meRole === 'agent' ? undefined : objectInfo.agentPhone
+  const personPhone = meRole === 'agent' ? (isCrm ? objectInfo.clientPhone : undefined) : objectInfo.agentPhone
 
   if (loading) {
-    return <p className="text-[var(--n15-muted)]">{t.lk.loading}</p>
+    return <p style={isCrm ? { color: '#817b70', fontSize: 12 } : undefined} className={isCrm ? undefined : 'text-[var(--n15-muted)]'}>{t.lk.loading}</p>
   }
 
   return (
-    <div className="flex flex-col min-h-[65vh] bg-[var(--n15-charcoal)] border border-[var(--n15-gold)]/15">
+    <div
+      style={isCrm ? { display: 'flex', flexDirection: 'column', minHeight: '60vh', background: '#fff', border: '1px solid #e5dfd3', borderRadius: 12, overflow: 'hidden' } : undefined}
+      className={isCrm ? undefined : 'flex flex-col min-h-[65vh] bg-[var(--n15-charcoal)] border border-[var(--n15-gold)]/15'}
+    >
       {/* Шапка досье: объект + собеседник */}
-      <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4 border-b border-[var(--n15-gold)]/15 bg-[var(--n15-black)]/40">
+      <div
+        style={isCrm ? { display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '14px 18px', borderBottom: '1px solid #e5dfd3', background: '#faf8f4' } : undefined}
+        className={isCrm ? undefined : 'flex flex-wrap items-center justify-between gap-3 px-6 py-4 border-b border-[var(--n15-gold)]/15 bg-[var(--n15-black)]/40'}
+      >
         <div className="min-w-0">
           {objectInfo.id ? (
-            <Link href={`/${lang}/catalog/${objectInfo.id}`} className="text-sm text-[var(--n15-gold)] hover:underline truncate">
+            <Link href={`/${lang}/catalog/${objectInfo.id}`}
+              style={isCrm ? { color: '#8d6b40', fontSize: 13, fontWeight: 600, textDecoration: 'none' } : undefined}
+              className={isCrm ? undefined : 'text-sm text-[var(--n15-gold)] hover:underline truncate'}>
               {objectInfo.title}
             </Link>
           ) : (
-            <span className="text-sm text-[var(--n15-muted)]">{t.lkChat.requestCard} #{applicationId}</span>
+            <span style={isCrm ? { color: '#817b70', fontSize: 13 } : undefined} className={isCrm ? undefined : 'text-sm text-[var(--n15-muted)]'}>{t.lkChat.requestCard} #{applicationId}</span>
           )}
           {personName && (
-            <div className="text-[10px] tracking-[0.15em] uppercase text-[var(--n15-muted)] mt-1">{personName}</div>
+            <div style={isCrm ? { color: '#817b70', fontSize: 9, textTransform: 'uppercase', letterSpacing: '.1em', marginTop: 4 } : undefined}
+              className={isCrm ? undefined : 'text-[10px] tracking-[0.15em] uppercase text-[var(--n15-muted)] mt-1'}>{personName}</div>
           )}
         </div>
         <div className="flex items-center gap-3 shrink-0">
           {personPhone && (
             <a href={`tel:${personPhone.replace(/\s+/g, '')}`}
-              className="inline-flex items-center gap-1.5 text-xs uppercase tracking-wider border border-[var(--n15-gold)]/40 text-[var(--n15-gold)] px-4 py-2 hover:bg-[var(--n15-gold)]/8 transition-colors">
+              style={isCrm ? { display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 10, textTransform: 'uppercase', letterSpacing: '.1em', border: '1px solid #d9d1c4', borderRadius: 7, color: '#8d6b40', padding: '8px 14px', textDecoration: 'none' } : undefined}
+              className={isCrm ? undefined : 'inline-flex items-center gap-1.5 text-xs uppercase tracking-wider border border-[var(--n15-gold)]/40 text-[var(--n15-gold)] px-4 py-2 hover:bg-[var(--n15-gold)]/8 transition-colors'}>
               <span className="material-symbols-outlined text-sm leading-none" aria-hidden="true">call</span>
               {t.lkChat.call}
             </a>
@@ -188,9 +213,13 @@ export default function ChatThread({ applicationId, lang }: { applicationId: num
       </div>
 
       {/* Сообщения */}
-      <div className="flex-1 flex flex-col gap-3 px-6 py-6">
+      <div
+        style={isCrm ? { flex: 1, display: 'flex', flexDirection: 'column', gap: 10, padding: '18px', minHeight: 200 } : undefined}
+        className={isCrm ? undefined : 'flex-1 flex flex-col gap-3 px-6 py-6'}
+      >
         {messages.length === 0 && (
-          <p className="text-sm text-[var(--n15-muted)] text-center py-10">{t.lkChat.empty}</p>
+          <p style={isCrm ? { fontSize: 12, color: '#817b70', textAlign: 'center', padding: '36px 0' } : undefined}
+            className={isCrm ? undefined : 'text-sm text-[var(--n15-muted)] text-center py-10'}>{t.lkChat.empty}</p>
         )}
         {messages.map((m, i) => {
           const mine = m.senderId === meId
@@ -203,33 +232,47 @@ export default function ChatThread({ applicationId, lang }: { applicationId: num
           return (
             <div key={m.id}>
               {showDay && (
-                <div className="flex items-center gap-3 text-[10px] uppercase tracking-[0.2em] text-[var(--n15-muted)] my-4">
-                  <span className="flex-1 h-px bg-[var(--n15-gold)]/10" />
+                <div style={isCrm ? { display: 'flex', alignItems: 'center', gap: 10, fontSize: 9, textTransform: 'uppercase', letterSpacing: '.2em', color: '#817b70', margin: '14px 0' } : undefined}
+                  className={isCrm ? undefined : 'flex items-center gap-3 text-[10px] uppercase tracking-[0.2em] text-[var(--n15-muted)] my-4'}>
+                  <span style={isCrm ? { flex: 1, height: 1, background: '#e5dfd3' } : undefined} className={isCrm ? undefined : 'flex-1 h-px bg-[var(--n15-gold)]/10'} />
                   {dayLabel(m.createdAt, t, t.locale)}
-                  <span className="flex-1 h-px bg-[var(--n15-gold)]/10" />
+                  <span style={isCrm ? { flex: 1, height: 1, background: '#e5dfd3' } : undefined} className={isCrm ? undefined : 'flex-1 h-px bg-[var(--n15-gold)]/10'} />
                 </div>
               )}
               <div className={`flex items-end gap-2.5 ${mine ? 'justify-end' : 'justify-start'}`}>
                 {!mine && (
-                  <div className="w-9 h-9 shrink-0 rounded-full overflow-hidden bg-[var(--n15-black)] border border-[var(--n15-gold)]/25 flex items-center justify-center">
+                  <div
+                    style={isCrm ? { width: 36, height: 36, flexShrink: 0, borderRadius: '50%', overflow: 'hidden', background: '#f2eadf', border: '1px solid #d9d1c4', display: 'flex', alignItems: 'center', justifyContent: 'center' } : undefined}
+                    className={isCrm ? undefined : 'w-9 h-9 shrink-0 rounded-full overflow-hidden bg-[var(--n15-black)] border border-[var(--n15-gold)]/25 flex items-center justify-center'}
+                  >
                     {incomingPhoto ? (
-                      <img src={incomingPhoto} alt={m.senderName} className="w-full h-full object-cover" />
+                      <img src={incomingPhoto} alt={m.senderName} style={isCrm ? { width: '100%', height: '100%', objectFit: 'cover' } : undefined} className={isCrm ? undefined : 'w-full h-full object-cover'} />
                     ) : (
-                      <span className="text-[11px] font-[family-name:var(--font-display)] text-[var(--n15-gold)]">{incomingInitials}</span>
+                      <span style={isCrm ? { fontSize: 11, color: '#8d6b40' } : undefined}
+                        className={isCrm ? undefined : 'text-[11px] font-[family-name:var(--font-display)] text-[var(--n15-gold)]'}>{incomingInitials}</span>
                     )}
                   </div>
                 )}
                 <div className={`max-w-[70%] ${mine ? '' : ''}`}>
                   {!mine && m.senderName && (
-                    <div className="text-[10px] tracking-[0.12em] uppercase text-[var(--n15-gold)] mb-1">{m.senderName}</div>
+                    <div style={isCrm ? { fontSize: 9, letterSpacing: '.12em', textTransform: 'uppercase', color: '#8d6b40', marginBottom: 4 } : undefined}
+                      className={isCrm ? undefined : 'text-[10px] tracking-[0.12em] uppercase text-[var(--n15-gold)] mb-1'}>{m.senderName}</div>
                   )}
-                  <div className={`px-4 py-3 text-sm leading-relaxed ${
-                    mine
-                      ? 'border border-[var(--n15-gold)]/50 bg-[var(--n15-gold)]/8 text-[var(--n15-white)]'
-                      : 'bg-[var(--n15-black)] border border-[var(--n15-gold)]/15 text-[var(--n15-silver)]'
-                  }`}>
+                  <div
+                    style={isCrm
+                      ? mine
+                        ? { maxWidth: '70%', marginLeft: 'auto', background: '#a7814e', color: '#fff', borderRadius: 10, padding: '10px 14px', fontSize: 13, lineHeight: 1.6 }
+                        : { maxWidth: '70%', marginRight: 'auto', background: '#fff', border: '1px solid #e5dfd3', color: '#25241f', borderRadius: 10, padding: '10px 14px', fontSize: 13, lineHeight: 1.6 }
+                      : undefined}
+                    className={isCrm ? undefined : `px-4 py-3 text-sm leading-relaxed ${
+                      mine
+                        ? 'border border-[var(--n15-gold)]/50 bg-[var(--n15-gold)]/8 text-[var(--n15-white)]'
+                        : 'bg-[var(--n15-black)] border border-[var(--n15-gold)]/15 text-[var(--n15-silver)]'
+                    }`}
+                  >
                     <div>{m.text}</div>
-                    <div className="text-[10px] mt-1.5 flex items-center justify-end gap-1 text-[var(--n15-muted)]">
+                    <div style={isCrm ? { fontSize: 10, marginTop: 6, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4, color: mine ? 'rgba(255,255,255,.75)' : '#817b70' } : undefined}
+                      className={isCrm ? undefined : 'text-[10px] mt-1.5 flex items-center justify-end gap-1 text-[var(--n15-muted)]'}>
                       {new Date(m.createdAt).toLocaleTimeString(t.locale, { hour: '2-digit', minute: '2-digit' })}
                       {mine && m.read && (
                         <span className="material-symbols-outlined text-[12px] text-[var(--n15-gold)]" title={t.lkChat.readMark}>done_all</span>
@@ -245,7 +288,10 @@ export default function ChatThread({ applicationId, lang }: { applicationId: num
       </div>
 
       {/* Инпут */}
-      <div className="px-6 py-4 border-t border-[var(--n15-gold)]/15 bg-[var(--n15-black)]/40">
+      <div
+        style={isCrm ? { padding: '14px 18px', borderTop: '1px solid #e5dfd3', background: '#faf8f4' } : undefined}
+        className={isCrm ? undefined : 'px-6 py-4 border-t border-[var(--n15-gold)]/15 bg-[var(--n15-black)]/40'}
+      >
         <div className="flex gap-3 items-end">
           <textarea
             value={text}
@@ -258,12 +304,14 @@ export default function ChatThread({ applicationId, lang }: { applicationId: num
             }}
             placeholder={t.lkChat.placeholder}
             rows={2}
-            className="flex-1 bg-[var(--n15-black)] border border-[var(--n15-gold)]/25 px-4 py-3 text-sm text-[var(--n15-silver)] placeholder:text-[var(--n15-muted)] focus:outline-none focus:border-[var(--n15-gold)]/60 resize-none"
+            style={isCrm ? { flex: 1, boxSizing: 'border-box', border: '1px solid #d9d1c4', borderRadius: 8, background: '#fff', color: '#25241f', padding: '10px 12px', font: '13px Arial, Helvetica, sans-serif', resize: 'none' } : undefined}
+            className={isCrm ? undefined : 'flex-1 bg-[var(--n15-black)] border border-[var(--n15-gold)]/25 px-4 py-3 text-sm text-[var(--n15-silver)] placeholder:text-[var(--n15-muted)] focus:outline-none focus:border-[var(--n15-gold)]/60 resize-none'}
           />
           <button
             onClick={() => void send()}
             disabled={sending || !text.trim()}
-            className="inline-flex items-center gap-1.5 px-5 py-3 text-xs uppercase tracking-wider bg-[var(--n15-gold)] text-[var(--on-accent)] font-medium transition-all hover:brightness-110 disabled:opacity-50 cursor-pointer"
+            style={isCrm ? { display: 'inline-flex', alignItems: 'center', gap: 6, padding: '10px 16px', border: 0, borderRadius: 8, background: '#a7814e', color: '#fff', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', cursor: 'pointer', opacity: sending || !text.trim() ? 0.5 : 1 } : undefined}
+            className={isCrm ? undefined : 'inline-flex items-center gap-1.5 px-5 py-3 text-xs uppercase tracking-wider bg-[var(--n15-gold)] text-[var(--on-accent)] font-medium transition-all hover:brightness-110 disabled:opacity-50 cursor-pointer'}
           >
             <span className="material-symbols-outlined text-sm leading-none" aria-hidden="true">send</span>
             {sending ? t.lkChat.sending : t.lkChat.send}

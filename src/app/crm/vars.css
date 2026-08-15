@@ -1,0 +1,51 @@
+/* Токены N15 для переиспользуемых компонентов (чат/воронка) внутри CRM.
+   Копия соответствующих блоков из src/app/globals.css. */
+
+/* ── New Standard font (Ossetian-supporting serif) ── */
+@font-face {
+  font-family: 'New Standard';
+  src: url('/fonts/NewStandard-Regular.woff2') format('woff2');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ── Светлая тема (по умолчанию) ── */
+:root {
+  --n15-black:       #F6F2E9;
+  --n15-charcoal:    #EFE8D9;
+  --n15-navy:        #3A4A5A;
+
+  --n15-white:       #2B2B28;
+  --n15-silver:      #45423C;
+  --n15-muted:       #8A8377;
+
+  --n15-gold:        #B08D3E;
+  --n15-gold-light:  #C8A44E;
+  --n15-gold-dim:    #8A6D2E;
+  --n15-burgundy:    #722F37;
+  --n15-burgundy-light: #8E3A44;
+
+  --background: var(--n15-black);
+  --foreground: var(--n15-silver);
+  --heading: var(--n15-white);
+  --accent: var(--n15-gold);
+  --accent-hover: var(--n15-gold-light);
+  --muted: var(--n15-muted);
+  --border: rgba(176, 141, 62, 0.12);
+  --card-bg: var(--n15-charcoal);
+
+  --on-accent: #0D0D0F;
+  --lightbox-bg: rgba(13, 13, 15, 0.97);
+  --lightbox-fg: #C8C8CC;
+
+  --font-display: 'New Standard', serif;
+  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+
+  --card-gradient: linear-gradient(to top, rgba(176, 141, 62, .68), rgba(176, 141, 62, 0) 60%);
+  --card-price-fg: #F6F2E9;
+  --pill-bg: rgba(246, 242, 233, .92);
+  --pill-fg: #722F37;
+  --search-bg: rgba(255, 255, 255, .6);
+  --search-border: rgba(176, 141, 62, .35);
+}

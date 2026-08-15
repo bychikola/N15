@@ -21,7 +21,6 @@ export const LkShell: FC<{ children: ReactNode; active?: string }> = ({ children
   const router = useRouter()
   const pathname = usePathname()
   const [user, setUser] = useState<{ name?: string; email?: string } | null>(null)
-  const [role, setRole] = useState<string>('user')
   const [counts, setCounts] = useState<{ favorites: number; applications: number; unread: number } | null>(null)
 
   useEffect(() => {
@@ -37,7 +36,6 @@ export const LkShell: FC<{ children: ReactNode; active?: string }> = ({ children
         }
         if (cancelled) return
         setUser(me)
-        setRole((me.role as string) || 'user')
         const favCount = Array.isArray(me.favorites) ? me.favorites.length : 0
         const [appsRes, unreadRes] = await Promise.all([
           fetch(`/api/applications?${new URLSearchParams({ where: JSON.stringify({ user: { equals: me.id } }), limit: '0' })}`, { credentials: 'include' }),
@@ -78,9 +76,6 @@ export const LkShell: FC<{ children: ReactNode; active?: string }> = ({ children
     { href: `/${lang}/lk`, icon: 'dashboard', label: t.lk.home },
     { href: `/${lang}/lk/favorites`, icon: 'favorite', label: t.lk.favorites, count: counts?.favorites },
     { href: `/${lang}/lk/applications`, icon: 'article', label: t.lk.applications, count: counts?.applications },
-    ...(role === 'agent' || role === 'admin'
-      ? [{ href: `/${lang}/lk/funnel`, icon: 'view_kanban', label: t.lkFunnel.title }]
-      : []),
     { href: `/${lang}/lk/messages`, icon: 'forum', label: t.lk.messages, count: counts?.unread },
     { href: `/${lang}/lk/profile`, icon: 'person', label: t.lk.profile },
   ]
