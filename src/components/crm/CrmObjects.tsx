@@ -303,55 +303,55 @@ export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) =>
           <Field label={t.crm.objBuildingType}>
             <select value={form.buildingType} onChange={(e) => set('buildingType', e.target.value)} style={inputStyle}>
               <option value="">—</option>
-              <option value="brick">Кирпичный</option><option value="monolith">Монолитный</option><option value="panel">Панельный</option><option value="stalin">Сталинский</option><option value="historic">Исторический</option>
+              <option value="brick">Кирпичный</option>
             </select>
           </Field>
           <Field label={t.crm.objCondition}>
             <select value={form.condition} onChange={(e) => set('condition', e.target.value)} style={inputStyle}>
               <option value="">—</option>
-              <option value="new">Новостройка</option><option value="excellent">Отличное</option><option value="good">Хорошее</option><option value="needsRepair">Требует ремонта</option><option value="shell">Свободная планировка</option>
+              <option value="new">Новое</option>
             </select>
           </Field>
           <Field label={t.crm.objHeating}>
             <select value={form.heating} onChange={(e) => set('heating', e.target.value)} style={inputStyle}>
               <option value="">—</option>
-              <option value="central">Центральное</option><option value="autonomous">Автономное</option><option value="gas">Газовое</option><option value="electric">Электрическое</option>
+              <option value="central">Центральное</option>
             </select>
           </Field>
           <Field label={t.crm.objBalcony}>
             <select value={form.balcony} onChange={(e) => set('balcony', e.target.value)} style={inputStyle}>
               <option value="">—</option>
-              <option value="none">Нет</option><option value="balcony">Балкон</option><option value="loggia">Лоджия</option><option value="several">Несколько</option>
+              <option value="balcony">Есть</option>
             </select>
           </Field>
           <Field label={t.crm.objWater}>
             <select value={form.water} onChange={(e) => set('water', e.target.value)} style={inputStyle}>
               <option value="">—</option>
-              <option value="none">Нет</option><option value="central">Центральная</option><option value="own">Своя</option>
+              <option value="central">Есть</option>
             </select>
           </Field>
           <Field label={t.crm.objSewerage}>
             <select value={form.sewerage} onChange={(e) => set('sewerage', e.target.value)} style={inputStyle}>
               <option value="">—</option>
-              <option value="none">Нет</option><option value="central">Центральная</option><option value="septic">Септик</option>
+              <option value="central">Есть</option>
             </select>
           </Field>
           <Field label={t.crm.objElectricity}>
             <select value={form.electricity} onChange={(e) => set('electricity', e.target.value)} style={inputStyle}>
               <option value="">—</option>
-              <option value="none">Нет</option><option value="yes">Есть</option>
+              <option value="yes">Есть</option>
             </select>
           </Field>
           <Field label={t.crm.objGas}>
             <select value={form.gas} onChange={(e) => set('gas', e.target.value)} style={inputStyle}>
               <option value="">—</option>
-              <option value="none">Нет</option><option value="main">Магистральный</option><option value="bottled">Баллонный</option>
+              <option value="main">Есть</option>
             </select>
           </Field>
           <Field label={t.crm.objInternet}>
             <select value={form.internet} onChange={(e) => set('internet', e.target.value)} style={inputStyle}>
               <option value="">—</option>
-              <option value="none">Нет</option><option value="yes">Есть</option>
+              <option value="yes">Есть</option>
             </select>
           </Field>
 
