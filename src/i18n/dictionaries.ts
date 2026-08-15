@@ -26,7 +26,7 @@ export const ru = {
   },
   locale: 'ru-RU',
   nav: {
-    catalog: 'Каталог',
+    catalog: 'Объекты',
     services: 'Услуги',
     about: 'Об агентстве',
     blog: 'Блог',
@@ -103,7 +103,7 @@ export const ru = {
     find: 'Найти',
   },
   catalog: {
-    title: 'Каталог объектов',
+    title: 'Объекты',
     subtitle: 'Найдите свой идеальный дом или инвестицию.',
     dealLabel: 'Сделка:',
     typeLabel: 'Тип:',
@@ -170,9 +170,9 @@ export const ru = {
     },
     yourAgent: 'Ваш агент',
     leadingExpert: 'Ведущий эксперт',
-    breadcrumbCatalog: 'Каталог',
-    similarTitle: 'Ещё в каталоге',
-    allCatalog: 'Весь каталог',
+    breadcrumbCatalog: 'Объекты',
+    similarTitle: 'Ещё объекты',
+    allCatalog: 'Все объекты',
     balcony: 'Балкон',
     balconyOptions: {
       none: 'Нет',
@@ -239,7 +239,7 @@ export const ru = {
       step2Desc: 'Показываем только подходящие варианты. Экономим ваше время.',
       step3Title: 'Сделка',
       step3Desc: 'Юридическая проверка, переговоры, договор. Сопровождение до ключей.',
-      cta: 'Смотреть каталог',
+      cta: 'Смотреть объекты',
     },
     sell: {
       title: 'Продажа недвижимости',
@@ -356,7 +356,7 @@ export const ru = {
     title: 'Избранное',
     empty: 'У вас пока нет избранных объектов',
     currency: '₽',
-    viewCatalog: 'Смотреть каталог',
+    viewCatalog: 'Смотреть объекты',
   },
   lkApplications: {
     back: '← Личный кабинет',
@@ -373,13 +373,13 @@ export const ru = {
     statusClosed: 'Завершена',
     statusRejected: 'Отменена',
     agentLabel: 'Агент',
-    viewCatalog: 'Смотреть каталог',
+    viewCatalog: 'Смотреть объекты',
   },
   lkMessages: {
     back: '← Личный кабинет',
     title: 'Сообщения',
     empty: 'Пока нет диалогов. Подайте заявку на просмотр — здесь появится чат с агентом.',
-    viewCatalog: 'Смотреть каталог',
+    viewCatalog: 'Смотреть объекты',
     openChat: 'Открыть чат',
   },
   lkChat: {
@@ -643,7 +643,7 @@ const os: Dict = {
   // os-RU не поддерживается Node ICU — откат к ISO ломает вид дат.
   locale: 'ru-RU',
   nav: {
-    catalog: 'Каталог',
+    catalog: 'Объекттæ',
     services: 'Услугæтæ',
     about: 'Агентады тыххæй',
     blog: 'Блог',
@@ -720,7 +720,7 @@ const os: Dict = {
     find: 'Ссард',
   },
   catalog: {
-    title: 'Объектты каталог',
+    title: 'Объекттæ',
     subtitle: 'Ссар уæ идеалон хæдзар æви инвестици.',
     dealLabel: 'Сделкæ:',
     typeLabel: 'Тип:',
@@ -787,9 +787,9 @@ const os: Dict = {
     },
     yourAgent: 'Уæ агент',
     leadingExpert: 'Сæйраг эксперт',
-    breadcrumbCatalog: 'Каталог',
-    similarTitle: 'Маддæр каталогы',
-    allCatalog: 'Æппæт каталог',
+    breadcrumbCatalog: 'Объекттæ',
+    similarTitle: 'Маддæр объекттæ',
+    allCatalog: 'Æппæт объекттæ',
     balcony: 'Балкон',
     balconyOptions: {
       none: 'Нæй',
@@ -857,7 +857,7 @@ const os: Dict = {
       step2Desc: 'Æрмæст æмбæлгæ варианттæ равдисæм. Уæ рæстæг бахъахъхъæнæм.',
       step3Title: 'Сделкæ',
       step3Desc: 'Юридикон бæлвырдгæнæнтæ, ныхас, договор. Рагъты онг ахъаз.',
-      cta: 'Каталог кæсын',
+      cta: 'Объекттæ кæсын',
     },
     sell: {
       title: 'Æндæрхуысты уæй',
@@ -974,7 +974,7 @@ const os: Dict = {
     title: 'Равзæрст',
     empty: 'Уæ равзæрст объекттæ нырма нæй',
     currency: '₽',
-    viewCatalog: 'Каталогмæ кæсын',
+    viewCatalog: 'Объекттæм кæсын',
   },
   lkApplications: {
     back: '← Хиуарт кабинет',
@@ -991,13 +991,13 @@ const os: Dict = {
     statusClosed: 'Феци',
     statusRejected: 'Ныууагъд',
     agentLabel: 'Агент',
-    viewCatalog: 'Каталогмæ кæсын',
+    viewCatalog: 'Объекттæм кæсын',
   },
   lkMessages: {
     back: '← Хиуарт кабинет',
     title: 'Ныхæстæ',
     empty: 'Ныхæстæ нырма нæй. Заявкæ ракæс — ам агентимæ ныхæстæ фæзынд.',
-    viewCatalog: 'Каталогмæ кæсын',
+    viewCatalog: 'Объекттæм кæсын',
     openChat: 'Ныхæстæ байгом кæнын',
   },
   lkChat: {
