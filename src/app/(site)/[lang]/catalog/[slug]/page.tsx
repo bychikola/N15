@@ -23,12 +23,13 @@ interface PageProps {
 
 function buildTypeLabel(t: Dict, key: string | undefined): string | null {
   if (!key) return null
-  return t.object.buildingTypes[key as keyof typeof t.object.buildingTypes] ?? null
+  // Свободный текст из CRM показываем как есть, известные коды — через словарь
+  return t.object.buildingTypes[key as keyof typeof t.object.buildingTypes] ?? key
 }
 
 function conditionLabel(t: Dict, key: string | undefined): string | null {
   if (!key) return null
-  return t.object.conditions[key as keyof typeof t.object.conditions] ?? null
+  return t.object.conditions[key as keyof typeof t.object.conditions] ?? key
 }
 
 export default async function ObjectPage({ params }: PageProps) {
@@ -185,13 +186,13 @@ export default async function ObjectPage({ params }: PageProps) {
                     { label: t.object.floor, value: obj.floor || obj.totalFloors ? `${obj.floor || '?'} / ${obj.totalFloors || '?'}` : null },
                     { label: t.object.buildingType, value: buildTypeLabel(t, obj.buildingType) },
                     { label: t.object.condition, value: conditionLabel(t, obj.condition) },
-                    { label: t.object.heating, value: obj.heating ? t.object.heatingOptions[obj.heating as keyof typeof t.object.heatingOptions] : null },
-                    { label: t.object.water, value: obj.water ? t.object.utilityOptions[obj.water as keyof typeof t.object.utilityOptions] : null },
-                    { label: t.object.sewerage, value: obj.sewerage ? t.object.utilityOptions[obj.sewerage as keyof typeof t.object.utilityOptions] : null },
-                    { label: t.object.electricity, value: obj.electricity ? t.object.utilityOptions[obj.electricity as keyof typeof t.object.utilityOptions] : null },
-                    { label: t.object.gas, value: obj.gas ? t.object.utilityOptions[obj.gas as keyof typeof t.object.utilityOptions] : null },
-                    { label: t.object.internet, value: obj.internet ? t.object.utilityOptions[obj.internet as keyof typeof t.object.utilityOptions] : null },
-                    { label: t.object.balcony, value: obj.balcony ? t.object.balconyOptions[obj.balcony as keyof typeof t.object.balconyOptions] : null },
+                    { label: t.object.heating, value: obj.heating ? (t.object.heatingOptions[obj.heating as keyof typeof t.object.heatingOptions] ?? obj.heating) : null },
+                    { label: t.object.water, value: obj.water ? (t.object.utilityOptions[obj.water as keyof typeof t.object.utilityOptions] ?? obj.water) : null },
+                    { label: t.object.sewerage, value: obj.sewerage ? (t.object.utilityOptions[obj.sewerage as keyof typeof t.object.utilityOptions] ?? obj.sewerage) : null },
+                    { label: t.object.electricity, value: obj.electricity ? (t.object.utilityOptions[obj.electricity as keyof typeof t.object.utilityOptions] ?? obj.electricity) : null },
+                    { label: t.object.gas, value: obj.gas ? (t.object.utilityOptions[obj.gas as keyof typeof t.object.utilityOptions] ?? obj.gas) : null },
+                    { label: t.object.internet, value: obj.internet ? (t.object.utilityOptions[obj.internet as keyof typeof t.object.utilityOptions] ?? obj.internet) : null },
+                    { label: t.object.balcony, value: obj.balcony ? (t.object.balconyOptions[obj.balcony as keyof typeof t.object.balconyOptions] ?? obj.balcony) : null },
                   ].filter((f) => f.value).map((f, i) => (
                     <div key={f.label}
                       className={`flex justify-between items-baseline gap-4 py-4 border-b border-[var(--n15-gold)]/15 ${

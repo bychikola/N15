@@ -301,59 +301,60 @@ export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) =>
           <Field label={t.crm.objFloor}><input type="number" value={form.floor} onChange={(e) => set('floor', e.target.value)} style={inputStyle} /></Field>
           <Field label={t.crm.objTotalFloors}><input type="number" value={form.totalFloors} onChange={(e) => set('totalFloors', e.target.value)} style={inputStyle} /></Field>
           <Field label={t.crm.objBuildingType}>
-            <select value={form.buildingType} onChange={(e) => set('buildingType', e.target.value)} style={inputStyle}>
-              <option value="">—</option>
-              <option value="brick">Кирпичный</option>
-            </select>
+            <input value={form.buildingType} onChange={(e) => set('buildingType', e.target.value)} style={inputStyle} list="crm-building-type" />
           </Field>
           <Field label={t.crm.objCondition}>
-            <select value={form.condition} onChange={(e) => set('condition', e.target.value)} style={inputStyle}>
-              <option value="">—</option>
-              <option value="new">Новое</option>
-            </select>
+            <input value={form.condition} onChange={(e) => set('condition', e.target.value)} style={inputStyle} list="crm-condition" />
           </Field>
           <Field label={t.crm.objHeating}>
-            <select value={form.heating} onChange={(e) => set('heating', e.target.value)} style={inputStyle}>
-              <option value="">—</option>
-              <option value="central">Центральное</option>
-            </select>
+            <input value={form.heating} onChange={(e) => set('heating', e.target.value)} style={inputStyle} list="crm-heating" />
           </Field>
           <Field label={t.crm.objBalcony}>
-            <select value={form.balcony} onChange={(e) => set('balcony', e.target.value)} style={inputStyle}>
-              <option value="">—</option>
-              <option value="balcony">Есть</option>
-            </select>
+            <input value={form.balcony} onChange={(e) => set('balcony', e.target.value)} style={inputStyle} list="crm-balcony" />
           </Field>
           <Field label={t.crm.objWater}>
-            <select value={form.water} onChange={(e) => set('water', e.target.value)} style={inputStyle}>
-              <option value="">—</option>
-              <option value="central">Есть</option>
-            </select>
+            <input value={form.water} onChange={(e) => set('water', e.target.value)} style={inputStyle} list="crm-water" />
           </Field>
           <Field label={t.crm.objSewerage}>
-            <select value={form.sewerage} onChange={(e) => set('sewerage', e.target.value)} style={inputStyle}>
-              <option value="">—</option>
-              <option value="central">Есть</option>
-            </select>
+            <input value={form.sewerage} onChange={(e) => set('sewerage', e.target.value)} style={inputStyle} list="crm-sewerage" />
           </Field>
           <Field label={t.crm.objElectricity}>
-            <select value={form.electricity} onChange={(e) => set('electricity', e.target.value)} style={inputStyle}>
-              <option value="">—</option>
-              <option value="yes">Есть</option>
-            </select>
+            <input value={form.electricity} onChange={(e) => set('electricity', e.target.value)} style={inputStyle} list="crm-electricity" />
           </Field>
           <Field label={t.crm.objGas}>
-            <select value={form.gas} onChange={(e) => set('gas', e.target.value)} style={inputStyle}>
-              <option value="">—</option>
-              <option value="main">Есть</option>
-            </select>
+            <input value={form.gas} onChange={(e) => set('gas', e.target.value)} style={inputStyle} list="crm-gas" />
           </Field>
           <Field label={t.crm.objInternet}>
-            <select value={form.internet} onChange={(e) => set('internet', e.target.value)} style={inputStyle}>
-              <option value="">—</option>
-              <option value="yes">Есть</option>
-            </select>
+            <input value={form.internet} onChange={(e) => set('internet', e.target.value)} style={inputStyle} list="crm-internet" />
           </Field>
+
+          <datalist id="crm-building-type">
+            <option value="Кирпичный" /><option value="Монолитный" /><option value="Панельный" />
+          </datalist>
+          <datalist id="crm-condition">
+            <option value="Новое" /><option value="Хорошее" /><option value="Требует ремонта" />
+          </datalist>
+          <datalist id="crm-heating">
+            <option value="Центральное" /><option value="Автономное" /><option value="Газовое" />
+          </datalist>
+          <datalist id="crm-balcony">
+            <option value="Есть" /><option value="Лоджия" /><option value="Несколько" />
+          </datalist>
+          <datalist id="crm-water">
+            <option value="Есть" /><option value="Центральная" /><option value="Своя" />
+          </datalist>
+          <datalist id="crm-sewerage">
+            <option value="Есть" /><option value="Центральная" /><option value="Септик" />
+          </datalist>
+          <datalist id="crm-electricity">
+            <option value="Есть" /><option value="Нет" />
+          </datalist>
+          <datalist id="crm-gas">
+            <option value="Есть" /><option value="Магистральный" /><option value="Баллонный" />
+          </datalist>
+          <datalist id="crm-internet">
+            <option value="Есть" /><option value="Нет" />
+          </datalist>
 
           <div className="span-2" style={{ gridColumn: '1 / -1', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr', gap: 10 }}>
             <Field label={t.crm.objCity}><input value={form.city} onChange={(e) => set('city', e.target.value)} style={inputStyle} /></Field>

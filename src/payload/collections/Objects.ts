@@ -118,97 +118,75 @@ export const Objects: CollectionConfig = {
     },
     {
       name: 'buildingType',
-      type: 'select',
+      type: 'text',
       label: 'Тип дома',
-      options: [
-        { label: 'Кирпичный', value: 'brick' },
-        { label: 'Монолитный', value: 'monolith' },
-        { label: 'Панельный', value: 'panel' },
-        { label: 'Сталинский', value: 'stalin' },
-        { label: 'Исторический', value: 'historic' },
-      ],
+      admin: {
+        description: 'Любое значение. Например: Кирпичный, Монолитный, Панельный',
+      },
     },
     {
       name: 'condition',
-      type: 'select',
+      type: 'text',
       label: 'Состояние',
-      options: [
-        { label: 'Новостройка', value: 'new' },
-        { label: 'Отличное', value: 'excellent' },
-        { label: 'Хорошее', value: 'good' },
-        { label: 'Требует ремонта', value: 'needsRepair' },
-        { label: 'Свободная планировка', value: 'shell' },
-      ],
+      admin: {
+        description: 'Любое значение. Например: Новое, Хорошее, Требует ремонта',
+      },
     },
     {
       name: 'heating',
-      type: 'select',
+      type: 'text',
       label: 'Отопление',
-      options: [
-        { label: 'Центральное', value: 'central' },
-        { label: 'Автономное', value: 'autonomous' },
-        { label: 'Газовое', value: 'gas' },
-        { label: 'Электрическое', value: 'electric' },
-      ],
+      admin: {
+        description: 'Любое значение. Например: Центральное, Автономное, Газовое',
+      },
     },
     {
       name: 'water',
-      type: 'select',
+      type: 'text',
       label: 'Вода',
-      options: [
-        { label: 'Нет', value: 'none' },
-        { label: 'Центральная', value: 'central' },
-        { label: 'Своя', value: 'own' },
-      ],
+      admin: {
+        description: 'Любое значение. Например: Есть, Центральная, Своя',
+      },
     },
     {
       name: 'sewerage',
-      type: 'select',
+      type: 'text',
       label: 'Канализация',
-      options: [
-        { label: 'Нет', value: 'none' },
-        { label: 'Центральная', value: 'central' },
-        { label: 'Септик', value: 'septic' },
-      ],
+      admin: {
+        description: 'Любое значение. Например: Есть, Центральная, Септик',
+      },
     },
     {
       name: 'electricity',
-      type: 'select',
+      type: 'text',
       label: 'Электричество',
-      options: [
-        { label: 'Нет', value: 'none' },
-        { label: 'Есть', value: 'yes' },
-      ],
+      admin: {
+        description: 'Любое значение. Например: Есть, Нет',
+      },
     },
     {
       name: 'gas',
-      type: 'select',
+      type: 'text',
       label: 'Газ',
-      options: [
-        { label: 'Нет', value: 'none' },
-        { label: 'Магистральный', value: 'main' },
-        { label: 'Баллонный', value: 'bottled' },
-      ],
+      admin: {
+        description: 'Любое значение. Например: Есть, Магистральный, Баллонный',
+      },
     },
     {
       name: 'internet',
-      type: 'select',
+      type: 'text',
       label: 'Интернет',
-      options: [
-        { label: 'Нет', value: 'none' },
-        { label: 'Есть', value: 'yes' },
-      ],
+      admin: {
+        description: 'Любое значение. Например: Есть, Нет',
+      },
     },
     {
       name: 'balcony',
-      type: 'select',
+      type: 'text',
       label: 'Балкон',
-      options: [
-        { label: 'Нет', value: 'none' },
-        { label: 'Балкон', value: 'balcony' },
-        { label: 'Лоджия', value: 'loggia' },
-        { label: 'Несколько', value: 'several' },
-      ],
+      admin: {
+        description: 'Любое значение. Например: Есть, Лоджия, Несколько',
+      },
     },
     {
       name: 'address',
