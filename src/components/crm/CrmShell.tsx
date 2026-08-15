@@ -32,7 +32,7 @@ export function CrmShell({ user, t, active, children }: Props) {
     <main className="crm-shell">
       <aside className="crm-sidebar">
         <div className="crm-brand">
-          <img className="crm-logo" src="/img/n15-logo.png" alt="Н15" />
+          <img className="crm-logo" src="/logo.png" alt="N15" />
           <span>{t.crm.sidebarCaption}</span>
         </div>
         <nav className="crm-nav" aria-label="Разделы CRM">

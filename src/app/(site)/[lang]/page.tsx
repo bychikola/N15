@@ -102,7 +102,7 @@ export default async function HomePage({ params, searchParams }: PageProps) {
         <ContactSection t={t} phone={phone} />
         <footer className="lp-footer">
           <a className="lp-brand" href="#top">
-            <img src="/img/n15-logo.png" alt="Н15" />
+            <img src="/logo.png" alt="N15" />
             <span className="lp-brand-caption">{t.landing.footerCaption}</span>
           </a>
           <p>
