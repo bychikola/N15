@@ -11,21 +11,31 @@ export const Applications: CollectionConfig = {
     read: ({ req: { user } }) => {
       if (!user) return false
       if (user.role === 'admin') return true
-      const where: Where = {
-        or: [
-          { user: { equals: user.id } },
-          { 'agent.user': { equals: user.id } },
-        ],
+      if (user.role === 'agent') {
+        // Агент видит свои заявки + общий «Неразобранное»
+        const where: Where = {
+          or: [
+            { user: { equals: user.id } },
+            { 'agent.user': { equals: user.id } },
+            { status: { equals: 'unsorted' } },
+          ],
+        }
+        return where
       }
-      return where
+      return { user: { equals: user.id } }
     },
     create: () => true, // форма на сайте — любой, в т.ч. аноним
     update: ({ req: { user } }) => {
       if (!user) return false
       if (user.role === 'admin') return true
       if (user.role === 'agent') {
-        // Агент правит только назначенные ему заявки
-        const where: Where = { 'agent.user': { equals: user.id } }
+        // Агент правит назначенные ему заявки + любые из «Неразобранного»
+        const where: Where = {
+          or: [
+            { 'agent.user': { equals: user.id } },
+            { status: { equals: 'unsorted' } },
+          ],
+        }
         return where
       }
       return false

@@ -41,7 +41,11 @@ export default function FunnelBoard({ lang }: { lang: string }) {
 
     const where: Record<string, unknown> = {}
     if (me.role === 'agent') {
-      where['agent.user'] = { equals: me.id }
+      // Свои заявки + общий пул «Неразобранное»
+      where.or = [
+        { 'agent.user': { equals: me.id } },
+        { status: { equals: 'unsorted' } },
+      ]
     } else if (me.role === 'admin' && agentFilter) {
       if (agentFilter === 'none') {
         where.agent = { equals: null }

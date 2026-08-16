@@ -20,7 +20,11 @@ export default function LeadsList() {
     if (!me) return
     const where: Record<string, unknown> = {}
     if (me.role === 'agent') {
-      where['agent.user'] = { equals: me.id }
+      // Свои заявки + общий пул «Неразобранное»
+      where.or = [
+        { 'agent.user': { equals: me.id } },
+        { status: { equals: 'unsorted' } },
+      ]
     }
     const params = new URLSearchParams({ sort: '-createdAt', depth: '2', limit: '200' })
     if (Object.keys(where).length) params.set('where', JSON.stringify(where))
