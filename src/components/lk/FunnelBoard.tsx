@@ -22,6 +22,9 @@ export default function FunnelBoard({ lang }: { lang: string }) {
   const [draggingId, setDraggingId] = useState<number | null>(null)
   const [dragOverStage, setDragOverStage] = useState<string | null>(null)
   const [quickName, setQuickName] = useState('')
+  const [lossApp, setLossApp] = useState<FunnelApplication | null>(null)
+  const [lossTarget, setLossTarget] = useState<string>('')
+  const [lossReason, setLossReason] = useState('')
 
   const load = useCallback(async () => {
     const meRes = await fetch('/api/users/me', { credentials: 'include' })
@@ -122,6 +125,12 @@ export default function FunnelBoard({ lang }: { lang: string }) {
   }, [apps, searchApplied])
 
   const moveStage = async (app: FunnelApplication, newStatus: string) => {
+    if ((newStatus === 'closed' || newStatus === 'rejected') && meRole !== 'user') {
+      setLossApp(app)
+      setLossTarget(newStatus)
+      setLossReason('')
+      return
+    }
     setApps((prev) => prev.map((a) => (a.id === app.id ? { ...a, status: newStatus } : a)))
     const body: Record<string, unknown> = { status: newStatus }
     // Агент забирает заявку из «Неразобранного» — назначается автоматически
@@ -164,6 +173,37 @@ export default function FunnelBoard({ lang }: { lang: string }) {
 
   const openChat = (appId: number) => {
     router.push(`/crm/messages/${appId}`)
+  }
+
+  const confirmLoss = async (withReason: boolean) => {
+    if (!lossApp) return
+    const app = lossApp
+    const target = lossTarget
+    const reason = withReason ? lossReason.trim() : ''
+    setLossApp(null)
+    setLossTarget('')
+    setLossReason('')
+    setApps((prev) => prev.map((a) => (a.id === app.id ? { ...a, status: target } : a)))
+    const body: Record<string, unknown> = { status: target }
+    if (app.status === 'unsorted' && target !== 'unsorted' && meRole === 'agent' && meAgentId) {
+      body.agent = meAgentId
+    }
+    if (reason) {
+      body.lossReason = reason
+    }
+    try {
+      const res = await fetch(`/api/applications/${app.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) {
+        await load()
+      }
+    } catch {
+      await load()
+    }
   }
 
   const quickAdd = async () => {
@@ -311,6 +351,45 @@ export default function FunnelBoard({ lang }: { lang: string }) {
           )
         })}
       </div>
+
+      {lossApp && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(32,33,30,.55)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '60px 16px', overflowY: 'auto' }}
+          onClick={() => { setLossApp(null); setLossReason(''); setLossTarget('') }}>
+          <div style={{ background: '#faf8f4', border: '1px solid #ded5c7', borderRadius: 12, width: 'min(100%, 460px)', padding: 22 }}
+            onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+              <h2 style={{ margin: 0, fontFamily: "'New Standard', Georgia, serif", fontWeight: 400, fontSize: 20 }}>{t.crm.lossTitle}</h2>
+              <button type="button" onClick={() => { setLossApp(null); setLossReason(''); setLossTarget('') }}
+                style={{ border: '1px solid #e1d8ca', borderRadius: 7, background: '#fff', color: '#716b62', padding: '6px 10px', cursor: 'pointer', fontSize: 12 }}>✕</button>
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+              {t.crm.lossReasons.map((r) => (
+                <button key={r} type="button" onClick={() => setLossReason(r)}
+                  style={{ border: '1px solid #d9d1c4', borderRadius: 999, background: lossReason === r ? '#a7814e' : '#fff', color: lossReason === r ? '#fff' : '#716b62', padding: '7px 12px', fontSize: 11, cursor: 'pointer' }}>
+                  {r}
+                </button>
+              ))}
+            </div>
+            <input
+              type="text"
+              value={lossReason}
+              onChange={(e) => setLossReason(e.target.value)}
+              placeholder={t.crm.lossCustom}
+              style={{ width: '100%', boxSizing: 'border-box', border: '1px solid #d9d1c4', borderRadius: 8, background: '#fff', color: '#25241f', padding: '10px 12px', font: '12px Arial, Helvetica, sans-serif', marginBottom: 14 }}
+            />
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button type="button" onClick={() => void confirmLoss(true)} disabled={!lossReason.trim()}
+                style={{ flex: 1, border: 0, borderRadius: 8, background: '#a7814e', color: '#fff', padding: '11px 14px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', cursor: 'pointer', opacity: lossReason.trim() ? 1 : 0.5 }}>
+                {t.crm.lossAdd}
+              </button>
+              <button type="button" onClick={() => void confirmLoss(false)}
+                style={{ border: '1px solid #e1d8ca', borderRadius: 8, background: '#fff', color: '#716b62', padding: '11px 14px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', cursor: 'pointer' }}>
+                {t.crm.lossSkip}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
