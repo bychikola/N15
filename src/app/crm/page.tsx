@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { getPayload } from 'payload'
+import type { Where } from 'payload'
 import config from '@payload-config'
 import { getDictionary } from '@/i18n/dictionaries'
 import { canAccessCrm, getCrmUser } from './auth'
@@ -40,18 +41,21 @@ export default async function CrmPage() {
   const tomorrowD = new Date(today.getTime() + 86400000)
   const tomorrowISO = `${tomorrowD.getFullYear()}-${pad(tomorrowD.getMonth() + 1)}-${pad(tomorrowD.getDate())}`
 
-  const taskWhere: Record<string, unknown> = user.role === 'admin' ? {} : { assignedTo: { equals: user.id } }
-  const [tasksOverdue, tasksTodayUp, tasksTomorrowUp, tasksAll, activeAppsAll] = await Promise.all([
-    payload.count({ collection: 'tasks', where: { ...taskWhere, done: { not_equals: true }, dueDate: { less_than: todayISO } } }),
-    payload.count({ collection: 'tasks', where: { ...taskWhere, done: { not_equals: true }, dueDate: { greater_than_equal: todayISO } } }),
-    payload.count({ collection: 'tasks', where: { ...taskWhere, done: { not_equals: true }, dueDate: { greater_than_equal: tomorrowISO } } }),
-    payload.find({ collection: 'tasks', limit: 500, depth: 0 }),
+  const taskWhere: Where = user.role === 'admin' ? {} : { assignedTo: { equals: user.id } }
+  // Даты бакетим в JS (строки YYYY-MM-DD) — SQL-сравнения дат зависят от TZ сервера
+  const [tasksAll, activeAppsAll] = await Promise.all([
+    payload.find({ collection: 'tasks', where: taskWhere, limit: 500, depth: 0 }),
     payload.find({ collection: 'applications', limit: 1000, depth: 0, where: { and: [{ status: { not_equals: 'closed' } }, { status: { not_equals: 'rejected' } }] } }),
   ])
-  const tasksTodayCount = Math.max(0, tasksTodayUp.totalDocs - tasksTomorrowUp.totalDocs)
+  const taskDocs = (tasksAll.docs || []) as { dueDate?: string; done?: boolean }[]
+  const openTasks = taskDocs.filter((tk) => !tk.done)
+  const keyOf = (iso: string) => (iso || '').slice(0, 10)
+  const tasksOverdueCount = openTasks.filter((tk) => keyOf(tk.dueDate || '') < todayISO).length
+  const tasksTodayCount = openTasks.filter((tk) => keyOf(tk.dueDate || '') === todayISO).length
+  const tasksTomorrowCount = openTasks.filter((tk) => keyOf(tk.dueDate || '') === tomorrowISO).length
 
   // Заявок без задач: активные заявки без привязки к задачам
-  const appsWithTasks = new Set((tasksAll.docs || []).map((tk) => (tk as unknown as { application?: number | null }).application).filter(Boolean))
+  const appsWithTasks = new Set(taskDocs.map((tk) => (tk as unknown as { application?: number | null }).application).filter(Boolean))
   const activeApps = (activeAppsAll.docs || []) as { id: number }[]
   const leadsNoTasks = activeApps.filter((a) => !appsWithTasks.has(a.id)).length
 
@@ -60,9 +64,9 @@ export default async function CrmPage() {
     { label: t.crm.metricLeads, value: String(activeLeads.totalDocs), note: t.crm.metricLeadsNote },
     { label: t.crm.metricClients, value: String(clientsCount.totalDocs), note: t.crm.metricClientsNote },
     { label: t.crm.metricMessages, value: String(messagesCount.totalDocs), note: t.crm.metricMessagesNote },
-    { label: t.crm.metricTasksOverdue, value: String(tasksOverdue.totalDocs), note: t.crm.taskColOverdue },
+    { label: t.crm.metricTasksOverdue, value: String(tasksOverdueCount), note: t.crm.taskColOverdue },
     { label: t.crm.metricTasksToday, value: String(tasksTodayCount), note: t.crm.taskColToday },
-    { label: t.crm.metricTasksTomorrow, value: String(tasksTomorrowUp.totalDocs), note: t.crm.taskColTomorrow },
+    { label: t.crm.metricTasksTomorrow, value: String(tasksTomorrowCount), note: t.crm.taskColTomorrow },
     { label: t.crm.metricLeadsNoTasks, value: String(leadsNoTasks), note: t.crm.recentLeadsNote },
   ]
 

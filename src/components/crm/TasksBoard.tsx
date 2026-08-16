@@ -33,6 +33,7 @@ interface TaskItem {
 export default function TasksBoard({ t }: { t: Dict }) {
   const [tasks, setTasks] = useState<TaskItem[]>([])
   const [apps, setApps] = useState<{ id: number; title: string }[]>([])
+  const [meId, setMeId] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [form, setForm] = useState({ title: '', type: 'call', due: 'today', date: localISO(new Date()), app: '' })
   const [saving, setSaving] = useState(false)
@@ -47,6 +48,7 @@ export default function TasksBoard({ t }: { t: Dict }) {
     const meData = await meRes.json()
     const me = meData?.user
     if (!me) return
+    setMeId(me.id as number)
     const where: Record<string, unknown> = {}
     if (me.role !== 'admin') {
       where.assignedTo = { equals: me.id }
@@ -102,6 +104,7 @@ export default function TasksBoard({ t }: { t: Dict }) {
         type: form.type,
         dueDate: due,
         application: form.app ? Number(form.app) : undefined,
+        assignedTo: meId,
       }),
     })
     setSaving(false)
