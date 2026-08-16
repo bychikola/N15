@@ -36,6 +36,7 @@ export default function ApplicationsPage() {
   const [loading, setLoading] = useState(true)
 
   const statusLabels: Record<string, string> = {
+    unsorted: t.lkApplications.statusNew,
     new: t.lkApplications.statusNew,
     call: t.lkApplications.statusCall,
     showing: t.lkApplications.statusShowing,

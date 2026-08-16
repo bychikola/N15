@@ -48,7 +48,8 @@ export const ViewRequestForm: FC<Props> = ({ objectId, lang }) => {
           clientName: name,
           clientPhone: phone,
           message,
-          status: 'new',
+          status: 'unsorted',
+          source: 'site',
           ...(userId ? { user: userId } : {}),
         }),
       })

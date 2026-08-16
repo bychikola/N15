@@ -29,7 +29,7 @@ export function stageLabel(t: Dict, stage: string): string {
   const found = STAGES.find((s) => s.value === stage)
   if (!found) return stage
   const key = found.labelKey
-  return (t.crm as Record<string, string>)[key.split('.')[1]] || stage
+  return (t.crm as unknown as Record<string, string>)[key.split('.')[1]] || stage
 }
 
 const typeKeys: Record<string, string> = {

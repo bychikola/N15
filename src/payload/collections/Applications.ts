@@ -61,7 +61,9 @@ export const Applications: CollectionConfig = {
       name: 'clientPhone',
       type: 'text',
       label: 'Телефон',
-      required: true,
+      admin: {
+        description: 'Можно не указывать при ручном создании',
+      },
     },
     {
       name: 'clientEmail',
@@ -78,6 +80,7 @@ export const Applications: CollectionConfig = {
       type: 'select',
       label: 'Статус',
       options: [
+        { label: 'Неразобранное', value: 'unsorted' },
         { label: 'Новая', value: 'new' },
         { label: 'Звонок', value: 'call' },
         { label: 'Показ', value: 'showing' },
@@ -86,7 +89,7 @@ export const Applications: CollectionConfig = {
         { label: 'Закрыто', value: 'closed' },
         { label: 'Отказ', value: 'rejected' },
       ],
-      defaultValue: 'new',
+      defaultValue: 'unsorted',
       required: true,
     },
     {
@@ -94,6 +97,38 @@ export const Applications: CollectionConfig = {
       type: 'relationship',
       label: 'Назначенный агент',
       relationTo: 'agents',
+    },
+    {
+      name: 'tags',
+      type: 'array',
+      label: 'Теги',
+      fields: [
+        { name: 'tag', type: 'text', label: 'Тег' },
+      ],
+    },
+    {
+      name: 'lossReason',
+      type: 'text',
+      label: 'Причина отказа',
+      admin: {
+        position: 'sidebar',
+      },
+    },
+    {
+      name: 'budget',
+      type: 'number',
+      label: 'Бюджет (₽)',
+      admin: {
+        position: 'sidebar',
+      },
+    },
+    {
+      name: 'source',
+      type: 'text',
+      label: 'Источник',
+      admin: {
+        position: 'sidebar',
+      },
     },
     {
       name: 'user',
