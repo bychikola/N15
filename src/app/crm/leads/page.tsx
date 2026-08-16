@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import { getDictionary } from '@/i18n/dictionaries'
 import { canAccessCrm, getCrmUser } from '../auth'
 import { CrmShell } from '@/components/crm/CrmShell'
-import FunnelBoard from '@/components/lk/FunnelBoard'
+import LeadsView from '@/components/crm/LeadsView'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,7 +15,7 @@ export default async function CrmLeadsPage() {
   }
   return (
     <CrmShell user={user} t={t} active="leads">
-      <FunnelBoard lang="ru" />
+      <LeadsView t={t} />
     </CrmShell>
   )
 }
