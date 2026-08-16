@@ -16,6 +16,7 @@ export interface FunnelApplication {
 }
 
 export const STAGES: { value: string; labelKey: string }[] = [
+  { value: 'unsorted', labelKey: 'crm.stageUnsorted' },
   { value: 'new', labelKey: 'crm.stageNew' },
   { value: 'call', labelKey: 'crm.stageCall' },
   { value: 'showing', labelKey: 'crm.stageShowing' },

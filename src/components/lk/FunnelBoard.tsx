@@ -13,7 +13,7 @@ export default function FunnelBoard({ lang }: { lang: string }) {
   const { t } = useI18n()
   const router = useRouter()
   const [meRole, setMeRole] = useState<string>('user')
-  const [meId, setMeId] = useState<number | null>(null)
+  const [meAgentId, setMeAgentId] = useState<number | null>(null)
   const [agents, setAgents] = useState<{ id: number; name: string }[]>([])
   const [agentFilter, setAgentFilter] = useState<string>('')
   const [search, setSearch] = useState('')
@@ -21,14 +21,20 @@ export default function FunnelBoard({ lang }: { lang: string }) {
   const [loading, setLoading] = useState(true)
   const [draggingId, setDraggingId] = useState<number | null>(null)
   const [dragOverStage, setDragOverStage] = useState<string | null>(null)
+  const [quickName, setQuickName] = useState('')
 
   const load = useCallback(async () => {
     const meRes = await fetch('/api/users/me', { credentials: 'include' })
     const meData = await meRes.json()
     const me = meData?.user
     if (!me) return
-    setMeId(me.id as number)
     setMeRole((me.role as string) || 'user')
+
+    if (me.role === 'agent') {
+      const agentRes = await fetch(`/api/agents?${new URLSearchParams({ where: JSON.stringify({ user: { equals: me.id } }), limit: '1', depth: '0' })}`, { credentials: 'include' })
+      const agentData = await agentRes.json()
+      setMeAgentId(((agentData.docs || [])[0] as { id?: number } | undefined)?.id ?? null)
+    }
 
     const where: Record<string, unknown> = {}
     if (me.role === 'agent') {
@@ -115,14 +121,19 @@ export default function FunnelBoard({ lang }: { lang: string }) {
     )
   }, [apps, searchApplied])
 
-  const moveStage = async (appId: number, newStatus: string) => {
-    setApps((prev) => prev.map((a) => (a.id === appId ? { ...a, status: newStatus } : a)))
+  const moveStage = async (app: FunnelApplication, newStatus: string) => {
+    setApps((prev) => prev.map((a) => (a.id === app.id ? { ...a, status: newStatus } : a)))
+    const body: Record<string, unknown> = { status: newStatus }
+    // Агент забирает заявку из «Неразобранного» — назначается автоматически
+    if (app.status === 'unsorted' && newStatus !== 'unsorted' && meRole === 'agent' && meAgentId) {
+      body.agent = meAgentId
+    }
     try {
-      const res = await fetch(`/api/applications/${appId}`, {
+      const res = await fetch(`/api/applications/${app.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ status: newStatus }),
+        body: JSON.stringify(body),
       })
       if (!res.ok) {
         await load()
@@ -136,13 +147,16 @@ export default function FunnelBoard({ lang }: { lang: string }) {
     const idx = STAGES.findIndex((s) => s.value === app.status)
     const target = STAGES[idx + delta]
     if (target) {
-      void moveStage(app.id, target.value)
+      void moveStage(app, target.value)
     }
   }
 
   const handleDrop = (stage: string) => {
     if (draggingId !== null) {
-      void moveStage(draggingId, stage)
+      const app = apps.find((a) => a.id === draggingId)
+      if (app) {
+        void moveStage(app, stage)
+      }
     }
     setDraggingId(null)
     setDragOverStage(null)
@@ -150,6 +164,19 @@ export default function FunnelBoard({ lang }: { lang: string }) {
 
   const openChat = (appId: number) => {
     router.push(`/crm/messages/${appId}`)
+  }
+
+  const quickAdd = async () => {
+    const name = quickName.trim()
+    if (!name) return
+    setQuickName('')
+    await fetch('/api/applications', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ type: 'viewing', clientName: name, status: 'unsorted', source: 'manual' }),
+    })
+    await load()
   }
 
   if (loading) {
@@ -238,6 +265,25 @@ export default function FunnelBoard({ lang }: { lang: string }) {
                   <div style={{ border: '1px dashed #cbbda9', borderRadius: 9, padding: 14, textAlign: 'center', fontSize: 9, color: '#9b958a', textTransform: 'uppercase', letterSpacing: '.1em' }}>
                     ↓
                   </div>
+                )}
+                {stage.value === 'unsorted' && meRole !== 'user' && (
+                  <input
+                    type="text"
+                    value={quickName}
+                    onChange={(e) => setQuickName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        void quickAdd()
+                      }
+                    }}
+                    placeholder={t.crm.quickAddPlaceholder}
+                    aria-label={t.crm.quickAddPlaceholder}
+                    style={{
+                      boxSizing: 'border-box', width: '100%', border: '1px dashed #cbbda9', borderRadius: 8,
+                      background: '#fcfaf7', color: '#25241f', padding: '10px 12px', font: '12px Arial, Helvetica, sans-serif',
+                    }}
+                  />
                 )}
                 {stageApps.map((app) => (
                   <div
