@@ -13,6 +13,8 @@ export interface FunnelApplication {
   lastText?: string
   lastActionAt?: string
   unread: number
+  tags: string[]
+  agentName?: string
 }
 
 export const STAGES: { value: string; labelKey: string }[] = [
@@ -44,6 +46,8 @@ interface Props {
   onMoveLeft?: () => void
   onMoveRight?: () => void
   onOpenChat?: () => void
+  onAddTag?: (tag: string) => void
+  onRemoveTag?: (tag: string) => void
   canMoveLeft: boolean
   canMoveRight: boolean
 }
@@ -63,7 +67,7 @@ const actionBtn: React.CSSProperties = {
   padding: '6px 10px', fontSize: 9, textTransform: 'uppercase', letterSpacing: '.07em', cursor: 'pointer',
 }
 
-export default function FunnelCard({ app, lang, t, onMoveLeft, onMoveRight, onOpenChat, canMoveLeft, canMoveRight }: Props) {
+export default function FunnelCard({ app, lang, t, onMoveLeft, onMoveRight, onOpenChat, onAddTag, onRemoveTag, canMoveLeft, canMoveRight }: Props) {
   const lastAction = app.lastActionAt || app.createdAt
   return (
     <div style={cardStyle}>
@@ -101,6 +105,34 @@ export default function FunnelCard({ app, lang, t, onMoveLeft, onMoveRight, onOp
           «{app.lastText}»
         </div>
       )}
+
+      <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}
+        onClick={(e) => e.stopPropagation()}>
+        {app.tags.map((tg) => (
+          <span key={tg} style={{ padding: '3px 8px', borderRadius: 999, background: '#f2eadf', color: '#8d6b40', fontSize: 9, display: 'inline-flex', alignItems: 'center', gap: 4, cursor: onRemoveTag ? 'pointer' : 'default' }}
+            onClick={() => onRemoveTag?.(tg)}>
+            {tg}{onRemoveTag && ' ✕'}
+          </span>
+        ))}
+        {onAddTag && (
+          <input
+            type="text"
+            placeholder={t.crm.tagPlaceholder}
+            aria-label={t.crm.tagPlaceholder}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                const v = (e.target as HTMLInputElement).value.trim()
+                if (v) {
+                  onAddTag(v)
+                  ;(e.target as HTMLInputElement).value = ''
+                }
+              }
+            }}
+            style={{ width: 64, boxSizing: 'border-box', border: '1px dashed #cbbda9', borderRadius: 999, background: '#fcfaf7', color: '#25241f', padding: '3px 8px', font: '9px Arial, Helvetica, sans-serif' }}
+          />
+        )}
+      </div>
 
       <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid #eee9e1', display: 'flex', alignItems: 'center', gap: 6 }}>
         {/* stopPropagation: кнопки не должны проваливаться в клик по карточке (открытие чата) */}

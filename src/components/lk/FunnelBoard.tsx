@@ -83,6 +83,7 @@ export default function FunnelBoard({ lang }: { lang: string }) {
         lastText: (last?.text as string) || undefined,
         lastActionAt: (last?.createdAt as string) || (a.createdAt as string) || undefined,
         unread: unreadData.totalDocs ?? 0,
+        tags: ((a.tags as { tag?: string }[] | undefined) || []).map((tg) => tg.tag || '').filter(Boolean),
       })
     }
     setApps(result)
@@ -197,6 +198,23 @@ export default function FunnelBoard({ lang }: { lang: string }) {
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify(body),
+      })
+      if (!res.ok) {
+        await load()
+      }
+    } catch {
+      await load()
+    }
+  }
+
+  const patchTags = async (app: FunnelApplication, tags: string[]) => {
+    setApps((prev) => prev.map((a) => (a.id === app.id ? { ...a, tags } : a)))
+    try {
+      const res = await fetch(`/api/applications/${app.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ tags: tags.map((tg) => ({ tag: tg })) }),
       })
       if (!res.ok) {
         await load()
@@ -343,6 +361,8 @@ export default function FunnelBoard({ lang }: { lang: string }) {
                       onMoveLeft={() => moveBy(app, -1)}
                       onMoveRight={() => moveBy(app, 1)}
                       onOpenChat={() => openChat(app.id)}
+                      onAddTag={meRole !== 'user' ? (tag) => void patchTags(app, [...app.tags, tag]) : undefined}
+                      onRemoveTag={meRole !== 'user' ? (tag) => void patchTags(app, app.tags.filter((tg) => tg !== tag)) : undefined}
                     />
                   </div>
                 ))}
