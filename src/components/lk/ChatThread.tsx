@@ -35,6 +35,11 @@ export default function ChatThread({ applicationId, lang, variant = 'lk' }: { ap
   const [loading, setLoading] = useState(true)
   const bottomRef = useRef<HTMLDivElement>(null)
   const isCrm = variant === 'crm'
+  const [showTaskForm, setShowTaskForm] = useState(false)
+  const [taskTitle, setTaskTitle] = useState('')
+  const [taskType, setTaskType] = useState('call')
+  const [taskDue, setTaskDue] = useState('today')
+  const [taskPosted, setTaskPosted] = useState(false)
 
   const load = useCallback(async () => {
     const meRes = await fetch('/api/users/me', { credentials: 'include' })
@@ -171,6 +176,28 @@ export default function ChatThread({ applicationId, lang, variant = 'lk' }: { ap
   const personName = meRole === 'agent' ? objectInfo.clientName : objectInfo.agentName
   const personPhone = meRole === 'agent' ? (isCrm ? objectInfo.clientPhone : undefined) : objectInfo.agentPhone
 
+  const addTask = async () => {
+    if (!taskTitle.trim() || meId === null) return
+    const now = new Date()
+    const p = (n: number) => String(n).padStart(2, '0')
+    const todayISO = `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}`
+    const tomorrow = new Date(now.getTime() + 86400000)
+    const tomorrowISO = `${tomorrow.getFullYear()}-${p(tomorrow.getMonth() + 1)}-${p(tomorrow.getDate())}`
+    const dueDate = taskDue === 'today' ? todayISO : tomorrowISO
+    const res = await fetch('/api/tasks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ title: taskTitle.trim(), type: taskType, dueDate, application: applicationId, assignedTo: meId }),
+    })
+    if (res.ok) {
+      setTaskTitle('')
+      setShowTaskForm(false)
+      setTaskPosted(true)
+      setTimeout(() => setTaskPosted(false), 2000)
+    }
+  }
+
   if (loading) {
     return <p style={isCrm ? { color: '#817b70', fontSize: 12 } : undefined} className={isCrm ? undefined : 'text-[var(--n15-muted)]'}>{t.lk.loading}</p>
   }
@@ -209,8 +236,41 @@ export default function ChatThread({ applicationId, lang, variant = 'lk' }: { ap
               {t.lkChat.call}
             </a>
           )}
+          {isCrm && (
+            <button type="button" onClick={() => setShowTaskForm((v) => !v)}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 10, textTransform: 'uppercase', letterSpacing: '.1em', border: '1px solid #d9d1c4', borderRadius: 7, color: '#8d6b40', padding: '8px 14px', cursor: 'pointer', background: '#fff' }}>
+              {taskPosted ? t.crm.chatTaskDone : t.crm.chatTaskBtn}
+            </button>
+          )}
         </div>
       </div>
+
+      {isCrm && showTaskForm && (
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', padding: '12px 18px', borderBottom: '1px solid #e5dfd3', background: '#faf8f4' }}>
+          <input
+            type="text"
+            value={taskTitle}
+            onChange={(e) => setTaskTitle(e.target.value)}
+            placeholder={t.crm.taskTitlePh}
+            aria-label={t.crm.taskTitlePh}
+            style={{ flex: '2 1 220px', boxSizing: 'border-box', border: '1px solid #d9d1c4', borderRadius: 8, background: '#fff', color: '#25241f', padding: '9px 12px', font: '12px Arial, Helvetica, sans-serif' }}
+          />
+          <select value={taskType} onChange={(e) => setTaskType(e.target.value)} style={{ flex: '1 1 120px', boxSizing: 'border-box', border: '1px solid #d9d1c4', borderRadius: 8, background: '#fff', color: '#25241f', padding: '9px 10px', font: '12px Arial, Helvetica, sans-serif' }}>
+            <option value="call">{t.crm.taskTypeCall}</option>
+            <option value="showing">{t.crm.taskTypeShowing}</option>
+            <option value="meeting">{t.crm.taskTypeMeeting}</option>
+            <option value="task">{t.crm.taskTypeTask}</option>
+          </select>
+          <select value={taskDue} onChange={(e) => setTaskDue(e.target.value)} style={{ flex: '1 1 120px', boxSizing: 'border-box', border: '1px solid #d9d1c4', borderRadius: 8, background: '#fff', color: '#25241f', padding: '9px 10px', font: '12px Arial, Helvetica, sans-serif' }}>
+            <option value="today">{t.crm.taskDueToday}</option>
+            <option value="tomorrow">{t.crm.taskDueTomorrow}</option>
+          </select>
+          <button type="button" onClick={() => void addTask()}
+            style={{ flex: '0 0 auto', border: 0, borderRadius: 8, background: '#a7814e', color: '#fff', padding: '9px 16px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', cursor: 'pointer' }}>
+            {t.crm.taskAdd}
+          </button>
+        </div>
+      )}
 
       {/* Сообщения */}
       <div
