@@ -42,6 +42,32 @@ export const Applications: CollectionConfig = {
     },
     delete: ({ req: { user } }) => user?.role === 'admin',
   },
+  hooks: {
+    beforeChange: [
+      // Автопривязка заявки к клиенту по нормализованному номеру телефона.
+      // Работает для всех создателей (гости и клиенты не имеют доступа
+      // к коллекции customers через REST, поэтому привязка — на сервере).
+      async ({ data, req }) => {
+        if (!data.customer && data.clientPhone) {
+          const norm = String(data.clientPhone).replace(/[^\d+]/g, '')
+          if (norm) {
+            const { docs } = await req.payload.find({
+              collection: 'customers',
+              where: { phone: { equals: norm } },
+              limit: 1,
+              depth: 0,
+              overrideAccess: true,
+            })
+            const customer = docs[0] as { id: number } | undefined
+            if (customer) {
+              data.customer = customer.id
+            }
+          }
+        }
+        return data
+      },
+    ],
+  },
   fields: [
     {
       name: 'type',
