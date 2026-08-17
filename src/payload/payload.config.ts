@@ -7,6 +7,7 @@ import sharp from 'sharp'
 import { Objects } from './collections/Objects'
 import { Agents } from './collections/Agents'
 import { Tasks } from './collections/Tasks'
+import { Customers } from './collections/Customers'
 import { Applications } from './collections/Applications'
 import { Messages } from './collections/Messages'
 import { Blog } from './collections/Blog'
@@ -35,7 +36,7 @@ export default buildConfig({
   routes: {
     admin: process.env.ADMIN_ROUTE || '/admin',
   },
-  collections: [Users, Media, Objects, Agents, Applications, Tasks, Messages, Blog, Pages],
+  collections: [Users, Media, Objects, Agents, Applications, Tasks, Messages, Blog, Pages, Customers],
   globals: [SiteSettings],
   editor: lexicalEditor(),
   db: process.env.DATABASE_URI

@@ -149,5 +149,11 @@ export const Applications: CollectionConfig = {
         description: 'Заполняется автоматически, если заявка отправлена авторизованным пользователем',
       },
     },
+    {
+      name: 'customer',
+      type: 'relationship',
+      label: 'Клиент',
+      relationTo: 'customers',
+    },
   ],
 }

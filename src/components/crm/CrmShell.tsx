@@ -19,6 +19,7 @@ export function CrmShell({ user, t, active, children }: Props) {
     { id: 'leads', href: '/crm/leads', label: t.crm.navLeads },
     { id: 'messages', href: '/crm/messages', label: t.crm.navMessages },
     { id: 'tasks', href: '/crm/tasks', label: t.crm.navTasks },
+    { id: 'customers', href: '/crm/customers', label: t.crm.navCustomers },
     { id: 'objects', href: '/crm/objects', label: t.crm.navObjects },
   ]
 
