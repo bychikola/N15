@@ -350,7 +350,10 @@ export default function ChatThread({ applicationId, lang, variant = 'lk' }: { ap
                   )}
                   <div
                     style={{
-                      wordBreak: 'break-word', overflowWrap: 'anywhere', whiteSpace: 'pre-wrap',
+                      // break-word (не anywhere): ломает только при переполнении и не
+                      // влияет на min-content — иначе с fit-content пузырь схлопывается
+                      // до одной буквы и текст идёт вертикально в некоторых браузерах
+                      wordBreak: 'break-word', overflowWrap: 'break-word', whiteSpace: 'pre-wrap',
                       // fit-content: пузырь по размеру текста, а не растянутая полоса
                       width: 'fit-content', maxWidth: '70%',
                       ...(isCrm
