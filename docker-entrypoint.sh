@@ -39,18 +39,16 @@ if [ -n "$DATABASE_URI" ]; then
   if ! node -e "
     const { Client } = require('pg');
     const c = new Client({ connectionString: process.env.DATABASE_URI });
-    c.connect()
-      .then(() => Promise.all([
-        c.query(\"SELECT to_regclass('public.objects') AS t\"),
-        c.query(\"SELECT to_regclass('public.tasks') AS t\"),
-        c.query(\"SELECT to_regclass('public.customers') AS t\"),
-        c.query(\"SELECT column_name FROM information_schema.columns WHERE table_name='applications' AND column_name='loss_reason'\"),
-      ]))
-      .then(([o, t, cu, lr]) => {
-        const ok = o.rows[0].t && t.rows[0].t && cu.rows[0].t && lr.rows.length > 0;
-        process.exit(ok ? 0 : 1);
-      })
-      .catch(() => process.exit(1));
+    (async () => {
+      await c.connect();
+      const o = await c.query(\"SELECT to_regclass('public.objects') AS t\");
+      const t = await c.query(\"SELECT to_regclass('public.tasks') AS t\");
+      const cu = await c.query(\"SELECT to_regclass('public.customers') AS t\");
+      const lr = await c.query(\"SELECT column_name FROM information_schema.columns WHERE table_name='applications' AND column_name='loss_reason'\");
+      const ok = o.rows[0].t && t.rows[0].t && cu.rows[0].t && lr.rows.length > 0;
+      await c.end();
+      process.exit(ok ? 0 : 1);
+    })().catch(() => process.exit(1));
   "; then
     echo "Schema missing — starting dev server to create tables..."
     NODE_ENV=development node_modules/.bin/next dev -p 3001 >/tmp/dev-init.log 2>&1 &
