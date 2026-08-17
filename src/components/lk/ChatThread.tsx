@@ -260,9 +260,9 @@ export default function ChatThread({ applicationId, lang, variant = 'lk' }: { ap
         <div className="flex items-center gap-3 shrink-0">
           {personPhone && (
             <a href={`tel:${personPhone.replace(/\s+/g, '')}`}
-              style={isCrm ? { display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 10, textTransform: 'uppercase', letterSpacing: '.1em', border: '1px solid #d9d1c4', borderRadius: 7, color: '#8d6b40', padding: '8px 14px', textDecoration: 'none' } : undefined}
+              style={isCrm ? { display: 'inline-block', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.1em', border: '1px solid #d9d1c4', borderRadius: 7, color: '#8d6b40', padding: '8px 14px', textDecoration: 'none', whiteSpace: 'nowrap' } : undefined}
               className={isCrm ? undefined : 'inline-flex items-center gap-1.5 text-xs uppercase tracking-wider border border-[var(--n15-gold)]/40 text-[var(--n15-gold)] px-4 py-2 hover:bg-[var(--n15-gold)]/8 transition-colors'}>
-              <span className="material-symbols-outlined text-sm leading-none" aria-hidden="true">call</span>
+              {isCrm ? null : <span className="material-symbols-outlined text-sm leading-none" aria-hidden="true">call</span>}
               {t.lkChat.call}
             </a>
           )}
@@ -398,17 +398,16 @@ export default function ChatThread({ applicationId, lang, variant = 'lk' }: { ap
               }
             }}
             placeholder={t.lkChat.placeholder}
-            rows={2}
-            style={isCrm ? { flex: 1, boxSizing: 'border-box', border: '1px solid #d9d1c4', borderRadius: 8, background: '#fff', color: '#25241f', padding: '10px 12px', font: '13px Arial, Helvetica, sans-serif', resize: 'none' } : undefined}
+            rows={isCrm ? 3 : 2}
+            style={isCrm ? { flex: 1, boxSizing: 'border-box', border: '1px solid #d9d1c4', borderRadius: 8, background: '#fff', color: '#25241f', padding: '12px 14px', font: '14px Arial, Helvetica, sans-serif', lineHeight: 1.5, resize: 'none' } : undefined}
             className={isCrm ? undefined : 'flex-1 bg-[var(--n15-black)] border border-[var(--n15-gold)]/25 px-4 py-3 text-sm text-[var(--n15-silver)] placeholder:text-[var(--n15-muted)] focus:outline-none focus:border-[var(--n15-gold)]/60 resize-none'}
           />
           <button
             onClick={() => void send()}
             disabled={sending || !text.trim()}
-            style={isCrm ? { display: 'inline-flex', alignItems: 'center', gap: 6, padding: '10px 16px', border: 0, borderRadius: 8, background: '#a7814e', color: '#fff', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', cursor: 'pointer', opacity: sending || !text.trim() ? 0.5 : 1 } : undefined}
+            style={isCrm ? { border: 0, borderRadius: 8, background: '#a7814e', color: '#fff', padding: '12px 22px', fontSize: 11, textTransform: 'uppercase', letterSpacing: '.08em', cursor: 'pointer', whiteSpace: 'nowrap', opacity: sending || !text.trim() ? 0.5 : 1 } : undefined}
             className={isCrm ? undefined : 'inline-flex items-center gap-1.5 px-5 py-3 text-xs uppercase tracking-wider bg-[var(--n15-gold)] text-[var(--on-accent)] font-medium transition-all hover:brightness-110 disabled:opacity-50 cursor-pointer'}
           >
-            <span className="material-symbols-outlined text-sm leading-none" aria-hidden="true">send</span>
             {sending ? t.lkChat.sending : t.lkChat.send}
           </button>
         </div>
