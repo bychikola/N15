@@ -120,7 +120,7 @@ export default function TasksBoard({ t }: { t: Dict }) {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
-      body: JSON.stringify({ done }),
+      body: JSON.stringify({ done, completedAt: done ? new Date().toISOString() : null }),
     })
   }
 

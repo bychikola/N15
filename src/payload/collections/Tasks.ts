@@ -59,6 +59,15 @@ export const Tasks: CollectionConfig = {
       defaultValue: false,
     },
     {
+      name: 'completedAt',
+      type: 'date',
+      label: 'Выполнена (дата)',
+      admin: {
+        readOnly: true,
+        position: 'sidebar',
+      },
+    },
+    {
       name: 'application',
       type: 'relationship',
       label: 'Заявка',
