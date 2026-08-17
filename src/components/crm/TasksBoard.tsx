@@ -23,7 +23,7 @@ function dayKey(iso: string): string {
 interface TaskItem {
   id: number
   title: string
-  type: string
+  taskType: string
   dueDate: string
   done: boolean
   appId?: number
@@ -66,7 +66,7 @@ export default function TasksBoard({ t }: { t: Dict }) {
       return {
         id: tk.id as number,
         title: tk.title as string,
-        type: tk.type as string,
+        taskType: tk.taskType as string,
         dueDate: dayKey(tk.dueDate as string),
         done: tk.done as boolean,
         appId: app?.id as number | undefined,
@@ -101,7 +101,7 @@ export default function TasksBoard({ t }: { t: Dict }) {
       credentials: 'include',
       body: JSON.stringify({
         title: form.title.trim(),
-        type: form.type,
+        taskType: form.type,
         dueDate: due,
         application: form.app ? Number(form.app) : undefined,
         assignedTo: meId,
@@ -168,7 +168,7 @@ export default function TasksBoard({ t }: { t: Dict }) {
           <div style={{ fontSize: 12, color: '#25241f', textDecoration: tk.done ? 'line-through' : 'none' }}>{tk.title}</div>
           <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
             <span style={{ padding: '3px 8px', borderRadius: 999, background: '#f2eadf', color: '#8d6b40', fontSize: 9, textTransform: 'uppercase', letterSpacing: '.08em' }}>
-              {t.crm[TYPE_LABELS[tk.type] as keyof Dict['crm']] || tk.type}
+              {t.crm[TYPE_LABELS[tk.taskType] as keyof Dict['crm']] || tk.taskType}
             </span>
             {tk.appId && tk.appTitle ? (
               <Link href={`/crm/messages/${tk.appId}`} style={{ fontSize: 10, color: '#8d6b40', textDecoration: 'underline' }}>

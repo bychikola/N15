@@ -34,7 +34,10 @@ export const Tasks: CollectionConfig = {
       required: true,
     },
     {
-      name: 'type',
+      // Поле названо taskType, а не type: enum enum_tasks_task_type не конфликтует
+      // с enum'ами select-полей объектов (enum_objects_*) — иначе drizzle при
+      // dev-push спрашивает про переименование enum и зависает в контейнере.
+      name: 'taskType',
       type: 'select',
       label: 'Тип задачи',
       options: [

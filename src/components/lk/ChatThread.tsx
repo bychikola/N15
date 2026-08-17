@@ -188,7 +188,7 @@ export default function ChatThread({ applicationId, lang, variant = 'lk' }: { ap
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
-      body: JSON.stringify({ title: taskTitle.trim(), type: taskType, dueDate, application: applicationId, assignedTo: meId }),
+      body: JSON.stringify({ title: taskTitle.trim(), taskType, dueDate, application: applicationId, assignedTo: meId }),
     })
     if (res.ok) {
       setTaskTitle('')
