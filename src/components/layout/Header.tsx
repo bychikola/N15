@@ -57,13 +57,14 @@ export const Header: FC = () => {
 
         {/* Mobile hamburger */}
         <button
-          className="lg:hidden flex flex-col gap-1.5 p-2"
+          className="lg:hidden relative flex flex-col justify-center items-center gap-1.5 p-2 w-10 h-10"
           onClick={() => setIsOpen(!isOpen)}
           aria-label={t.nav.menu}
         >
-          <span className={`block w-6 h-px bg-[var(--n15-gold)] transition-all duration-300 ${isOpen ? 'rotate-45 translate-y-[5px]' : ''}`} />
+          {/* Крест: линии стягиваются к центру кнопки, чтобы пересекались ровно */}
+          <span className={`block w-6 h-px bg-[var(--n15-gold)] transition-all duration-300 ${isOpen ? 'absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rotate-45' : ''}`} />
           <span className={`block w-6 h-px bg-[var(--n15-gold)] transition-all duration-300 ${isOpen ? 'opacity-0' : ''}`} />
-          <span className={`block w-6 h-px bg-[var(--n15-gold)] transition-all duration-300 ${isOpen ? '-rotate-45 -translate-y-[5px]' : ''}`} />
+          <span className={`block w-6 h-px bg-[var(--n15-gold)] transition-all duration-300 ${isOpen ? 'absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 -rotate-45' : ''}`} />
         </button>
       </div>
 

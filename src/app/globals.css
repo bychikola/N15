@@ -546,7 +546,7 @@ html[data-theme='dark'] span.theme-icon-moon { display: block; }
 /* Мобильная адаптация */
 @media (max-width: 820px) {
   .lp-hero { min-height: 610px; align-items: flex-end; padding-bottom: 80px; }
-  .lp-hero-content { width: auto; margin: 0 22px; }
+  .lp-hero-content { width: calc(100% - 44px); margin: 0 22px; box-sizing: border-box; }
   .lp-hero h1 { font-size: 54px; }
   .lp-hero-copy { max-width: 360px; font-size: 15px; margin: 24px 0 28px; }
   .lp-hero-note { display: none; }
@@ -558,7 +558,7 @@ html[data-theme='dark'] span.theme-icon-moon { display: block; }
   .lp-filters, .lp-land-filters { grid-template-columns: 1fr; padding: 0 0 24px; }
   .lp-filters > div { padding: 16px 0; }
   .lp-land-filters .lp-settlement-filter { grid-column: auto; }
-  .lp-cards { grid-template-columns: 1fr; width: auto; margin: 0 22px; }
+  .lp-cards { grid-template-columns: repeat(2, 1fr); width: auto; margin: 0 22px; }
   .lp-mortgage { width: auto; margin: 60px 22px; padding: 28px 24px; grid-template-columns: 1fr; gap: 30px; }
   .lp-mortgage-disclosure > summary { grid-template-columns: 1fr 30px; gap: 18px; min-height: 300px; }
   .lp-mortgage-disclosure > summary h2 { font-size: 44px; }
@@ -581,4 +581,8 @@ html[data-theme='dark'] span.theme-icon-moon { display: block; }
 @media (max-width: 480px) {
   .lp-mortgage-fields { grid-template-columns: 1fr; }
   .lp-mortgage-panel { padding: 16px; }
+  .lp-hero h1 { font-size: 46px; }
+  .lp-eyebrow { letter-spacing: .22em; }
+  .lp-hero-copy { font-size: 15px; }
+  .lp-cards { grid-template-columns: 1fr; }
 }
