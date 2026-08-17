@@ -40,6 +40,7 @@ export default function ChatThread({ applicationId, lang, variant = 'lk' }: { ap
   const [taskType, setTaskType] = useState('call')
   const [taskDue, setTaskDue] = useState('today')
   const [taskPosted, setTaskPosted] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     const meRes = await fetch('/api/users/me', { credentials: 'include' })
@@ -61,7 +62,12 @@ export default function ChatThread({ applicationId, lang, variant = 'lk' }: { ap
         { credentials: 'include' },
       ),
     ])
-    if (!appRes.ok) return
+    if (!appRes.ok) {
+      // Нет доступа к заявке или она не найдена — не оставляем вечную загрузку
+      setLoadError(`HTTP ${appRes.status}`)
+      setLoading(false)
+      return
+    }
     const app = await appRes.json()
     const obj = app.object as Record<string, unknown> | undefined
     const agent = app.agent as Record<string, unknown> | undefined
@@ -109,6 +115,7 @@ export default function ChatThread({ applicationId, lang, variant = 'lk' }: { ap
       })
     }
     setMessages(mapped)
+    setLoadError(null)
     setLoading(false)
 
     // Пометить входящие непрочитанные прочитанными
@@ -202,6 +209,29 @@ export default function ChatThread({ applicationId, lang, variant = 'lk' }: { ap
     return <p style={isCrm ? { color: '#817b70', fontSize: 12 } : undefined} className={isCrm ? undefined : 'text-[var(--n15-muted)]'}>{t.lk.loading}</p>
   }
 
+  if (loadError) {
+    return (
+      <div
+        style={isCrm ? { background: '#fff', border: '1px solid #e5dfd3', borderRadius: 12, padding: '46px 20px', textAlign: 'center' } : undefined}
+        className={isCrm ? undefined : 'bg-[var(--n15-charcoal)] border border-[var(--n15-gold)]/15 p-12 text-center'}
+      >
+        <p style={isCrm ? { color: '#817b70', fontSize: 13, margin: '0 0 6px' } : undefined} className={isCrm ? undefined : 'text-sm text-[var(--n15-muted)] mb-2'}>
+          {t.crm.chatNotFound}
+        </p>
+        <p style={isCrm ? { color: '#9b958a', fontSize: 11, margin: '0 0 18px' } : undefined} className={isCrm ? undefined : 'text-[11px] text-[var(--n15-muted)] mb-4'}>
+          {loadError}
+        </p>
+        <Link
+          href={isCrm ? '/crm/messages' : `/${lang}/lk/messages`}
+          style={isCrm ? { display: 'inline-block', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.1em', border: '1px solid #d9d1c4', borderRadius: 7, color: '#8d6b40', padding: '10px 18px', textDecoration: 'none' } : undefined}
+          className={isCrm ? undefined : 'inline-block text-xs uppercase tracking-wider border border-[var(--n15-gold)]/40 text-[var(--n15-gold)] px-6 py-2.5 hover:bg-[var(--n15-gold)]/8 transition-colors'}
+        >
+          {t.crm.chatBack}
+        </Link>
+      </div>
+    )
+  }
+
   return (
     <div
       style={isCrm ? { display: 'flex', flexDirection: 'column', minHeight: '60vh', background: '#fff', border: '1px solid #e5dfd3', borderRadius: 12, overflow: 'hidden' } : undefined}
@@ -274,7 +304,7 @@ export default function ChatThread({ applicationId, lang, variant = 'lk' }: { ap
 
       {/* Сообщения */}
       <div
-        style={isCrm ? { flex: 1, display: 'flex', flexDirection: 'column', gap: 10, padding: '18px', minHeight: 200 } : undefined}
+        style={isCrm ? { flex: 1, display: 'flex', flexDirection: 'column', gap: 10, padding: '18px', minHeight: 200, overflowY: 'auto' } : { overflowY: 'auto' }}
         className={isCrm ? undefined : 'flex-1 flex flex-col gap-3 px-6 py-6'}
       >
         {messages.length === 0 && (
@@ -319,11 +349,14 @@ export default function ChatThread({ applicationId, lang, variant = 'lk' }: { ap
                       className={isCrm ? undefined : 'text-[10px] tracking-[0.12em] uppercase text-[var(--n15-gold)] mb-1'}>{m.senderName}</div>
                   )}
                   <div
-                    style={isCrm
-                      ? mine
-                        ? { maxWidth: '70%', marginLeft: 'auto', background: '#a7814e', color: '#fff', borderRadius: 10, padding: '10px 14px', fontSize: 13, lineHeight: 1.6 }
-                        : { maxWidth: '70%', marginRight: 'auto', background: '#fff', border: '1px solid #e5dfd3', color: '#25241f', borderRadius: 10, padding: '10px 14px', fontSize: 13, lineHeight: 1.6 }
-                      : undefined}
+                    style={{
+                      wordBreak: 'break-word', overflowWrap: 'anywhere', whiteSpace: 'pre-wrap',
+                      ...(isCrm
+                        ? mine
+                          ? { maxWidth: '70%', marginLeft: 'auto', background: '#a7814e', color: '#fff', borderRadius: 10, padding: '10px 14px', fontSize: 13, lineHeight: 1.6 }
+                          : { maxWidth: '70%', marginRight: 'auto', background: '#fff', border: '1px solid #e5dfd3', color: '#25241f', borderRadius: 10, padding: '10px 14px', fontSize: 13, lineHeight: 1.6 }
+                        : {}),
+                    }}
                     className={isCrm ? undefined : `px-4 py-3 text-sm leading-relaxed ${
                       mine
                         ? 'border border-[var(--n15-gold)]/50 bg-[var(--n15-gold)]/8 text-[var(--n15-white)]'
