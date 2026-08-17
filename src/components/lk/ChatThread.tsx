@@ -351,10 +351,12 @@ export default function ChatThread({ applicationId, lang, variant = 'lk' }: { ap
                   <div
                     style={{
                       wordBreak: 'break-word', overflowWrap: 'anywhere', whiteSpace: 'pre-wrap',
+                      // fit-content: пузырь по размеру текста, а не растянутая полоса
+                      width: 'fit-content', maxWidth: '70%',
                       ...(isCrm
                         ? mine
-                          ? { maxWidth: '70%', marginLeft: 'auto', background: '#a7814e', color: '#fff', borderRadius: 10, padding: '10px 14px', fontSize: 13, lineHeight: 1.6 }
-                          : { maxWidth: '70%', marginRight: 'auto', background: '#fff', border: '1px solid #e5dfd3', color: '#25241f', borderRadius: 10, padding: '10px 14px', fontSize: 13, lineHeight: 1.6 }
+                          ? { marginLeft: 'auto', background: '#a7814e', color: '#fff', borderRadius: 10, padding: '10px 14px', fontSize: 13, lineHeight: 1.6 }
+                          : { marginRight: 'auto', background: '#fff', border: '1px solid #e5dfd3', color: '#25241f', borderRadius: 10, padding: '10px 14px', fontSize: 13, lineHeight: 1.6 }
                         : {}),
                     }}
                     className={isCrm ? undefined : `px-4 py-3 text-sm leading-relaxed ${
