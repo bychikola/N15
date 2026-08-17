@@ -32,13 +32,24 @@ if [ -n "$DATABASE_URI" ]; then
   # окружении (tsx vs ESM-модуль lexical). Надёжный способ — запустить dev-сервер
   # с NODE_ENV=development на время: Payload выполнит pushDevSchema и создаст
   # все таблицы. Затем восстанавливаем production-сборку из .next-prod.
-  echo "Checking if schema exists..."
+  echo "Checking if schema is up to date..."
+  # Проверяем не просто наличие схемы, а актуальность: базовые таблицы + новые
+  # коллекции/колонки (tasks, customers, loss_reason в applications). Если чего-то
+  # нет — запускаем dev-push, который досоздаст недостающее без потери данных.
   if ! node -e "
     const { Client } = require('pg');
     const c = new Client({ connectionString: process.env.DATABASE_URI });
     c.connect()
-      .then(() => c.query(\"SELECT to_regclass('public.objects') AS t\"))
-      .then((r) => { process.exit(r.rows[0] && r.rows[0].t ? 0 : 1); })
+      .then(() => Promise.all([
+        c.query(\"SELECT to_regclass('public.objects') AS t\"),
+        c.query(\"SELECT to_regclass('public.tasks') AS t\"),
+        c.query(\"SELECT to_regclass('public.customers') AS t\"),
+        c.query(\"SELECT column_name FROM information_schema.columns WHERE table_name='applications' AND column_name='loss_reason'\"),
+      ]))
+      .then(([o, t, cu, lr]) => {
+        const ok = o.rows[0].t && t.rows[0].t && cu.rows[0].t && lr.rows.length > 0;
+        process.exit(ok ? 0 : 1);
+      })
       .catch(() => process.exit(1));
   "; then
     echo "Schema missing — starting dev server to create tables..."
