@@ -38,6 +38,20 @@ export const ViewRequestForm: FC<Props> = ({ objectId, lang }) => {
         // гость — заявка без user
       }
 
+      // Автопривязка к клиенту по номеру телефона (нормализованному)
+      let customerId: number | undefined
+      try {
+        const custRes = await fetch(
+          `/api/customers?${new URLSearchParams({ where: JSON.stringify({ phone: { equals: phone.replace(/[^\d+]/g, '') } }), limit: '1', depth: '0' })}`,
+          { credentials: 'include' },
+        )
+        const custData = await custRes.json()
+        const custDoc = (custData.docs || [])[0] as { id?: number } | undefined
+        customerId = custDoc?.id
+      } catch {
+        // нет доступа к клиентам (гость/клиент) — заявка останется без привязки
+      }
+
       const res = await fetch('/api/applications', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -51,6 +65,7 @@ export const ViewRequestForm: FC<Props> = ({ objectId, lang }) => {
           status: 'unsorted',
           source: 'site',
           ...(userId ? { user: userId } : {}),
+          ...(customerId ? { customer: customerId } : {}),
         }),
       })
       if (!res.ok) {
