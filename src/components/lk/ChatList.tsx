@@ -107,7 +107,7 @@ export default function ChatList({ lang, basePath = '/lk/messages', variant = 'l
           objectTitle: (obj?.title as string) || (app.type as string) || '',
           objectImage: ((obj?.primaryImage as Record<string, unknown>)?.url as string) || undefined,
           personName:
-            me.role === 'agent'
+            me.role === 'agent' || me.role === 'admin'
               ? (clientUser?.name as string) || (app.clientName as string) || ''
               : (agent?.name as string) || '',
           lastText: (last?.text as string) || (app.message as string) || '',
