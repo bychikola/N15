@@ -15,7 +15,7 @@ export default async function CrmMessagesPage() {
   }
   return (
     <CrmShell user={user} t={t} active="messages">
-      <ChatList lang="ru" basePath="/crm/messages" variant="crm" />
+      <ChatList lang="ru" basePath="/crm/messages" variant="crm" showFilters />
     </CrmShell>
   )
 }

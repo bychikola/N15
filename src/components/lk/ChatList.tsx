@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useI18n } from '@/i18n/i18n-provider'
+import { STAGES, stageLabel } from './FunnelCard'
 
 interface ConversationItem {
   applicationId: number
@@ -12,6 +13,9 @@ interface ConversationItem {
   lastText: string
   lastAt: string
   unread: number
+  status: string
+  agentId?: number
+  agentName?: string
 }
 
 const POLL_MS = 10_000
@@ -30,9 +34,15 @@ const crmBadgeStyle: React.CSSProperties = {
   display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
 }
 
-export default function ChatList({ lang, basePath = '/lk/messages', variant = 'lk' }: { lang: string; basePath?: string; variant?: 'lk' | 'crm' }) {
+export default function ChatList({ lang, basePath = '/lk/messages', variant = 'lk', showFilters = false }: { lang: string; basePath?: string; variant?: 'lk' | 'crm'; showFilters?: boolean }) {
   const { t } = useI18n()
   const isCrm = variant === 'crm'
+  const [search, setSearch] = useState('')
+  const [onlyUnread, setOnlyUnread] = useState(false)
+  const [statusFilter, setStatusFilter] = useState('')
+  const [agentFilter, setAgentFilter] = useState('')
+  const [agents, setAgents] = useState<{ id: number; name: string }[]>([])
+  const [meRole, setMeRole] = useState<string>('user')
   const [items, setItems] = useState<ConversationItem[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -45,6 +55,7 @@ export default function ChatList({ lang, basePath = '/lk/messages', variant = 'l
         setItems([])
         return
       }
+      setMeRole((me.role as string) || 'user')
       // Мои заявки (как клиент) или назначенные мне (как агент)
       const where = me.role === 'agent'
         ? { 'agent.user': { equals: me.id } }
@@ -106,7 +117,15 @@ export default function ChatList({ lang, basePath = '/lk/messages', variant = 'l
           lastText: (last?.text as string) || (app.message as string) || '',
           lastAt: (last?.createdAt as string) || (app.createdAt as string) || '',
           unread: unreadData.totalDocs ?? 0,
+          status: (app.status as string) || '',
+          agentId: (agent as Record<string, unknown> | undefined)?.id as number | undefined,
+          agentName: (agent as Record<string, unknown> | undefined)?.name as string | undefined,
         })
+      }
+      if (me.role === 'admin') {
+        const agentsRes = await fetch('/api/agents?limit=100&depth=0', { credentials: 'include' })
+        const agentsData = await agentsRes.json()
+        setAgents(((agentsData.docs || []) as { id: number; name: string }[]).map((a) => ({ id: a.id, name: a.name })))
       }
       setItems(convs)
     } finally {
@@ -127,6 +146,19 @@ export default function ChatList({ lang, basePath = '/lk/messages', variant = 'l
       clearInterval(timer)
     }
   }, [load])
+
+  const visibleItems = items.filter((c) => {
+    if (onlyUnread && c.unread === 0) return false
+    if (statusFilter && c.status !== statusFilter) return false
+    if (agentFilter && c.agentId !== Number(agentFilter)) return false
+    const q = search.trim().toLowerCase()
+    if (!q) return true
+    return (
+      c.objectTitle.toLowerCase().includes(q) ||
+      c.personName.toLowerCase().includes(q) ||
+      c.lastText.toLowerCase().includes(q)
+    )
+  })
 
   if (loading) {
     return <p className="text-[var(--n15-muted)]">{t.lk.loading}</p>
@@ -153,7 +185,57 @@ export default function ChatList({ lang, basePath = '/lk/messages', variant = 'l
 
   return (
     <div style={isCrm ? { display: 'flex', flexDirection: 'column', gap: 10 } : undefined} className={isCrm ? undefined : 'space-y-3'}>
-      {items.map((c) => (
+      {isCrm && showFilters && (
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 6 }}>
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={t.crm.searchPlaceholder}
+            aria-label={t.crm.searchPlaceholder}
+            style={{ flex: '1 1 260px', maxWidth: 420, boxSizing: 'border-box', border: '1px solid #d9d1c4', borderRadius: 8, background: '#fff', color: '#25241f', padding: '12px 14px', font: '13px Arial, Helvetica, sans-serif' }}
+          />
+          <button
+            type="button"
+            onClick={() => setOnlyUnread((v) => !v)}
+            style={{
+              border: '1px solid #d9d1c4', borderRadius: 999, background: onlyUnread ? '#a7814e' : '#fff',
+              color: onlyUnread ? '#fff' : '#716b62', padding: '9px 16px', fontSize: 10,
+              textTransform: 'uppercase', letterSpacing: '.08em', cursor: 'pointer',
+            }}
+          >
+            {t.crm.filterUnread}
+          </button>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            aria-label={t.crm.filterStatus}
+            style={{ border: '1px solid #d9d1c4', borderRadius: 8, background: '#fff', color: '#25241f', padding: '9px 10px', font: '12px Arial, Helvetica, sans-serif' }}
+          >
+            <option value="">{t.crm.filterStatus}: {t.crm.filterAll}</option>
+            {STAGES.map((s) => (
+              <option key={s.value} value={s.value}>{stageLabel(t, s.value)}</option>
+            ))}
+          </select>
+          {meRole === 'admin' && (
+            <select
+              value={agentFilter}
+              onChange={(e) => setAgentFilter(e.target.value)}
+              aria-label={t.crm.filterAgent}
+              style={{ border: '1px solid #d9d1c4', borderRadius: 8, background: '#fff', color: '#25241f', padding: '9px 10px', font: '12px Arial, Helvetica, sans-serif' }}
+            >
+              <option value="">{t.crm.filterAgent}: {t.crm.filterAll}</option>
+              {agents.map((a) => (
+                <option key={a.id} value={a.id}>{a.name}</option>
+              ))}
+            </select>
+          )}
+          <span style={{ fontSize: 10, color: '#817b70', textTransform: 'uppercase', letterSpacing: '.08em' }}>
+            {t.crm.chatsTotal}: {visibleItems.length}
+          </span>
+        </div>
+      )}
+      {visibleItems.map((c) => (
         <Link key={c.applicationId} href={`${basePath}/${c.applicationId}`}
           style={isCrm ? crmRowStyle : undefined}
           className={isCrm ? undefined : 'flex items-center gap-4 bg-[var(--n15-charcoal)] border border-[var(--n15-gold)]/15 p-4 hover:border-[var(--n15-gold)]/40 transition-colors group'}>
