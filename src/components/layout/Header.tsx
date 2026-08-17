@@ -55,16 +55,39 @@ export const Header: FC = () => {
           <ThemeSwitcher className="ml-3" />
         </nav>
 
-        {/* Mobile hamburger */}
+        {/* Mobile hamburger: точный inline-стиль, чтобы крест всегда был ровно по центру кнопки */}
         <button
-          className="lg:hidden relative flex flex-col justify-center items-center gap-1.5 p-2 w-10 h-10"
+          className="lg:hidden relative flex items-center justify-center w-10 h-10 shrink-0"
           onClick={() => setIsOpen(!isOpen)}
           aria-label={t.nav.menu}
+          style={{ background: 'none', border: 0, cursor: 'pointer' }}
         >
-          {/* Крест: линии стягиваются к центру кнопки, чтобы пересекались ровно */}
-          <span className={`block w-6 h-px bg-[var(--n15-gold)] transition-all duration-300 ${isOpen ? 'absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rotate-45' : ''}`} />
-          <span className={`block w-6 h-px bg-[var(--n15-gold)] transition-all duration-300 ${isOpen ? 'opacity-0' : ''}`} />
-          <span className={`block w-6 h-px bg-[var(--n15-gold)] transition-all duration-300 ${isOpen ? 'absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 -rotate-45' : ''}`} />
+          <span
+            className="block bg-[var(--n15-gold)]"
+            style={{
+              position: 'absolute', width: 24, height: 1, left: 8, top: 19.5,
+              transformOrigin: '12px 0.5px',
+              transform: isOpen ? 'rotate(45deg)' : 'translateY(-4px)',
+              transition: 'transform .3s ease',
+            }}
+          />
+          <span
+            className="block bg-[var(--n15-gold)]"
+            style={{
+              position: 'absolute', width: 24, height: 1, left: 8, top: 19.5,
+              opacity: isOpen ? 0 : 1,
+              transition: 'opacity .2s ease',
+            }}
+          />
+          <span
+            className="block bg-[var(--n15-gold)]"
+            style={{
+              position: 'absolute', width: 24, height: 1, left: 8, top: 19.5,
+              transformOrigin: '12px 0.5px',
+              transform: isOpen ? 'rotate(-45deg)' : 'translateY(4px)',
+              transition: 'transform .3s ease',
+            }}
+          />
         </button>
       </div>
 
