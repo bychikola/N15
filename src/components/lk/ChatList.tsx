@@ -56,19 +56,15 @@ export default function ChatList({ lang, basePath = '/lk/messages', variant = 'l
         return
       }
       setMeRole((me.role as string) || 'user')
-      // Мои заявки (как клиент) или назначенные мне (как агент)
+      // Мои заявки (как клиент), назначенные мне (как агент), все (админ)
       const where = me.role === 'agent'
         ? { 'agent.user': { equals: me.id } }
-        : { user: { equals: me.id } }
-      const appsRes = await fetch(
-        `/api/applications?${new URLSearchParams({
-          where: JSON.stringify(where),
-          depth: '2',
-          limit: '50',
-          sort: '-createdAt',
-        })}`,
-        { credentials: 'include' },
-      )
+        : me.role === 'admin'
+          ? undefined
+          : { user: { equals: me.id } }
+      const appParams = new URLSearchParams({ depth: '2', limit: '200', sort: '-createdAt' })
+      if (where) appParams.set('where', JSON.stringify(where))
+      const appsRes = await fetch(`/api/applications?${appParams}`, { credentials: 'include' })
       const appsData = await appsRes.json()
       const apps = (appsData.docs || []) as Record<string, unknown>[]
 
