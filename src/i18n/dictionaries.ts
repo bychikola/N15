@@ -396,6 +396,7 @@ export const ru = {
     requestCard: 'Заявка',
     readMark: 'Прочитано',
     empty: 'Сообщений пока нет — напишите первым.',
+    emptyHint: 'Напишите сообщение ниже, и диалог начнётся',
   },
   lkFunnel: {
     title: 'Воронка',
@@ -1107,6 +1108,7 @@ const os: Dict = {
     requestCard: 'Заявкæ',
     readMark: 'Фехъусын кодтай',
     empty: 'Ныхæстæ нырма нæй — фыс фыццаг.',
+    emptyHint: 'Ныффыс ныхас — æмæ диалог райдайдзæн',
   },
   lkFunnel: {
     title: 'Воронкæ',

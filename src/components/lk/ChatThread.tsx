@@ -182,6 +182,11 @@ export default function ChatThread({ applicationId, lang, variant = 'lk' }: { ap
 
   const personName = meRole === 'agent' ? objectInfo.clientName : objectInfo.agentName
   const personPhone = meRole === 'agent' ? (isCrm ? objectInfo.clientPhone : undefined) : objectInfo.agentPhone
+  const personInitials = personName
+    ? personName.split(' ').filter(Boolean).map((n) => n[0]).join('').slice(0, 2).toUpperCase()
+    : '?'
+  // Фото собеседника: для клиента — фото агента; агент видит клиента (только инициалы)
+  const personPhoto = meRole === 'user' ? objectInfo.agentPhoto : undefined
 
   const addTask = async () => {
     if (!taskTitle.trim() || meId === null) return
@@ -234,7 +239,7 @@ export default function ChatThread({ applicationId, lang, variant = 'lk' }: { ap
 
   return (
     <div
-      style={isCrm ? { display: 'flex', flexDirection: 'column', minHeight: '60vh', background: '#fff', border: '1px solid #e5dfd3', borderRadius: 12, overflow: 'hidden' } : undefined}
+      style={isCrm ? { display: 'flex', flexDirection: 'column', height: 'calc(100vh - 150px)', minHeight: 440, maxHeight: 920, background: '#fff', border: '1px solid #e5dfd3', borderRadius: 12, overflow: 'hidden' } : undefined}
       className={isCrm ? undefined : 'flex flex-col min-h-[65vh] bg-[var(--n15-charcoal)] border border-[var(--n15-gold)]/15'}
     >
       {/* Шапка досье: объект + собеседник */}
@@ -242,20 +247,31 @@ export default function ChatThread({ applicationId, lang, variant = 'lk' }: { ap
         style={isCrm ? { display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '14px 18px', borderBottom: '1px solid #e5dfd3', background: '#faf8f4' } : undefined}
         className={isCrm ? undefined : 'flex flex-wrap items-center justify-between gap-3 px-6 py-4 border-b border-[var(--n15-gold)]/15 bg-[var(--n15-black)]/40'}
       >
-        <div className="min-w-0">
-          {objectInfo.id ? (
-            <Link href={`/${lang}/catalog/${objectInfo.id}`}
-              style={isCrm ? { color: '#8d6b40', fontSize: 13, fontWeight: 600, textDecoration: 'none' } : undefined}
-              className={isCrm ? undefined : 'text-sm text-[var(--n15-gold)] hover:underline truncate'}>
-              {objectInfo.title}
-            </Link>
-          ) : (
-            <span style={isCrm ? { color: '#817b70', fontSize: 13 } : undefined} className={isCrm ? undefined : 'text-sm text-[var(--n15-muted)]'}>{t.lkChat.requestCard} #{applicationId}</span>
+        <div className="min-w-0" style={isCrm ? { display: 'flex', alignItems: 'center', gap: 12 } : undefined}>
+          {isCrm && (
+            <div style={{ width: 42, height: 42, flexShrink: 0, borderRadius: '50%', overflow: 'hidden', background: '#f2eadf', border: '1px solid #d9d1c4', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              {personPhoto ? (
+                <img src={personPhoto} alt={personName || ''} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              ) : (
+                <span style={{ fontSize: 13, color: '#8d6b40', fontWeight: 600 }}>{personInitials}</span>
+              )}
+            </div>
           )}
-          {personName && (
-            <div style={isCrm ? { color: '#817b70', fontSize: 9, textTransform: 'uppercase', letterSpacing: '.1em', marginTop: 4 } : undefined}
-              className={isCrm ? undefined : 'text-[10px] tracking-[0.15em] uppercase text-[var(--n15-muted)] mt-1'}>{personName}</div>
-          )}
+          <div style={isCrm ? { minWidth: 0 } : undefined}>
+            {objectInfo.id ? (
+              <Link href={`/${lang}/catalog/${objectInfo.id}`}
+                style={isCrm ? { color: '#8d6b40', fontSize: 12, fontWeight: 600, textDecoration: 'none', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } : undefined}
+                className={isCrm ? undefined : 'text-sm text-[var(--n15-gold)] hover:underline truncate'}>
+                {objectInfo.title}
+              </Link>
+            ) : (
+              <span style={isCrm ? { color: '#817b70', fontSize: 12, display: 'block' } : undefined} className={isCrm ? undefined : 'text-sm text-[var(--n15-muted)]'}>{t.lkChat.requestCard} #{applicationId}</span>
+            )}
+            {personName && (
+              <div style={isCrm ? { color: '#25241f', fontSize: 14, fontWeight: 600, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } : undefined}
+                className={isCrm ? undefined : 'text-[10px] tracking-[0.15em] uppercase text-[var(--n15-muted)] mt-1'}>{personName}</div>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-3 shrink-0">
           {personPhone && (
@@ -308,43 +324,62 @@ export default function ChatThread({ applicationId, lang, variant = 'lk' }: { ap
         className={isCrm ? undefined : 'flex-1 flex flex-col gap-3 px-6 py-6'}
       >
         {messages.length === 0 && (
-          <p style={isCrm ? { fontSize: 12, color: '#817b70', textAlign: 'center', padding: '36px 0' } : undefined}
-            className={isCrm ? undefined : 'text-sm text-[var(--n15-muted)] text-center py-10'}>{t.lkChat.empty}</p>
+          <div style={isCrm ? { margin: 'auto', textAlign: 'center', padding: '48px 20px' } : undefined}
+            className={isCrm ? undefined : 'text-center py-10'}>
+            <div style={isCrm ? { width: 64, height: 64, margin: '0 auto 16px', borderRadius: '50%', background: '#f2eadf', border: '1px solid #d9d1c4', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, color: '#8d6b40', fontWeight: 600 } : undefined}>
+              {isCrm ? personInitials : null}
+            </div>
+            <p style={isCrm ? { fontSize: 13, color: '#25241f', margin: '0 0 6px', fontWeight: 600 } : undefined}
+              className={isCrm ? undefined : 'text-sm text-[var(--n15-muted)]'}>{t.lkChat.empty}</p>
+            <p style={isCrm ? { fontSize: 11, color: '#9b958a', margin: 0 } : undefined}>
+              {isCrm ? t.lkChat.emptyHint : ''}
+            </p>
+          </div>
         )}
         {messages.map((m, i) => {
           const mine = m.senderId === meId
           const showDay = i === 0 || dayLabel(messages[i - 1].createdAt, t, t.locale) !== dayLabel(m.createdAt, t, t.locale)
+          // Группировка: подряд от одного отправителя в пределах 5 минут — без аватара и имени
+          const prev = messages[i - 1]
+          const grouped = !showDay && !!prev && prev.senderId === m.senderId &&
+            (new Date(m.createdAt).getTime() - new Date(prev.createdAt).getTime()) < 5 * 60 * 1000
           // Аватар и имя входящего: для агента — его фото, для клиента — инициалы
           const incomingPhoto = !mine && meRole === 'user' ? objectInfo.agentPhoto : undefined
           const incomingInitials = !mine && m.senderName
-            ? m.senderName.split(' ').map((n) => n[0]).join('').slice(0, 2)
+            ? m.senderName.split(' ').filter(Boolean).map((n) => n[0]).join('').slice(0, 2).toUpperCase()
             : ''
           return (
             <div key={m.id}>
               {showDay && (
-                <div style={isCrm ? { display: 'flex', alignItems: 'center', gap: 10, fontSize: 9, textTransform: 'uppercase', letterSpacing: '.2em', color: '#817b70', margin: '14px 0' } : undefined}
+                <div style={isCrm ? { display: 'flex', alignItems: 'center', gap: 10, fontSize: 9, textTransform: 'uppercase', letterSpacing: '.2em', color: '#817b70', margin: '16px 0 12px' } : undefined}
                   className={isCrm ? undefined : 'flex items-center gap-3 text-[10px] uppercase tracking-[0.2em] text-[var(--n15-muted)] my-4'}>
                   <span style={isCrm ? { flex: 1, height: 1, background: '#e5dfd3' } : undefined} className={isCrm ? undefined : 'flex-1 h-px bg-[var(--n15-gold)]/10'} />
                   {dayLabel(m.createdAt, t, t.locale)}
                   <span style={isCrm ? { flex: 1, height: 1, background: '#e5dfd3' } : undefined} className={isCrm ? undefined : 'flex-1 h-px bg-[var(--n15-gold)]/10'} />
                 </div>
               )}
-              <div className={`flex items-end gap-2.5 ${mine ? 'justify-end' : 'justify-start'}`}>
+              <div style={isCrm ? { display: 'flex', alignItems: 'flex-end', gap: 8, justifyContent: mine ? 'flex-end' : 'flex-start', marginTop: grouped ? 2 : 10 } : undefined}
+                className={`flex items-end gap-2.5 ${mine ? 'justify-end' : 'justify-start'}${!isCrm && grouped ? ' -mt-1' : ''}`}>
                 {!mine && (
-                  <div
-                    style={isCrm ? { width: 36, height: 36, flexShrink: 0, borderRadius: '50%', overflow: 'hidden', background: '#f2eadf', border: '1px solid #d9d1c4', display: 'flex', alignItems: 'center', justifyContent: 'center' } : undefined}
-                    className={isCrm ? undefined : 'w-9 h-9 shrink-0 rounded-full overflow-hidden bg-[var(--n15-black)] border border-[var(--n15-gold)]/25 flex items-center justify-center'}
-                  >
-                    {incomingPhoto ? (
-                      <img src={incomingPhoto} alt={m.senderName} style={isCrm ? { width: '100%', height: '100%', objectFit: 'cover' } : undefined} className={isCrm ? undefined : 'w-full h-full object-cover'} />
-                    ) : (
-                      <span style={isCrm ? { fontSize: 11, color: '#8d6b40' } : undefined}
-                        className={isCrm ? undefined : 'text-[11px] font-[family-name:var(--font-display)] text-[var(--n15-gold)]'}>{incomingInitials}</span>
-                    )}
-                  </div>
+                  grouped ? (
+                    <div style={isCrm ? { width: 36, flexShrink: 0 } : undefined} className={isCrm ? undefined : 'w-9 shrink-0'} />
+                  ) : (
+                    <div
+                      style={isCrm ? { width: 36, height: 36, flexShrink: 0, borderRadius: '50%', overflow: 'hidden', background: '#f2eadf', border: '1px solid #d9d1c4', display: 'flex', alignItems: 'center', justifyContent: 'center' } : undefined}
+                      className={isCrm ? undefined : 'w-9 h-9 shrink-0 rounded-full overflow-hidden bg-[var(--n15-black)] border border-[var(--n15-gold)]/25 flex items-center justify-center'}
+                    >
+                      {incomingPhoto ? (
+                        <img src={incomingPhoto} alt={m.senderName} style={isCrm ? { width: '100%', height: '100%', objectFit: 'cover' } : undefined} className={isCrm ? undefined : 'w-full h-full object-cover'} />
+                      ) : (
+                        <span style={isCrm ? { fontSize: 11, color: '#8d6b40', fontWeight: 600 } : undefined}
+                          className={isCrm ? undefined : 'text-[11px] font-[family-name:var(--font-display)] text-[var(--n15-gold)]'}>{incomingInitials}</span>
+                      )}
+                    </div>
+                  )
                 )}
-                <div className={`max-w-[70%] ${mine ? '' : ''}`}>
-                  {!mine && m.senderName && (
+                <div style={isCrm ? { display: 'flex', flexDirection: 'column', alignItems: mine ? 'flex-end' : 'flex-start', maxWidth: 'min(70%, 520px)' } : undefined}
+                  className={isCrm ? undefined : 'max-w-[70%]'}>
+                  {!mine && !grouped && m.senderName && (
                     <div style={isCrm ? { fontSize: 9, letterSpacing: '.12em', textTransform: 'uppercase', color: '#8d6b40', marginBottom: 4 } : undefined}
                       className={isCrm ? undefined : 'text-[10px] tracking-[0.12em] uppercase text-[var(--n15-gold)] mb-1'}>{m.senderName}</div>
                   )}
@@ -355,11 +390,12 @@ export default function ChatThread({ applicationId, lang, variant = 'lk' }: { ap
                       // до одной буквы и текст идёт вертикально в некоторых браузерах
                       wordBreak: 'break-word', overflowWrap: 'break-word', whiteSpace: 'pre-wrap',
                       // fit-content: пузырь по размеру текста, а не растянутая полоса
-                      width: 'fit-content', maxWidth: '70%',
+                      width: 'fit-content', maxWidth: '100%',
                       ...(isCrm
                         ? mine
-                          ? { marginLeft: 'auto', background: '#a7814e', color: '#fff', borderRadius: 10, padding: '10px 14px', fontSize: 13, lineHeight: 1.6 }
-                          : { marginRight: 'auto', background: '#fff', border: '1px solid #e5dfd3', color: '#25241f', borderRadius: 10, padding: '10px 14px', fontSize: 13, lineHeight: 1.6 }
+                          ? // «хвостик» как в мессенджерах — справа внизу
+                            { background: '#a7814e', color: '#fff', borderRadius: '12px 12px 3px 12px', padding: '8px 13px', fontSize: 14, lineHeight: 1.45 }
+                          : { background: '#fff', border: '1px solid #e5dfd3', color: '#25241f', borderRadius: '12px 12px 12px 3px', padding: '8px 13px', fontSize: 14, lineHeight: 1.45 }
                         : {}),
                     }}
                     className={isCrm ? undefined : `px-4 py-3 text-sm leading-relaxed ${
@@ -369,11 +405,11 @@ export default function ChatThread({ applicationId, lang, variant = 'lk' }: { ap
                     }`}
                   >
                     <div>{m.text}</div>
-                    <div style={isCrm ? { fontSize: 10, marginTop: 6, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4, color: mine ? 'rgba(255,255,255,.75)' : '#817b70' } : undefined}
+                    <div style={isCrm ? { fontSize: 10, marginTop: 3, marginRight: -3, marginBottom: -3, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4, color: mine ? 'rgba(255,255,255,.72)' : '#9b958a', minWidth: 34 } : undefined}
                       className={isCrm ? undefined : 'text-[10px] mt-1.5 flex items-center justify-end gap-1 text-[var(--n15-muted)]'}>
                       {new Date(m.createdAt).toLocaleTimeString(t.locale, { hour: '2-digit', minute: '2-digit' })}
                       {mine && m.read && (
-                        <span className="material-symbols-outlined text-[12px] text-[var(--n15-gold)]" title={t.lkChat.readMark}>done_all</span>
+                        <span style={isCrm ? { fontSize: 11, letterSpacing: -1 } : undefined} title={t.lkChat.readMark}>✓✓</span>
                       )}
                     </div>
                   </div>
