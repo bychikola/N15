@@ -426,7 +426,10 @@ export default function ChatThread({ applicationId, lang, variant = 'lk' }: { ap
         style={isCrm ? { padding: '14px 18px', borderTop: '1px solid #e5dfd3', background: '#faf8f4' } : undefined}
         className={isCrm ? undefined : 'px-6 py-4 border-t border-[var(--n15-gold)]/15 bg-[var(--n15-black)]/40'}
       >
-        <div className="flex gap-3 items-end">
+        <div
+          style={isCrm ? { display: 'flex', gap: 10, alignItems: 'center' } : undefined}
+          className={isCrm ? undefined : 'flex gap-3 items-end'}
+        >
           <textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
@@ -437,14 +440,14 @@ export default function ChatThread({ applicationId, lang, variant = 'lk' }: { ap
               }
             }}
             placeholder={t.lkChat.placeholder}
-            rows={isCrm ? 3 : 2}
-            style={isCrm ? { flex: 1, boxSizing: 'border-box', border: '1px solid #d9d1c4', borderRadius: 8, background: '#fff', color: '#25241f', padding: '12px 14px', font: '14px Arial, Helvetica, sans-serif', lineHeight: 1.5, resize: 'none' } : undefined}
+            rows={isCrm ? 2 : 2}
+            style={isCrm ? { flex: 1, minHeight: 58, maxHeight: 150, boxSizing: 'border-box', border: '1px solid #d9d1c4', borderRadius: 10, background: '#fff', color: '#25241f', padding: '16px 18px', font: '15px/1.45 Arial, Helvetica, sans-serif', resize: 'none', outline: 'none' } : undefined}
             className={isCrm ? undefined : 'flex-1 bg-[var(--n15-black)] border border-[var(--n15-gold)]/25 px-4 py-3 text-sm text-[var(--n15-silver)] placeholder:text-[var(--n15-muted)] focus:outline-none focus:border-[var(--n15-gold)]/60 resize-none'}
           />
           <button
             onClick={() => void send()}
             disabled={sending || !text.trim()}
-            style={isCrm ? { border: 0, borderRadius: 8, background: '#a7814e', color: '#fff', padding: '12px 22px', fontSize: 11, textTransform: 'uppercase', letterSpacing: '.08em', cursor: 'pointer', whiteSpace: 'nowrap', opacity: sending || !text.trim() ? 0.5 : 1 } : undefined}
+            style={isCrm ? { alignSelf: 'stretch', border: 0, borderRadius: 10, background: '#a7814e', color: '#fff', padding: '0 30px', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.06em', cursor: 'pointer', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: sending || !text.trim() ? 0.5 : 1 } : undefined}
             className={isCrm ? undefined : 'inline-flex items-center gap-1.5 px-5 py-3 text-xs uppercase tracking-wider bg-[var(--n15-gold)] text-[var(--on-accent)] font-medium transition-all hover:brightness-110 disabled:opacity-50 cursor-pointer'}
           >
             {sending ? t.lkChat.sending : t.lkChat.send}
