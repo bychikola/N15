@@ -49,6 +49,9 @@ export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) =>
   const [photos, setPhotos] = useState<PhotoItem[]>([])
   const [features, setFeatures] = useState<string[]>([])
   const [featureInput, setFeatureInput] = useState('')
+  // Перетаскивание фото для смены порядка
+  const [dragPhotoIdx, setDragPhotoIdx] = useState<number | null>(null)
+  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -180,6 +183,15 @@ export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) =>
 
   const removePhoto = (idx: number) => {
     setPhotos((prev) => prev.filter((_, i) => i !== idx))
+  }
+
+  const movePhoto = (from: number, to: number) => {
+    setPhotos((prev) => {
+      const next = [...prev]
+      const [item] = next.splice(from, 1)
+      next.splice(to, 0, item)
+      return next
+    })
   }
 
   const save = async () => {
@@ -412,6 +424,7 @@ export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) =>
                 <div>
                   <strong>{t.crm.objPhotos}</strong>
                   <small>{t.crm.objPhotosHint}</small>
+                  <small style={{ display: 'block', marginTop: 4 }}>{t.crm.objPhotosOrder}</small>
                 </div>
                 <label className="crm-photo-picker" style={{ position: 'relative', display: 'grid', placeItems: 'center', textAlign: 'center', border: '1px dashed #cbbda9', borderRadius: 9, background: '#fcfaf7', cursor: 'pointer', padding: 16 }}>
                   <span>{t.crm.objPhotoPick}</span>
@@ -421,13 +434,42 @@ export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) =>
               {photos.length ? (
                 <div className="crm-photo-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(145px, 1fr))', gap: 10 }}>
                   {photos.map((p, i) => (
-                    <div key={p.id ?? `new-${i}`} className="crm-photo" style={{ padding: 7, border: '1px solid #e2dacd', borderRadius: 9, background: 'white' }}>
-                      <img src={p.url} alt="" style={{ display: 'block', width: '100%', aspectRatio: '4/3', objectFit: 'cover', borderRadius: 6 }} />
-                      <div className="crm-photo-actions" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4, marginTop: 6 }}>
-                        {i === 0
-                          ? <b style={{ gridColumn: '1 / -1', textAlign: 'center', background: '#a7814e', color: 'white', borderRadius: 5, padding: '7px 4px', fontSize: 8, textTransform: 'uppercase', letterSpacing: '.07em' }}>Обложка</b>
-                          : <button type="button" onClick={() => makeCover(i)} style={{ border: '1px solid #e1d8ca', borderRadius: 5, background: '#faf7f2', color: '#716b62', padding: 7, fontSize: 8, cursor: 'pointer' }}>{t.crm.objPhotoCover}</button>}
-                        {i !== 0 && <button type="button" onClick={() => removePhoto(i)} style={{ border: '1px solid #e1d8ca', borderRadius: 5, background: '#faf7f2', color: '#9b4e43', padding: 7, fontSize: 8, cursor: 'pointer' }}>{t.crm.objPhotoRemove}</button>}
+                    <div
+                      key={p.id ?? `new-${i}`}
+                      className="crm-photo"
+                      draggable={photos.length > 1}
+                      onDragStart={(e) => { setDragPhotoIdx(i); e.dataTransfer.effectAllowed = 'move' }}
+                      onDragOver={(e) => { e.preventDefault(); setDragOverIdx(i) }}
+                      onDrop={() => {
+                        if (dragPhotoIdx !== null && dragPhotoIdx !== i) {
+                          movePhoto(dragPhotoIdx, i)
+                        }
+                        setDragPhotoIdx(null)
+                        setDragOverIdx(null)
+                      }}
+                      onDragEnd={() => { setDragPhotoIdx(null); setDragOverIdx(null) }}
+                      style={{
+                        padding: 7, border: '1px solid #e2dacd', borderRadius: 9, background: 'white',
+                        cursor: photos.length > 1 ? 'grab' : 'default',
+                        outline: dragOverIdx === i && dragPhotoIdx !== null ? '2px dashed #b68a51' : 'none',
+                        opacity: dragPhotoIdx === i ? 0.45 : 1,
+                        transition: 'opacity .15s',
+                      }}
+                    >
+                      <img src={p.url} alt="" style={{ display: 'block', width: '100%', aspectRatio: '4/3', objectFit: 'cover', borderRadius: 6, pointerEvents: 'none' }} />
+                      <div style={{ display: 'flex', gap: 4, marginTop: 6, alignItems: 'stretch' }}>
+                        {i === 0 ? (
+                          <b style={{ flex: 1, textAlign: 'center', background: '#a7814e', color: 'white', borderRadius: 5, padding: '7px 4px', fontSize: 8, textTransform: 'uppercase', letterSpacing: '.07em' }}>Обложка</b>
+                        ) : (
+                          <button type="button" onClick={() => makeCover(i)} style={{ flex: 1, border: '1px solid #e1d8ca', borderRadius: 5, background: '#faf7f2', color: '#716b62', padding: 7, fontSize: 8, cursor: 'pointer' }} title={t.crm.objPhotoCover}>{t.crm.objPhotoCover}</button>
+                        )}
+                        {i > 0 && (
+                          <button type="button" onClick={() => movePhoto(i, i - 1)} aria-label="↑" style={{ border: '1px solid #e1d8ca', borderRadius: 5, background: '#faf7f2', color: '#716b62', padding: '7px 9px', fontSize: 10, cursor: 'pointer' }}>↑</button>
+                        )}
+                        {i < photos.length - 1 && (
+                          <button type="button" onClick={() => movePhoto(i, i + 1)} aria-label="↓" style={{ border: '1px solid #e1d8ca', borderRadius: 5, background: '#faf7f2', color: '#716b62', padding: '7px 9px', fontSize: 10, cursor: 'pointer' }}>↓</button>
+                        )}
+                        <button type="button" onClick={() => removePhoto(i)} aria-label={t.crm.objPhotoRemove} style={{ border: '1px solid #e1d8ca', borderRadius: 5, background: '#faf7f2', color: '#9b4e43', padding: '7px 9px', fontSize: 10, cursor: 'pointer' }}>✕</button>
                       </div>
                     </div>
                   ))}
