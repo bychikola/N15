@@ -273,7 +273,7 @@ export default function ChatThread({ applicationId, lang, variant = 'lk' }: { ap
             )}
           </div>
         </div>
-        <div className="flex items-center gap-3 shrink-0" style={isCrm ? { gap: 10 } : undefined}>
+        <div className="flex items-center gap-3 shrink-0" style={isCrm ? { gap: 14 } : undefined}>
           {personPhone && (
             <a href={`tel:${personPhone.replace(/\s+/g, '')}`}
               style={isCrm ? { display: 'inline-block', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.1em', border: '1px solid #d9d1c4', borderRadius: 7, color: '#8d6b40', padding: '8px 14px', textDecoration: 'none', whiteSpace: 'nowrap' } : undefined}
