@@ -9,6 +9,11 @@ const nextConfig: NextConfig = {
       { protocol: 'https', hostname: 'www.n15-realty.ru' },
     ],
   },
+  // VPS всего 2 ядра и ~2 ГБ свободной RAM: ограничиваем число воркеров
+  // сборки, иначе Next разворачивает по воркеру на ядро и упирается в память
+  experimental: {
+    cpus: 2,
+  },
 }
 
 export default withPayload(nextConfig)
