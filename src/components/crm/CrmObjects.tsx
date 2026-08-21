@@ -159,8 +159,11 @@ export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) =>
     const files = e.target.files
     if (!files) return
     for (const file of Array.from(files)) {
+      // Накладываем водяной знак (левый верхний угол с отступом) до загрузки
+      const watermarked = await applyWatermark(file)
+      if (!watermarked) continue
       const fd = new FormData()
-      fd.append('file', file)
+      fd.append('file', watermarked, file.name)
       const res = await fetch('/api/media', { method: 'POST', credentials: 'include', body: fd })
       if (!res.ok) continue
       const data = await res.json()
@@ -170,6 +173,41 @@ export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) =>
       }
     }
     e.target.value = ''
+  }
+
+  // Водяной знак: рисуем фото на canvas и поверх — watermark.png в левом верхнем
+  // углу с отступом ~3% ширины; размер знака ~28% ширины фото
+  const applyWatermark = (file: File): Promise<Blob | null> => {
+    return new Promise((resolve) => {
+      const img = new Image()
+      img.onload = () => {
+        const wm = new Image()
+        wm.onload = () => {
+          const canvas = document.createElement('canvas')
+          canvas.width = img.naturalWidth
+          canvas.height = img.naturalHeight
+          const ctx = canvas.getContext('2d')
+          if (!ctx) {
+            resolve(null)
+            return
+          }
+          ctx.drawImage(img, 0, 0)
+          const wmW = Math.round(canvas.width * 0.28)
+          const wmH = Math.round(wmW * (wm.naturalHeight / wm.naturalWidth))
+          const margin = Math.round(canvas.width * 0.03)
+          ctx.drawImage(wm, margin, margin, wmW, wmH)
+          canvas.toBlob(
+            (blob) => resolve(blob),
+            file.type === 'image/png' ? 'image/png' : 'image/jpeg',
+            0.92,
+          )
+        }
+        wm.onerror = () => resolve(null)
+        wm.src = '/img/watermark.png'
+      }
+      img.onerror = () => resolve(null)
+      img.src = URL.createObjectURL(file)
+    })
   }
 
   const makeCover = (idx: number) => {
