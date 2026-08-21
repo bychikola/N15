@@ -20,6 +20,10 @@ ENV NEXT_PUBLIC_ADMIN_URL=$NEXT_PUBLIC_ADMIN_URL
 ENV ADMIN_ROUTE=$ADMIN_ROUTE
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
+# Без лимита памяти Next build (Turbopack + tsc) может «зависнуть» на слабых
+# VPS: Node упирается в доступную RAM и начинает свопить. 4 ГБ — безопасный
+# максимум для 2–4 ГБ серверов; при большей RAM можно поднять.
+ENV NODE_OPTIONS=--max-old-space-size=4096
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
