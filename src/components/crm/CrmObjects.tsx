@@ -195,7 +195,11 @@ export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) =>
           const wmW = Math.round(canvas.width * 0.28)
           const wmH = Math.round(wmW * (wm.naturalHeight / wm.naturalWidth))
           const margin = Math.round(canvas.width * 0.03)
-          ctx.drawImage(wm, margin, margin, wmW, wmH)
+          // Знак в исходнике очень прозрачный (alpha ~0.1) — рисуем его несколько
+          // раз: каждый проход накапливает непрозрачность (1-(1-a)^n)
+          for (let pass = 0; pass < 4; pass++) {
+            ctx.drawImage(wm, margin, margin, wmW, wmH)
+          }
           canvas.toBlob(
             (blob) => resolve(blob),
             file.type === 'image/png' ? 'image/png' : 'image/jpeg',
