@@ -175,8 +175,8 @@ export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) =>
     e.target.value = ''
   }
 
-  // Водяной знак: рисуем фото на canvas и поверх — watermark.png в левом верхнем
-  // углу с отступом ~3% ширины; размер знака ~28% ширины фото
+  // Водяной знак: рисуем фото на canvas и поверх — watermark.png по центру
+  // фото; размер знака ~28% ширины
   const applyWatermark = (file: File): Promise<Blob | null> => {
     return new Promise((resolve) => {
       const img = new Image()
@@ -194,11 +194,13 @@ export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) =>
           ctx.drawImage(img, 0, 0)
           const wmW = Math.round(canvas.width * 0.28)
           const wmH = Math.round(wmW * (wm.naturalHeight / wm.naturalWidth))
-          const margin = Math.round(canvas.width * 0.03)
+          // По центру фото
+          const wmX = Math.round((canvas.width - wmW) / 2)
+          const wmY = Math.round((canvas.height - wmH) / 2)
           // Знак в исходнике очень прозрачный (alpha ~0.1) — рисуем его несколько
           // раз: каждый проход накапливает непрозрачность (1-(1-a)^n)
           for (let pass = 0; pass < 4; pass++) {
-            ctx.drawImage(wm, margin, margin, wmW, wmH)
+            ctx.drawImage(wm, wmX, wmY, wmW, wmH)
           }
           canvas.toBlob(
             (blob) => resolve(blob),
