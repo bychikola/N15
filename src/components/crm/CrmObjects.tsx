@@ -205,7 +205,7 @@ export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) =>
           canvas.toBlob(
             (blob) => resolve(blob),
             file.type === 'image/png' ? 'image/png' : 'image/jpeg',
-            0.92,
+            0.95,
           )
         }
         wm.onerror = () => resolve(null)

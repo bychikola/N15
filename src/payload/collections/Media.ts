@@ -37,6 +37,12 @@ export const Media: CollectionConfig = {
     ],
     adminThumbnail: 'thumbnail',
     mimeTypes: ['image/*'],
+    // Качество генерируемых размеров (по умолчанию Payload сжимает ~80 —
+    // на карточках сайта фото выглядят заметно хуже оригинала)
+    formatOptions: {
+      format: 'jpeg',
+      options: { quality: 92 },
+    },
   },
   hooks: {
     beforeChange: [
