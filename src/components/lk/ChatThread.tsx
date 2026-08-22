@@ -245,7 +245,7 @@ export default function ChatThread({ applicationId, lang, variant = 'lk' }: { ap
   return (
     <div
       style={isCrm ? { display: 'flex', flexDirection: 'column', background: '#fff', border: '1px solid #e5dfd3', borderRadius: 12, overflow: 'hidden' } : undefined}
-      className={isCrm ? 'crm-chat-panel' : 'flex flex-col min-h-[65vh] bg-[var(--n15-charcoal)] border border-[var(--n15-gold)]/15'}
+      className={isCrm ? 'crm-chat-panel' : 'flex flex-col h-[65vh] bg-[var(--n15-charcoal)] border border-[var(--n15-gold)]/15'}
     >
       {/* Шапка досье: объект + собеседник */}
       <div
