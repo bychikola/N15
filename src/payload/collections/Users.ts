@@ -4,11 +4,12 @@ export const Users: CollectionConfig = {
   slug: 'users',
   auth: {
     // Вход по номеру телефона (username) или email. Почта необязательна —
-    // регистрация идёт по телефону, он и есть логин.
+    // регистрация идёт по телефону, он и есть логин. requireUsername: false —
+    // старые аккаунты (созданные только по почте) продолжают заходить по email.
     loginWithUsername: {
       allowEmailLogin: true,
       requireEmail: false,
-      requireUsername: true,
+      requireUsername: false,
     },
   },
   admin: {
