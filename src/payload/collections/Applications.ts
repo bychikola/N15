@@ -44,23 +44,38 @@ export const Applications: CollectionConfig = {
   },
   hooks: {
     beforeChange: [
-      // Автопривязка заявки к клиенту по нормализованному номеру телефона.
-      // Работает для всех создателей (гости и клиенты не имеют доступа
-      // к коллекции customers через REST, поэтому привязка — на сервере).
+      // Автопривязка заявки к клиенту (customers) и пользователю (users)
+      // по нормализованному номеру телефона. Работает для всех создателей
+      // (гости не имеют доступа к коллекциям через REST — привязка на сервере).
       async ({ data, req }) => {
         if (!data.customer && data.clientPhone) {
           const norm = String(data.clientPhone).replace(/[^\d+]/g, '')
           if (norm) {
-            const { docs } = await req.payload.find({
-              collection: 'customers',
-              where: { phone: { equals: norm } },
-              limit: 1,
-              depth: 0,
-              overrideAccess: true,
-            })
-            const customer = docs[0] as { id: number } | undefined
+            const [custRes, userRes] = await Promise.all([
+              req.payload.find({
+                collection: 'customers',
+                where: { phone: { equals: norm } },
+                limit: 1,
+                depth: 0,
+                overrideAccess: true,
+              }),
+              req.payload.find({
+                collection: 'users',
+                where: { phone: { equals: norm } },
+                limit: 1,
+                depth: 0,
+                overrideAccess: true,
+              }),
+            ])
+            const customer = custRes.docs[0] as { id: number } | undefined
             if (customer) {
               data.customer = customer.id
+            }
+            // Если такой пользователь уже зарегистрирован — заявка сразу
+            // попадает в его личный кабинет и чат с агентом
+            const user = userRes.docs[0] as { id: number } | undefined
+            if (user && !data.user) {
+              data.user = user.id
             }
           }
         }

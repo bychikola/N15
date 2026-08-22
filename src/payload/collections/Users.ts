@@ -2,7 +2,15 @@ import type { CollectionConfig } from 'payload'
 
 export const Users: CollectionConfig = {
   slug: 'users',
-  auth: true,
+  auth: {
+    // Вход по номеру телефона (username) или email. Почта необязательна —
+    // регистрация идёт по телефону, он и есть логин.
+    loginWithUsername: {
+      allowEmailLogin: true,
+      requireEmail: false,
+      requireUsername: true,
+    },
+  },
   admin: {
     useAsTitle: 'email',
     group: 'Система',
@@ -25,7 +33,45 @@ export const Users: CollectionConfig = {
             data.role = 'admin'
           }
         }
+        // username = нормализованный телефон (логин по номеру)
+        if (data?.phone) {
+          const norm = String(data.phone).replace(/[^\d+]/g, '')
+          data.phone = norm
+          if (!data.username) {
+            data.username = norm
+          }
+        }
         return data
+      },
+    ],
+    afterChange: [
+      // Привязка «анонимных» заявок к только что зарегистрированному
+      // пользователю по номеру телефона: в ЛК появятся его старые заявки
+      // и чаты с агентами.
+      async ({ doc, req }) => {
+        if (!doc || !doc.id || !doc.phone) return
+        const norm = String(doc.phone).replace(/[^\d+]/g, '')
+        if (!norm) return
+        const { docs } = await req.payload.find({
+          collection: 'applications',
+          where: {
+            and: [
+              { clientPhone: { equals: norm } },
+              { user: { equals: null } },
+            ],
+          },
+          limit: 200,
+          depth: 0,
+          overrideAccess: true,
+        })
+        for (const app of docs) {
+          await req.payload.update({
+            collection: 'applications',
+            id: app.id,
+            data: { user: doc.id as number },
+            overrideAccess: true,
+          })
+        }
       },
     ],
   },
@@ -39,7 +85,10 @@ export const Users: CollectionConfig = {
     {
       name: 'phone',
       type: 'text',
-      label: 'Телефон',
+      label: 'Телефон (логин)',
+      admin: {
+        description: 'Номер телефона — логин для входа. По нему подтягиваются ваши заявки.',
+      },
     },
     {
       name: 'role',
