@@ -53,26 +53,39 @@ export const Users: CollectionConfig = {
         if (!doc || !doc.id || !doc.phone) return
         const norm = String(doc.phone).replace(/[^\d+]/g, '')
         if (!norm) return
-        const { docs } = await req.payload.find({
-          collection: 'applications',
-          where: {
-            and: [
-              { clientPhone: { equals: norm } },
-              { user: { equals: null } },
-            ],
-          },
-          limit: 200,
-          depth: 0,
-          overrideAccess: true,
-        })
-        for (const app of docs) {
-          await req.payload.update({
-            collection: 'applications',
-            id: app.id,
-            data: { user: doc.id as number },
-            overrideAccess: true,
-          })
-        }
+        const userId = doc.id as number
+        // Откладываем привязку: хук выполняется внутри транзакции создания
+        // пользователя, и Postgres ещё не видит нового юзера (FK падает).
+        // Через 1.5с транзакция закоммичена — привязка проходит.
+        setTimeout(() => {
+          void (async () => {
+            try {
+              const { docs } = await req.payload.find({
+                collection: 'applications',
+                where: {
+                  and: [
+                    { clientPhone: { equals: norm } },
+                    { user: { equals: null } },
+                  ],
+                },
+                limit: 200,
+                depth: 0,
+                overrideAccess: true,
+              })
+              for (const app of docs) {
+                await req.payload.update({
+                  collection: 'applications',
+                  id: app.id,
+                  data: { user: userId },
+                  overrideAccess: true,
+                })
+              }
+            } catch (e) {
+              // Привязка не должна ломать регистрацию
+              console.error('attach applications failed:', e)
+            }
+          })()
+        }, 1500)
       },
     ],
   },

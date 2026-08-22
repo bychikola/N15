@@ -51,31 +51,36 @@ export const Applications: CollectionConfig = {
         if (!data.customer && data.clientPhone) {
           const norm = String(data.clientPhone).replace(/[^\d+]/g, '')
           if (norm) {
-            const [custRes, userRes] = await Promise.all([
-              req.payload.find({
-                collection: 'customers',
-                where: { phone: { equals: norm } },
-                limit: 1,
-                depth: 0,
-                overrideAccess: true,
-              }),
-              req.payload.find({
-                collection: 'users',
-                where: { phone: { equals: norm } },
-                limit: 1,
-                depth: 0,
-                overrideAccess: true,
-              }),
-            ])
-            const customer = custRes.docs[0] as { id: number } | undefined
-            if (customer) {
-              data.customer = customer.id
-            }
-            // Если такой пользователь уже зарегистрирован — заявка сразу
-            // попадает в его личный кабинет и чат с агентом
-            const user = userRes.docs[0] as { id: number } | undefined
-            if (user && !data.user) {
-              data.user = user.id
+            try {
+              const [custRes, userRes] = await Promise.all([
+                req.payload.find({
+                  collection: 'customers',
+                  where: { phone: { equals: norm } },
+                  limit: 1,
+                  depth: 0,
+                  overrideAccess: true,
+                }),
+                req.payload.find({
+                  collection: 'users',
+                  where: { phone: { equals: norm } },
+                  limit: 1,
+                  depth: 0,
+                  overrideAccess: true,
+                }),
+              ])
+              const customer = custRes.docs[0] as { id: number } | undefined
+              if (customer) {
+                data.customer = customer.id
+              }
+              // Если такой пользователь уже зарегистрирован — заявка сразу
+              // попадает в его личный кабинет и чат с агентом
+              const user = userRes.docs[0] as { id: number } | undefined
+              if (user && !data.user) {
+                data.user = user.id
+              }
+            } catch (e) {
+              // Привязка не должна ломать создание заявки
+              console.error('attach user/customer failed:', e)
             }
           }
         }
