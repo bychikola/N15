@@ -33,7 +33,7 @@ export default function ChatThread({ applicationId, lang, variant = 'lk' }: { ap
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
   const [loading, setLoading] = useState(true)
-  const bottomRef = useRef<HTMLDivElement>(null)
+  const messagesRef = useRef<HTMLDivElement>(null)
   const isCrm = variant === 'crm'
   const [showTaskForm, setShowTaskForm] = useState(false)
   const [taskTitle, setTaskTitle] = useState('')
@@ -149,7 +149,12 @@ export default function ChatThread({ applicationId, lang, variant = 'lk' }: { ap
   }, [load])
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    // Скроллим ТОЛЬКО контейнер сообщений (не страницу): scrollIntoView
+    // прокручивал body вниз, когда сообщений было меньше высоты панели
+    const el = messagesRef.current
+    if (el) {
+      el.scrollTop = el.scrollHeight
+    }
   }, [messages.length])
 
   const send = async () => {
@@ -321,6 +326,7 @@ export default function ChatThread({ applicationId, lang, variant = 'lk' }: { ap
 
       {/* Сообщения */}
       <div
+        ref={messagesRef}
         style={isCrm ? { flex: 1, display: 'flex', flexDirection: 'column', gap: 10, padding: '18px', minHeight: 200, overflowY: 'auto' } : { overflowY: 'auto' }}
         className={isCrm ? undefined : 'flex-1 flex flex-col gap-3 px-6 py-6'}
       >
@@ -419,7 +425,6 @@ export default function ChatThread({ applicationId, lang, variant = 'lk' }: { ap
             </div>
           )
         })}
-        <div ref={bottomRef} />
       </div>
 
       {/* Инпут */}
