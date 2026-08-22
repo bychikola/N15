@@ -310,6 +310,11 @@ export const ru = {
   auth: {
     loginTitle: 'Вход в личный кабинет',
     email: 'Email',
+    loginLabel: 'Телефон или email',
+    loginPlaceholder: '+7 (928) 123-45-67 или email',
+    emailOptional: 'Почта (необязательно)',
+    phoneLogin: 'Телефон (логин)',
+    phoneLoginHint: 'Номер телефона — ваш логин. По нему подтянутся ваши заявки и чаты.',
     password: 'Пароль',
     entering: 'Вход...',
     enter: 'Войти',
@@ -1023,6 +1028,11 @@ const os: Dict = {
   auth: {
     loginTitle: 'Хиуарт кабинетмæ бацæуæд',
     email: 'Email',
+    loginLabel: 'Телефон æви email',
+    loginPlaceholder: '+7 (928) 123-45-67 æви email',
+    emailOptional: 'Почтæ (нæ хъæуы)',
+    phoneLogin: 'Телефон (логин)',
+    phoneLoginHint: 'Телефоны ном — уæ логин. Уымæ гæсгæ уæ заявкæтæ æмæ ныхæстæ æрбацæудзысты.',
     password: 'Пароль',
     entering: 'Бацæуыны цæуы...',
     enter: 'Бацæуын',

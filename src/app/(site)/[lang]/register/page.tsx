@@ -26,10 +26,18 @@ export default function RegisterPage() {
     setLoading(true)
 
     try {
+      // Логин — номер телефона (username), нормализованный: только цифры и +
+      const normPhone = phone.replace(/[^\d+]/g, '')
+      if (!normPhone) {
+        setError(t.auth.phone + ' — ' + t.auth.phoneLogin)
+        setLoading(false)
+        return
+      }
+
       const res = await fetch('/api/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, phone, password, role: 'user' }),
+        body: JSON.stringify({ name, email, phone: normPhone, username: normPhone, password, role: 'user' }),
       })
 
       const data = await res.json()
@@ -39,11 +47,11 @@ export default function RegisterPage() {
         return
       }
 
-      // Auto-login after registration
+      // Auto-login after registration (по номеру телефона или почте)
       const loginRes = await fetch('/api/users/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email: normPhone, password }),
       })
 
       if (loginRes.ok) {
@@ -83,17 +91,18 @@ export default function RegisterPage() {
                 </div>
 
                 <div>
-                  <label className="text-xs tracking-wider uppercase text-[var(--n15-muted)] mb-2 block">{t.auth.email}</label>
-                  <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required
+                  <label className="text-xs tracking-wider uppercase text-[var(--n15-muted)] mb-2 block">{t.auth.phoneLogin}</label>
+                  <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} required
                     className="w-full bg-[var(--n15-black)] border border-[var(--n15-gold)]/20 px-4 py-3 text-sm text-[var(--n15-silver)] placeholder:text-[var(--n15-muted)] focus:outline-none focus:border-[var(--n15-gold)]/50"
-                    placeholder="your@email.com" />
+                    placeholder={t.auth.phonePlaceholder} />
+                  <p className="text-[11px] text-[var(--n15-muted)] mt-1.5">{t.auth.phoneLoginHint}</p>
                 </div>
 
                 <div>
-                  <label className="text-xs tracking-wider uppercase text-[var(--n15-muted)] mb-2 block">{t.auth.phone}</label>
-                  <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)}
+                  <label className="text-xs tracking-wider uppercase text-[var(--n15-muted)] mb-2 block">{t.auth.emailOptional}</label>
+                  <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
                     className="w-full bg-[var(--n15-black)] border border-[var(--n15-gold)]/20 px-4 py-3 text-sm text-[var(--n15-silver)] placeholder:text-[var(--n15-muted)] focus:outline-none focus:border-[var(--n15-gold)]/50"
-                    placeholder={t.auth.phonePlaceholder} />
+                    placeholder="your@email.com" />
                 </div>
 
                 <div>
