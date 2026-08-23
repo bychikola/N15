@@ -46,7 +46,8 @@ if [ -n "$DATABASE_URI" ]; then
       const cu = await c.query(\"SELECT to_regclass('public.customers') AS t\");
       const lr = await c.query(\"SELECT column_name FROM information_schema.columns WHERE table_name='applications' AND column_name='loss_reason'\");
       const un = await c.query(\"SELECT column_name FROM information_schema.columns WHERE table_name='users' AND column_name='username'\");
-      const ok = o.rows[0].t && t.rows[0].t && cu.rows[0].t && lr.rows.length > 0 && un.rows.length > 0;
+      const own = await c.query(\"SELECT column_name FROM information_schema.columns WHERE table_name='objects' AND column_name='owner_name'\");
+      const ok = o.rows[0].t && t.rows[0].t && cu.rows[0].t && lr.rows.length > 0 && un.rows.length > 0 && own.rows.length > 0;
       await c.end();
       process.exit(ok ? 0 : 1);
     })().catch(() => process.exit(1));
