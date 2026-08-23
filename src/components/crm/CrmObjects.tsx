@@ -18,12 +18,23 @@ interface PhotoItem {
   url?: string
 }
 
+interface DuplicateInfo {
+  id: number
+  title?: string
+  price?: number | null
+  address?: { city?: string; street?: string; house?: string; apartment?: string } | null
+  ownerName?: string | null
+  matches: string[]
+  strength: 'strong' | 'weak'
+}
+
 const emptyForm = {
   title: '', type: 'sale', category: 'apartment', price: '', area: '', livingArea: '',
   kitchenArea: '', rooms: '', floor: '', totalFloors: '', buildingType: '', condition: '',
   heating: '', balcony: '', water: '', sewerage: '', electricity: '', gas: '', internet: '',
   city: 'Владикавказ', district: '', street: '', house: '', apartment: '',
   lat: '', lng: '', description: '', status: 'draft', agent: '',
+  ownerName: '', ownerPhone: '', cadastralNumber: '',
 }
 
 type FormState = typeof emptyForm
@@ -57,6 +68,8 @@ export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) =>
   const [saved, setSaved] = useState(false)
   const [modalOpen, setModalOpen] = useState(false)
   const [saveError, setSaveError] = useState('')
+  // Найденные дубли объекта (модалка подтверждения)
+  const [duplicates, setDuplicates] = useState<DuplicateInfo[] | null>(null)
 
   const load = useCallback(async () => {
     const [objectsRes, agentsRes] = await Promise.all([
@@ -100,10 +113,12 @@ export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) =>
     setPhotos([])
     setFeatures([])
     setSaveError('')
+    setDuplicates(null)
   }
 
   const startEdit = (o: Record<string, unknown>) => {
     setModalOpen(true)
+    setDuplicates(null)
     setSaveError('')
     const addr = o.address as Record<string, unknown> | undefined
     const coords = o.coordinates as Record<string, unknown> | undefined
@@ -140,6 +155,9 @@ export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) =>
       description: '',
       status: (o.status as string) || 'draft',
       agent: agentRel?.id != null ? String(agentRel.id) : '',
+      ownerName: (o.ownerName as string) || '',
+      ownerPhone: (o.ownerPhone as string) || '',
+      cadastralNumber: (o.cadastralNumber as string) || '',
     })
     const img = o.primaryImage as { id?: number; url?: string } | undefined
     const imgs = (o.images as { id?: number; url?: string }[] | undefined) || []
@@ -238,13 +256,12 @@ export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) =>
     })
   }
 
-  const save = async () => {
+  const save = async (force = false) => {
     if (saving || !form.title.trim()) return
     if (!form.price) {
       setSaveError(t.crm.objPriceRequired)
       return
     }
-    setSaving(true)
     setSaveError('')
     const mediaIds = photos.map((p) => p.id).filter((id): id is number => id !== null)
     const body: Record<string, unknown> = {
@@ -283,9 +300,40 @@ export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) =>
       agent: form.agent ? Number(form.agent) : undefined,
       primaryImage: mediaIds[0],
       images: mediaIds.slice(1),
+      ownerName: form.ownerName.trim() || undefined,
+      ownerPhone: form.ownerPhone.trim() || undefined,
+      cadastralNumber: form.cadastralNumber.trim() || undefined,
     }
 
-    const res = await fetch(editId ? `/api/objects/${editId}` : '/api/objects', {
+    // Проверка дублей перед сохранением (если не подтвердили force)
+    if (!force) {
+      try {
+        const dupRes = await fetch('/api/objects/check-duplicate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            ownerName: form.ownerName,
+            ownerPhone: form.ownerPhone,
+            cadastralNumber: form.cadastralNumber,
+            address: { city: form.city, street: form.street, house: form.house, apartment: form.apartment },
+            excludeId: editId ?? undefined,
+          }),
+        })
+        if (dupRes.ok) {
+          const dupData = await dupRes.json()
+          if (dupData.duplicates?.length) {
+            setDuplicates(dupData.duplicates)
+            return
+          }
+        }
+      } catch {
+        // проверка не должна блокировать сохранение
+      }
+    }
+
+    setSaving(true)
+    const res = await fetch(editId ? `/api/objects/${editId}?force=${force}` : `/api/objects?force=${force}`, {
       method: editId ? 'PATCH' : 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -422,6 +470,12 @@ export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) =>
           <Field label={t.crm.objLat}><input value={form.lat} onChange={(e) => set('lat', e.target.value)} style={inputStyle} /></Field>
           <Field label={t.crm.objLng}><input value={form.lng} onChange={(e) => set('lng', e.target.value)} style={inputStyle} /></Field>
 
+          <div className="span-2" style={{ gridColumn: '1 / -1', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+            <Field label={t.crm.objOwnerName}><input value={form.ownerName} onChange={(e) => set('ownerName', e.target.value)} style={inputStyle} /></Field>
+            <Field label={t.crm.objOwnerPhone}><input value={form.ownerPhone} onChange={(e) => set('ownerPhone', e.target.value)} style={inputStyle} /></Field>
+            <Field label={t.crm.objCadastral}><input value={form.cadastralNumber} onChange={(e) => set('cadastralNumber', e.target.value)} style={inputStyle} /></Field>
+          </div>
+
           <div className="span-2" style={{ gridColumn: '1 / -1' }}>
             <Field label={t.crm.objDescription}>
               <textarea rows={4} value={form.description} onChange={(e) => set('description', e.target.value)} style={inputStyle} />
@@ -531,6 +585,48 @@ export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) =>
             {saved && <p style={{ margin: 0, color: '#8b683f', fontSize: 11 }}>{t.crm.objSaved} ✓</p>}
             {saveError && <p style={{ margin: 0, color: '#9b4e43', fontSize: 11 }}>{saveError}</p>}
           </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Модалка найденных дублей */}
+      {duplicates && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 120, background: 'rgba(32,33,30,.55)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 16px', overflowY: 'auto' }}
+          onClick={() => setDuplicates(null)}>
+          <div style={{ background: '#faf8f4', border: '1px solid #ded5c7', borderRadius: 12, width: 'min(100%, 640px)', padding: 22 }}
+            onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ margin: '0 0 6px', fontFamily: "'New Standard', Georgia, serif", fontWeight: 400, fontSize: 20 }}>
+              {t.crm.dupTitle}
+            </h2>
+            <p style={{ margin: '0 0 14px', color: '#817b70', fontSize: 12 }}>{t.crm.dupText}</p>
+            {duplicates.map((d) => (
+              <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid #eee9e1' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, fontSize: 13 }}>{d.title || `#${d.id}`}</div>
+                  <div style={{ fontSize: 11, color: '#817b70', marginTop: 2 }}>
+                    {[d.address?.city, d.address?.street, d.address?.house].filter(Boolean).join(', ')}
+                    {d.ownerName ? ` · ${d.ownerName}` : ''}
+                  </div>
+                  <div style={{ fontSize: 10, color: d.strength === 'strong' ? '#9b4e43' : '#9b958a', marginTop: 3 }}>
+                    {d.matches.map((m) => t.crm[`dupMatch${m.charAt(0).toUpperCase()}${m.slice(1)}` as keyof Dict['crm']] || m).join(' · ')}
+                  </div>
+                </div>
+                <a href={`/ru/catalog/${d.id}`} target="_blank" rel="noopener"
+                  style={{ border: '1px solid #d9d1c4', borderRadius: 7, color: '#8d6b40', padding: '8px 12px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', textDecoration: 'none', whiteSpace: 'nowrap' }}>
+                  {t.crm.dupOpen}
+                </a>
+              </div>
+            ))}
+            <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+              <button type="button" onClick={() => { setDuplicates(null); void save(true) }}
+                style={{ flex: 1, border: 0, borderRadius: 8, background: '#a7814e', color: '#fff', padding: '12px 16px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', cursor: 'pointer' }}>
+                {t.crm.dupForce}
+              </button>
+              <button type="button" onClick={() => setDuplicates(null)}
+                style={{ border: '1px solid #e1d8ca', borderRadius: 8, background: '#fff', color: '#716b62', padding: '12px 16px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', cursor: 'pointer' }}>
+                {t.crm.dupCancel}
+              </button>
             </div>
           </div>
         </div>
