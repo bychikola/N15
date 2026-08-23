@@ -62,3 +62,4 @@ src/img/
 # temp files
 *.zip
 scrape/tmp/
+*.psd
