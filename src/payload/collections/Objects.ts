@@ -1,4 +1,7 @@
-import type { CollectionConfig } from 'payload'
+import type { CollectionConfig, Where } from 'payload'
+
+const normPhone = (v?: string) => (v || '').replace(/[^\d+]/g, '')
+const normCadastral = (v?: string) => (v || '').toLowerCase().replace(/\s+/g, '')
 
 export const Objects: CollectionConfig = {
   slug: 'objects',
@@ -12,6 +15,46 @@ export const Objects: CollectionConfig = {
     create: ({ req: { user } }) => !!user,
     update: ({ req: { user } }) => !!user,
     delete: ({ req: { user } }) => user?.role === 'admin',
+  },
+  hooks: {
+    beforeChange: [
+      // Нормализация полей собственника + защита от жёстких дублей.
+      // Полный анализ (включая адрес и имя) делает клиент через
+      // /api/objects/check-duplicate; здесь — телефон и кадастровый,
+      // чтобы дубль нельзя было создать ни через API, ни через админку.
+      async ({ data, req }) => {
+        if (!data) return data
+        if (data.ownerPhone) {
+          data.ownerPhone = normPhone(data.ownerPhone)
+        }
+        if (data.cadastralNumber) {
+          data.cadastralNumber = normCadastral(data.cadastralNumber)
+        }
+        const force = req.query?.get('force') === 'true'
+        if (force) return data
+        const or: Where[] = []
+        if (data.ownerPhone) {
+          or.push({ ownerPhone: { equals: data.ownerPhone } })
+        }
+        if (data.cadastralNumber) {
+          or.push({ cadastralNumber: { equals: data.cadastralNumber } })
+        }
+        if (or.length) {
+          const where: Where = data.id ? { and: [{ or }, { id: { not_equals: data.id } }] } : { or }
+          const { docs } = await req.payload.find({
+            collection: 'objects',
+            where,
+            limit: 5,
+            depth: 0,
+            overrideAccess: true,
+          })
+          if (docs.length) {
+            throw new Error('Такой объект уже есть в базе: совпал телефон или кадастровый номер собственника')
+          }
+        }
+        return data
+      },
+    ],
   },
   fields: [
     {
@@ -246,6 +289,30 @@ export const Objects: CollectionConfig = {
       type: 'relationship',
       label: 'Агент',
       relationTo: 'agents',
+    },
+    {
+      name: 'ownerName',
+      type: 'text',
+      label: 'Собственник (имя)',
+      admin: {
+        description: 'По имени и телефону собственника система находит дубли объекта',
+      },
+    },
+    {
+      name: 'ownerPhone',
+      type: 'text',
+      label: 'Собственник (телефон)',
+      admin: {
+        description: 'Хранится нормализованно: только цифры и +',
+      },
+    },
+    {
+      name: 'cadastralNumber',
+      type: 'text',
+      label: 'Кадастровый номер',
+      admin: {
+        description: 'Например: 15:07:0030021:123',
+      },
     },
     {
       name: 'isPremium',
