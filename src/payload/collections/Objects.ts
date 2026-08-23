@@ -30,10 +30,21 @@ export const Objects: CollectionConfig = {
         if (data.cadastralNumber) {
           data.cadastralNumber = normCadastral(data.cadastralNumber)
         }
-        const q = req.query as URLSearchParams | Record<string, unknown> | undefined
-        const force = typeof q === 'object' && q !== null && 'get' in q
-          ? (q as URLSearchParams).get('force') === 'true'
-          : false
+        // force=true приходит query-параметром; в разных окружениях Payload
+        // кладёт его в req.query / req.searchParams / req.nextUrl
+        const anyReq = req as unknown as {
+          searchParams?: URLSearchParams
+          nextUrl?: { searchParams?: URLSearchParams }
+          query?: URLSearchParams | Record<string, unknown>
+        }
+        let force = false
+        const sp = anyReq.searchParams || anyReq.nextUrl?.searchParams
+        if (sp && typeof sp.get === 'function') {
+          force = sp.get('force') === 'true'
+        }
+        if (!force && anyReq.query && typeof anyReq.query === 'object' && 'get' in anyReq.query) {
+          force = (anyReq.query as URLSearchParams).get('force') === 'true'
+        }
         if (force) return data
         const or: Where[] = []
         if (data.ownerPhone) {

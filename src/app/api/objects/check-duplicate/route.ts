@@ -6,10 +6,14 @@ import { NextRequest, NextResponse } from 'next/server'
 const normPhone = (v?: string) => (v || '').replace(/[^\d+]/g, '')
 const normCadastral = (v?: string) => (v || '').toLowerCase().replace(/\s+/g, '')
 const normName = (v?: string) => (v || '').trim().toLowerCase()
-const normAddress = (a?: { city?: string; street?: string; house?: string; apartment?: string } | null) =>
-  `${a?.city || ''}${a?.street || ''}${a?.house || ''}${a?.apartment || ''}`
+const normAddress = (a?: { city?: string; street?: string; house?: string; apartment?: string } | null) => {
+  // Город сам по себе слишком общий — совпадение адреса считаем только
+  // когда указана улица или дом
+  if (!a?.street && !a?.house) return ''
+  return `${a?.city || ''}${a?.street || ''}${a?.house || ''}${a?.apartment || ''}`
     .toLowerCase()
     .replace(/[^a-zа-яё0-9]/g, '')
+}
 
 interface Duplicate {
   id: number
