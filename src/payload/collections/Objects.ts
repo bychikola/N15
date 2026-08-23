@@ -30,7 +30,10 @@ export const Objects: CollectionConfig = {
         if (data.cadastralNumber) {
           data.cadastralNumber = normCadastral(data.cadastralNumber)
         }
-        const force = req.query?.get('force') === 'true'
+        const q = req.query as URLSearchParams | Record<string, unknown> | undefined
+        const force = typeof q === 'object' && q !== null && 'get' in q
+          ? (q as URLSearchParams).get('force') === 'true'
+          : false
         if (force) return data
         const or: Where[] = []
         if (data.ownerPhone) {
