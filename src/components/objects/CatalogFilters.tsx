@@ -20,6 +20,8 @@ export const emptyFilters: FiltersState = {
 
 export function buildWhere(f: FiltersState, q: string): Record<string, unknown> {
   const conds: Record<string, unknown>[] = []
+  // На сайте показываем только опубликованные (черновики и архив скрыты)
+  conds.push({ status: { equals: 'published' } })
   if (f.type) conds.push({ type: { equals: f.type } })
   if (f.category) conds.push({ category: { equals: f.category } })
   if (f.district) conds.push({ 'address.district': { equals: f.district } })

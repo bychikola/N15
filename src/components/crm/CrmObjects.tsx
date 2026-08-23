@@ -68,6 +68,7 @@ export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) =>
   const [saved, setSaved] = useState(false)
   const [modalOpen, setModalOpen] = useState(false)
   const [saveError, setSaveError] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
   // Найденные дубли объекта (модалка подтверждения)
   const [duplicates, setDuplicates] = useState<DuplicateInfo[] | null>(null)
 
@@ -363,11 +364,28 @@ export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) =>
 
   const set = (k: keyof FormState, v: string) => setForm((prev) => ({ ...prev, [k]: v }))
 
+  // Фильтр по статусу (черновик / опубликован / архив)
+  const visibleRows = statusFilter ? rows.filter((o) => o.status === statusFilter) : rows
+
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 18 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          aria-label={t.crm.filterStatus}
+          style={{ border: '1px solid #d9d1c4', borderRadius: 8, background: '#fff', color: '#25241f', padding: '10px 12px', font: '12px Arial, Helvetica, sans-serif' }}
+        >
+          <option value="">{t.crm.filterStatus}: {t.crm.filterAll}</option>
+          <option value="draft">{t.crm.statusDraft}</option>
+          <option value="published">{t.crm.statusPublished}</option>
+          <option value="archived">{t.crm.statusArchived}</option>
+        </select>
+        <span style={{ fontSize: 10, color: '#817b70', textTransform: 'uppercase', letterSpacing: '.08em' }}>
+          {visibleRows.length} / {rows.length}
+        </span>
         <button type="button" onClick={() => { resetForm(); setModalOpen(true) }}
-          style={{ border: 0, borderRadius: 8, background: '#a7814e', color: '#fff', padding: '12px 20px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.1em', cursor: 'pointer' }}>
+          style={{ marginLeft: 'auto', border: 0, borderRadius: 8, background: '#a7814e', color: '#fff', padding: '12px 20px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.1em', cursor: 'pointer' }}>
           + {t.crm.objAdd}
         </button>
       </div>
@@ -634,9 +652,13 @@ export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) =>
 
       {loading ? (
         <p style={{ color: '#817b70', fontSize: 12 }}>…</p>
-      ) : rows.length ? (
+      ) : rows.length && !visibleRows.length ? (
+        <div style={{ background: '#fff', border: '1px solid #e5dfd3', borderRadius: 12, padding: 30, textAlign: 'center' }}>
+          <p style={{ color: '#817b70', fontSize: 13, margin: 0 }}>{t.crm.objEmptyStatus}</p>
+        </div>
+      ) : visibleRows.length ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }}>
-          {rows.map((o) => (
+          {visibleRows.map((o) => (
             <div key={o.id} style={{ background: '#fff', border: '1px solid #e5dfd3', borderRadius: 12, padding: 14 }}>
               <div style={{ aspectRatio: '4 / 3', borderRadius: 8, overflow: 'hidden', background: o.thumb ? undefined : '#f2eadf', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 {o.thumb
