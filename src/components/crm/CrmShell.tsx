@@ -22,6 +22,7 @@ export function CrmShell({ user, t, active, children }: Props) {
     { id: 'customers', href: '/crm/customers', label: t.crm.navCustomers },
     { id: 'objects', href: '/crm/objects', label: t.crm.navObjects },
     { id: 'stats', href: '/crm/stats', label: t.crm.navStats },
+    { id: 'mail', href: '/crm/mail', label: t.crm.navMail },
   ]
 
   const signOut = async () => {
