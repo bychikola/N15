@@ -66,7 +66,7 @@ export const Footer: FC = () => {
                   <li key={link.href}>
                     <Link
                       href={link.href}
-                      className="text-sm text-[var(--n15-muted)] hover:text-[var(--n15-gold)] transition-colors duration-300"
+                      className="text-sm text-[#97692d] hover:text-[var(--n15-gold)] transition-colors duration-300"
                     >
                       {link.label}
                     </Link>
