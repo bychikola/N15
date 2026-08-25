@@ -43,15 +43,16 @@ const SolarPattern = () => (
 
 // Осетинский орнамент: картинка повторяется в ряд без растягивания
 // (высота фиксирована, ширина — по пропорции оригинала)
+// Центрирование распределяет обрезку последнего сегмента поровну на оба
+// края — узор начинается и заканчивается симметрично, без «обрубка» справа
 const WovenPattern = () => (
   <div
     style={{
-      height: 70,
+      height: 35,
       backgroundImage: 'url(/img/os-arnament.png)',
       backgroundRepeat: 'repeat-x',
-      backgroundSize: 'auto 70px',
-      // От левого края: без сдвига по центру последний сегмент не «обрывается»
-      backgroundPosition: 'left top',
+      backgroundSize: 'auto 35px',
+      backgroundPosition: 'center',
     }}
   />
 )
