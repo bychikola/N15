@@ -41,21 +41,18 @@ const SolarPattern = () => (
   </svg>
 )
 
+// Осетинский орнамент: картинка повторяется в ряд без растягивания
+// (высота фиксирована, ширина — по пропорции оригинала)
 const WovenPattern = () => (
-  <svg
-    width="100%"
-    height="24"
-    viewBox="0 0 1200 24"
-    fill="none"
-    xmlns="http://www.w3.org/2000/svg"
-    preserveAspectRatio="none"
-  >
-    <pattern id="woven" x="0" y="0" width="48" height="24" patternUnits="userSpaceOnUse">
-      <path d="M0 12 L12 0 L24 12 L36 0 L48 12" stroke="#C8A44E" strokeWidth="0.5" fill="none" opacity="0.3" />
-      <path d="M0 12 L12 24 L24 12 L36 24 L48 12" stroke="#C8A44E" strokeWidth="0.5" fill="none" opacity="0.3" />
-    </pattern>
-    <rect x="0" y="0" width="1200" height="24" fill="url(#woven)" />
-  </svg>
+  <div
+    style={{
+      height: 56,
+      backgroundImage: 'url(/img/os-arnament.png)',
+      backgroundRepeat: 'repeat-x',
+      backgroundSize: 'auto 100%',
+      backgroundPosition: 'center',
+    }}
+  />
 )
 
 const SimplePattern = () => (
