@@ -46,11 +46,12 @@ const SolarPattern = () => (
 const WovenPattern = () => (
   <div
     style={{
-      height: 56,
+      height: 70,
       backgroundImage: 'url(/img/os-arnament.png)',
       backgroundRepeat: 'repeat-x',
-      backgroundSize: 'auto 100%',
-      backgroundPosition: 'center',
+      backgroundSize: 'auto 70px',
+      // От левого края: без сдвига по центру последний сегмент не «обрывается»
+      backgroundPosition: 'left top',
     }}
   />
 )
