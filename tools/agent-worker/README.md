@@ -34,6 +34,17 @@ journalctl -u n15-agent -f   # должно быть: worker connected, provider
 
 `DATABASE_URI` собирается автоматически из `~/n15/.env` (fallback на IP контейнера postgres).
 
+## Обновление воркера (правильный путь!)
+
+Юнит запускает воркер из `/home/n15/n15-agent/worker.js` (не `/root/n15-agent`):
+
+```bash
+cd ~/n15 && git pull origin master
+cp tools/agent-worker/worker.js /home/n15/n15-agent/worker.js
+chown n15:n15 /home/n15/n15-agent/worker.js
+systemctl restart n15-agent
+```
+
 ## Проверка CLI
 
 ```bash
