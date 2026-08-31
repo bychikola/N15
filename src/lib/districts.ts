@@ -11,3 +11,11 @@ export const DISTRICT_OPTIONS = [
   'Правобережный район',
   'Пригородный район',
 ]
+
+// Все населённые пункты республики (для фильтра «Населённый пункт»
+// и выбора в форме объекта)
+import { COUNTRY_AREAS } from '@/components/home/landing-data'
+
+export const LOCALITY_OPTIONS = Array.from(
+  new Set(COUNTRY_AREAS.flatMap((a) => a.places.split(' · ').map((p) => p.trim()))),
+).sort()

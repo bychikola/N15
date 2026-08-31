@@ -258,6 +258,14 @@ export const Objects: CollectionConfig = {
           label: 'Район',
           options: DISTRICT_OPTIONS.map((d) => ({ label: d, value: d })),
         },
+        {
+          name: 'locality',
+          type: 'text',
+          label: 'Населённый пункт',
+          admin: {
+            description: 'Например: Владикавказ, Ногир, Заводской…',
+          },
+        },
         { name: 'street', type: 'text', label: 'Улица' },
         { name: 'house', type: 'text', label: 'Дом' },
         { name: 'apartment', type: 'text', label: 'Квартира' },

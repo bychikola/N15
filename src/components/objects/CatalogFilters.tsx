@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import type { Dict } from '@/i18n/dictionaries'
-import { DISTRICTS } from '@/components/home/landing-data'
+import { DISTRICT_OPTIONS, LOCALITY_OPTIONS } from '@/lib/districts'
 
 export interface FiltersState {
   type: string
@@ -12,10 +12,11 @@ export interface FiltersState {
   priceMax: string
   areaMin: string
   district: string
+  locality: string
 }
 
 export const emptyFilters: FiltersState = {
-  type: '', category: '', rooms: '', priceMin: '', priceMax: '', areaMin: '', district: '',
+  type: '', category: '', rooms: '', priceMin: '', priceMax: '', areaMin: '', district: '', locality: '',
 }
 
 export function buildWhere(f: FiltersState, q: string): Record<string, unknown> {
@@ -25,6 +26,7 @@ export function buildWhere(f: FiltersState, q: string): Record<string, unknown> 
   if (f.type) conds.push({ type: { equals: f.type } })
   if (f.category) conds.push({ category: { equals: f.category } })
   if (f.district) conds.push({ 'address.district': { equals: f.district } })
+  if (f.locality) conds.push({ 'address.locality': { equals: f.locality } })
   if (f.rooms) {
     conds.push(f.rooms === '4'
       ? { rooms: { greater_than_equal: 4 } }
@@ -84,7 +86,7 @@ interface CatalogFiltersProps {
 export default function CatalogFilters({ state, onChange, t }: CatalogFiltersProps) {
   const typeOptions = Object.entries(t.typeLabels).map(([value, label]) => ({ value, label }))
   const categoryOptions = Object.entries(t.categoryLabels).map(([value, label]) => ({ value, label }))
-  const hasFilters = state.type || state.category || state.rooms || state.priceMin || state.priceMax || state.areaMin || state.district
+  const hasFilters = state.type || state.category || state.rooms || state.priceMin || state.priceMax || state.areaMin || state.district || state.locality
 
   return (
     <div className="flex flex-wrap items-end gap-3 p-4 border border-[var(--n15-gold)]/10 bg-[var(--n15-black)]/30">
@@ -98,8 +100,13 @@ export default function CatalogFilters({ state, onChange, t }: CatalogFiltersPro
       </div>
       <div className="w-48">
         <Dropdown label={t.catalog.districtLabel} value={state.district}
-          options={DISTRICTS.map((d) => ({ value: d, label: d }))}
+          options={DISTRICT_OPTIONS.map((d) => ({ value: d, label: d }))}
           onSelect={(v) => onChange({ district: v })} />
+      </div>
+      <div className="w-48">
+        <Dropdown label={t.catalog.localityLabel} value={state.locality}
+          options={LOCALITY_OPTIONS.map((l) => ({ value: l, label: l }))}
+          onSelect={(v) => onChange({ locality: v })} />
       </div>
       <div className="w-48">
         <div className={labelCls + ' mb-1'}>{t.catalog.priceLabel}</div>

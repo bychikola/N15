@@ -128,6 +128,7 @@ export const ru = {
     priceLabel: 'Цена, ₽',
     areaLabel: 'Площадь, м²',
     districtLabel: 'Район',
+    localityLabel: 'Населённый пункт',
   },
   object: {
     exclusive: 'Эксклюзив',
@@ -581,6 +582,7 @@ export const ru = {
     objAddress: 'Адрес',
     objCity: 'Город',
     objDistrict: 'Район',
+    objLocality: 'Населённый пункт',
     objStreet: 'Улица',
     objHouse: 'Дом',
     objApartment: 'Квартира',
@@ -875,6 +877,7 @@ const os: Dict = {
     priceLabel: 'Аргъ, ₽',
     areaLabel: 'Фæзуат, м²',
     districtLabel: 'Район',
+    localityLabel: 'Цæрæнран',
   },
   object: {
     exclusive: 'Сæрмагонд',
@@ -1329,6 +1332,7 @@ const os: Dict = {
     objAddress: 'Адрис',
     objCity: 'Горæт',
     objDistrict: 'Район',
+    objLocality: 'Цæрæнран',
     objStreet: 'Уынг',
     objHouse: 'Хæдзар',
     objApartment: 'Квартирæ',

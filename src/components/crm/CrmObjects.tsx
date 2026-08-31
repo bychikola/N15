@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState, type FC } from 'react'
 import type { Dict } from '@/i18n/dictionaries'
-import { DISTRICT_OPTIONS } from '@/lib/districts'
+import { DISTRICT_OPTIONS, LOCALITY_OPTIONS } from '@/lib/districts'
 
 interface ObjectRow {
   id: number
@@ -33,7 +33,7 @@ const emptyForm = {
   title: '', type: 'sale', category: 'apartment', price: '', area: '', livingArea: '',
   kitchenArea: '', rooms: '', floor: '', totalFloors: '', buildingType: '', condition: '',
   heating: '', balcony: '', water: '', sewerage: '', electricity: '', gas: '', internet: '',
-  city: 'Владикавказ', district: '', street: '', house: '', apartment: '',
+  city: 'Владикавказ', district: '', locality: '', street: '', house: '', apartment: '',
   lat: '', lng: '', description: '', status: 'draft', agent: '',
   ownerName: '', ownerPhone: '', cadastralNumber: '',
 }
@@ -149,6 +149,7 @@ export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) =>
       internet: (o.internet as string) || '',
       city: (addr?.city as string) || 'Владикавказ',
       district: (addr?.district as string) || '',
+      locality: (addr?.locality as string) || '',
       street: (addr?.street as string) || '',
       house: (addr?.house as string) || '',
       apartment: (addr?.apartment as string) || '',
@@ -289,6 +290,7 @@ export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) =>
       address: {
         city: form.city,
         district: form.district,
+        locality: form.locality,
         street: form.street,
         house: form.house,
         apartment: form.apartment,
@@ -479,13 +481,21 @@ export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) =>
             <option value="Есть" /><option value="Нет" />
           </datalist>
 
-          <div className="span-2" style={{ gridColumn: '1 / -1', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr', gap: 10 }}>
+          <div className="span-2" style={{ gridColumn: '1 / -1', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr 1fr', gap: 10 }}>
             <Field label={t.crm.objCity}><input value={form.city} onChange={(e) => set('city', e.target.value)} style={inputStyle} /></Field>
             <Field label={t.crm.objDistrict}>
               <select value={form.district} onChange={(e) => set('district', e.target.value)} style={inputStyle}>
                 <option value="">—</option>
                 {DISTRICT_OPTIONS.map((d) => (
                   <option key={d} value={d}>{d}</option>
+                ))}
+              </select>
+            </Field>
+            <Field label={t.crm.objLocality}>
+              <select value={form.locality} onChange={(e) => set('locality', e.target.value)} style={inputStyle}>
+                <option value="">—</option>
+                {LOCALITY_OPTIONS.map((l) => (
+                  <option key={l} value={l}>{l}</option>
                 ))}
               </select>
             </Field>
