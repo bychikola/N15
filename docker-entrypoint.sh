@@ -50,7 +50,8 @@ if [ -n "$DATABASE_URI" ]; then
       const em = await c.query(\"SELECT to_regclass('public.emails') AS t\");
       const ms = await c.query(\"SELECT to_regclass('public.mail_settings') AS t\");
       const loc = await c.query(\"SELECT column_name FROM information_schema.columns WHERE table_name='objects_address' AND column_name='locality'\");
-      const ok = o.rows[0].t && t.rows[0].t && cu.rows[0].t && lr.rows.length > 0 && un.rows.length > 0 && own.rows.length > 0 && em.rows[0].t && ms.rows[0].t && loc.rows.length > 0;
+      const at = await c.query(\"SELECT to_regclass('public.agent_tasks') AS t\");
+      const ok = o.rows[0].t && t.rows[0].t && cu.rows[0].t && lr.rows.length > 0 && un.rows.length > 0 && own.rows.length > 0 && em.rows[0].t && ms.rows[0].t && loc.rows.length > 0 && at.rows[0].t;
       await c.end();
       process.exit(ok ? 0 : 1);
     })().catch(() => process.exit(1));

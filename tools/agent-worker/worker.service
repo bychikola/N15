@@ -1,0 +1,14 @@
+[Unit]
+Description=N15 AI agent worker
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+WorkingDirectory=/root/n15-agent
+EnvironmentFile=/root/n15-agent/.env
+ExecStart=/usr/bin/node /root/n15-agent/worker.js
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
