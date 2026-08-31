@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState, type FC } from 'react'
 import type { Dict } from '@/i18n/dictionaries'
-import { DISTRICT_OPTIONS, LOCALITY_OPTIONS } from '@/lib/districts'
+import { DISTRICT_OPTIONS, LOCALITIES_BY_DISTRICT, LOCALITY_OPTIONS } from '@/lib/districts'
 
 interface ObjectRow {
   id: number
@@ -484,7 +484,18 @@ export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) =>
           <div className="span-2" style={{ gridColumn: '1 / -1', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr 1fr', gap: 10 }}>
             <Field label={t.crm.objCity}><input value={form.city} onChange={(e) => set('city', e.target.value)} style={inputStyle} /></Field>
             <Field label={t.crm.objDistrict}>
-              <select value={form.district} onChange={(e) => set('district', e.target.value)} style={inputStyle}>
+              <select
+                value={form.district}
+                onChange={(e) => {
+                  const v = e.target.value
+                  set('district', v)
+                  // При смене района сбрасываем пункт, если он не входит в новый район
+                  if (v && form.locality && !(LOCALITIES_BY_DISTRICT[v] || []).includes(form.locality)) {
+                    set('locality', '')
+                  }
+                }}
+                style={inputStyle}
+              >
                 <option value="">—</option>
                 {DISTRICT_OPTIONS.map((d) => (
                   <option key={d} value={d}>{d}</option>
@@ -494,7 +505,7 @@ export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) =>
             <Field label={t.crm.objLocality}>
               <select value={form.locality} onChange={(e) => set('locality', e.target.value)} style={inputStyle}>
                 <option value="">—</option>
-                {LOCALITY_OPTIONS.map((l) => (
+                {(form.district ? LOCALITIES_BY_DISTRICT[form.district] || [] : LOCALITY_OPTIONS).map((l) => (
                   <option key={l} value={l}>{l}</option>
                 ))}
               </select>
