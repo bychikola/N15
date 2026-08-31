@@ -95,6 +95,7 @@ async function runClaude(client, id, prompt) {
   const args = [
     '-p', `${SYSTEM_RULES}\n\nЗапрос пользователя:\n${prompt}`,
     '--output-format', 'stream-json',
+    '--verbose',
     '--dangerously-skip-permissions',
   ]
   return new Promise((resolve) => {
