@@ -270,7 +270,7 @@ export default function AgentChat() {
               rows={14}
               value={configJson}
               onChange={(e) => setConfigJson(e.target.value)}
-              placeholder={'{\n  "ANTHROPIC_BASE_URL": "https://api.deepseek.com/anthropic",\n  "ANTHROPIC_AUTH_TOKEN": "...",\n  "ANTHROPIC_MODEL": "deepseek-v4-flash"\n}'}
+              placeholder={'{\n  "ANTHROPIC_BASE_URL": "http://127.0.0.1:4000",\n  "ANTHROPIC_API_KEY": "sk-ant-placeholder",\n  "ANTHROPIC_MODEL": "gpt-5.5"\n}'}
               aria-label={t.crm.agentConfigJsonLabel}
               disabled={configLoading}
               style={{
