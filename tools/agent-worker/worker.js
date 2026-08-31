@@ -242,6 +242,21 @@ let client = null
 let busy = false
 let agentEnv = {}
 
+// Разрешаем только переменные Claude Code/Anthropic — нельзя подсунуть
+// системные ключи (PATH, LD_PRELOAD и т.п.) через конфиг из CRM.
+function sanitizeAgentEnv(env) {
+  const out = {}
+  for (const [k, v] of Object.entries(env)) {
+    if (
+      typeof v === 'string' &&
+      (k.startsWith('ANTHROPIC_') || k.startsWith('CLAUDE_CODE_') || k === 'ENABLE_TOOL_SEARCH')
+    ) {
+      out[k] = v
+    }
+  }
+  return out
+}
+
 // Читает конфигурацию агента из глобала agent-settings (БД) и обновляет env,
 // который передаётся CLI при следующем запуске. Вызывается при старте и каждые 30с.
 async function refreshAgentEnv() {
@@ -259,7 +274,7 @@ async function refreshAgentEnv() {
     if (typeof envJson === 'string' && envJson.trim()) {
       const env = JSON.parse(envJson)
       if (typeof env === 'object' && env !== null && !Array.isArray(env)) {
-        agentEnv = env
+        agentEnv = sanitizeAgentEnv(env)
       }
     }
   } catch (e) {
