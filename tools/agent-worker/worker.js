@@ -321,8 +321,9 @@ async function runAuthTask(client, task) {
       shell: false,
       stdio: ['ignore', 'pipe', 'pipe'],
     })
-    child.stdout.on('data', (d) => { appendLog(client, id, d.toString()) })
-    child.stderr.on('data', (d) => { appendLog(client, id, d.toString()) })
+    let out = ''
+    child.stdout.on('data', (d) => { const s = d.toString(); out += s; appendLog(client, id, s) })
+    child.stderr.on('data', (d) => { const s = d.toString(); out += s; appendLog(client, id, s) })
     const timer = setTimeout(() => {
       child.kill('SIGKILL')
       updateTask(client, id, { status: 'failed', result: 'Авторизация не завершена за 20 минут — код протух. Повтори.' })
@@ -339,9 +340,10 @@ async function runAuthTask(client, task) {
         await updateTask(client, id, { status: 'done', result: 'ChatGPT (Codex) авторизован ✓' })
         log(id, 'auth done')
       } else if (code !== 0) {
+        const tail = out.trim().slice(-400)
         await updateTask(client, id, {
           status: 'failed',
-          result: `codex login завершился с ошибкой (exit ${code}). Включи в ChatGPT: Settings → Security → «Allow device code login», затем повтори.`,
+          result: `codex login завершился с ошибкой (exit ${code}).${tail ? ` Вывод: ${tail}` : ''} Включи в ChatGPT: Settings → Security → «Allow device code login», затем повтори.`,
         })
         log(id, `auth failed (exit ${code})`)
       } else {

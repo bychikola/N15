@@ -309,6 +309,9 @@ export default function AgentChat() {
           ) : authTask?.status === 'failed' ? (
             <>
               <p style={{ margin: '0 0 10px', color: '#9b4e43', fontSize: 12 }}>{authTask.result || t.crm.agentAuthFailed}</p>
+              {authTask.log && (
+                <pre style={{ margin: '0 0 10px', fontSize: 11, lineHeight: 1.6, color: '#45423c', whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 160, overflowY: 'auto', background: '#faf8f4', border: '1px solid #eee9e1', borderRadius: 8, padding: 10 }}>{authTask.log}</pre>
+              )}
               <button type="button" onClick={() => void startAuth()}
                 style={{ border: '1px solid #a7814e', borderRadius: 8, background: '#fff', color: '#8d6b40', padding: '10px 18px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', cursor: 'pointer' }}>
                 {t.crm.agentAuthStart}
