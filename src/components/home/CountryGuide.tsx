@@ -37,16 +37,20 @@ export default function CountryGuide({ t, lang }: { t: Dict; lang: string }) {
             <details key={area.district}>
               <summary>
                 <span>{String(index + 1).padStart(2, '0')}</span>
-                <Link
-                  href={`/${lang}/catalog?district=${encodeURIComponent(area.district)}`}
-                  className="lp-district-link"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  {area.district}{index === 0 ? ' — официальный состав' : ''}
-                </Link>
+                <strong>{area.district}{index === 0 ? ' — официальный состав' : ''}</strong>
                 <i>+</i>
               </summary>
-              <p>{area.places}</p>
+              <div className="lp-places">
+                {area.places.split(' · ').map((place) => (
+                  <Link
+                    key={place}
+                    href={`/${lang}/catalog?district=${encodeURIComponent(area.district)}`}
+                    className="lp-place-chip"
+                  >
+                    {place}
+                  </Link>
+                ))}
+              </div>
             </details>
           ))}
         </div>
