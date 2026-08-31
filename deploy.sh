@@ -79,7 +79,7 @@ if [ -d "$APP_DIR/.git" ]; then
             echo 'github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl' >> /root/.ssh/known_hosts
         fi
         chmod 600 /root/.ssh/known_hosts 2>/dev/null || true
-        export GIT_SSH_COMMAND="ssh -i /home/n15/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
+        export GIT_SSH_COMMAND="ssh -i /home/n15/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o BatchMode=yes"
     fi
     git fetch origin
     # Сброс к состоянию GitHub: незакоммиченный мусор (если агент что-то не
