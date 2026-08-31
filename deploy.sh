@@ -70,8 +70,16 @@ if [ -d "$APP_DIR/.git" ]; then
     cd "$APP_DIR"
     # Remote может быть SSH, а deploy key зарегистрирован у пользователя n15
     # (root-ключа в GitHub нет) — используем ключ n15 для git-операций.
+    # Хост-ключ GitHub пиним из официального api.github.com/meta (не accept-new):
+    # первое подключение не должно принимать любой ключ.
     if [ -f /home/n15/.ssh/id_ed25519 ]; then
-        export GIT_SSH_COMMAND="ssh -i /home/n15/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
+        mkdir -p /root/.ssh
+        chmod 700 /root/.ssh 2>/dev/null || true
+        if ! grep -Fq 'github.com ssh-ed25519' /root/.ssh/known_hosts 2>/dev/null; then
+            echo 'github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl' >> /root/.ssh/known_hosts
+        fi
+        chmod 600 /root/.ssh/known_hosts 2>/dev/null || true
+        export GIT_SSH_COMMAND="ssh -i /home/n15/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
     fi
     git fetch origin
     # Сброс к состоянию GitHub: незакоммиченный мусор (если агент что-то не
