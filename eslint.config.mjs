@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // tools/** — отдельные серверные скрипты (воркер ИИ-агента и т.п.),
+    // не входят в приложение: CommonJS require и пр. — намеренно
+    "tools/**",
   ]),
 ]);
 

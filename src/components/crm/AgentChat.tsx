@@ -21,6 +21,28 @@ const STATUS_KEYS: Record<string, string> = {
   failed: 'agentStatusFailed',
 }
 
+// Модульная функция — стабильная идентичность: поллинг-эффект и обработчики
+// не пересоздаются на каждый рендер (React Compiler не может сохранить ручной
+// useCallback с пустыми зависимостями — см. react-hooks/preserve-manual-memoization).
+async function fetchTasks(): Promise<AgentTask[]> {
+  try {
+    const res = await fetch('/api/agent/tasks', { credentials: 'include' })
+    if (!res.ok) return []
+    const data = await res.json()
+    return (data.docs || []).map((d: Record<string, unknown>) => ({
+      id: d.id as number,
+      prompt: d.prompt as string,
+      status: d.status as AgentTask['status'],
+      log: (d.log as string) || undefined,
+      result: (d.result as string) || undefined,
+      createdAt: (d.createdAt as string) || undefined,
+    }))
+  } catch {
+    // временная недоступность — молчим
+    return []
+  }
+}
+
 export default function AgentChat() {
   const { t } = useI18n()
   const [tasks, setTasks] = useState<AgentTask[]>([])
@@ -139,7 +161,7 @@ export default function AgentChat() {
         credentials: 'include',
         body: JSON.stringify({ prompt: '__AUTH__' }),
       })
-      if (res.ok) await load()
+      if (res.ok) await refresh()
     } catch {
       // молчим
     }
@@ -156,29 +178,16 @@ export default function AgentChat() {
     return m ? m[0].toUpperCase() : ''
   }
 
-  const load = useCallback(async () => {
-    try {
-      const res = await fetch('/api/agent/tasks', { credentials: 'include' })
-      if (!res.ok) return
-      const data = await res.json()
-      setTasks((data.docs || []).map((d: Record<string, unknown>) => ({
-        id: d.id as number,
-        prompt: d.prompt as string,
-        status: d.status as AgentTask['status'],
-        log: (d.log as string) || undefined,
-        result: (d.result as string) || undefined,
-        createdAt: (d.createdAt as string) || undefined,
-      })))
-    } catch {
-      // временная недоступность — молчим
-    }
-  }, [])
+  const refresh = async () => {
+    setTasks(await fetchTasks())
+  }
 
   useEffect(() => {
     let cancelled = false
     async function tick() {
       if (cancelled || document.visibilityState !== 'visible') return
-      await load()
+      const list = await fetchTasks()
+      if (!cancelled) setTasks(list)
     }
     void tick()
     const timer = setInterval(() => { void tick() }, POLL_MS)
@@ -186,7 +195,7 @@ export default function AgentChat() {
       cancelled = true
       clearInterval(timer)
     }
-  }, [load])
+  }, [])
 
   // Активную задачу раскрываем автоматически — видно, как агент работает
   useEffect(() => {
@@ -223,7 +232,7 @@ export default function AgentChat() {
         return
       }
       setPrompt('')
-      await load()
+      await refresh()
     } catch {
       setError(t.crm.agentSendError)
     } finally {
