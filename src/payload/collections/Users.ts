@@ -19,7 +19,11 @@ export const Users: CollectionConfig = {
   access: {
     create: () => true,       // Anyone can register
     read: ({ req: { user } }) => !!user,  // Only logged-in users can read
-    update: ({ req: { user } }) => !!user,
+    // Свой профиль — любому залогиненному, чужие аккаунты — только администратор
+    update: ({ req: { user }, id }) => {
+      if (!user) return false
+      return user.role === 'admin' || id === user.id
+    },
     delete: ({ req: { user } }) => user?.role === 'admin',
   },
   hooks: {
@@ -28,6 +32,16 @@ export const Users: CollectionConfig = {
       // иначе «Create First User» создаёт аккаунт с ролью 'user' и админка
       // отвечает «You are not allowed to perform this action».
       async ({ data, req }) => {
+        // Привилегии (роль, доступ к ИИ-агенту) выставляет только администратор:
+        // убираем их из запроса не-админа — нельзя зарегистрироваться с
+        // role=admin/agentAccess=true и нельзя поднять их себе при редактировании.
+        if (req.user?.role !== 'admin' && data) {
+          delete data.role
+          delete data.agentAccess
+        }
+        // Первый созданный пользователь автоматически становится администратором,
+        // иначе «Create First User» создаёт аккаунт с ролью 'user' и админка
+        // отвечает «You are not allowed to perform this action».
         if (data && !data.id) {
           const { totalDocs } = await req.payload.count({ collection: 'users' })
           if (totalDocs === 0) {
