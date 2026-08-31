@@ -110,7 +110,9 @@ export const ViewRequestForm: FC<Props> = ({ objectId, lang }) => {
       <input type="tel" required value={phone} onChange={(e) => setPhone(e.target.value)} placeholder={t.object.phonePlaceholder} className={inputCls} />
       <textarea value={message} onChange={(e) => setMessage(e.target.value)} placeholder={t.object.messagePlaceholder} rows={3} className={`${inputCls} resize-none`} />
       {error && <p className="text-xs text-red-400">{error}</p>}
-      <Button variant="primary" size="md" className="w-full" disabled={sending}>
+      {/* цвет текста как у кнопки «Позвонить» — светлый на золотом */}
+      <Button variant="primary" size="md" className="w-full" disabled={sending}
+        style={{ color: 'var(--card-price-fg)' }}>
         {sending ? t.lkChat.sending : t.object.submit}
       </Button>
     </form>
