@@ -10,7 +10,9 @@
 cd ~/n15 && git pull origin master && bash tools/agent-worker/install.sh
 ```
 
-Скрипт сам: ставит Node и Claude Code CLI (**через npm** — работает в регионах, где claude.ai/install.sh недоступен), копирует воркер, собирает `DATABASE_URI` из `.env`, спросит ключ DeepSeek (или возьмёт из `ANTHROPIC_AUTH_TOKEN`) и запустит сервис. Повторный запуск — обновление.
+Скрипт сам: ставит Node и Claude Code CLI (**через npm** — работает в регионах, где claude.ai/install.sh недоступен), создаёт пользователя `n15` (воркер не работает от root — Claude Code запрещает `--dangerously-skip-permissions` под root), отдаёт ему репозиторий, даёт docker-группу, генерирует SSH-ключ, собирает `DATABASE_URI`, спросит ключ DeepSeek и запустит сервис от `n15`. Повторный запуск — обновление.
+
+После установки добавь напечатанный публичный SSH-ключ в GitHub (Settings → Deploy keys репозитория N15) — иначе `git push` не пройдёт.
 
 ## Плагины/скиллы (после установки, один раз)
 

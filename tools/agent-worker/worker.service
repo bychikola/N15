@@ -1,12 +1,17 @@
+# Шаблон systemd-юнита. install.sh генерирует фактический юнит
+# с User=n15 (Claude Code запрещает --dangerously-skip-permissions под root).
+# Репозиторий и воркер принадлежат пользователю n15, docker — через группу docker.
 [Unit]
 Description=N15 AI agent worker
-After=network.target postgresql.service
+After=network.target postgresql.service docker.service
 
 [Service]
 Type=simple
-WorkingDirectory=/root/n15-agent
-EnvironmentFile=/root/n15-agent/.env
-ExecStart=/usr/bin/node /root/n15-agent/worker.js
+User=n15
+Group=docker
+WorkingDirectory=/home/n15/n15-agent
+EnvironmentFile=/home/n15/n15-agent/.env
+ExecStart=/usr/local/bin/node /home/n15/n15-agent/worker.js
 Restart=always
 RestartSec=10
 
