@@ -55,6 +55,8 @@ if ! id "$N15_USER" >/dev/null 2>&1; then
   echo "  Создан пользователь $N15_USER"
 fi
 usermod -aG docker "$N15_USER" 2>/dev/null || echo "  (docker-группа не добавлена — проверь вручную)"
+# после смены владельца git от root ругается на "dubious ownership"
+git config --global --add safe.directory "$REPO_DIR" 2>/dev/null || true
 # путь к репо должен быть проходим для n15 (если репо в /root/...)
 PARENT=$(dirname "$REPO_DIR")
 chmod o+x "$PARENT" 2>/dev/null || true
