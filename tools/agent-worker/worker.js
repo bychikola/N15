@@ -307,7 +307,8 @@ async function runAuthTask(client, task) {
   log(id, 'auth started')
 
   if (existsSync(AUTH_JSON)) {
-    await appendLog(client, id, 'Найден ~/.codex/auth.json — авторизация уже выполнена.\nЕсли токен протух, удали файл и повтори.')
+    await appendLog(client, id, 'Найден ~/.codex/auth.json — авторизация уже выполнена.\nПерезапускаю прокси, чтобы он подхватил токен...\n')
+    await runCommand('pkill', ['-f', 'claudex'], REPO, 10000)
     await updateTask(client, id, { status: 'done', result: 'Уже авторизовано ✓' })
     return
   }
