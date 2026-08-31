@@ -10,7 +10,7 @@ export default async function CrmAgentPage() {
   const t = getDictionary('ru')
   const user = await getCrmUser()
   if (!user) redirect('/crm/login')
-  if (!canAccessCrm(user) || user.role !== 'admin') {
+  if (!canAccessCrm(user) || !user.agentAccess) {
     redirect('/crm')
   }
   return (

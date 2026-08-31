@@ -117,6 +117,19 @@ export const Users: CollectionConfig = {
       required: true,
     },
     {
+      name: 'agentAccess',
+      type: 'checkbox',
+      label: 'Доступ к ИИ-агенту',
+      defaultValue: false,
+      access: {
+        // Менять может только администратор — иначе юзер сам себе откроет доступ
+        update: ({ req }) => req.user?.role === 'admin',
+      },
+      admin: {
+        description: 'Открывает вкладку «ИИ-агент» в CRM: страница /crm/agent, задачи и настройки агента.',
+      },
+    },
+    {
       name: 'favorites',
       type: 'relationship',
       label: 'Избранное',

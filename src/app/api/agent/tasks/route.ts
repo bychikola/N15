@@ -2,13 +2,14 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 import { NextRequest, NextResponse } from 'next/server'
 
-// Задачи ИИ-агента: только администратор. Создание ставит задачу в очередь —
+// Задачи ИИ-агента: доступ по флагу agentAccess (ставится админом в админке
+// Payload на пользователе). Создание ставит задачу в очередь —
 // воркер на сервере (tools/agent-worker) выполняет её.
 export async function GET(req: NextRequest) {
   try {
     const payload = await getPayload({ config })
     const me = await payload.auth({ headers: req.headers })
-    if (!me.user || me.user.role !== 'admin') {
+    if (!me.user || !me.user.agentAccess) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
     const { docs } = await payload.find({
@@ -37,7 +38,7 @@ export async function POST(req: NextRequest) {
 
     const payload = await getPayload({ config })
     const me = await payload.auth({ headers: req.headers })
-    if (!me.user || me.user.role !== 'admin') {
+    if (!me.user || !me.user.agentAccess) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 

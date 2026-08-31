@@ -7,6 +7,7 @@ export interface CrmUser {
   name: string
   email: string
   role: string
+  agentAccess: boolean
 }
 
 /**
@@ -18,13 +19,14 @@ export async function getCrmUser(): Promise<CrmUser | null> {
   const payload = await getPayload({ config })
   try {
     const result = await payload.auth({ headers: headersList })
-    const user = result.user as { id?: number; name?: string; email?: string; role?: string } | null | undefined
+    const user = result.user as { id?: number; name?: string; email?: string; role?: string; agentAccess?: boolean } | null | undefined
     if (!user?.id) return null
     return {
       id: user.id as number,
       name: (user.name as string) || (user.email as string) || 'Команда',
       email: (user.email as string) || '',
       role: (user.role as string) || 'user',
+      agentAccess: Boolean(user.agentAccess),
     }
   } catch {
     return null
