@@ -165,9 +165,9 @@ sleep 2
 systemctl status n15-agent --no-pager | head -12 || true
 
 # ---------- 9. Бэкенд ChatGPT Plus: @openai/codex (логин) + claudex (прокси) ----------
-echo "[9/10] Устанавливаю @openai/codex и claudex (npm -g)..."
-if ! npm list -g @openai/codex >/dev/null 2>&1; then npm install -g @openai/codex; fi
-if ! npm list -g claudex >/dev/null 2>&1; then npm install -g claudex; fi
+echo "[9/10] Устанавливаю @openai/codex@0.151.0 и claudex@1.0.5 (npm -g)..."
+if ! npm list -g @openai/codex@0.151.0 >/dev/null 2>&1; then npm install -g @openai/codex@0.151.0; fi
+if ! npm list -g claudex@1.0.5 >/dev/null 2>&1; then npm install -g claudex@1.0.5; fi
 echo "  codex: $(command -v codex || echo ok) / claudex: $(command -v claudex || echo ok)"
 
 # ---------- 10. systemd-юнит прокси (порт 4000, от n15) ----------
@@ -193,6 +193,16 @@ systemctl daemon-reload
 systemctl enable n15-proxy >/dev/null 2>&1 || true
 # до device-auth claudex может не стартовать — не критично
 systemctl restart n15-proxy || true
+# claudex не умеет выбирать интерфейс привязки — закрываем порт 4000 снаружи
+# на уровне firewall: доступ только с localhost (прокси не проверяет ключи,
+# открытый доступ = кто угодно жжёт квоту подписки).
+if command -v iptables >/dev/null 2>&1; then
+  iptables -C INPUT -p tcp --dport 4000 -s 127.0.0.1 -j ACCEPT 2>/dev/null || iptables -I INPUT 1 -p tcp --dport 4000 -s 127.0.0.1 -j ACCEPT
+  iptables -C INPUT -p tcp --dport 4000 -j DROP 2>/dev/null || iptables -I INPUT 2 -p tcp --dport 4000 -j DROP
+  echo "  iptables: порт 4000 доступен только с localhost"
+else
+  echo "  ⚠ iptables не найден — закрой порт 4000 снаружи вручную (ufw/firewalld)"
+fi
 
 echo ""
 echo "======================================"
@@ -207,6 +217,7 @@ echo "     (URL + код — подтверди с телефона)"
 echo "  5. Проверка источников: sudo -u n15 claudex --reuse-codex --list-sources"
 echo "  6. systemctl restart n15-proxy"
 echo "  7. Проверка прокси: curl -s http://127.0.0.1:4000/health"
+echo "  8. Проверка привязки (должно быть 127.0.0.1): ss -tlnp | grep 4000"
 echo "  ВАЖНО: токен протухает после ~8 дней простоя — повтори п.4"
 echo "  Возврат на DeepSeek: конфиг _deepseek_template в модалке настроек CRM"
 echo "======================================"

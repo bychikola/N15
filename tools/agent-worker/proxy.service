@@ -4,6 +4,8 @@
 # claudex: переводчик Anthropic Messages API -> OpenAI Responses API (ChatGPT).
 # Токены берёт из ~/.codex/auth.json пользователя n15 (--reuse-codex).
 # Авторизация: sudo -u n15 codex login --device-auth.
+# БЕЗОПАСНОСТЬ: порт 4000 снаружи закрывается install.sh (iptables, только
+# localhost) — claudex не проверяет ключи, открытый прокси опасен.
 [Unit]
 Description=N15 claudex proxy (Claude Code -> ChatGPT Plus)
 After=network-online.target

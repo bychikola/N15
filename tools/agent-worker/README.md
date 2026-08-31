@@ -52,6 +52,8 @@ journalctl -u n15-agent -f   # должно быть: worker connected, provider
 
 Возврат на DeepSeek: в модалке настроек CRM замени конфиг содержимым `_deepseek_template` и сохрани — воркер подхватит за ≤30 с, прокси не используется.
 
+**Безопасность**: claudex не проверяет API-ключи, поэтому порт 4000 закрыт firewall'ом для внешних подключений (install.sh настраивает iptables: доступ только с 127.0.0.1; открытый доступ = кто угодно жжёт квоту подписки). Если у тебя ufw/firewalld — закрой порт 4000 вручную. Проверка привязки: `ss -tlnp | grep 4000`. **Доверие (supply chain)**: `claudex` — community-пакет из npm (версия зафиксирована в install.sh — 1.0.5), работает от непривилегированного пользователя n15 и ходит только на chatgpt.com; `@openai/codex` — официальный пакет OpenAI. Ставятся на свой риск.
+
 ## Если commit/push у воркера падает
 
 `Author identity unknown` или `could not read Username for 'https://github.com'` — у пользователя `n15` нет имени автора коммита, а `origin` настроен на https (SSH deploy key не работает). Один раз:
