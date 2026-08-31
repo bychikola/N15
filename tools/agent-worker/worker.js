@@ -198,6 +198,16 @@ async function runAgentTask(client, task) {
   const id = task.id
   log(id, 'started')
 
+  // ChatGPT-режим: проверяем прокси ДО запуска агента, иначе задача упала бы
+  // с непонятной ошибкой или висела на сетевых таймаутах.
+  const proxy = await checkProxy()
+  if (!proxy.ok) {
+    await appendLog(client, id, `\n⨯ ${proxy.reason}\n`)
+    await updateTask(client, id, { status: 'failed', result: `${proxy.reason}. ${proxy.hint}` })
+    log(id, `proxy preflight failed: ${proxy.reason}`)
+    return
+  }
+
   // Состояние ДО агента: что на origin/master, HEAD и какие файлы грязные.
   // После агента по ним понимаем, что он сделал с кодом — сам коммитит
   // и пушит, как обычная сессия Claude Code.
@@ -210,10 +220,16 @@ async function runAgentTask(client, task) {
   const agent = await runClaude(client, id, task.prompt)
   await appendLog(client, id, `\n— Claude Code завершил (exit ${agent.code}) —\n`)
   if (agent.code !== 0) {
-    await updateTask(client, id, {
-      status: 'failed',
-      result: `Claude Code завершился с ошибкой (exit ${agent.code}). Хвост: ${agent.out.slice(-1500)}`,
-    })
+    let result = `Claude Code завершился с ошибкой (exit ${agent.code}). Хвост: ${agent.out.slice(-1500)}`
+    // ChatGPT-режим: подсказки по типичным ошибкам прокси/подписки
+    if (LOCAL_PROXY_RE.test(agentEnv.ANTHROPIC_BASE_URL || '')) {
+      if (/401|403|unauthorized|invalid token|not authenticated/i.test(agent.out)) {
+        result += ' Подсказка: токен ChatGPT протух — выполни sudo -u n15 codex login --device-auth'
+      } else if (/429|rate limit|quota exceeded/i.test(agent.out)) {
+        result += ' Подсказка: исчерпан лимит ChatGPT Plus (роллинг-окно ~5 ч) — повтори задачу позже'
+      }
+    }
+    await updateTask(client, id, { status: 'failed', result })
     return
   }
 
@@ -299,6 +315,58 @@ function sanitizeAgentEnv(env) {
     }
   }
   return out
+}
+
+// Префлайт прокси ChatGPT (claudex, порт 4000) — только когда в конфиге
+// ANTHROPIC_BASE_URL указывает на локальный прокси. DeepSeek-режим не трогаем.
+const LOCAL_PROXY_RE = /^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?\//
+
+async function checkProxy() {
+  const base = (agentEnv.ANTHROPIC_BASE_URL || process.env.ANTHROPIC_BASE_URL || '').replace(/\/+$/, '')
+  if (!LOCAL_PROXY_RE.test(base)) return { ok: true }
+  // 1. Жив ли процесс прокси (GET /health — квоту не тратит)
+  let health
+  try {
+    health = await fetch(`${base}/health`, { signal: AbortSignal.timeout(3000) })
+  } catch {
+    return {
+      ok: false,
+      reason: `прокси ${base} не отвечает`,
+      hint: 'На сервере: systemctl status n15-proxy, затем systemctl restart n15-proxy.',
+    }
+  }
+  if (!health.ok) {
+    return { ok: false, reason: `/health → HTTP ${health.status}`, hint: 'Смотри journalctl -u n15-proxy -f' }
+  }
+  // 2. Авторизация Codex: POST /v1/messages/count_tokens (квоту не тратит).
+  //    Если claudex считает count_tokens локально и upstream не трогает —
+  //    вернёт 200 даже с протухшим токеном; тогда подстрахует разбор
+  //    401/429 после запуска агента (см. runAgentTask).
+  try {
+    const r = await fetch(`${base}/v1/messages/count_tokens`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-api-key': 'sk-ant-placeholder' },
+      body: JSON.stringify({ model: 'gpt-5.5', messages: [{ role: 'user', content: 'ping' }] }),
+      signal: AbortSignal.timeout(8000),
+    })
+    if (r.status === 401 || r.status === 403) {
+      return {
+        ok: false,
+        reason: `count_tokens → HTTP ${r.status}`,
+        hint: 'Токен ChatGPT (Codex) протух (~8 дней простоя). На сервере: sudo -u n15 codex login --device-auth',
+      }
+    }
+    if (r.status === 429) {
+      return {
+        ok: false,
+        reason: 'count_tokens → HTTP 429',
+        hint: 'Исчерпан лимит ChatGPT Plus (роллинг-окно ~5 ч) — повтори задачу позже.',
+      }
+    }
+  } catch {
+    // таймаут/эндпоинт не поддерживается — не блокируем
+  }
+  return { ok: true }
 }
 
 // Читает конфигурацию агента из глобала agent-settings (БД) и обновляет env,

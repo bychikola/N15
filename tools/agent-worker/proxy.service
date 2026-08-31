@@ -1,0 +1,21 @@
+# Шаблон systemd-юнита прокси claudex (Claude Code -> ChatGPT Plus).
+# install.sh генерирует /etc/systemd/system/n15-proxy.service,
+# подставляя User=n15 и путь $(npm prefix -g)/bin/claudex.
+# claudex: переводчик Anthropic Messages API -> OpenAI Responses API (ChatGPT).
+# Токены берёт из ~/.codex/auth.json пользователя n15 (--reuse-codex).
+# Авторизация: sudo -u n15 codex login --device-auth.
+[Unit]
+Description=N15 claudex proxy (Claude Code -> ChatGPT Plus)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=n15
+Environment=CODEX_MODEL=gpt-5.5
+ExecStart=/usr/local/bin/claudex --reuse-codex --port 4000
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

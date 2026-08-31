@@ -34,6 +34,24 @@ journalctl -u n15-agent -f   # должно быть: worker connected, provider
 
 `DATABASE_URI` собирается автоматически из `~/n15/.env` (fallback на IP контейнера postgres).
 
+## Бэкенд ChatGPT Plus (вместо DeepSeek)
+
+Прокси **claudex** на порту 4000 переводит Anthropic Messages API → OpenAI Responses API (ChatGPT). Токены — из `/home/n15/.codex/auth.json` (`claudex --reuse-codex`); активный конфиг агента — в модалке настроек CRM (`agent_settings`): `ANTHROPIC_BASE_URL=http://127.0.0.1:4000`, ключ-заглушка `sk-ant-placeholder`, модели `gpt-5.5` / `gpt-5.4-mini`.
+
+Установка: `bash tools/agent-worker/install.sh` — ставит `@openai/codex` и `claudex`, создаёт сервис `n15-proxy`. Авторизация:
+
+1. ChatGPT → Settings → Security → включить «Allow device code login»
+2. `sudo -u n15 codex login --device-auth` — открываешь ссылку с телефона, вводишь код
+3. `sudo -u n15 claudex --reuse-codex --list-sources` — проверить, что токены видны
+4. `systemctl restart n15-proxy`
+
+Проверка: `curl -s http://127.0.0.1:4000/health`; тест CLI:
+`sudo -u n15 env ANTHROPIC_BASE_URL=http://127.0.0.1:4000 ANTHROPIC_API_KEY=sk-ant-placeholder ANTHROPIC_MODEL=gpt-5.5 claude -p "привет" --output-format text --dangerously-skip-permissions --cwd /root/n15`
+
+⚠️ Токен протухает после ~8 дней простоя — задачи падают с подсказкой `codex login --device-auth` (повтори шаги 2–4). Лимиты ChatGPT Plus — роллинг-окна ~5 ч: упор → 429, подожди. Это серая зона условий OpenAI — использование на свой риск.
+
+Возврат на DeepSeek: в модалке настроек CRM замени конфиг содержимым `_deepseek_template` и сохрани — воркер подхватит за ≤30 с, прокси не используется.
+
 ## Если commit/push у воркера падает
 
 `Author identity unknown` или `could not read Username for 'https://github.com'` — у пользователя `n15` нет имени автора коммита, а `origin` настроен на https (SSH deploy key не работает). Один раз:

@@ -12,6 +12,8 @@
 #   4. Генерирует SSH-ключ для n15 (нужно добавить его в GitHub как deploy key)
 #   5. Ставит воркер в /home/n15/n15-agent и запускает сервис от пользователя n15
 #      (Claude Code запрещает --dangerously-skip-permissions под root)
+#   6. Ставит @openai/codex (авторизация ChatGPT) + claudex (прокси на порт 4000)
+#      и запускает сервис n15-proxy — бэкенд ChatGPT Plus для агента
 # Повторный запуск — безопасен (обновление).
 # ============================================================
 set -e
@@ -30,9 +32,9 @@ echo "======================================"
 
 # ---------- 1. Node 22 ----------
 if command -v node >/dev/null 2>&1; then
-  echo "[1/8] Node: $(node -v) — уже установлен"
+  echo "[1/10] Node: $(node -v) — уже установлен"
 else
-  echo "[1/8] Устанавливаю Node 22..."
+  echo "[1/10] Устанавливаю Node 22..."
   curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
   apt install -y nodejs
   echo "  Node: $(node -v)"
@@ -40,16 +42,16 @@ fi
 
 # ---------- 2. Claude Code CLI (npm — работает в любом регионе) ----------
 if command -v claude >/dev/null 2>&1; then
-  echo "[2/8] Claude Code CLI: установлен ($(claude --version 2>/dev/null || echo ok))"
+  echo "[2/10] Claude Code CLI: установлен ($(claude --version 2>/dev/null || echo ok))"
 else
-  echo "[2/8] Устанавливаю Claude Code CLI (npm)..."
+  echo "[2/10] Устанавливаю Claude Code CLI (npm)..."
   npm install -g @anthropic-ai/claude-code
   export PATH="$PATH:$(npm prefix -g)/bin"
   echo "  CLI: $(claude --version 2>/dev/null || echo ok)"
 fi
 
 # ---------- 3. Пользователь n15 + доступ к репозиторию ----------
-echo "[3/8] Пользователь $N15_USER..."
+echo "[3/10] Пользователь $N15_USER..."
 if ! id "$N15_USER" >/dev/null 2>&1; then
   useradd -m -s /bin/bash "$N15_USER"
   echo "  Создан пользователь $N15_USER"
@@ -64,7 +66,7 @@ chown -R "$N15_USER:$N15_USER" "$REPO_DIR"
 echo "  Репозиторий $REPO_DIR отдан пользователю $N15_USER"
 
 # ---------- 4. SSH-ключ для git push ----------
-echo "[4/8] SSH-ключ для $N15_USER..."
+echo "[4/10] SSH-ключ для $N15_USER..."
 sudo -u "$N15_USER" bash -c 'mkdir -p ~/.ssh && chmod 700 ~/.ssh && [ -f ~/.ssh/id_ed25519 ] || ssh-keygen -t ed25519 -N "" -f ~/.ssh/id_ed25519'
 PUBKEY=$(sudo -u "$N15_USER" cat "$N15_HOME/.ssh/id_ed25519.pub")
 echo "  Публичный ключ (добавь в GitHub → Settings → Deploy keys репозитория N15):"
@@ -85,7 +87,7 @@ fi
 sudo -u "$N15_USER" bash -c 'ssh-keyscan -H github.com >> ~/.ssh/known_hosts 2>/dev/null || true'
 
 # ---------- 5. Воркер ----------
-echo "[5/8] Готовлю воркер..."
+echo "[5/10] Готовлю воркер..."
 if [ ! -f "$REPO_DIR/tools/agent-worker/worker.js" ]; then
   echo "Ошибка: не найден $REPO_DIR/tools/agent-worker/worker.js — сделай git pull" >&2
   exit 1
@@ -102,7 +104,7 @@ else
 fi
 
 # ---------- 6. DATABASE_URI ----------
-echo "[6/8] Собираю DATABASE_URI из $REPO_DIR/.env..."
+echo "[6/10] Собираю DATABASE_URI из $REPO_DIR/.env..."
 if [ ! -f "$REPO_DIR/.env" ]; then
   echo "Ошибка: не найден $REPO_DIR/.env" >&2
   exit 1
@@ -118,12 +120,12 @@ DATABASE_URI="postgres://${PGUSER:-n15}:${PGPASS}@${PGHOST}:5432/${PGDB:-n15}"
 echo "  DATABASE_URI: postgres://$PGUSER:****@$PGHOST:5432/$PGDB"
 
 # ---------- 7. Ключ DeepSeek ----------
-echo "[7/8] Проверяю ключ ANTHROPIC_AUTH_TOKEN..."
+echo "[7/10] Проверяю ключ ANTHROPIC_AUTH_TOKEN..."
 if [ -n "$ANTHROPIC_AUTH_TOKEN" ]; then
   TOKEN="$ANTHROPIC_AUTH_TOKEN"
   echo "  (взят из переменной окружения)"
 else
-  read -rp "  Вставь ключ DeepSeek (ANTHROPIC_AUTH_TOKEN): " TOKEN
+  read -rp "  Вставь ключ DeepSeek (ANTHROPIC_AUTH_TOKEN, fallback-бэкенд — активный конфиг в модалке CRM): " TOKEN
 fi
 cat > "$AGENT_DIR/.env" << EOF
 ANTHROPIC_BASE_URL=${ANTHROPIC_BASE_URL:-https://api.deepseek.com/anthropic}
@@ -136,7 +138,7 @@ chown "$N15_USER:$N15_USER" "$AGENT_DIR/.env"
 chmod 600 "$AGENT_DIR/.env"
 
 # ---------- 8. systemd (запуск от пользователя n15) ----------
-echo "[8/8] Устанавливаю systemd-сервис..."
+echo "[8/10] Устанавливаю systemd-сервис..."
 cat > /etc/systemd/system/n15-agent.service << EOF
 [Unit]
 Description=N15 AI agent worker
@@ -162,9 +164,49 @@ systemctl restart n15-agent
 sleep 2
 systemctl status n15-agent --no-pager | head -12 || true
 
+# ---------- 9. Бэкенд ChatGPT Plus: @openai/codex (логин) + claudex (прокси) ----------
+echo "[9/10] Устанавливаю @openai/codex и claudex (npm -g)..."
+if ! npm list -g @openai/codex >/dev/null 2>&1; then npm install -g @openai/codex; fi
+if ! npm list -g claudex >/dev/null 2>&1; then npm install -g claudex; fi
+echo "  codex: $(command -v codex || echo ok) / claudex: $(command -v claudex || echo ok)"
+
+# ---------- 10. systemd-юнит прокси (порт 4000, от n15) ----------
+echo "[10/10] Устанавливаю systemd-сервис n15-proxy..."
+cat > /etc/systemd/system/n15-proxy.service << EOF
+[Unit]
+Description=N15 claudex proxy (Claude Code -> ChatGPT Plus)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=$N15_USER
+Environment=CODEX_MODEL=gpt-5.5
+ExecStart=$(npm prefix -g)/bin/claudex --reuse-codex --port 4000
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+systemctl daemon-reload
+systemctl enable n15-proxy >/dev/null 2>&1 || true
+# до device-auth claudex может не стартовать — не критично
+systemctl restart n15-proxy || true
+
 echo ""
 echo "======================================"
 echo "  ✅ Воркер установлен и запущен от $N15_USER!"
 echo "  1. Добавь публичный ключ выше в GitHub (Deploy keys репозитория)"
-echo "  2. Проверка: journalctl -u n15-agent -f"
+echo "  2. Проверка воркера: journalctl -u n15-agent -f"
+echo "  ── Бэкенд ChatGPT Plus (n15-proxy, порт 4000) ──"
+echo "  3. В ChatGPT (chatgpt.com) → Settings → Security включи «Allow device code login»"
+echo "  4. Авторизуй Codex от имени n15:"
+echo "       sudo -u n15 codex login --device-auth"
+echo "     (URL + код — подтверди с телефона)"
+echo "  5. Проверка источников: sudo -u n15 claudex --reuse-codex --list-sources"
+echo "  6. systemctl restart n15-proxy"
+echo "  7. Проверка прокси: curl -s http://127.0.0.1:4000/health"
+echo "  ВАЖНО: токен протухает после ~8 дней простоя — повтори п.4"
+echo "  Возврат на DeepSeek: конфиг _deepseek_template в модалке настроек CRM"
 echo "======================================"

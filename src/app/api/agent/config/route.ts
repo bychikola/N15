@@ -2,17 +2,29 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 import { NextRequest, NextResponse } from 'next/server'
 
-// Конфигурация по умолчанию (провайдер DeepSeek — текущий рабочий конфиг).
-// Показывается в модалке, если админ ещё ничего не сохранил. Ключ не храним
-// в коде: вставляется в модалке (или лежит в .env воркера на сервере).
+// Конфигурация по умолчанию (провайдер ChatGPT Plus через локальный прокси
+// claudex на VPS: Anthropic Messages API → OpenAI Responses API).
+// ANTHROPIC_API_KEY — заглушка: прокси авторизует по токену Codex
+// из ~/.codex/auth.json пользователя n15 (--reuse-codex).
+// `_deepseek_template` — неактивный шаблон старого бэкенда. Воркер его
+// игнорирует (sanitize пропускает только ANTHROPIC_*/CLAUDE_CODE_*).
+// Вернуть DeepSeek: заменить содержимое объекта ключами шаблона.
 const DEFAULT_ENV_JSON = `{
-  "ANTHROPIC_BASE_URL": "https://api.deepseek.com/anthropic",
-  "ANTHROPIC_AUTH_TOKEN": "ВСТАВЬТЕ_КЛЮЧ_ИЗ_НАСТРОЕК",
-  "ANTHROPIC_MODEL": "deepseek-v4-flash",
-  "ANTHROPIC_DEFAULT_HAIKU_MODEL": "deepseek-v4-pro",
-  "ANTHROPIC_DEFAULT_OPUS_MODEL": "deepseek-v4-pro",
-  "ANTHROPIC_DEFAULT_SONNET_MODEL": "deepseek-v4-flash",
-  "CLAUDE_CODE_EFFORT_LEVEL": "max"
+  "ANTHROPIC_BASE_URL": "http://127.0.0.1:4000",
+  "ANTHROPIC_API_KEY": "sk-ant-placeholder",
+  "ANTHROPIC_MODEL": "gpt-5.5",
+  "ANTHROPIC_DEFAULT_HAIKU_MODEL": "gpt-5.4-mini",
+  "ANTHROPIC_DEFAULT_SONNET_MODEL": "gpt-5.5",
+  "ANTHROPIC_DEFAULT_OPUS_MODEL": "gpt-5.5",
+  "_deepseek_template": {
+    "ANTHROPIC_BASE_URL": "https://api.deepseek.com/anthropic",
+    "ANTHROPIC_AUTH_TOKEN": "ВСТАВЬТЕ_КЛЮЧ_ИЗ_НАСТРОЕК",
+    "ANTHROPIC_MODEL": "deepseek-v4-flash",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "deepseek-v4-pro",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "deepseek-v4-pro",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "deepseek-v4-flash",
+    "CLAUDE_CODE_EFFORT_LEVEL": "max"
+  }
 }`
 
 // Конфигурация ИИ-агента (env для Claude Code CLI): только администратор.
