@@ -32,6 +32,9 @@ const REPO = process.env.N15_REPO || '/root/n15'
 const POLL_MS = 5000
 const AGENT_TIMEOUT_MS = 20 * 60 * 1000
 const DEPLOY_TIMEOUT_MS = 40 * 60 * 1000
+const AUTH_PROMPT = '__AUTH__' // спец-задача: авторизация ChatGPT (Codex) из CRM
+const AUTH_JSON = `${process.env.HOME || '/home/n15'}/.codex/auth.json`
+const AUTH_TIMEOUT_MS = 20 * 60 * 1000
 
 if (!DB) {
   console.error('DATABASE_URI is required')
@@ -298,6 +301,65 @@ async function runAgentTask(client, task) {
   log(id, 'done (no code changes)')
 }
 
+// Авторизация ChatGPT (Codex) прямо из CRM: спец-задача __AUTH__.
+// Запускаем `codex login --device-auth`, стримим URL+код в лог задачи;
+// после подтверждения на телефоне codex сам пишет ~/.codex/auth.json —
+// перезапускаем прокси (pkill → systemd Restart=always), задача «Готово».
+async function runAuthTask(client, task) {
+  const id = task.id
+  log(id, 'auth started')
+
+  if (existsSync(AUTH_JSON)) {
+    await appendLog(client, id, 'Найден ~/.codex/auth.json — авторизация уже выполнена.\nЕсли токен протух, удали файл и повтори.')
+    await updateTask(client, id, { status: 'done', result: 'Уже авторизовано ✓' })
+    return
+  }
+
+  await appendLog(client, id, `\n— Авторизация ChatGPT (Codex) —\n`)
+  await appendLog(client, id, `Открой ссылку ниже на телефоне, введи код и подтверди вход в ChatGPT.\nКод действует ~15 минут.\n\n`)
+
+  return new Promise((resolve) => {
+    const child = spawn('codex', ['login', '--device-auth'], {
+      env: { ...process.env, ...agentEnv },
+      shell: false,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+    child.stdout.on('data', (d) => { appendLog(client, id, d.toString()) })
+    child.stderr.on('data', (d) => { appendLog(client, id, d.toString()) })
+    const timer = setTimeout(() => {
+      child.kill('SIGKILL')
+      updateTask(client, id, { status: 'failed', result: 'Авторизация не завершена за 20 минут — код протух. Повтори.' })
+      log(id, 'auth timeout')
+      resolve()
+    }, AUTH_TIMEOUT_MS)
+
+    child.on('close', async (code) => {
+      clearTimeout(timer)
+      if (existsSync(AUTH_JSON)) {
+        await appendLog(client, id, `\n✓ Авторизовано. Перезапускаю прокси, чтобы он подхватил токен...\n`)
+        const k = await runCommand('pkill', ['-f', 'claudex'], REPO, 10000)
+        await appendLog(client, id, `прокси перезапущен (systemd Restart=always)${k.code !== 0 ? ' — проверь systemctl status n15-proxy' : ''}\n`)
+        await updateTask(client, id, { status: 'done', result: 'ChatGPT (Codex) авторизован ✓' })
+        log(id, 'auth done')
+      } else if (code !== 0) {
+        await updateTask(client, id, {
+          status: 'failed',
+          result: `codex login завершился с ошибкой (exit ${code}). Включи в ChatGPT: Settings → Security → «Allow device code login», затем повтори.`,
+        })
+        log(id, `auth failed (exit ${code})`)
+      } else {
+        await updateTask(client, id, { status: 'failed', result: 'Авторизация не завершилась — токен не найден. Повтори.' })
+      }
+      resolve()
+    })
+    child.on('error', (e) => {
+      clearTimeout(timer)
+      updateTask(client, id, { status: 'failed', result: `codex недоступен: ${String(e)}` })
+      resolve()
+    })
+  })
+}
+
 let client = null
 let busy = false
 let agentEnv = {}
@@ -428,7 +490,11 @@ async function main() {
       const task = res.rows[0]
       await updateTask(client, task.id, { status: 'running' })
       try {
-        await runAgentTask(client, task)
+        if (task.prompt === AUTH_PROMPT) {
+          await runAuthTask(client, task)
+        } else {
+          await runAgentTask(client, task)
+        }
       } catch (e) {
         console.error('task error', e)
         await updateTask(client, task.id, { status: 'failed', result: String(e).slice(0, 2000) })

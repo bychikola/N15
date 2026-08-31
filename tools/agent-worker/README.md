@@ -38,12 +38,11 @@ journalctl -u n15-agent -f   # должно быть: worker connected, provider
 
 Прокси **claudex** на порту 4000 переводит Anthropic Messages API → OpenAI Responses API (ChatGPT). Токены — из `/home/n15/.codex/auth.json` (`claudex --reuse-codex`); активный конфиг агента — в модалке настроек CRM (`agent_settings`): `ANTHROPIC_BASE_URL=http://127.0.0.1:4000`, ключ-заглушка `sk-ant-placeholder`, модели `gpt-5.5` / `gpt-5.4-mini`.
 
-Установка: `bash tools/agent-worker/install.sh` — ставит `@openai/codex` и `claudex`, создаёт сервис `n15-proxy`. Авторизация:
+Установка: `bash tools/agent-worker/install.sh` — ставит `@openai/codex` и `claudex`, создаёт сервис `n15-proxy`.
 
-1. ChatGPT → Settings → Security → включить «Allow device code login»
-2. `sudo -u n15 codex login --device-auth` — открываешь ссылку с телефона, вводишь код
-3. `sudo -u n15 claudex --reuse-codex --list-sources` — проверить, что токены видны
-4. `systemctl restart n15-proxy`
+Авторизация — **прямо из CRM**: вкладка «ИИ-агент» → провайдер «ChatGPT (Codex)» → «Получить ссылку для входа» → открываешь ссылку с телефона, вводишь код. Воркер сам запускает `codex login --device-auth` (спец-задача `__AUTH__`), показывает URL+код в логе и перезапускает прокси после подтверждения. Один раз включи в ChatGPT: Settings → Security → «Allow device code login» (иначе 403).
+
+Запасной путь (CLI): `sudo -u n15 codex login --device-auth` → `sudo -u n15 claudex --reuse-codex --list-sources` → `systemctl restart n15-proxy`.
 
 Проверка: `curl -s http://127.0.0.1:4000/health`; тест CLI:
 `sudo -u n15 env ANTHROPIC_BASE_URL=http://127.0.0.1:4000 ANTHROPIC_API_KEY=sk-ant-placeholder ANTHROPIC_MODEL=gpt-5.5 claude -p "привет" --output-format text --dangerously-skip-permissions --cwd /root/n15`

@@ -36,6 +36,9 @@ export default function AgentChat() {
   const [configSaving, setConfigSaving] = useState(false)
   const [configError, setConfigError] = useState('')
   const [configSaved, setConfigSaved] = useState(false)
+  const [provider, setProvider] = useState<'chatgpt' | 'deepseek' | null>(null)
+  const [configLoaded, setConfigLoaded] = useState(false)
+  const [providerNotice, setProviderNotice] = useState('')
 
   const openSettings = async () => {
     setSettingsOpen(true)
@@ -83,6 +86,87 @@ export default function AgentChat() {
     }
   }
 
+  // Определяем активного провайдера по сохранённому конфигу (один раз при загрузке)
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/agent/config', { credentials: 'include' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (cancelled || !d) return
+        const j = String(d.envJson || '')
+        if (j.includes('api.deepseek.com')) setProvider('deepseek')
+        else if (j.includes('127.0.0.1') || j.includes('localhost')) setProvider('chatgpt')
+        setConfigLoaded(true)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  // Переключение провайдера: ChatGPT (конфиг без _deepseek_template) или DeepSeek (шаблон)
+  const applyProvider = async (p: 'chatgpt' | 'deepseek') => {
+    try {
+      const res = await fetch('/api/agent/config', { credentials: 'include' })
+      if (!res.ok) return
+      const data = await res.json()
+      let parsed: Record<string, unknown>
+      try {
+        parsed = JSON.parse(data.envJson || '')
+      } catch {
+        return
+      }
+      let next = ''
+      if (p === 'deepseek') {
+        const tpl = parsed._deepseek_template
+        if (!tpl) return
+        next = JSON.stringify(tpl, null, 2)
+      } else {
+        const copy: Record<string, unknown> = { ...parsed }
+        delete copy._deepseek_template
+        next = JSON.stringify(copy, null, 2)
+      }
+      const put = await fetch('/api/agent/config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ envJson: next }),
+      })
+      if (!put.ok) return
+      setProvider(p)
+      setProviderNotice(t.crm.agentProviderApplied)
+      setTimeout(() => setProviderNotice(''), 2500)
+    } catch {
+      // молчим
+    }
+  }
+
+  // Запуск авторизации ChatGPT: спец-задача __AUTH__, её обрабатывает воркер
+  const startAuth = async () => {
+    try {
+      const res = await fetch('/api/agent/tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ prompt: '__AUTH__' }),
+      })
+      if (res.ok) await load()
+    } catch {
+      // молчим
+    }
+  }
+
+  // Парсим URL и код из лога задачи авторизации (вывод codex login --device-auth)
+  const authLink = (log?: string) => {
+    const m = (log || '').match(/https:\/\/[^\s'"<>]+/)
+    return m ? m[0].replace(/[),.;:]+$/, '') : ''
+  }
+
+  const authCode = (log?: string) => {
+    const m = (log || '').match(/\b[A-Z0-9]{4}-[A-Z0-9]{4}\b/i)
+    return m ? m[0].toUpperCase() : ''
+  }
+
   const load = useCallback(async () => {
     try {
       const res = await fetch('/api/agent/tasks', { credentials: 'include' })
@@ -117,7 +201,7 @@ export default function AgentChat() {
 
   // Активную задачу раскрываем автоматически — видно, как агент работает
   useEffect(() => {
-    const running = tasks.find((t) => t.status === 'running')
+    const running = tasks.find((t) => t.status === 'running' && t.prompt !== '__AUTH__')
     if (running && autoExpandedId.current !== running.id) {
       autoExpandedId.current = running.id
       setExpandedId(running.id)
@@ -158,6 +242,9 @@ export default function AgentChat() {
     }
   }
 
+  // Последняя задача авторизации (__AUTH__) — показываем отдельной панелью
+  const authTask = [...tasks].reverse().find((t) => t.prompt === '__AUTH__')
+
   const inputStyle: React.CSSProperties = {
     width: '100%', boxSizing: 'border-box', border: '1px solid #d9d1c4', borderRadius: 8,
     background: '#fff', color: '#25241f', padding: '12px 14px', font: '13px Arial, Helvetica, sans-serif', resize: 'none',
@@ -177,6 +264,64 @@ export default function AgentChat() {
           ⚙
         </button>
       </div>
+
+      {/* Выбор провайдера */}
+      {configLoaded && (
+        <div style={{ display: 'flex', gap: 8, marginBottom: 18 }}>
+          {(['chatgpt', 'deepseek'] as const).map((p) => (
+            <button key={p} type="button" onClick={() => void applyProvider(p)}
+              style={{
+                flex: 1, border: provider === p ? '1px solid #a7814e' : '1px solid #e1d8ca', borderRadius: 10,
+                padding: '12px 14px', cursor: 'pointer', textAlign: 'left', background: provider === p ? '#fbf7ef' : '#fff',
+              }}>
+              <span style={{ display: 'block', fontSize: 13, color: provider === p ? '#8d6b40' : '#45423c', fontWeight: 600 }}>
+                {p === 'chatgpt' ? t.crm.agentProviderChatgpt : t.crm.agentProviderDeepseek}
+              </span>
+              <span style={{ display: 'block', fontSize: 11, color: '#9b958a', marginTop: 2 }}>
+                {p === 'chatgpt' ? 'gpt-5.5 · подписка Plus' : 'deepseek-v4-flash · API-ключ'}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+      {providerNotice && <p style={{ margin: '-8px 0 12px', color: '#4e7a3a', fontSize: 11 }}>{providerNotice}</p>}
+
+      {/* Авторизация ChatGPT — панель только при активном Codex-провайдере */}
+      {provider === 'chatgpt' && (
+        <div style={{ background: '#fff', border: '1px solid #e5dfd3', borderRadius: 12, padding: 16, marginBottom: 18 }}>
+          <p style={{ margin: '0 0 12px', color: '#817b70', fontSize: 12, lineHeight: 1.6 }}>{t.crm.agentAuthHint}</p>
+          {authTask && (authTask.status === 'queued' || authTask.status === 'running') ? (
+            <div style={{ border: '1px dashed #d9c8a8', borderRadius: 10, padding: 14, marginBottom: 10, background: '#fbf7ef' }}>
+              <p style={{ margin: '0 0 6px', color: '#8d6b40', fontSize: 11 }}>{t.crm.agentAuthWaiting}</p>
+              {authLink(authTask.log) ? (
+                <a href={authLink(authTask.log)} target="_blank" rel="noreferrer" style={{ color: '#a7814e', fontSize: 13, wordBreak: 'break-all' }}>{authLink(authTask.log)}</a>
+              ) : (
+                <p style={{ margin: 0, color: '#9b958a', fontSize: 12 }}>{t.crm.agentNoLog}</p>
+              )}
+              {authCode(authTask.log) && (
+                <div style={{ marginTop: 10, font: '22px/1.5 Consolas, Menlo, monospace', color: '#25241f', background: '#fff', border: '1px solid #e1d8ca', borderRadius: 8, padding: '8px 14px', textAlign: 'center', letterSpacing: '.14em' }}>
+                  {authCode(authTask.log)}
+                </div>
+              )}
+            </div>
+          ) : authTask?.status === 'done' ? (
+            <p style={{ margin: 0, color: '#4e7a3a', fontSize: 13 }}>{t.crm.agentAuthDone} ✓ — {t.crm.agentProviderChatgpt}</p>
+          ) : authTask?.status === 'failed' ? (
+            <>
+              <p style={{ margin: '0 0 10px', color: '#9b4e43', fontSize: 12 }}>{authTask.result || t.crm.agentAuthFailed}</p>
+              <button type="button" onClick={() => void startAuth()}
+                style={{ border: '1px solid #a7814e', borderRadius: 8, background: '#fff', color: '#8d6b40', padding: '10px 18px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', cursor: 'pointer' }}>
+                {t.crm.agentAuthStart}
+              </button>
+            </>
+          ) : (
+            <button type="button" onClick={() => void startAuth()}
+              style={{ border: 0, borderRadius: 8, background: '#a7814e', color: '#fff', padding: '12px 22px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', cursor: 'pointer' }}>
+              {t.crm.agentAuthStart}
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Форма запроса */}
       <div style={{ background: '#fff', border: '1px solid #e5dfd3', borderRadius: 12, padding: 16, marginBottom: 18 }}>
@@ -213,7 +358,7 @@ export default function AgentChat() {
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {tasks.map((task) => (
+          {tasks.filter((t) => t.prompt !== '__AUTH__').map((task) => (
             <div key={task.id} style={{ background: '#fff', border: '1px solid #e5dfd3', borderRadius: 12, overflow: 'hidden' }}>
               <div
                 onClick={() => setExpandedId(expandedId === task.id ? null : task.id)}
