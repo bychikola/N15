@@ -16,6 +16,11 @@ export const DISTRICT_OPTIONS = [
 // и выбора в форме объекта)
 import { COUNTRY_AREAS } from '@/components/home/landing-data'
 
+// Район → его населённые пункты (каскадный фильтр: пункты зависят от района)
+export const LOCALITIES_BY_DISTRICT: Record<string, string[]> = Object.fromEntries(
+  COUNTRY_AREAS.map((a) => [a.district, a.places.split(' · ').map((p) => p.trim())]),
+)
+
 export const LOCALITY_OPTIONS = Array.from(
   new Set(COUNTRY_AREAS.flatMap((a) => a.places.split(' · ').map((p) => p.trim()))),
 ).sort()

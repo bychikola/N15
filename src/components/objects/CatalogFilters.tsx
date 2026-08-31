@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import type { Dict } from '@/i18n/dictionaries'
-import { DISTRICT_OPTIONS, LOCALITY_OPTIONS } from '@/lib/districts'
+import { DISTRICT_OPTIONS, LOCALITIES_BY_DISTRICT, LOCALITY_OPTIONS } from '@/lib/districts'
 
 export interface FiltersState {
   type: string
@@ -86,6 +86,10 @@ interface CatalogFiltersProps {
 export default function CatalogFilters({ state, onChange, t }: CatalogFiltersProps) {
   const typeOptions = Object.entries(t.typeLabels).map(([value, label]) => ({ value, label }))
   const categoryOptions = Object.entries(t.categoryLabels).map(([value, label]) => ({ value, label }))
+  // Пункты зависят от выбранного района: показываем только его нас. пункты
+  const localityOptions = state.district
+    ? (LOCALITIES_BY_DISTRICT[state.district] || []).map((l) => ({ value: l, label: l }))
+    : LOCALITY_OPTIONS.map((l) => ({ value: l, label: l }))
   const hasFilters = state.type || state.category || state.rooms || state.priceMin || state.priceMax || state.areaMin || state.district || state.locality
 
   return (
@@ -101,11 +105,18 @@ export default function CatalogFilters({ state, onChange, t }: CatalogFiltersPro
       <div className="w-48">
         <Dropdown label={t.catalog.districtLabel} value={state.district}
           options={DISTRICT_OPTIONS.map((d) => ({ value: d, label: d }))}
-          onSelect={(v) => onChange({ district: v })} />
+          onSelect={(v) => {
+            const patch: Partial<FiltersState> = { district: v }
+            // Если выбранный пункт не входит в новый район — сбрасываем его
+            if (v && state.locality && !(LOCALITIES_BY_DISTRICT[v] || []).includes(state.locality)) {
+              patch.locality = ''
+            }
+            onChange(patch)
+          }} />
       </div>
       <div className="w-48">
         <Dropdown label={t.catalog.localityLabel} value={state.locality}
-          options={LOCALITY_OPTIONS.map((l) => ({ value: l, label: l }))}
+          options={localityOptions}
           onSelect={(v) => onChange({ locality: v })} />
       </div>
       <div className="w-48">
