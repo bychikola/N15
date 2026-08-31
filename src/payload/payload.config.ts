@@ -18,6 +18,7 @@ import { Users } from './collections/Users'
 import { Media } from './collections/Media'
 import { SiteSettings } from './globals/SiteSettings'
 import { MailSettings } from './globals/MailSettings'
+import { AgentSettings } from './globals/AgentSettings'
 
 export default buildConfig({
   secret: process.env.PAYLOAD_SECRET || 'n15-dev-secret-change-in-production',
@@ -40,7 +41,7 @@ export default buildConfig({
     admin: process.env.ADMIN_ROUTE || '/admin',
   },
   collections: [Users, Media, Objects, Agents, Applications, Tasks, Messages, Blog, Pages, Customers, Emails, AgentTasks],
-  globals: [SiteSettings, MailSettings],
+  globals: [SiteSettings, MailSettings, AgentSettings],
   editor: lexicalEditor(),
   db: process.env.DATABASE_URI
     ? postgresAdapter({

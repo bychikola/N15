@@ -29,6 +29,57 @@ export default function AgentChat() {
   const [error, setError] = useState('')
   const [expandedId, setExpandedId] = useState<number | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [configJson, setConfigJson] = useState('')
+  const [configLoading, setConfigLoading] = useState(false)
+  const [configSaving, setConfigSaving] = useState(false)
+  const [configError, setConfigError] = useState('')
+  const [configSaved, setConfigSaved] = useState(false)
+
+  const openSettings = async () => {
+    setSettingsOpen(true)
+    setConfigError('')
+    setConfigSaved(false)
+    setConfigLoading(true)
+    try {
+      const res = await fetch('/api/agent/config', { credentials: 'include' })
+      if (res.ok) {
+        const data = await res.json()
+        setConfigJson(data.envJson || '')
+      } else {
+        setConfigError(t.crm.agentConfigError)
+      }
+    } catch {
+      setConfigError(t.crm.agentConfigError)
+    } finally {
+      setConfigLoading(false)
+    }
+  }
+
+  const saveConfig = async () => {
+    if (configSaving) return
+    setConfigSaving(true)
+    setConfigError('')
+    setConfigSaved(false)
+    try {
+      const res = await fetch('/api/agent/config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ envJson: configJson }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => null)
+        setConfigError(data?.error === 'invalid json' ? t.crm.agentConfigInvalidJson : t.crm.agentConfigError)
+        return
+      }
+      setConfigSaved(true)
+      setTimeout(() => setConfigSaved(false), 2500)
+    } catch {
+      setConfigError(t.crm.agentConfigError)
+    } finally {
+      setConfigSaving(false)
+    }
+  }
 
   const load = useCallback(async () => {
     try {
@@ -99,7 +150,7 @@ export default function AgentChat() {
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
         <button
           type="button"
-          onClick={() => setSettingsOpen(true)}
+          onClick={() => void openSettings()}
           title={t.crm.agentSettings}
           aria-label={t.crm.agentSettings}
           style={{ border: '1px solid #d9d1c4', borderRadius: 8, background: '#fff', color: '#716b62', padding: '9px 12px', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}
@@ -187,25 +238,40 @@ export default function AgentChat() {
       {settingsOpen && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 120, background: 'rgba(32,33,30,.55)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 16px', overflowY: 'auto' }}
           onClick={() => setSettingsOpen(false)}>
-          <div style={{ background: '#faf8f4', border: '1px solid #ded5c7', borderRadius: 12, width: 'min(100%, 560px)', padding: 22 }}
+          <div style={{ background: '#faf8f4', border: '1px solid #ded5c7', borderRadius: 12, width: 'min(100%, 680px)', padding: 22 }}
             onClick={(e) => e.stopPropagation()}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
               <h2 style={{ margin: 0, fontFamily: "'New Standard', Georgia, serif", fontWeight: 400, fontSize: 20 }}>{t.crm.agentSettings}</h2>
               <button type="button" onClick={() => setSettingsOpen(false)} style={{ border: '1px solid #e1d8ca', borderRadius: 7, background: '#fff', color: '#716b62', padding: '8px 12px', cursor: 'pointer', fontSize: 12 }}>✕</button>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 14, padding: '10px 0', borderBottom: '1px solid #eee9e1', fontSize: 13, color: '#25241f' }}>
-                <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.1em', color: '#927046' }}>{t.crm.agentProvider}</span>
-                <span>DeepSeek ({t.crm.agentModel})</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 14, padding: '10px 0', borderBottom: '1px solid #eee9e1', fontSize: 13, color: '#25241f' }}>
-                <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.1em', color: '#927046' }}>{t.crm.agentAccess}</span>
-                <span>{t.crm.agentAccessFull}</span>
-              </div>
-            </div>
-            <p style={{ margin: '16px 0 0', fontSize: 12, color: '#817b70', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
-              {t.crm.agentSettingsHint}
+            <p style={{ margin: '0 0 12px', fontSize: 12, color: '#817b70', lineHeight: 1.6 }}>
+              {t.crm.agentConfigHint}
             </p>
+            <textarea
+              rows={14}
+              value={configJson}
+              onChange={(e) => setConfigJson(e.target.value)}
+              placeholder={'{\n  "ANTHROPIC_BASE_URL": "https://api.deepseek.com/anthropic",\n  "ANTHROPIC_AUTH_TOKEN": "...",\n  "ANTHROPIC_MODEL": "deepseek-v4-flash"\n}'}
+              aria-label={t.crm.agentConfigJsonLabel}
+              disabled={configLoading}
+              style={{
+                width: '100%', boxSizing: 'border-box', border: '1px solid #d9d1c4', borderRadius: 8,
+                background: configLoading ? '#f5f2eb' : '#fff', color: '#25241f', padding: 12,
+                font: '12px/1.6 Consolas, Menlo, monospace', resize: 'vertical',
+              }}
+            />
+            {configError && <p style={{ margin: '10px 0 0', color: '#9b4e43', fontSize: 11 }}>{configError}</p>}
+            {configSaved && <p style={{ margin: '10px 0 0', color: '#4e7a3a', fontSize: 11 }}>{t.crm.agentConfigSaved} ✓</p>}
+            <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+              <button type="button" onClick={() => void saveConfig()} disabled={configSaving}
+                style={{ flex: 1, border: 0, borderRadius: 8, background: '#a7814e', color: '#fff', padding: '12px 18px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', cursor: 'pointer', opacity: configSaving ? 0.5 : 1 }}>
+                {configSaving ? t.crm.agentConfigSaving : t.crm.agentConfigSave}
+              </button>
+              <button type="button" onClick={() => setSettingsOpen(false)}
+                style={{ border: '1px solid #e1d8ca', borderRadius: 8, background: '#fff', color: '#716b62', padding: '12px 18px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', cursor: 'pointer' }}>
+                {t.crm.dupCancel}
+              </button>
+            </div>
           </div>
         </div>
       )}

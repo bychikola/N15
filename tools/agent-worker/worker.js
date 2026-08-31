@@ -98,7 +98,7 @@ async function runClaude(client, id, prompt) {
     '--dangerously-skip-permissions',
   ]
   return new Promise((resolve) => {
-    const child = spawn('claude', args, { cwd: REPO, env: process.env, shell: false })
+    const child = spawn('claude', args, { cwd: REPO, env: { ...process.env, ...agentEnv }, shell: false })
     let out = ''
     let buffer = ''
     const timer = setTimeout(() => child.kill('SIGKILL'), AGENT_TIMEOUT_MS)
@@ -240,6 +240,32 @@ async function runAgentTask(client, task) {
 
 let client = null
 let busy = false
+let agentEnv = {}
+
+// Читает конфигурацию агента из глобала agent-settings (БД) и обновляет env,
+// который передаётся CLI при следующем запуске. Вызывается при старте и каждые 30с.
+async function refreshAgentEnv() {
+  try {
+    const res = await client.query(
+      `SELECT value FROM payload_globals WHERE slug = 'agent-settings' LIMIT 1`,
+    )
+    const raw = res.rows[0]?.value
+    if (!raw) {
+      agentEnv = {}
+      return
+    }
+    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
+    const envJson = parsed?.envJson
+    if (typeof envJson === 'string' && envJson.trim()) {
+      const env = JSON.parse(envJson)
+      if (typeof env === 'object' && env !== null && !Array.isArray(env)) {
+        agentEnv = env
+      }
+    }
+  } catch (e) {
+    console.error('refreshAgentEnv error', e)
+  }
+}
 
 async function main() {
   // Проверка доступности CLI и репозитория
@@ -257,8 +283,12 @@ async function main() {
   client = new Client({ connectionString: DB })
   await client.connect()
   console.log('worker connected, polling every', POLL_MS / 1000, 's')
-  console.log('provider:', process.env.ANTHROPIC_BASE_URL || 'anthropic (default)')
-  console.log('model:', process.env.ANTHROPIC_MODEL || 'default')
+  await refreshAgentEnv()
+  console.log('provider:', agentEnv.ANTHROPIC_BASE_URL || process.env.ANTHROPIC_BASE_URL || 'anthropic (default)')
+  console.log('model:', agentEnv.ANTHROPIC_MODEL || process.env.ANTHROPIC_MODEL || 'default')
+
+  // Периодически обновляем конфиг из БД (редактирование из модалки CRM)
+  setInterval(() => { refreshAgentEnv().catch(() => {}) }, 30 * 1000)
 
   setInterval(async () => {
     if (busy) return
