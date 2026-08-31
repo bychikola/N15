@@ -28,6 +28,7 @@ export default function AgentChat() {
   const [sending, setSending] = useState(false)
   const [error, setError] = useState('')
   const [expandedId, setExpandedId] = useState<number | null>(null)
+  const [settingsOpen, setSettingsOpen] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -94,6 +95,19 @@ export default function AgentChat() {
 
   return (
     <div>
+      {/* Шапка с настройками */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
+        <button
+          type="button"
+          onClick={() => setSettingsOpen(true)}
+          title={t.crm.agentSettings}
+          aria-label={t.crm.agentSettings}
+          style={{ border: '1px solid #d9d1c4', borderRadius: 8, background: '#fff', color: '#716b62', padding: '9px 12px', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}
+        >
+          ⚙
+        </button>
+      </div>
+
       {/* Форма запроса */}
       <div style={{ background: '#fff', border: '1px solid #e5dfd3', borderRadius: 12, padding: 16, marginBottom: 18 }}>
         <p style={{ margin: '0 0 10px', color: '#817b70', fontSize: 12, lineHeight: 1.6 }}>
@@ -166,6 +180,33 @@ export default function AgentChat() {
               )}
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Модалка настроек */}
+      {settingsOpen && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 120, background: 'rgba(32,33,30,.55)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 16px', overflowY: 'auto' }}
+          onClick={() => setSettingsOpen(false)}>
+          <div style={{ background: '#faf8f4', border: '1px solid #ded5c7', borderRadius: 12, width: 'min(100%, 560px)', padding: 22 }}
+            onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <h2 style={{ margin: 0, fontFamily: "'New Standard', Georgia, serif", fontWeight: 400, fontSize: 20 }}>{t.crm.agentSettings}</h2>
+              <button type="button" onClick={() => setSettingsOpen(false)} style={{ border: '1px solid #e1d8ca', borderRadius: 7, background: '#fff', color: '#716b62', padding: '8px 12px', cursor: 'pointer', fontSize: 12 }}>✕</button>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 14, padding: '10px 0', borderBottom: '1px solid #eee9e1', fontSize: 13, color: '#25241f' }}>
+                <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.1em', color: '#927046' }}>{t.crm.agentProvider}</span>
+                <span>DeepSeek ({t.crm.agentModel})</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 14, padding: '10px 0', borderBottom: '1px solid #eee9e1', fontSize: 13, color: '#25241f' }}>
+                <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.1em', color: '#927046' }}>{t.crm.agentAccess}</span>
+                <span>{t.crm.agentAccessFull}</span>
+              </div>
+            </div>
+            <p style={{ margin: '16px 0 0', fontSize: 12, color: '#817b70', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
+              {t.crm.agentSettingsHint}
+            </p>
+          </div>
         </div>
       )}
     </div>

@@ -257,6 +257,8 @@ async function main() {
   client = new Client({ connectionString: DB })
   await client.connect()
   console.log('worker connected, polling every', POLL_MS / 1000, 's')
+  console.log('provider:', process.env.ANTHROPIC_BASE_URL || 'anthropic (default)')
+  console.log('model:', process.env.ANTHROPIC_MODEL || 'default')
 
   setInterval(async () => {
     if (busy) return

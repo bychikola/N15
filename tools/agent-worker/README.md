@@ -26,8 +26,12 @@ cp /root/n15/tools/agent-worker/worker.js /root/n15/tools/agent-worker/package.j
 npm install
 
 # 4. Конфиг
+# Провайдер — DeepSeek (Anthropic-совместимый endpoint), как в локальном
+# конфиге ~/.claude/settings.json на ПК. Значения берутся оттуда же:
 cat > /root/n15-agent/.env << 'EOF'
-ANTHROPIC_API_KEY=sk-ant-...
+ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic
+ANTHROPIC_AUTH_TOKEN=<ключ из ~/.claude/settings.json на ПК>
+ANTHROPIC_MODEL=deepseek-v4-flash
 DATABASE_URI=postgres://n15:ПАРОЛЬ@localhost:5432/n15
 N15_REPO=/root/n15
 EOF
