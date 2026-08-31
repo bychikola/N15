@@ -102,8 +102,9 @@ export const ObjectActions: FC<Props> = ({ objectId, shareUrl }) => {
 
   const share = async () => {
     // Пока так: копируем ссылку и показываем «Скопировано» в кнопке с анимацией.
+    // shareUrl относительный — подставляем origin, чтобы в буфере был полный адрес сайта.
     try {
-      await navigator.clipboard.writeText(shareUrl)
+      await navigator.clipboard.writeText(new URL(shareUrl, window.location.origin).toString())
     } catch {
       // нет доступа к буферу — анимацию всё равно показываем
     }
