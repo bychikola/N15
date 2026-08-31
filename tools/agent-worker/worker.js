@@ -6,16 +6,17 @@
 // Безопасность (принятый компромисс): CLI запускается с
 // --dangerously-skip-permissions — агент имеет полный доступ (Bash и т.д.),
 // как локальный Claude Code. Это сознательный выбор владельца («как у меня»).
-// Проверки tsc/lint, git commit/push и deploy выполняет сам воркер после
-// завершения агента — LLM деплой не запускает.
+// Агент сам коммитит и пушит изменения (git add/commit/push), как обычная
+// сессия — воркер после него лишь проверяет tsc/lint (гейт перед деплоем)
+// и запускает bash deploy.sh, если origin/master уехал вперёд.
 //
 // Цикл:
 //   1. Раз в 5 секунд берёт задачу status='queued' из agent-tasks.
 //   2. Запускает: claude -p "<запрос>" --output-format stream-json
 //      --dangerously-skip-permissions --cwd <репозиторий>
 //   3. Стрим-события агента пишутся в лог задачи (CRM видит живьём).
-//   4. Воркер: tsc --noEmit → npm run lint → git add/commit/push.
-//   5. Воркер запускает bash deploy.sh.
+//   4. Агент делает git commit + push (если правил код).
+//   5. Воркер: tsc/lint (если есть node_modules) → bash deploy.sh.
 //
 // Переменные окружения:
 //   DATABASE_URI      — Postgres (как в ~/n15/.env)
@@ -43,14 +44,14 @@ if (!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_AUTH_TOKEN) {
 
 const SYSTEM_RULES = `
 Ты — Claude Code, работающий в репозитории сайта N15 (Next.js + Payload) на сервере.
-У тебя есть все обычные инструменты (включая Bash), как в обычной сессии.
+У тебя есть все обычные инструменты (включая Bash) и git, как в обычной сессии.
 Выполни запрос пользователя. Правила:
 1. Работай в этом репозитории. Не трогай: node_modules, .env*, docker-compose*, Caddyfile, deploy.sh, docker-entrypoint.sh, tools/.
 2. Соблюдай стиль существующего кода (комментарии на русском, где они есть).
-3. Проверки tsc/lint: если в репозитории есть node_modules — выполни npx tsc --noEmit и npm run lint и исправь ошибки. Если node_modules нет — пропусти проверки (это сделает воркер и сборка при деплое).
+3. Если правил код — до коммита выполни проверки (если есть node_modules): npx tsc --noEmit и npm run lint; исправь найденные ошибки. Если node_modules нет — пропусти.
 4. НЕ устанавливай зависимости (npm install, npm ci и т.п.) и не запускай сторонние npx-пакеты — на сервере зависимостей нет намеренно, сайт собирается в docker.
-5. Если для задачи не нужны правки кода (например, только данные в БД) — просто выполни операцию и опиши результат.
-6. НЕ коммить и НЕ пуши — это сделает воркер после тебя.
+5. После правок сделай git add -A, git commit -m "<краткое описание>" и git push origin master — как в обычной сессии.
+6. Если правки кода не нужны (например, только данные в БД) — ничего не коммить, просто опиши результат.
 7. НЕ запускай deploy и не трогай docker-команды.
 Заверши кратким списком изменений.
 `
@@ -152,67 +153,47 @@ async function runClaude(client, id, prompt) {
   })
 }
 
-// Проверки + коммит + push — выполняет воркер (не LLM)
-async function checkAndPush(client, id, commitMsg, baseline) {
-  await appendLog(client, id, `\n— Проверки —\n`)
-
-  // 1. Агент не изменил репозиторий (сверка со снимком до его запуска) —
-  //    например, задача работала с данными в БД. tsc/lint/коммит/деплой не нужны.
-  const status = await runCommand('git', ['status', '--porcelain'], REPO, 30000)
-  if (status.out.trim() === (baseline || '').trim()) {
-    await appendLog(client, id, `Изменений в репозитории нет — проверки, коммит и деплой пропущены.\n`)
-    return { ok: true, step: 'noop' }
+// Гейт tsc/lint после агента, перед деплоем. Коммит и push делает сам агент
+// (как обычная сессия Claude Code) — воркер лишь убеждается, что код
+// собирается, иначе сломанный код не уедет на прод.
+async function verifyCodeGate(client, id) {
+  await appendLog(client, id, `\n— Проверки (tsc/lint) перед деплоем —\n`)
+  if (!existsSync(`${REPO}/node_modules`)) {
+    await appendLog(client, id, `node_modules отсутствует — tsc/lint пропущены (проверит сборка при деплое).\n`)
+    return true
   }
-
-  // 2. tsc/lint — только если зависимости установлены локально. Голый
-  //    `npx tsc` без node_modules скачивает посторонний пакет "tsc"
-  //    (это НЕ компилятор TypeScript!) и падает — используем только
-  //    локальный компилятор из node_modules.
-  const hasModules = existsSync(`${REPO}/node_modules`)
-  if (hasModules) {
-    const tsc = await runCommand(`${REPO}/node_modules/.bin/tsc`, ['--noEmit'], REPO, 5 * 60 * 1000)
-    await appendLog(client, id, tsc.out.slice(-3000))
-    if (tsc.code !== 0) {
-      await appendLog(client, id, `\n⨯ tsc не прошёл (exit ${tsc.code})\n`)
-      return { ok: false, step: 'tsc', out: tsc.out }
-    }
-
-    const lint = await runCommand('npm', ['run', 'lint'], REPO, 5 * 60 * 1000)
-    await appendLog(client, id, lint.out.slice(-3000))
-    if (lint.code !== 0) {
-      await appendLog(client, id, `\n⨯ lint не прошёл (exit ${lint.code})\n`)
-      return { ok: false, step: 'lint', out: lint.out }
-    }
-  } else {
-    await appendLog(client, id, `node_modules отсутствует — tsc/lint пропущены, типы проверит сборка при деплое.\n`)
+  const tsc = await runCommand(`${REPO}/node_modules/.bin/tsc`, ['--noEmit'], REPO, 5 * 60 * 1000)
+  await appendLog(client, id, tsc.out.slice(-3000))
+  if (tsc.code !== 0) {
+    await appendLog(client, id, `\n⨯ tsc не прошёл (exit ${tsc.code}) — деплой отменён.\n`)
+    return false
   }
+  const lint = await runCommand('npm', ['run', 'lint'], REPO, 5 * 60 * 1000)
+  await appendLog(client, id, lint.out.slice(-3000))
+  if (lint.code !== 0) {
+    await appendLog(client, id, `\n⨯ lint не прошёл (exit ${lint.code}) — деплой отменён.\n`)
+    return false
+  }
+  return true
+}
 
-  // 3. Коммит и push (изменения уже есть — мы это проверили в шаге 1)
-  await runCommand('git', ['add', '-A'], REPO, 30000)
-  const commit = await runCommand('git', ['commit', '-m', commitMsg], REPO, 30000)
-  await appendLog(client, id, commit.out.slice(-1500))
-  if (commit.code !== 0) {
-    await appendLog(client, id, `\n⨯ commit не прошёл (exit ${commit.code})\n`)
-    return { ok: false, step: 'commit', out: commit.out }
-  }
-  const push = await runCommand('git', ['push', 'origin', 'master'], REPO, 60 * 1000)
-  await appendLog(client, id, push.out.slice(-1500))
-  if (push.code !== 0) {
-    await appendLog(client, id, `\n⨯ push не прошёл (exit ${push.code})\n`)
-    return { ok: false, step: 'push' }
-  }
-  return { ok: true, step: 'pushed' }
+// Текущий коммит origin/master (после fetch). Пустая строка — репо без remote.
+async function remoteHead() {
+  const r = await runCommand('git', ['rev-parse', 'origin/master'], REPO, 30000)
+  return r.code === 0 ? r.out.trim() : ''
 }
 
 async function runAgentTask(client, task) {
   const id = task.id
   log(id, 'started')
-  const commitMsg = `feat(ai): ${task.prompt.replace(/[^\wа-яё\s-]/gi, '').slice(0, 60) || 'agent changes'}`
-  // Снимок репозитория ДО агента. Если после его работы состояние не
-  // изменилось — задача была чисто по данным (БД и т.п.), и коммит/деплой
-  // не нужны, даже если в репозитории уже лежал мусор (например, package-lock
-  // от ручного npm install).
-  const repoBefore = (await runCommand('git', ['status', '--porcelain'], REPO, 30000)).out
+
+  // Состояние ДО агента: что на origin/master, HEAD и какие файлы грязные.
+  // После агента по ним понимаем, что он сделал с кодом — сам коммитит
+  // и пушит, как обычная сессия Claude Code.
+  await runCommand('git', ['fetch', 'origin'], REPO, 60000)
+  const remoteBefore = await remoteHead()
+  const headBefore = (await runCommand('git', ['rev-parse', 'HEAD'], REPO, 30000)).out.trim()
+  const dirtyBefore = (await runCommand('git', ['status', '--porcelain'], REPO, 30000)).out.trim()
 
   // 1. Настоящий Claude Code CLI (с плагинами из ~/.claude на сервере)
   const agent = await runClaude(client, id, task.prompt)
@@ -225,48 +206,69 @@ async function runAgentTask(client, task) {
     return
   }
 
-  // 2. Проверки воркера. Агента на «исправление» НЕ перезапускаем: он
-  //    выполнил свою задачу один раз (и сам проверяет tsc/lint, когда есть
-  //    node_modules). Если его правки не проходят — задача failed с логом.
-  const check = await checkAndPush(client, id, commitMsg, repoBefore)
-  if (!check.ok) {
+  // Что изменилось после агента
+  await runCommand('git', ['fetch', 'origin'], REPO, 60000)
+  const remoteAfter = await remoteHead()
+  const headAfter = (await runCommand('git', ['rev-parse', 'HEAD'], REPO, 30000)).out.trim()
+  const dirtyAfter = (await runCommand('git', ['status', '--porcelain'], REPO, 30000)).out.trim()
+
+  // 2. Агент запушил изменения → гейт tsc/lint → деплой
+  if (remoteBefore && remoteAfter !== remoteBefore) {
+    if (!(await verifyCodeGate(client, id))) {
+      await updateTask(client, id, {
+        status: 'failed',
+        result: 'Код после агента не прошёл tsc/lint — деплой отменён. Хвост лога в журнале задачи.',
+      })
+      log(id, 'gate failed, deploy cancelled')
+      return
+    }
+    await appendLog(client, id, `\n— Деплой: bash deploy.sh (10-20 мин) —\n`)
+    const deploy = await runCommand('bash', ['deploy.sh'], REPO, DEPLOY_TIMEOUT_MS, (chunk) => {
+      appendLog(client, id, chunk)
+    })
+    await appendLog(client, id, `\n— Деплой завершён (exit ${deploy.code}) —\n`)
+    if (deploy.code === 0) {
+      await updateTask(client, id, {
+        status: 'done',
+        result: agent.out.slice(-2000) || 'Изменения применены и сайт обновлён.',
+      })
+      log(id, 'done')
+    } else {
+      await updateTask(client, id, {
+        status: 'failed',
+        result: `Деплой упал (exit ${deploy.code}). Хвост: ${deploy.out.slice(-2000)}`,
+      })
+      log(id, 'deploy failed')
+    }
+    return
+  }
+
+  // 3. Закоммичено локально, но не запушено
+  if (headAfter && headBefore && headAfter !== headBefore) {
     await updateTask(client, id, {
       status: 'failed',
-      result: `Проверки не прошли (${check.step}). Хвост лога в журнале задачи.`,
+      result: 'Агент закоммитил изменения, но не запушал (origin/master не двигался). Хвост лога в журнале задачи.',
     })
+    log(id, 'committed but not pushed')
     return
   }
 
-  // 2а. Код не менялся — деплой не нужен
-  if (check.step === 'noop') {
+  // 4. Файлы изменились, но не закоммичены
+  if (dirtyAfter !== dirtyBefore) {
     await updateTask(client, id, {
-      status: 'done',
-      result: agent.out.slice(-2000) || 'Изменений в коде не требовалось.',
+      status: 'failed',
+      result: 'Агент изменил файлы в репозитории, но не закоммитил. Хвост лога в журнале задачи.',
     })
-    log(id, 'done (no code changes)')
+    log(id, 'uncommitted changes')
     return
   }
 
-  // 3. Деплой — воркер (сборка долгая)
-  await appendLog(client, id, `\n— Деплой: bash deploy.sh (10-20 мин) —\n`)
-  const deploy = await runCommand('bash', ['deploy.sh'], REPO, DEPLOY_TIMEOUT_MS, (chunk) => {
-    appendLog(client, id, chunk)
+  // 5. Код не менялся — задача по данным (БД и т.п.), деплой не нужен
+  await updateTask(client, id, {
+    status: 'done',
+    result: agent.out.slice(-2000) || 'Изменений в коде не требовалось.',
   })
-  await appendLog(client, id, `\n— Деплой завершён (exit ${deploy.code}) —\n`)
-
-  if (deploy.code === 0) {
-    await updateTask(client, id, {
-      status: 'done',
-      result: agent.out.slice(-2000) || 'Изменения применены и сайт обновлён.',
-    })
-    log(id, 'done')
-  } else {
-    await updateTask(client, id, {
-      status: 'failed',
-      result: `Деплой упал (exit ${deploy.code}). Хвост: ${deploy.out.slice(-2000)}`,
-    })
-    log(id, 'deploy failed')
-  }
+  log(id, 'done (no code changes)')
 }
 
 let client = null
