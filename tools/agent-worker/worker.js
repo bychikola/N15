@@ -153,13 +153,13 @@ async function runClaude(client, id, prompt) {
 }
 
 // Проверки + коммит + push — выполняет воркер (не LLM)
-async function checkAndPush(client, id, commitMsg) {
+async function checkAndPush(client, id, commitMsg, baseline) {
   await appendLog(client, id, `\n— Проверки —\n`)
 
-  // 1. Изменений в коде нет (например, задача работала с данными в БД) —
-  //    tsc/lint/коммит/деплой не нужны.
+  // 1. Агент не изменил репозиторий (сверка со снимком до его запуска) —
+  //    например, задача работала с данными в БД. tsc/lint/коммит/деплой не нужны.
   const status = await runCommand('git', ['status', '--porcelain'], REPO, 30000)
-  if (!status.out.trim()) {
+  if (status.out.trim() === (baseline || '').trim()) {
     await appendLog(client, id, `Изменений в репозитории нет — проверки, коммит и деплой пропущены.\n`)
     return { ok: true, step: 'noop' }
   }
@@ -191,6 +191,10 @@ async function checkAndPush(client, id, commitMsg) {
   await runCommand('git', ['add', '-A'], REPO, 30000)
   const commit = await runCommand('git', ['commit', '-m', commitMsg], REPO, 30000)
   await appendLog(client, id, commit.out.slice(-1500))
+  if (commit.code !== 0) {
+    await appendLog(client, id, `\n⨯ commit не прошёл (exit ${commit.code})\n`)
+    return { ok: false, step: 'commit', out: commit.out }
+  }
   const push = await runCommand('git', ['push', 'origin', 'master'], REPO, 60 * 1000)
   await appendLog(client, id, push.out.slice(-1500))
   if (push.code !== 0) {
@@ -204,6 +208,11 @@ async function runAgentTask(client, task) {
   const id = task.id
   log(id, 'started')
   const commitMsg = `feat(ai): ${task.prompt.replace(/[^\wа-яё\s-]/gi, '').slice(0, 60) || 'agent changes'}`
+  // Снимок репозитория ДО агента. Если после его работы состояние не
+  // изменилось — задача была чисто по данным (БД и т.п.), и коммит/деплой
+  // не нужны, даже если в репозитории уже лежал мусор (например, package-lock
+  // от ручного npm install).
+  const repoBefore = (await runCommand('git', ['status', '--porcelain'], REPO, 30000)).out
 
   // 1. Настоящий Claude Code CLI (с плагинами из ~/.claude на сервере)
   const agent = await runClaude(client, id, task.prompt)
@@ -216,13 +225,10 @@ async function runAgentTask(client, task) {
     return
   }
 
-  // 2. Проверки; при ошибке — одна попытка агента исправить (с реальным логом ошибки)
-  let check = await checkAndPush(client, id, commitMsg)
-  if (!check.ok) {
-    await appendLog(client, id, `\n— Claude Code исправляет ошибки (${check.step}) —\n`)
-    await runClaude(client, id, `В репозитории ошибка проверки "${check.step}". Исправь её. Лог ошибки:\n${(check.out || '').slice(-3000)}`)
-    check = await checkAndPush(client, id, commitMsg)
-  }
+  // 2. Проверки воркера. Агента на «исправление» НЕ перезапускаем: он
+  //    выполнил свою задачу один раз (и сам проверяет tsc/lint, когда есть
+  //    node_modules). Если его правки не проходят — задача failed с логом.
+  const check = await checkAndPush(client, id, commitMsg, repoBefore)
   if (!check.ok) {
     await updateTask(client, id, {
       status: 'failed',

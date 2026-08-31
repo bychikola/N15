@@ -71,6 +71,18 @@ echo "  Публичный ключ (добавь в GitHub → Settings → Dep
 echo "  ---"
 echo "$PUBKEY"
 echo "  ---"
+# git-автор коммитов (иначе commit падает: "Author identity unknown")
+sudo -u "$N15_USER" git config --global user.name "N15 Agent"
+sudo -u "$N15_USER" git config --global user.email "agent@n15-realty.ru"
+# если репозиторий склонирован по https — переключаем origin на SSH,
+# чтобы push шёл по deploy key, а не спрашивал пароль
+CURRENT_REMOTE=$(sudo -u "$N15_USER" git -C "$REPO_DIR" remote get-url origin 2>/dev/null || true)
+if [[ "$CURRENT_REMOTE" == https://* ]]; then
+  SSH_REMOTE="git@github.com:${CURRENT_REMOTE#https://github.com/}"
+  sudo -u "$N15_USER" git -C "$REPO_DIR" remote set-url origin "$SSH_REMOTE"
+  echo "  origin переключён на SSH: $SSH_REMOTE"
+fi
+sudo -u "$N15_USER" bash -c 'ssh-keyscan -H github.com >> ~/.ssh/known_hosts 2>/dev/null || true'
 
 # ---------- 5. Воркер ----------
 echo "[5/8] Готовлю воркер..."
