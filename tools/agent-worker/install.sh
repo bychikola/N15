@@ -39,13 +39,14 @@ fi
 if command -v claude >/dev/null 2>&1; then
   echo "[2/7] Claude Code CLI: $(claude --version 2>/dev/null || echo installed) — уже установлен"
 else
-  echo "[2/7] Устанавливаю Claude Code CLI..."
-  curl -fsSL https://claude.ai/install.sh | bash
-  # свежий PATH после установки
-  export PATH="$HOME/.local/bin:$PATH"
+  # Установка через npm: официальный пакет, работает в регионах, где
+  # claude.ai/install.sh недоступен (возвращает «App unavailable in region»).
+  echo "[2/7] Устанавливаю Claude Code CLI (npm)..."
+  npm install -g @anthropic-ai/claude-code
+  export PATH="$PATH:$(npm prefix -g)/bin"
   echo "  CLI: $(claude --version 2>/dev/null || echo ok)"
 fi
-export PATH="$HOME/.local/bin:$PATH"
+export PATH="$PATH:$(npm prefix -g)/bin"
 
 # ---------- 3. Воркер ----------
 echo "[3/7] Готовлю воркер..."

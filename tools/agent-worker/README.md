@@ -10,7 +10,7 @@
 cd ~/n15 && git pull origin master && bash tools/agent-worker/install.sh
 ```
 
-Скрипт сам: ставит Node и Claude Code CLI, копирует воркер, собирает `DATABASE_URI` из `.env`, спросит ключ DeepSeek (или возьмёт из `ANTHROPIC_AUTH_TOKEN`) и запустит сервис. Повторный запуск — обновление.
+Скрипт сам: ставит Node и Claude Code CLI (**через npm** — работает в регионах, где claude.ai/install.sh недоступен), копирует воркер, собирает `DATABASE_URI` из `.env`, спросит ключ DeepSeek (или возьмёт из `ANTHROPIC_AUTH_TOKEN`) и запустит сервис. Повторный запуск — обновление.
 
 ## Плагины/скиллы (после установки, один раз)
 
