@@ -41,8 +41,9 @@ if (!DB) {
   process.exit(1)
 }
 if (!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_AUTH_TOKEN) {
-  console.error('ANTHROPIC_API_KEY (или ANTHROPIC_AUTH_TOKEN) is required')
-  process.exit(1)
+  // Ключ может прийти из конфига в модалке CRM (agent_settings) — старт не
+  // блокируем, только предупреждаем.
+  console.warn('ANTHROPIC_API_KEY/AUTH_TOKEN не заданы в .env — ключ возьмётся из конфига CRM (agent_settings), если он там есть')
 }
 
 const SYSTEM_RULES = `
