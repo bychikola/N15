@@ -1,3 +1,5 @@
+'use client'
+
 import Link from 'next/link'
 import type { Dict } from '@/i18n/dictionaries'
 import { COUNTRY_AREAS, NEAR_VIK } from './landing-data'
