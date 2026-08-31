@@ -27,6 +27,10 @@ const DEFAULT_ENV_JSON = `{
   }
 }`
 
+// Эталонные конфиги для переключателя провайдера в CRM: дефолтный ChatGPT
+// (вместе с _deepseek_template) и сам шаблон DeepSeek — извлекаем один раз.
+const DEEPSEEK_TEMPLATE = JSON.stringify(JSON.parse(DEFAULT_ENV_JSON)._deepseek_template, null, 2)
+
 // Конфигурация ИИ-агента (env для Claude Code CLI): только администратор.
 export async function GET(req: NextRequest) {
   try {
@@ -37,7 +41,7 @@ export async function GET(req: NextRequest) {
     }
     const settings = await payload.findGlobal({ slug: 'agent-settings', overrideAccess: true })
     const envJson = (settings.envJson as string)?.trim() || DEFAULT_ENV_JSON
-    return NextResponse.json({ envJson })
+    return NextResponse.json({ envJson, defaultEnvJson: DEFAULT_ENV_JSON, deepseekTemplate: DEEPSEEK_TEMPLATE })
   } catch (error) {
     console.error('Agent config GET error:', error)
     return NextResponse.json({ error: String(error) }, { status: 500 })

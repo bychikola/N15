@@ -39,6 +39,8 @@ export default function AgentChat() {
   const [provider, setProvider] = useState<'chatgpt' | 'deepseek' | null>(null)
   const [configLoaded, setConfigLoaded] = useState(false)
   const [providerNotice, setProviderNotice] = useState('')
+  const [defaultConfig, setDefaultConfig] = useState('')
+  const [deepseekConfig, setDeepseekConfig] = useState('')
 
   const openSettings = async () => {
     setSettingsOpen(true)
@@ -86,7 +88,8 @@ export default function AgentChat() {
     }
   }
 
-  // Определяем активного провайдера по сохранённому конфигу (один раз при загрузке)
+  // Определяем активного провайдера по сохранённому конфигу и запоминаем
+  // эталонные конфиги (дефолт ChatGPT + шаблон DeepSeek), которые отдаёт сервер.
   useEffect(() => {
     let cancelled = false
     fetch('/api/agent/config', { credentials: 'include' })
@@ -96,6 +99,8 @@ export default function AgentChat() {
         const j = String(d.envJson || '')
         if (j.includes('api.deepseek.com')) setProvider('deepseek')
         else if (j.includes('127.0.0.1') || j.includes('localhost')) setProvider('chatgpt')
+        if (d.defaultEnvJson) setDefaultConfig(String(d.defaultEnvJson))
+        if (d.deepseekTemplate) setDeepseekConfig(String(d.deepseekTemplate))
         setConfigLoaded(true)
       })
       .catch(() => {})
@@ -104,28 +109,12 @@ export default function AgentChat() {
     }
   }, [])
 
-  // Переключение провайдера: ChatGPT (конфиг без _deepseek_template) или DeepSeek (шаблон)
+  // Переключение провайдера: сохраняем эталонный конфиг с сервера —
+  // не вырезаем _deepseek_template, чтобы переключение работало в обе стороны.
   const applyProvider = async (p: 'chatgpt' | 'deepseek') => {
+    const next = p === 'chatgpt' ? defaultConfig : deepseekConfig
+    if (!next) return
     try {
-      const res = await fetch('/api/agent/config', { credentials: 'include' })
-      if (!res.ok) return
-      const data = await res.json()
-      let parsed: Record<string, unknown>
-      try {
-        parsed = JSON.parse(data.envJson || '')
-      } catch {
-        return
-      }
-      let next = ''
-      if (p === 'deepseek') {
-        const tpl = parsed._deepseek_template
-        if (!tpl) return
-        next = JSON.stringify(tpl, null, 2)
-      } else {
-        const copy: Record<string, unknown> = { ...parsed }
-        delete copy._deepseek_template
-        next = JSON.stringify(copy, null, 2)
-      }
       const put = await fetch('/api/agent/config', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
