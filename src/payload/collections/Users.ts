@@ -122,7 +122,9 @@ export const Users: CollectionConfig = {
       label: 'Доступ к ИИ-агенту',
       defaultValue: false,
       access: {
-        // Менять может только администратор — иначе юзер сам себе откроет доступ
+        // Выставлять при создании и менять может только администратор —
+        // иначе юзер сам себе откроет доступ (регистрация открыта для всех)
+        create: ({ req }) => req.user?.role === 'admin',
         update: ({ req }) => req.user?.role === 'admin',
       },
       admin: {
