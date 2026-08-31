@@ -68,9 +68,16 @@ echo "[3/6] Получаю код..."
 if [ -d "$APP_DIR/.git" ]; then
     echo "  Обновляю существующую копию..."
     cd "$APP_DIR"
+    # Remote может быть SSH, а deploy key зарегистрирован у пользователя n15
+    # (root-ключа в GitHub нет) — используем ключ n15 для git-операций.
+    if [ -f /home/n15/.ssh/id_ed25519 ]; then
+        export GIT_SSH_COMMAND="ssh -i /home/n15/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
+    fi
     git fetch origin
-    git checkout "$BRANCH"
-    git pull origin "$BRANCH"
+    # Сброс к состоянию GitHub: незакоммиченный мусор (если агент что-то не
+    # докоммитил) не должен ломать деплой. .env не трогается (он в .gitignore).
+    git reset --hard origin/"$BRANCH"
+    git checkout "$BRANCH" 2>/dev/null || true
 else
     echo "  Клонирую репозиторий..."
     mkdir -p "$APP_DIR"
