@@ -102,7 +102,14 @@ async function runClaude(client, id, prompt) {
     '--dangerously-skip-permissions',
   ]
   return new Promise((resolve) => {
-    const child = spawn('claude', args, { cwd: REPO, env: { ...process.env, ...agentEnv }, shell: false })
+    const child = spawn('claude', args, {
+      cwd: REPO,
+      env: { ...process.env, ...agentEnv },
+      shell: false,
+      // stdin не нужен (headless) — сразу закрыт, иначе CLI 3с ждёт ввода
+      // и пишет "no stdin data received" в каждую задачу
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
     let out = ''
     let buffer = ''
     const timer = setTimeout(() => child.kill('SIGKILL'), AGENT_TIMEOUT_MS)
@@ -139,7 +146,11 @@ async function runClaude(client, id, prompt) {
     child.stderr.on('data', (d) => {
       const s = d.toString()
       out += s
-      appendLog(client, id, s)
+      // [claude-code:unrecognized_model] — косметика CLI (модель DeepSeek не
+      // из таблицы Anthropic), на работу не влияет — в лог задачи не пишем.
+      if (!s.includes('[claude-code:unrecognized_model]')) {
+        appendLog(client, id, s)
+      }
     })
     child.on('close', (code) => {
       clearTimeout(timer)
