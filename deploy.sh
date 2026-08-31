@@ -18,7 +18,10 @@ set -e
 # ---- Настройки (можно менять) ----
 REPO="https://github.com/bychikola/N15.git"
 BRANCH="master"
-APP_DIR="$HOME/n15"              # папка сайта (меняй на любой путь, например /var/www/n15)
+# Папка сайта. По умолчанию — $HOME/n15 (интерактивный запуск от root), но
+# воркер ИИ-агента запускает deploy от n15 и передаёт APP_DIR=/root/n15 —
+# ровно тот репозиторий, который правил агент.
+APP_DIR="${APP_DIR:-$HOME/n15}"  # папка сайта (меняй на любой путь, например /var/www/n15)
 # Домен спрашивается при первой установке (можно передать заранее: DOMAIN=my.ru bash deploy.sh)
 DEFAULT_DOMAIN="n15-realty.ru"
 # NEXT_PUBLIC_YANDEX_MAPS_API_KEY — если не задан ниже, скрипт спросит
@@ -73,12 +76,15 @@ if [ -d "$APP_DIR/.git" ]; then
     # Хост-ключ GitHub пиним из официального api.github.com/meta (не accept-new):
     # первое подключение не должно принимать любой ключ.
     if [ -f /home/n15/.ssh/id_ed25519 ]; then
-        mkdir -p /root/.ssh
-        chmod 700 /root/.ssh 2>/dev/null || true
-        if ! grep -Fq 'github.com ssh-ed25519' /root/.ssh/known_hosts 2>/dev/null; then
-            echo 'github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl' >> /root/.ssh/known_hosts
+        # Хост-ключ GitHub пиним в known_hosts ТЕКУЩЕГО пользователя: deploy
+        # запускается и от root (вручную), и от n15 (воркер ИИ-агента)
+        KH="$HOME/.ssh/known_hosts"
+        mkdir -p "$HOME/.ssh"
+        chmod 700 "$HOME/.ssh" 2>/dev/null || true
+        if ! grep -Fq 'github.com ssh-ed25519' "$KH" 2>/dev/null; then
+            echo 'github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl' >> "$KH"
         fi
-        chmod 600 /root/.ssh/known_hosts 2>/dev/null || true
+        chmod 600 "$KH" 2>/dev/null || true
         export GIT_SSH_COMMAND="ssh -i /home/n15/.ssh/id_ed25519 -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o BatchMode=yes"
     fi
     git fetch origin

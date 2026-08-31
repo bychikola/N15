@@ -73,9 +73,9 @@ async function appendLog(client, id, text) {
   )
 }
 
-function runCommand(cmd, args, cwd, timeoutMs, onChunk) {
+function runCommand(cmd, args, cwd, timeoutMs, onChunk, extraEnv) {
   return new Promise((resolve) => {
-    const child = spawn(cmd, args, { cwd, env: process.env, shell: false })
+    const child = spawn(cmd, args, { cwd, env: { ...process.env, ...(extraEnv || {}) }, shell: false })
     let out = ''
     const timer = setTimeout(() => child.kill('SIGKILL'), timeoutMs)
     child.stdout.on('data', (d) => { const s = d.toString(); out += s; onChunk?.(s) })
@@ -252,7 +252,7 @@ async function runAgentTask(client, task) {
     await appendLog(client, id, `\n— Деплой: bash deploy.sh (10-20 мин) —\n`)
     const deploy = await runCommand('bash', ['deploy.sh'], REPO, DEPLOY_TIMEOUT_MS, (chunk) => {
       appendLog(client, id, chunk)
-    })
+    }, { APP_DIR: REPO })
     await appendLog(client, id, `\n— Деплой завершён (exit ${deploy.code}) —\n`)
     if (deploy.code === 0) {
       await updateTask(client, id, {
