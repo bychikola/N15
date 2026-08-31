@@ -40,11 +40,7 @@ if (!DB) {
   console.error('DATABASE_URI is required')
   process.exit(1)
 }
-if (!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_AUTH_TOKEN) {
-  // Ключ может прийти из конфига в модалке CRM (agent_settings) — старт не
-  // блокируем, только предупреждаем.
-  console.warn('ANTHROPIC_API_KEY/AUTH_TOKEN не заданы в .env — ключ возьмётся из конфига CRM (agent_settings), если он там есть')
-}
+// Гейт наличия ключа — fail-closed, см. main() (после загрузки конфига из CRM).
 
 const SYSTEM_RULES = `
 Ты — Claude Code, работающий в репозитории сайта N15 (Next.js + Payload) на сервере.
@@ -476,6 +472,19 @@ async function main() {
   await refreshAgentEnv()
   console.log('provider:', agentEnv.ANTHROPIC_BASE_URL || process.env.ANTHROPIC_BASE_URL || 'anthropic (default)')
   console.log('model:', agentEnv.ANTHROPIC_MODEL || process.env.ANTHROPIC_MODEL || 'default')
+
+  // Fail-closed гейт: ключ должен быть в .env ИЛИ в конфиге CRM (agent_settings).
+  // Иначе воркер не стартует — ошибка видна сразу в journalctl, а не в задачах.
+  const hasKey = [
+    agentEnv.ANTHROPIC_API_KEY,
+    process.env.ANTHROPIC_API_KEY,
+    agentEnv.ANTHROPIC_AUTH_TOKEN,
+    process.env.ANTHROPIC_AUTH_TOKEN,
+  ].some(Boolean)
+  if (!hasKey) {
+    console.error('Нет ключа API: задай ANTHROPIC_API_KEY/AUTH_TOKEN в /home/n15/n15-agent/.env или сохрани конфиг в модалке CRM (agent_settings)')
+    process.exit(1)
+  }
 
   // Периодически обновляем конфиг из БД (редактирование из модалки CRM)
   setInterval(() => { refreshAgentEnv().catch(() => {}) }, 30 * 1000)
