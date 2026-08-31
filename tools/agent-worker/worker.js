@@ -1,17 +1,21 @@
 // Воркер ИИ-агента для CRM N15.
-// Запуск на VPS-хосте (НЕ в docker): нужен доступ к ~/n15, docker и Postgres.
+// Запуск на VPS-хосте (НЕ в docker). В основе — настоящий терминальный
+// Claude Code CLI (как в локальной сессии): headless-режим `claude -p`,
+// со ВСЕМИ плагинами и скиллами из ~/.claude на сервере.
 //
-// Безопасность (по итогам аудита):
-//   - Агент НЕ получает Bash: только Read/Edit/Write/Glob/Grep — правит файлы
-//     репозитория и не может выполнять команды/читать .env на хосте.
-//   - Проверки (tsc/lint), git commit/push и deploy выполняет сам воркер.
-//   - При ошибках tsc/lint воркер даёт агенту одну попытку исправить.
+// Безопасность (принятый компромисс): CLI запускается с
+// --dangerously-skip-permissions — агент имеет полный доступ (Bash и т.д.),
+// как локальный Claude Code. Это сознательный выбор владельца («как у меня»).
+// Проверки tsc/lint, git commit/push и deploy выполняет сам воркер после
+// завершения агента — LLM деплой не запускает.
 //
 // Цикл:
 //   1. Раз в 5 секунд берёт задачу status='queued' из agent-tasks.
-//   2. Claude Agent SDK (cwd = репозиторий) правит файлы по запросу.
-//   3. Воркер: tsc --noEmit → npm run lint → git add/commit/push.
-//   4. Воркер запускает bash deploy.sh. Статус и журнал — в БД (CRM видит живьём).
+//   2. Запускает: claude -p "<запрос>" --output-format stream-json
+//      --dangerously-skip-permissions --cwd <репозиторий>
+//   3. Стрим-события агента пишутся в лог задачи (CRM видит живьём).
+//   4. Воркер: tsc --noEmit → npm run lint → git add/commit/push.
+//   5. Воркер запускает bash deploy.sh.
 //
 // Переменные окружения:
 //   DATABASE_URI      — Postgres (как в ~/n15/.env)
@@ -20,32 +24,33 @@
 
 const { Client } = require('pg')
 const { spawn } = require('child_process')
-const { claudeAgentSDK } = require('@anthropic-ai/claude-agent-sdk')
+const { existsSync } = require('fs')
 
 const DB = process.env.DATABASE_URI
 const REPO = process.env.N15_REPO || '/root/n15'
 const POLL_MS = 5000
-const AGENT_TIMEOUT_MS = 15 * 60 * 1000
+const AGENT_TIMEOUT_MS = 20 * 60 * 1000
 const DEPLOY_TIMEOUT_MS = 40 * 60 * 1000
 
 if (!DB) {
   console.error('DATABASE_URI is required')
   process.exit(1)
 }
-if (!process.env.ANTHROPIC_API_KEY) {
-  console.error('ANTHROPIC_API_KEY is required')
+if (!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_AUTH_TOKEN) {
+  console.error('ANTHROPIC_API_KEY (или ANTHROPIC_AUTH_TOKEN) is required')
   process.exit(1)
 }
 
 const SYSTEM_RULES = `
-Ты — ИИ-разработчик сайта N15 (Next.js + Payload). Ты работаешь в его репозитории (${REPO}).
-Выполни запрос пользователя, ИЗМЕНЯЯ ТОЛЬКО ФАЙЛЫ РЕПОЗИТОРИЯ инструментами Read/Edit/Write/Glob/Grep.
-Правила:
-1. Не трогай: node_modules, .env*, docker-compose*, Caddyfile, deploy.sh, docker-entrypoint.sh, tools/.
+Ты — Claude Code, работающий в репозитории сайта N15 (Next.js + Payload) на сервере.
+У тебя есть все обычные инструменты (включая Bash), как в обычной сессии.
+Выполни запрос пользователя. Правила:
+1. Работай в этом репозитории. Не трогай: node_modules, .env*, docker-compose*, Caddyfile, deploy.sh, docker-entrypoint.sh, tools/.
 2. Соблюдай стиль существующего кода (комментарии на русском, где они есть).
-3. НЕ запускай никакие команды (у тебя нет Bash). Только правь файлы и сообщи, что изменил.
-4. Не создавай новые файлы без необходимости.
-Заверши работу кратким списком изменений — он попадёт в сообщение коммита.
+3. После правок выполни проверки: npx tsc --noEmit и npm run lint — исправь ошибки.
+4. НЕ коммить и НЕ пуши — это сделает воркер после тебя.
+5. НЕ запускай deploy и не трогай docker-команды.
+Заверши кратким списком изменений.
 `
 
 function log(taskId, line) {
@@ -83,32 +88,65 @@ function runCommand(cmd, args, cwd, timeoutMs, onChunk) {
   })
 }
 
-async function runAgent(client, id, prompt) {
-  await appendLog(client, id, `\n— Агент (${new Date().toLocaleTimeString('ru-RU')}) —\n`)
-  const result = await claudeAgentSDK.run({
-    cwd: REPO,
-    prompt: `${SYSTEM_RULES}\n\nЗапрос пользователя:\n${prompt}`,
-    options: {
-      model: 'claude-sonnet-4-6',
-      maxTurns: 60,
-      // БЕЗ Bash: агент может только править файлы репозитория
-      allowedTools: ['Read', 'Edit', 'Write', 'Glob', 'Grep'],
-      permissionMode: 'acceptEdits',
-      abortSignal: AbortSignal.timeout(AGENT_TIMEOUT_MS),
-    },
-  })
-  for await (const event of result) {
-    if (event.type === 'assistant' && event.message?.content) {
-      for (const block of event.message.content) {
-        if (block.type === 'text' && block.text) {
-          await appendLog(client, id, block.text)
+// Запуск настоящего Claude Code CLI в headless-режиме.
+// Стрим-события (stream-json) пишем в лог задачи.
+async function runClaude(client, id, prompt) {
+  await appendLog(client, id, `\n— Claude Code (${new Date().toLocaleTimeString('ru-RU')}) —\n`)
+  const args = [
+    '-p', `${SYSTEM_RULES}\n\nЗапрос пользователя:\n${prompt}`,
+    '--output-format', 'stream-json',
+    '--dangerously-skip-permissions',
+  ]
+  return new Promise((resolve) => {
+    const child = spawn('claude', args, { cwd: REPO, env: process.env, shell: false })
+    let out = ''
+    let buffer = ''
+    const timer = setTimeout(() => child.kill('SIGKILL'), AGENT_TIMEOUT_MS)
+
+    const onLine = (line) => {
+      try {
+        const evt = JSON.parse(line)
+        if (evt.type === 'assistant' && evt.message?.content) {
+          for (const block of evt.message.content) {
+            if (block.type === 'text' && block.text) {
+              out += block.text
+              appendLog(client, id, block.text)
+            }
+          }
+        } else if (evt.type === 'result') {
+          out += evt.result || ''
+          if (evt.totalCostUsd) {
+            out += `\n[стоимость: $${evt.totalCostUsd.toFixed(3)}]`
+          }
         }
+      } catch {
+        // не-JSON строка — игнорируем (служебный вывод)
       }
     }
-  }
-  const text = result.result?.output?.trim() || ''
-  await appendLog(client, id, `\n— Агент завершил —\n`)
-  return { text, ok: result.result?.subtype !== 'error_max_turns' }
+
+    child.stdout.on('data', (d) => {
+      buffer += d.toString()
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
+      for (const line of lines) {
+        if (line.trim()) onLine(line)
+      }
+    })
+    child.stderr.on('data', (d) => {
+      const s = d.toString()
+      out += s
+      appendLog(client, id, s)
+    })
+    child.on('close', (code) => {
+      clearTimeout(timer)
+      if (buffer.trim()) onLine(buffer)
+      resolve({ code, out })
+    })
+    child.on('error', (e) => {
+      clearTimeout(timer)
+      resolve({ code: -1, out: String(e) })
+    })
+  })
 }
 
 // Проверки + коммит + push — выполняет воркер (не LLM)
@@ -131,7 +169,7 @@ async function checkAndPush(client, id, commitMsg) {
 
   const diff = await runCommand('git', ['diff', '--stat'], REPO, 30000)
   if (!diff.out.trim()) {
-    await appendLog(client, id, `\n⚠ Изменений в репозитории нет — коммит пропущен.\n`)
+    await appendLog(client, id, `\n⚠ Изменений нет — коммит пропущен.\n`)
     return { ok: true, step: 'noop' }
   }
 
@@ -152,18 +190,22 @@ async function runAgentTask(client, task) {
   log(id, 'started')
   const commitMsg = `feat(ai): ${task.prompt.replace(/[^\wа-яё\s-]/gi, '').slice(0, 60) || 'agent changes'}`
 
-  // 1. Агент правит файлы
-  const agent = await runAgent(client, id, task.prompt)
-  if (!agent.ok) {
-    await updateTask(client, id, { status: 'failed', result: 'Агент не завершил работу (лимит шагов)' })
+  // 1. Настоящий Claude Code CLI (с плагинами из ~/.claude на сервере)
+  const agent = await runClaude(client, id, task.prompt)
+  await appendLog(client, id, `\n— Claude Code завершил (exit ${agent.code}) —\n`)
+  if (agent.code !== 0) {
+    await updateTask(client, id, {
+      status: 'failed',
+      result: `Claude Code завершился с ошибкой (exit ${agent.code}). Хвост: ${agent.out.slice(-1500)}`,
+    })
     return
   }
 
   // 2. Проверки; при ошибке — одна попытка агента исправить
   let check = await checkAndPush(client, id, commitMsg)
   if (!check.ok) {
-    await appendLog(client, id, `\n— Агент исправляет ошибки (${check.step}) —\n`)
-    await runAgent(client, id, `Исправь ошибки сборки/стиля, которые показаны в логе выше. Проверь результат по коду.`)
+    await appendLog(client, id, `\n— Claude Code исправляет ошибки (${check.step}) —\n`)
+    await runClaude(client, id, `Исправь ошибки сборки/стиля, показанные в логе выше.`)
     check = await checkAndPush(client, id, commitMsg)
   }
   if (!check.ok) {
@@ -184,7 +226,7 @@ async function runAgentTask(client, task) {
   if (deploy.code === 0) {
     await updateTask(client, id, {
       status: 'done',
-      result: agent.text || 'Изменения применены и сайт обновлён.',
+      result: agent.out.slice(-2000) || 'Изменения применены и сайт обновлён.',
     })
     log(id, 'done')
   } else {
@@ -200,6 +242,18 @@ let client = null
 let busy = false
 
 async function main() {
+  // Проверка доступности CLI и репозитория
+  if (!existsSync(REPO)) {
+    console.error(`Repo not found: ${REPO}`)
+    process.exit(1)
+  }
+  const cliCheck = await runCommand('claude', ['--version'], REPO, 15000)
+  if (cliCheck.code !== 0) {
+    console.error('claude CLI not found. Install: curl -fsSL https://claude.ai/install.sh | bash')
+    process.exit(1)
+  }
+  console.log('claude CLI:', cliCheck.out.trim())
+
   client = new Client({ connectionString: DB })
   await client.connect()
   console.log('worker connected, polling every', POLL_MS / 1000, 's')
