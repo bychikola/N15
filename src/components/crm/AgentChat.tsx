@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useI18n } from '@/i18n/i18n-provider'
 
 const POLL_MS = 5000
@@ -29,6 +29,8 @@ export default function AgentChat() {
   const [error, setError] = useState('')
   const [expandedId, setExpandedId] = useState<number | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const autoExpandedId = useRef<number | null>(null)
+  const logEndRef = useRef<HTMLPreElement>(null)
   const [configJson, setConfigJson] = useState('')
   const [configLoading, setConfigLoading] = useState(false)
   const [configSaving, setConfigSaving] = useState(false)
@@ -112,6 +114,23 @@ export default function AgentChat() {
       clearInterval(timer)
     }
   }, [load])
+
+  // Активную задачу раскрываем автоматически — видно, как агент работает
+  useEffect(() => {
+    const running = tasks.find((t) => t.status === 'running')
+    if (running && autoExpandedId.current !== running.id) {
+      autoExpandedId.current = running.id
+      setExpandedId(running.id)
+    }
+  }, [tasks])
+
+  // Живой лог: прокручиваем вниз, чтобы были видны последние строки
+  useEffect(() => {
+    const el = logEndRef.current
+    if (el && expandedId !== null) {
+      el.scrollTop = el.scrollHeight
+    }
+  }, [tasks, expandedId])
 
   const send = async () => {
     const value = prompt.trim()
@@ -205,7 +224,7 @@ export default function AgentChat() {
                   background: task.status === 'done' ? '#e5efdd' : task.status === 'failed' ? '#f4e0dc' : task.status === 'running' ? '#f2eadf' : '#efede8',
                   color: task.status === 'done' ? '#4e7a3a' : task.status === 'failed' ? '#9b4e43' : task.status === 'running' ? '#8d6b40' : '#817b70',
                 }}>
-                  {t.crm[STATUS_KEYS[task.status] as keyof typeof t.crm] || task.status}
+                  {t.crm[STATUS_KEYS[task.status] as keyof typeof t.crm] || task.status}{task.status === 'running' ? '…' : ''}
                 </span>
                 <span style={{ flex: 1, fontSize: 13, color: '#25241f', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {task.prompt}
@@ -221,7 +240,7 @@ export default function AgentChat() {
                     <p style={{ margin: '0 0 10px', fontSize: 12, color: '#4e7a3a' }}>{task.result}</p>
                   )}
                   {task.log ? (
-                    <pre style={{ margin: 0, fontSize: 11, lineHeight: 1.6, color: '#45423c', whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 320, overflowY: 'auto', background: '#faf8f4', border: '1px solid #eee9e1', borderRadius: 8, padding: 10 }}>
+                    <pre ref={logEndRef} style={{ margin: 0, fontSize: 11, lineHeight: 1.6, color: '#45423c', whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 320, overflowY: 'auto', background: '#faf8f4', border: '1px solid #eee9e1', borderRadius: 8, padding: 10 }}>
                       {task.log}
                     </pre>
                   ) : (
