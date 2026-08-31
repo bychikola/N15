@@ -142,7 +142,9 @@ RestartSec=10
 WantedBy=multi-user.target
 EOF
 systemctl daemon-reload
-systemctl enable --now n15-agent
+systemctl enable n15-agent >/dev/null 2>&1 || true
+# enable --now не перезапускает уже запущенный сервис — делаем явный restart
+systemctl restart n15-agent
 sleep 2
 systemctl status n15-agent --no-pager | head -12 || true
 
