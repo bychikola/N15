@@ -259,18 +259,12 @@ function sanitizeAgentEnv(env) {
 
 // Читает конфигурацию агента из глобала agent-settings (БД) и обновляет env,
 // который передаётся CLI при следующем запуске. Вызывается при старте и каждые 30с.
+// Payload 3 хранит глобал в отдельной таблице по имени (agent_settings), поле
+// envJson — колонка env_json.
 async function refreshAgentEnv() {
   try {
-    const res = await client.query(
-      `SELECT value FROM payload_globals WHERE slug = 'agent-settings' LIMIT 1`,
-    )
-    const raw = res.rows[0]?.value
-    if (!raw) {
-      agentEnv = {}
-      return
-    }
-    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
-    const envJson = parsed?.envJson
+    const res = await client.query(`SELECT env_json FROM agent_settings LIMIT 1`)
+    const envJson = res.rows[0]?.env_json
     if (typeof envJson === 'string' && envJson.trim()) {
       const env = JSON.parse(envJson)
       if (typeof env === 'object' && env !== null && !Array.isArray(env)) {
