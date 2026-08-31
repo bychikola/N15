@@ -47,9 +47,11 @@ const SYSTEM_RULES = `
 Выполни запрос пользователя. Правила:
 1. Работай в этом репозитории. Не трогай: node_modules, .env*, docker-compose*, Caddyfile, deploy.sh, docker-entrypoint.sh, tools/.
 2. Соблюдай стиль существующего кода (комментарии на русском, где они есть).
-3. После правок выполни проверки: npx tsc --noEmit и npm run lint — исправь ошибки.
-4. НЕ коммить и НЕ пуши — это сделает воркер после тебя.
-5. НЕ запускай deploy и не трогай docker-команды.
+3. Проверки tsc/lint: если в репозитории есть node_modules — выполни npx tsc --noEmit и npm run lint и исправь ошибки. Если node_modules нет — пропусти проверки (это сделает воркер и сборка при деплое).
+4. НЕ устанавливай зависимости (npm install, npm ci и т.п.) и не запускай сторонние npx-пакеты — на сервере зависимостей нет намеренно, сайт собирается в docker.
+5. Если для задачи не нужны правки кода (например, только данные в БД) — просто выполни операцию и опиши результат.
+6. НЕ коммить и НЕ пуши — это сделает воркер после тебя.
+7. НЕ запускай deploy и не трогай docker-команды.
 Заверши кратким списком изменений.
 `
 
@@ -154,26 +156,38 @@ async function runClaude(client, id, prompt) {
 async function checkAndPush(client, id, commitMsg) {
   await appendLog(client, id, `\n— Проверки —\n`)
 
-  const tsc = await runCommand('npx', ['tsc', '--noEmit'], REPO, 5 * 60 * 1000)
-  await appendLog(client, id, tsc.out.slice(-3000))
-  if (tsc.code !== 0) {
-    await appendLog(client, id, `\n⨯ tsc не прошёл (exit ${tsc.code})\n`)
-    return { ok: false, step: 'tsc' }
-  }
-
-  const lint = await runCommand('npm', ['run', 'lint'], REPO, 5 * 60 * 1000)
-  await appendLog(client, id, lint.out.slice(-3000))
-  if (lint.code !== 0) {
-    await appendLog(client, id, `\n⨯ lint не прошёл (exit ${lint.code})\n`)
-    return { ok: false, step: 'lint' }
-  }
-
-  const diff = await runCommand('git', ['diff', '--stat'], REPO, 30000)
-  if (!diff.out.trim()) {
-    await appendLog(client, id, `\n⚠ Изменений нет — коммит пропущен.\n`)
+  // 1. Изменений в коде нет (например, задача работала с данными в БД) —
+  //    tsc/lint/коммит/деплой не нужны.
+  const status = await runCommand('git', ['status', '--porcelain'], REPO, 30000)
+  if (!status.out.trim()) {
+    await appendLog(client, id, `Изменений в репозитории нет — проверки, коммит и деплой пропущены.\n`)
     return { ok: true, step: 'noop' }
   }
 
+  // 2. tsc/lint — только если зависимости установлены локально. Голый
+  //    `npx tsc` без node_modules скачивает посторонний пакет "tsc"
+  //    (это НЕ компилятор TypeScript!) и падает — используем только
+  //    локальный компилятор из node_modules.
+  const hasModules = existsSync(`${REPO}/node_modules`)
+  if (hasModules) {
+    const tsc = await runCommand(`${REPO}/node_modules/.bin/tsc`, ['--noEmit'], REPO, 5 * 60 * 1000)
+    await appendLog(client, id, tsc.out.slice(-3000))
+    if (tsc.code !== 0) {
+      await appendLog(client, id, `\n⨯ tsc не прошёл (exit ${tsc.code})\n`)
+      return { ok: false, step: 'tsc', out: tsc.out }
+    }
+
+    const lint = await runCommand('npm', ['run', 'lint'], REPO, 5 * 60 * 1000)
+    await appendLog(client, id, lint.out.slice(-3000))
+    if (lint.code !== 0) {
+      await appendLog(client, id, `\n⨯ lint не прошёл (exit ${lint.code})\n`)
+      return { ok: false, step: 'lint', out: lint.out }
+    }
+  } else {
+    await appendLog(client, id, `node_modules отсутствует — tsc/lint пропущены, типы проверит сборка при деплое.\n`)
+  }
+
+  // 3. Коммит и push (изменения уже есть — мы это проверили в шаге 1)
   await runCommand('git', ['add', '-A'], REPO, 30000)
   const commit = await runCommand('git', ['commit', '-m', commitMsg], REPO, 30000)
   await appendLog(client, id, commit.out.slice(-1500))
@@ -202,11 +216,11 @@ async function runAgentTask(client, task) {
     return
   }
 
-  // 2. Проверки; при ошибке — одна попытка агента исправить
+  // 2. Проверки; при ошибке — одна попытка агента исправить (с реальным логом ошибки)
   let check = await checkAndPush(client, id, commitMsg)
   if (!check.ok) {
     await appendLog(client, id, `\n— Claude Code исправляет ошибки (${check.step}) —\n`)
-    await runClaude(client, id, `Исправь ошибки сборки/стиля, показанные в логе выше.`)
+    await runClaude(client, id, `В репозитории ошибка проверки "${check.step}". Исправь её. Лог ошибки:\n${(check.out || '').slice(-3000)}`)
     check = await checkAndPush(client, id, commitMsg)
   }
   if (!check.ok) {
@@ -214,6 +228,16 @@ async function runAgentTask(client, task) {
       status: 'failed',
       result: `Проверки не прошли (${check.step}). Хвост лога в журнале задачи.`,
     })
+    return
+  }
+
+  // 2а. Код не менялся — деплой не нужен
+  if (check.step === 'noop') {
+    await updateTask(client, id, {
+      status: 'done',
+      result: agent.out.slice(-2000) || 'Изменений в коде не требовалось.',
+    })
+    log(id, 'done (no code changes)')
     return
   }
 
@@ -292,6 +316,12 @@ async function main() {
 
   client = new Client({ connectionString: DB })
   await client.connect()
+  // Задачи, оборванные рестартом воркера, навсегда залипают в 'running' —
+  // при старте сбрасываем их в 'failed', чтобы очередь не встала.
+  const stuck = await client.query(
+    `UPDATE agent_tasks SET status = 'failed', result = 'Воркер перезапущен — задача прервана', "updated_at" = now() WHERE status = 'running'`,
+  )
+  if (stuck.rowCount > 0) console.log(`reset ${stuck.rowCount} stuck task(s) -> failed`)
   console.log('worker connected, polling every', POLL_MS / 1000, 's')
   await refreshAgentEnv()
   console.log('provider:', agentEnv.ANTHROPIC_BASE_URL || process.env.ANTHROPIC_BASE_URL || 'anthropic (default)')
