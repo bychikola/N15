@@ -33,7 +33,7 @@ export default function SearchCategories({ t, lang }: Props) {
 
       <div className="lp-categories">
         {/* 01 Квартиры */}
-        <details id="apartments" open>
+        <details id="apartments">
           <summary>
             <span>01</span>
             <div>
