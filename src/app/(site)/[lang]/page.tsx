@@ -95,7 +95,7 @@ export default async function HomePage({ params, searchParams }: PageProps) {
         <SearchCategories t={t} lang={lang} />
         <FeaturedObjects objects={objects} t={t} lang={lang} filterSummary={filterSummary} />
         <MortgageCalculator t={t} />
-        <CountryGuide t={t} />
+        <CountryGuide t={t} lang={lang} />
         <ServicesSection t={t} />
         <LegalSection t={t} />
         <AboutSection t={t} />

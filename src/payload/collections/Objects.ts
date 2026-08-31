@@ -1,4 +1,5 @@
 import type { CollectionConfig, Where } from 'payload'
+import { DISTRICT_OPTIONS } from '@/lib/districts'
 
 const normPhone = (v?: string) => (v || '').replace(/[^\d+]/g, '')
 const normCadastral = (v?: string) => (v || '').toLowerCase().replace(/\s+/g, '')
@@ -251,7 +252,12 @@ export const Objects: CollectionConfig = {
       label: 'Адрес',
       fields: [
         { name: 'city', type: 'text', label: 'Город', defaultValue: 'Владикавказ' },
-        { name: 'district', type: 'text', label: 'Район' },
+        {
+          name: 'district',
+          type: 'select',
+          label: 'Район',
+          options: DISTRICT_OPTIONS.map((d) => ({ label: d, value: d })),
+        },
         { name: 'street', type: 'text', label: 'Улица' },
         { name: 'house', type: 'text', label: 'Дом' },
         { name: 'apartment', type: 'text', label: 'Квартира' },

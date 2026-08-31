@@ -1,7 +1,8 @@
+import Link from 'next/link'
 import type { Dict } from '@/i18n/dictionaries'
 import { COUNTRY_AREAS, NEAR_VIK } from './landing-data'
 
-export default function CountryGuide({ t }: { t: Dict }) {
+export default function CountryGuide({ t, lang }: { t: Dict; lang: string }) {
   return (
     <section className="lp-country" id="country">
       <div className="lp-country-heading">
@@ -34,7 +35,13 @@ export default function CountryGuide({ t }: { t: Dict }) {
             <details key={area.district}>
               <summary>
                 <span>{String(index + 1).padStart(2, '0')}</span>
-                <strong>{area.district}{index === 0 ? ' — официальный состав' : ''}</strong>
+                <Link
+                  href={`/${lang}/catalog?district=${encodeURIComponent(area.district)}`}
+                  className="lp-district-link"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {area.district}{index === 0 ? ' — официальный состав' : ''}
+                </Link>
                 <i>+</i>
               </summary>
               <p>{area.places}</p>

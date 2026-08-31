@@ -477,6 +477,8 @@ html[data-theme='dark'] span.theme-icon-moon { display: block; }
 .lp-districts summary::-webkit-details-marker { display: none; }
 .lp-districts summary span { color: #c5a46d; letter-spacing: .15em; font-size: 10px; }
 .lp-districts summary strong { font-family: 'New Standard', Georgia, serif; font-weight: 400; font-size: 22px; }
+.lp-district-link { color: inherit; text-decoration: none; font-family: 'New Standard', Georgia, serif; font-weight: 400; font-size: 22px; border-bottom: 1px solid transparent; transition: color .2s, border-color .2s; }
+.lp-district-link:hover { color: #c5a46d; border-bottom-color: #c5a46d; }
 .lp-districts summary i { color: #c5a46d; justify-self: end; font: 300 25px Arial, sans-serif; transition: transform .2s; }
 .lp-districts details[open] summary i { transform: rotate(45deg); }
 .lp-districts details > p { color: rgba(255,255,255,.58); margin: 0; padding: 0 50px 30px 55px; font-size: 13px; line-height: 2; }

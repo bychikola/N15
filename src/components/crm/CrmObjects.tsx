@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState, type FC } from 'react'
 import type { Dict } from '@/i18n/dictionaries'
+import { DISTRICT_OPTIONS } from '@/lib/districts'
 
 interface ObjectRow {
   id: number
@@ -480,7 +481,14 @@ export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) =>
 
           <div className="span-2" style={{ gridColumn: '1 / -1', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr', gap: 10 }}>
             <Field label={t.crm.objCity}><input value={form.city} onChange={(e) => set('city', e.target.value)} style={inputStyle} /></Field>
-            <Field label={t.crm.objDistrict}><input value={form.district} onChange={(e) => set('district', e.target.value)} style={inputStyle} /></Field>
+            <Field label={t.crm.objDistrict}>
+              <select value={form.district} onChange={(e) => set('district', e.target.value)} style={inputStyle}>
+                <option value="">—</option>
+                {DISTRICT_OPTIONS.map((d) => (
+                  <option key={d} value={d}>{d}</option>
+                ))}
+              </select>
+            </Field>
             <Field label={t.crm.objStreet}><input value={form.street} onChange={(e) => set('street', e.target.value)} style={inputStyle} /></Field>
             <Field label={t.crm.objHouse}><input value={form.house} onChange={(e) => set('house', e.target.value)} style={inputStyle} /></Field>
             <Field label={t.crm.objApartment}><input value={form.apartment} onChange={(e) => set('apartment', e.target.value)} style={inputStyle} /></Field>
