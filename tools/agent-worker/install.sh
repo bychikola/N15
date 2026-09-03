@@ -148,9 +148,21 @@ chmod 600 "$AGENT_DIR/.env"
 # — не трогаем. Ключ в код НЕ попадает: берётся из .env воркера на сервере.
 echo "[7.5/10] Записываю DeepSeek-конфиг в agent_settings (если пусто/заглушка)..."
 cat > "$AGENT_DIR/seed-config.js" << 'SEEDEOF'
+// Читает секреты прямо из .env (chmod 600, владелец n15) — не из аргументов
+// командной строки и не из окружения (иначе видны в ps/истории).
+const fs = require('fs');
+const path = require('path');
+function envOf(file, key) {
+  const text = fs.readFileSync(file, 'utf8');
+  const m = text.split('\n').find((l) => l.startsWith(`${key}=`));
+  return m ? m.slice(key.length + 1).trim() : '';
+}
+const dotenv = path.join(__dirname, '.env');
 const { Client } = require('pg');
 (async () => {
-  const c = new Client({ connectionString: process.env.DATABASE_URI });
+  const DATABASE_URI = envOf(dotenv, 'DATABASE_URI') || process.env.DATABASE_URI;
+  const TOKEN = envOf(dotenv, 'ANTHROPIC_AUTH_TOKEN') || process.env.ANTHROPIC_AUTH_TOKEN;
+  const c = new Client({ connectionString: DATABASE_URI });
   await c.connect();
   const r = await c.query('SELECT env_json FROM agent_settings LIMIT 1');
   const cur = (r.rows[0] && r.rows[0].env_json) || '';
@@ -159,7 +171,7 @@ const { Client } = require('pg');
   } else {
     const cfg = {
       ANTHROPIC_BASE_URL: 'https://api.deepseek.com/anthropic',
-      ANTHROPIC_AUTH_TOKEN: process.env.ANTHROPIC_AUTH_TOKEN || '',
+      ANTHROPIC_AUTH_TOKEN: TOKEN,
       ANTHROPIC_MODEL: 'deepseek-v4-flash',
       CLAUDE_CODE_EFFORT_LEVEL: 'max',
     };
@@ -170,7 +182,7 @@ const { Client } = require('pg');
 })().catch((e) => { console.error('seed error:', e.message); process.exit(1); });
 SEEDEOF
 chown "$N15_USER:$N15_USER" "$AGENT_DIR/seed-config.js"
-sudo -u "$N15_USER" env DATABASE_URI="$DATABASE_URI" ANTHROPIC_AUTH_TOKEN="$TOKEN" node "$AGENT_DIR/seed-config.js" || echo "  (seed не выполнился — не критично, поправишь позже)"
+sudo -u "$N15_USER" node "$AGENT_DIR/seed-config.js" || echo "  (seed не выполнился — не критично, поправишь позже)"
 rm -f "$AGENT_DIR/seed-config.js"
 
 # ---------- 8. systemd (запуск от пользователя n15) ----------
