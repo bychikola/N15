@@ -3,19 +3,54 @@ import config from '@payload-config'
 import { NextRequest, NextResponse } from 'next/server'
 import nodemailer from 'nodemailer'
 
+// Простой per-user лимит отправок (одна инстанция Next): не более N писем
+// в минуту с одного аккаунта — защита от спам-релея через взломанную сессию.
+const SEND_WINDOW_MS = 60_000
+const SEND_MAX_PER_WINDOW = 10
+const recentSends = new Map<number, number[]>()
+
+function rateLimited(userId: number): boolean {
+  const now = Date.now()
+  const arr = (recentSends.get(userId) || []).filter((ts) => now - ts < SEND_WINDOW_MS)
+  if (arr.length >= SEND_MAX_PER_WINDOW) {
+    recentSends.set(userId, arr)
+    return true
+  }
+  arr.push(now)
+  recentSends.set(userId, arr)
+  return false
+}
+
+// Один синтаксически валидный адрес — без списков рассылки и заголовочных инъекций
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
+
 // Реальная отправка письма через SMTP (настройки ящика VK WorkSpace —
 // глобал «Почта (подключение)» в админке). Письмо попадает в «Отправленные»
 // ТОЛЬКО после успешной отправки на сервер — без фальшивых записей.
 export async function POST(req: NextRequest) {
   try {
+    // Доступ: только агент/админ с валидной сессией — иначе открытый SMTP-релей
+    const payload = await getPayload({ config })
+    const me = await payload.auth({ headers: req.headers })
+    if (!me.user || (me.user.role !== 'admin' && me.user.role !== 'agent')) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+    if (rateLimited(me.user.id as number)) {
+      return NextResponse.json({ error: 'Слишком много отправок — подожди минуту' }, { status: 429 })
+    }
+
     const body = await req.json()
-    const { toEmail, subject, text } = body as { toEmail?: string; subject?: string; text?: string }
+    const toEmail = String((body.toEmail as string) || '').trim().toLowerCase()
+    const subject = String((body.subject as string) || '').trim().slice(0, 500)
+    const text = String((body.text as string) || '').slice(0, 100_000)
 
     if (!toEmail || !text) {
       return NextResponse.json({ error: 'toEmail and text are required' }, { status: 400 })
     }
+    if (!EMAIL_RE.test(toEmail) || toEmail.includes(',')) {
+      return NextResponse.json({ error: 'Некорректный адрес получателя' }, { status: 400 })
+    }
 
-    const payload = await getPayload({ config })
     const settings = await payload.findGlobal({ slug: 'mail-settings', overrideAccess: true })
     if (!settings.enabled || !settings.username || !settings.password) {
       return NextResponse.json(
@@ -36,11 +71,11 @@ export async function POST(req: NextRequest) {
 
     const fromName = String(settings.senderName || '').trim().replace(/"/g, '')
     const from = fromName ? `"${fromName}" <${settings.username}>` : settings.username
-    const subjectLine = subject?.trim() || '(без темы)'
+    const subjectLine = subject || '(без темы)'
 
     const info = await transporter.sendMail({
       from,
-      to: toEmail.trim(),
+      to: toEmail,
       subject: subjectLine,
       text,
     })
