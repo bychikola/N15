@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useI18n } from '@/i18n/i18n-provider'
 
 const POLL_MS = 5000
@@ -65,10 +65,23 @@ export default function AgentChat() {
   const [deepseekConfig, setDeepseekConfig] = useState('')
   const [journalOpen, setJournalOpen] = useState(false)
   const journalListRef = useRef<HTMLDivElement>(null)
+  // Липкая прокрутка: пока true, журнал держится у нижнего края (свежие записи).
+  // onScroll снимает флаг, как только пользователь сам ушёл вверх читать историю.
+  const journalStickRef = useRef(true)
 
-  // В журнале держим прокрутку внизу, пока идёт активная задача
+  // При открытии журнал всегда показывает свежие записи (низ списка)
   useEffect(() => {
     if (!journalOpen) return
+    journalStickRef.current = true
+    const el = journalListRef.current
+    if (el) el.scrollTop = el.scrollHeight
+  }, [journalOpen])
+
+  // Пока пользователь у нижнего края, держим прокрутку там — новые записи видны
+  // сразу. Без проверки флага поллинг (новый массив задач каждые POLL_MS)
+  // сбрасывал бы прокрутку вниз, мешая читать историю
+  useEffect(() => {
+    if (!journalOpen || !journalStickRef.current) return
     const el = journalListRef.current
     if (el) el.scrollTop = el.scrollHeight
   }, [tasks, journalOpen])
@@ -472,7 +485,13 @@ export default function AgentChat() {
             <p style={{ margin: '0 0 12px', fontSize: 12, color: '#817b70', lineHeight: 1.6 }}>
               {t.crm.agentJournalHint}
             </p>
-            <div ref={journalListRef} style={{ maxHeight: '62vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8, paddingRight: 4 }}>
+            <div ref={journalListRef} onScroll={(e) => {
+              // Учтём прокрутку только самого списка; скролл внутри лога карточки не отлипает
+              if (e.target !== e.currentTarget) return
+              const el = e.currentTarget
+              // Отлипаем, только если пользователь ушёл от низа заметно (на строку и более)
+              journalStickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 64
+            }} style={{ maxHeight: '62vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8, paddingRight: 4 }}>
               {tasks.length === 0 ? (
                 <p style={{ margin: 0, color: '#9b958a', fontSize: 12 }}>{t.crm.agentEmpty}</p>
               ) : (
