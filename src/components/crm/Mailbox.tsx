@@ -70,6 +70,7 @@ export default function Mailbox() {
   const [sendError, setSendError] = useState('')
   const [attachments, setAttachments] = useState<{ id: number; filename: string; mimeType?: string; size?: number }[]>([])
   const selectedIdRef = useRef<number | null>(null)
+  const [lightboxIdx, setLightboxIdx] = useState<number | null>(null)
 
   // Вложения выбранного письма (без синхронного setState в эффекте —
   // иначе react-hooks ругается на каскадные рендеры)
@@ -160,6 +161,19 @@ export default function Mailbox() {
 
   const visible = folder === 'all' ? emails : emails.filter((m) => m.folder === folder)
   const selected = emails.find((m) => m.id === selectedId) || null
+  const imgAtts = attachments.filter((a) => (a.mimeType || '').startsWith('image/'))
+
+  // Лайтбокс: Esc — закрыть, ←/→ — листать фото письма
+  useEffect(() => {
+    if (lightboxIdx === null) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setLightboxIdx(null)
+      else if (e.key === 'ArrowRight' && imgAtts.length > 1) setLightboxIdx((i) => (i === null ? i : (i + 1) % imgAtts.length))
+      else if (e.key === 'ArrowLeft' && imgAtts.length > 1) setLightboxIdx((i) => (i === null ? i : (i + imgAtts.length - 1) % imgAtts.length))
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [lightboxIdx, imgAtts.length])
 
   const markRead = async (id: number) => {
     if (emails.find((m) => m.id === id)?.read) return
@@ -287,7 +301,7 @@ export default function Mailbox() {
             {visible.map((m) => (
               <div
                 key={m.id}
-                onClick={() => { setSelectedId(m.id); void markRead(m.id) }}
+                onClick={() => { setSelectedId(m.id); setLightboxIdx(null); void markRead(m.id) }}
                 style={{
                   padding: '12px 14px', borderBottom: '1px solid #eee9e1', cursor: 'pointer',
                   background: selectedId === m.id ? '#f2eadf' : '#fff',
@@ -336,9 +350,11 @@ export default function Mailbox() {
                         const href = `/api/mail/attachment/${a.id}`
                         const isImg = (a.mimeType || '').startsWith('image/')
                         return isImg ? (
-                          // Фото — одинаковые квадратные миниатюры в ряд, без подписей
-                          <a key={a.id} href={href} target="_blank" rel="noreferrer" title={a.filename}
-                            style={{ width: 104, height: 104, flexShrink: 0, display: 'block', overflow: 'hidden', borderRadius: 10, border: '1px solid #e5dfd3', background: '#f5f2eb' }}>
+                          // Фото — одинаковые квадратные миниатюры в ряд, без подписей;
+                          // клик открывает лайтбокс (модальное окно), не новую вкладку
+                          <a key={a.id} href={href} title={a.filename} aria-label={`${t.crm.mailAttachments}: ${a.filename}`}
+                            onClick={(e) => { e.preventDefault(); setLightboxIdx(imgAtts.indexOf(a)) }}
+                            style={{ width: 104, height: 104, flexShrink: 0, display: 'block', overflow: 'hidden', borderRadius: 10, border: '1px solid #e5dfd3', background: '#f5f2eb', cursor: 'zoom-in' }}>
                             <img src={href} alt={a.filename} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
                           </a>
                         ) : (
@@ -396,6 +412,48 @@ export default function Mailbox() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Лайтбокс: просмотр фото письма */}
+      {lightboxIdx !== null && imgAtts[lightboxIdx] && (
+        <div role="dialog" aria-modal="true" aria-label={imgAtts[lightboxIdx].filename}
+          onClick={() => setLightboxIdx(null)}
+          style={{ position: 'fixed', inset: 0, zIndex: 150, background: 'rgba(18,17,14,.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          {/* Шапка: счётчик, имя файла, закрыть */}
+          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, display: 'flex', alignItems: 'center', gap: 14, padding: '14px 18px', background: 'linear-gradient(rgba(0,0,0,.45), transparent)' }}>
+            <span style={{ color: '#e9e2d4', fontSize: 12, fontFamily: "'New Standard', Georgia, serif" }}>
+              {imgAtts[lightboxIdx].filename}
+            </span>
+            <span style={{ color: '#9b958a', fontSize: 11, marginLeft: 'auto' }}>
+              {lightboxIdx + 1} / {imgAtts.length}
+            </span>
+            <button type="button" onClick={() => setLightboxIdx(null)} aria-label="Закрыть"
+              style={{ border: '1px solid rgba(233,226,212,.4)', borderRadius: 8, background: 'transparent', color: '#e9e2d4', padding: '7px 12px', cursor: 'pointer', fontSize: 13, lineHeight: 1 }}>
+              ✕
+            </button>
+          </div>
+
+          {/* Листание */}
+          {imgAtts.length > 1 && (
+            <>
+              <button type="button" aria-label="Назад"
+                onClick={(e) => { e.stopPropagation(); setLightboxIdx((lightboxIdx + imgAtts.length - 1) % imgAtts.length) }}
+                style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', width: 46, height: 46, borderRadius: '50%', border: '1px solid rgba(233,226,212,.35)', background: 'rgba(20,19,16,.5)', color: '#e9e2d4', fontSize: 24, cursor: 'pointer', lineHeight: 1 }}>
+                ‹
+              </button>
+              <button type="button" aria-label="Вперёд"
+                onClick={(e) => { e.stopPropagation(); setLightboxIdx((lightboxIdx + 1) % imgAtts.length) }}
+                style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', width: 46, height: 46, borderRadius: '50%', border: '1px solid rgba(233,226,212,.35)', background: 'rgba(20,19,16,.5)', color: '#e9e2d4', fontSize: 24, cursor: 'pointer', lineHeight: 1 }}>
+                ›
+              </button>
+            </>
+          )}
+
+          {/* Фото по центру */}
+          <img src={`/api/mail/attachment/${imgAtts[lightboxIdx].id}`} alt={imgAtts[lightboxIdx].filename}
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: '92vw', maxHeight: '86vh', objectFit: 'contain', borderRadius: 4, boxShadow: '0 12px 50px rgba(0,0,0,.55)' }} />
         </div>
       )}
     </div>
