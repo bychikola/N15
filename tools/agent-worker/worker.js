@@ -43,6 +43,7 @@ const AUTH_JSON = `${process.env.HOME || '/home/n15'}/.codex/auth.json`
 const AUTH_TIMEOUT_MS = 20 * 60 * 1000
 const MAIL_SYNC_MS = 60 * 1000 // почта: интервал забора писем
 const MAIL_LOOKBACK_MS = 48 * 3600 * 1000 // при первом заборе смотрим последние 48ч
+const MAIL_BATCH = 30 // максимум писем за один проход (остальные — следующими)
 
 if (!DB) {
   console.error('DATABASE_URI is required')
@@ -371,7 +372,21 @@ async function runAuthTask(client, task) {
 // Забирает новые письма с ящика VK WorkSpace (настройки в mail_settings) и
 // пишет их в коллекцию emails. Дедуп по message_id; письмо привязывается
 // к клиенту (customers.email) или заявке (applications.client_email).
+// Один проход за раз и не во время задачи агента: syncMailOnce по интервалу
+// мог бы пересечься сам с собой (гонка → двойной импорт без unique-индекса)
+// или отнять ресурсы у выполняющейся задачи/деплоя.
+let mailSyncing = false
 async function syncMailOnce() {
+  if (!imap || !simpleParser || !client || busy || mailSyncing) return
+  mailSyncing = true
+  try {
+    await syncMailRun()
+  } finally {
+    mailSyncing = false
+  }
+}
+
+async function syncMailRun() {
   if (!imap || !simpleParser || !client) return
   let cfg
   try {
@@ -406,6 +421,10 @@ async function syncMailOnce() {
         uids = [...new Set([...uids, ...unseen])]
       } catch { /* поиск по seen не поддержан — ок */ }
       if (!uids.length) return
+
+      // Лимит прохода: свежие письма первыми, остальные дойдут следующими
+      // проходами (непрочитанные не теряются — помечаются \Seen после импорта)
+      uids = uids.slice(-MAIL_BATCH)
 
       let imported = 0
       for (const uid of uids) {
