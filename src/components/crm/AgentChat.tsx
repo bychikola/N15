@@ -476,7 +476,7 @@ export default function AgentChat() {
               {tasks.length === 0 ? (
                 <p style={{ margin: 0, color: '#9b958a', fontSize: 12 }}>{t.crm.agentEmpty}</p>
               ) : (
-                tasks.map((task) => (
+                [...tasks].reverse().map((task) => (
                   <div key={task.id} style={{ background: '#fff', border: '1px solid #e5dfd3', borderRadius: 10, padding: 10 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                       <span style={{
