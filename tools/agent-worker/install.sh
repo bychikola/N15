@@ -122,11 +122,15 @@ echo "  DATABASE_URI: postgres://$PGUSER:****@$PGHOST:5432/$PGDB"
 
 # ---------- 7. Ключ DeepSeek ----------
 echo "[7/10] Проверяю ключ ANTHROPIC_AUTH_TOKEN..."
+EXISTING_TOKEN=$(grep '^ANTHROPIC_AUTH_TOKEN=' "$AGENT_DIR/.env" 2>/dev/null | head -1 | cut -d= -f2- || true)
 if [ -n "$ANTHROPIC_AUTH_TOKEN" ]; then
   TOKEN="$ANTHROPIC_AUTH_TOKEN"
   echo "  (взят из переменной окружения)"
+elif [ -n "$EXISTING_TOKEN" ]; then
+  TOKEN="$EXISTING_TOKEN"
+  echo "  (использую ключ из .env воркера — переспрашивать не буду)"
 else
-  read -rp "  Вставь ключ DeepSeek (ANTHROPIC_AUTH_TOKEN, fallback-бэкенд — активный конфиг в модалке CRM): " TOKEN
+  read -rp "  Вставь ключ DeepSeek (ANTHROPIC_AUTH_TOKEN): " TOKEN
 fi
 cat > "$AGENT_DIR/.env" << EOF
 ANTHROPIC_BASE_URL=${ANTHROPIC_BASE_URL:-https://api.deepseek.com/anthropic}
@@ -137,6 +141,37 @@ N15_REPO=$REPO_DIR
 EOF
 chown "$N15_USER:$N15_USER" "$AGENT_DIR/.env"
 chmod 600 "$AGENT_DIR/.env"
+
+# ---------- [7.5/10] DeepSeek-конфиг в БД (общий для всех админов) ----------
+# Записывает конфиг с ключом в agent_settings (модалка настроек CRM), если там
+# пусто или лежит заглушка. Если админ сам задал другой конфиг (ChatGPT и т.п.)
+# — не трогаем. Ключ в код НЕ попадает: берётся из .env воркера на сервере.
+echo "[7.5/10] Записываю DeepSeek-конфиг в agent_settings (если пусто/заглушка)..."
+cat > "$AGENT_DIR/seed-config.js" << 'SEEDEOF'
+const { Client } = require('pg');
+(async () => {
+  const c = new Client({ connectionString: process.env.DATABASE_URI });
+  await c.connect();
+  const r = await c.query('SELECT env_json FROM agent_settings LIMIT 1');
+  const cur = (r.rows[0] && r.rows[0].env_json) || '';
+  if (cur.trim() && !cur.includes('ВСТАВЬТЕ') && !cur.includes('sk-ant-placeholder')) {
+    console.log('  Конфиг уже задан админом — не трогаю.');
+  } else {
+    const cfg = {
+      ANTHROPIC_BASE_URL: 'https://api.deepseek.com/anthropic',
+      ANTHROPIC_AUTH_TOKEN: process.env.ANTHROPIC_AUTH_TOKEN || '',
+      ANTHROPIC_MODEL: 'deepseek-v4-flash',
+      CLAUDE_CODE_EFFORT_LEVEL: 'max',
+    };
+    await c.query('UPDATE agent_settings SET env_json = $1', [JSON.stringify(cfg, null, 2)]);
+    console.log('  DeepSeek-конфиг записан в agent_settings (общий для всех админов).');
+  }
+  await c.end();
+})().catch((e) => { console.error('seed error:', e.message); process.exit(1); });
+SEEDEOF
+chown "$N15_USER:$N15_USER" "$AGENT_DIR/seed-config.js"
+sudo -u "$N15_USER" env DATABASE_URI="$DATABASE_URI" ANTHROPIC_AUTH_TOKEN="$TOKEN" node "$AGENT_DIR/seed-config.js" || echo "  (seed не выполнился — не критично, поправишь позже)"
+rm -f "$AGENT_DIR/seed-config.js"
 
 # ---------- 8. systemd (запуск от пользователя n15) ----------
 echo "[8/10] Устанавливаю systemd-сервис..."
