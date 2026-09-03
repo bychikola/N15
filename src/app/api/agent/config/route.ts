@@ -2,34 +2,31 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 import { NextRequest, NextResponse } from 'next/server'
 
-// Конфигурация по умолчанию (провайдер ChatGPT Plus через локальный прокси
-// claudex на VPS: Anthropic Messages API → OpenAI Responses API).
-// ANTHROPIC_API_KEY — заглушка: прокси авторизует по токену Codex
-// из ~/.codex/auth.json пользователя n15 (--reuse-codex).
-// `_deepseek_template` — неактивный шаблон старого бэкенда. Воркер его
-// игнорирует (sanitize пропускает только ANTHROPIC_*/CLAUDE_CODE_*).
-// Вернуть DeepSeek: заменить содержимое объекта ключами шаблона.
-const DEFAULT_ENV_JSON = `{
+// Пресеты провайдеров для переключателя в CRM. Реальный ключ DeepSeek в коде
+// НЕ храним (репозиторий публичный) — он лежит в .env воркера на сервере
+// (/home/n15/n15-agent/.env, chmod 600) и в agent_settings (БД сервера), если
+// админ сохранил конфиг. Заглушки из пресетов воркер игнорирует
+// (см. sanitizeAgentEnv в tools/agent-worker/worker.js) и использует ключ из .env.
+const DEEPSEEK_PRESET = `{
+  "ANTHROPIC_BASE_URL": "https://api.deepseek.com/anthropic",
+  "ANTHROPIC_AUTH_TOKEN": "ВСТАВЬТЕ_КЛЮЧ_ИЗ_НАСТРОЕК",
+  "ANTHROPIC_MODEL": "deepseek-v4-flash",
+  "CLAUDE_CODE_EFFORT_LEVEL": "max"
+}`
+
+// ChatGPT Plus — через локальный прокси claudex (порт 4000). Ключ-заглушка:
+// прокси авторизует по токену Codex из ~/.codex/auth.json (--reuse-codex).
+const CHATGPT_PRESET = `{
   "ANTHROPIC_BASE_URL": "http://127.0.0.1:4000",
   "ANTHROPIC_API_KEY": "sk-ant-placeholder",
   "ANTHROPIC_MODEL": "gpt-5.5",
   "ANTHROPIC_DEFAULT_HAIKU_MODEL": "gpt-5.4-mini",
   "ANTHROPIC_DEFAULT_SONNET_MODEL": "gpt-5.5",
-  "ANTHROPIC_DEFAULT_OPUS_MODEL": "gpt-5.5",
-  "_deepseek_template": {
-    "ANTHROPIC_BASE_URL": "https://api.deepseek.com/anthropic",
-    "ANTHROPIC_AUTH_TOKEN": "ВСТАВЬТЕ_КЛЮЧ_ИЗ_НАСТРОЕК",
-    "ANTHROPIC_MODEL": "deepseek-v4-flash",
-    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "deepseek-v4-pro",
-    "ANTHROPIC_DEFAULT_OPUS_MODEL": "deepseek-v4-pro",
-    "ANTHROPIC_DEFAULT_SONNET_MODEL": "deepseek-v4-flash",
-    "CLAUDE_CODE_EFFORT_LEVEL": "max"
-  }
+  "ANTHROPIC_DEFAULT_OPUS_MODEL": "gpt-5.5"
 }`
 
-// Эталонные конфиги для переключателя провайдера в CRM: дефолтный ChatGPT
-// (вместе с _deepseek_template) и сам шаблон DeepSeek — извлекаем один раз.
-const DEEPSEEK_TEMPLATE = JSON.stringify(JSON.parse(DEFAULT_ENV_JSON)._deepseek_template, null, 2)
+// По умолчанию (пока в agent_settings ничего не сохранено) — DeepSeek
+const DEFAULT_ENV_JSON = DEEPSEEK_PRESET
 
 // Конфигурация ИИ-агента (env для Claude Code CLI): только администратор.
 export async function GET(req: NextRequest) {
@@ -41,7 +38,10 @@ export async function GET(req: NextRequest) {
     }
     const settings = await payload.findGlobal({ slug: 'agent-settings', overrideAccess: true })
     const envJson = (settings.envJson as string)?.trim() || DEFAULT_ENV_JSON
-    return NextResponse.json({ envJson, defaultEnvJson: DEFAULT_ENV_JSON, deepseekTemplate: DEEPSEEK_TEMPLATE })
+    return NextResponse.json({
+      envJson,
+      presets: { deepseek: DEEPSEEK_PRESET, chatgpt: CHATGPT_PRESET },
+    })
   } catch (error) {
     console.error('Agent config GET error:', error)
     return NextResponse.json({ error: String(error) }, { status: 500 })

@@ -373,6 +373,10 @@ function sanitizeAgentEnv(env) {
       typeof v === 'string' &&
       (k.startsWith('ANTHROPIC_') || k.startsWith('CLAUDE_CODE_') || k === 'ENABLE_TOOL_SEARCH')
     ) {
+      // Заглушки вместо ключей (пресеты/модалка: «ВСТАВЬТЕ_КЛЮЧ…»,
+      // sk-ant-placeholder) и пустые значения не должны перекрывать реальный
+      // ключ из .env воркера — иначе DeepSeek падает с ошибкой авторизации.
+      if (!v.trim() || v === 'sk-ant-placeholder' || v.startsWith('ВСТАВЬТЕ')) continue
       out[k] = v
     }
   }

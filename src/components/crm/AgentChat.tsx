@@ -61,8 +61,17 @@ export default function AgentChat() {
   const [provider, setProvider] = useState<'chatgpt' | 'deepseek' | null>(null)
   const [configLoaded, setConfigLoaded] = useState(false)
   const [providerNotice, setProviderNotice] = useState('')
-  const [defaultConfig, setDefaultConfig] = useState('')
+  const [chatgptConfig, setChatgptConfig] = useState('')
   const [deepseekConfig, setDeepseekConfig] = useState('')
+  const [journalOpen, setJournalOpen] = useState(false)
+  const journalListRef = useRef<HTMLDivElement>(null)
+
+  // В журнале держим прокрутку внизу, пока идёт активная задача
+  useEffect(() => {
+    if (!journalOpen) return
+    const el = journalListRef.current
+    if (el) el.scrollTop = el.scrollHeight
+  }, [tasks, journalOpen])
 
   const openSettings = async () => {
     setSettingsOpen(true)
@@ -121,8 +130,8 @@ export default function AgentChat() {
         const j = String(d.envJson || '')
         if (j.includes('api.deepseek.com')) setProvider('deepseek')
         else if (j.includes('127.0.0.1') || j.includes('localhost')) setProvider('chatgpt')
-        if (d.defaultEnvJson) setDefaultConfig(String(d.defaultEnvJson))
-        if (d.deepseekTemplate) setDeepseekConfig(String(d.deepseekTemplate))
+        if (d.presets?.chatgpt) setChatgptConfig(String(d.presets.chatgpt))
+        if (d.presets?.deepseek) setDeepseekConfig(String(d.presets.deepseek))
         setConfigLoaded(true)
       })
       .catch(() => {})
@@ -134,7 +143,7 @@ export default function AgentChat() {
   // Переключение провайдера: сохраняем эталонный конфиг с сервера —
   // не вырезаем _deepseek_template, чтобы переключение работало в обе стороны.
   const applyProvider = async (p: 'chatgpt' | 'deepseek') => {
-    const next = p === 'chatgpt' ? defaultConfig : deepseekConfig
+    const next = p === 'chatgpt' ? chatgptConfig : deepseekConfig
     if (!next) return
     try {
       const put = await fetch('/api/agent/config', {
@@ -250,8 +259,17 @@ export default function AgentChat() {
 
   return (
     <div>
-      {/* Шапка с настройками */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
+      {/* Шапка: журнал + настройки */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginBottom: 10 }}>
+        <button
+          type="button"
+          onClick={() => setJournalOpen(true)}
+          title={t.crm.agentJournal}
+          aria-label={t.crm.agentJournal}
+          style={{ border: '1px solid #d9d1c4', borderRadius: 8, background: '#fff', color: '#716b62', padding: '9px 12px', cursor: 'pointer', fontSize: 11, lineHeight: 1, textTransform: 'uppercase', letterSpacing: '.06em' }}
+        >
+          {t.crm.agentJournal}
+        </button>
         <button
           type="button"
           onClick={() => void openSettings()}
@@ -436,6 +454,55 @@ export default function AgentChat() {
                 style={{ border: '1px solid #e1d8ca', borderRadius: 8, background: '#fff', color: '#716b62', padding: '12px 18px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', cursor: 'pointer' }}>
                 {t.crm.dupCancel}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Модалка журнала: все действия агента и модели */}
+      {journalOpen && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 130, background: 'rgba(32,33,30,.55)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 16px', overflowY: 'auto' }}
+          onClick={() => setJournalOpen(false)}>
+          <div style={{ background: '#faf8f4', border: '1px solid #ded5c7', borderRadius: 12, width: 'min(100%, 760px)', padding: 22 }}
+            onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+              <h2 style={{ margin: 0, fontFamily: "'New Standard', Georgia, serif", fontWeight: 400, fontSize: 20 }}>{t.crm.agentJournalTitle}</h2>
+              <button type="button" onClick={() => setJournalOpen(false)} style={{ border: '1px solid #e1d8ca', borderRadius: 7, background: '#fff', color: '#716b62', padding: '8px 12px', cursor: 'pointer', fontSize: 12 }}>✕</button>
+            </div>
+            <p style={{ margin: '0 0 12px', fontSize: 12, color: '#817b70', lineHeight: 1.6 }}>
+              {t.crm.agentJournalHint}
+            </p>
+            <div ref={journalListRef} style={{ maxHeight: '62vh', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8, paddingRight: 4 }}>
+              {tasks.length === 0 ? (
+                <p style={{ margin: 0, color: '#9b958a', fontSize: 12 }}>{t.crm.agentEmpty}</p>
+              ) : (
+                tasks.map((task) => (
+                  <div key={task.id} style={{ background: '#fff', border: '1px solid #e5dfd3', borderRadius: 10, padding: 10 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                      <span style={{
+                        flexShrink: 0, padding: '3px 8px', borderRadius: 999, fontSize: 8, textTransform: 'uppercase', letterSpacing: '.08em',
+                        background: task.status === 'done' ? '#e5efdd' : task.status === 'failed' ? '#f4e0dc' : task.status === 'running' ? '#f2eadf' : '#efede8',
+                        color: task.status === 'done' ? '#4e7a3a' : task.status === 'failed' ? '#9b4e43' : task.status === 'running' ? '#8d6b40' : '#817b70',
+                      }}>
+                        {t.crm[STATUS_KEYS[task.status] as keyof typeof t.crm] || task.status}{task.status === 'running' ? '…' : ''}
+                      </span>
+                      <span style={{ flex: 1, fontSize: 12, color: '#25241f', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {task.prompt === '__AUTH__' ? t.crm.agentAuthStart : task.prompt}
+                      </span>
+                      <span style={{ fontSize: 10, color: '#9b958a', flexShrink: 0 }}>
+                        {task.createdAt ? new Date(task.createdAt).toLocaleString(t.locale, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''}
+                      </span>
+                    </div>
+                    {task.log ? (
+                      <pre style={{ margin: 0, fontSize: 11, lineHeight: 1.6, color: '#45423c', whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 220, overflowY: 'auto', background: '#faf8f4', border: '1px solid #eee9e1', borderRadius: 8, padding: 8 }}>
+                        {task.log}
+                      </pre>
+                    ) : (
+                      <p style={{ margin: 0, color: '#9b958a', fontSize: 11 }}>{t.crm.agentNoLog}</p>
+                    )}
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>
