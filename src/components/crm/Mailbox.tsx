@@ -331,24 +331,24 @@ export default function Mailbox() {
                     <p style={{ margin: '0 0 8px', fontSize: 10, color: '#817b70', textTransform: 'uppercase', letterSpacing: '.08em' }}>
                       {t.crm.mailAttachments} ({attachments.length})
                     </p>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
                       {attachments.map((a) => {
                         const href = `/api/mail/attachment/${a.id}`
                         const isImg = (a.mimeType || '').startsWith('image/')
-                        return (
-                          <div key={a.id} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                            {isImg && (
-                              <a href={href} target="_blank" rel="noreferrer" style={{ flexShrink: 0 }}>
-                                <img src={href} alt={a.filename} style={{ maxHeight: 140, maxWidth: 200, borderRadius: 8, border: '1px solid #e5dfd3', display: 'block' }} />
-                              </a>
-                            )}
-                            <div style={{ minWidth: 0 }}>
-                              <a href={href} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: '#a7814e', wordBreak: 'break-all' }}>
-                                📎 {a.filename}
-                              </a>
-                              <span style={{ fontSize: 10, color: '#9b958a', marginLeft: 8 }}>{fmtSize(a.size)}</span>
-                            </div>
-                          </div>
+                        return isImg ? (
+                          // Фото — одинаковые квадратные миниатюры в ряд, без подписей
+                          <a key={a.id} href={href} target="_blank" rel="noreferrer" title={a.filename}
+                            style={{ width: 104, height: 104, flexShrink: 0, display: 'block', overflow: 'hidden', borderRadius: 10, border: '1px solid #e5dfd3', background: '#f5f2eb' }}>
+                            <img src={href} alt={a.filename} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                          </a>
+                        ) : (
+                          // Остальные файлы — компактная карточка с именем и размером
+                          <a key={a.id} href={href} target="_blank" rel="noreferrer" title={a.filename}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, border: '1px solid #e1d8ca', borderRadius: 8, background: '#fff', padding: '8px 12px', fontSize: 11, color: '#716b62', textDecoration: 'none', maxWidth: 280 }}>
+                            <span aria-hidden="true">📎</span>
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.filename}</span>
+                            <span style={{ color: '#9b958a' }}>{fmtSize(a.size)}</span>
+                          </a>
                         )
                       })}
                     </div>
