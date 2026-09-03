@@ -27,6 +27,10 @@ const { Client } = require('pg')
 const { spawn } = require('child_process')
 const { existsSync } = require('fs')
 
+// IMAP-поллер почты (VK WorkSpace). Пакет ставится install.sh (см. package.json).
+let imap = null
+try { imap = require('imapflow') } catch { /* появится после install.sh */ }
+
 const DB = process.env.DATABASE_URI
 const REPO = process.env.N15_REPO || '/root/n15'
 const POLL_MS = 5000
@@ -35,6 +39,8 @@ const DEPLOY_TIMEOUT_MS = 40 * 60 * 1000
 const AUTH_PROMPT = '__AUTH__' // спец-задача: авторизация ChatGPT (Codex) из CRM
 const AUTH_JSON = `${process.env.HOME || '/home/n15'}/.codex/auth.json`
 const AUTH_TIMEOUT_MS = 20 * 60 * 1000
+const MAIL_SYNC_MS = 60 * 1000 // почта: интервал забора писем
+const MAIL_LOOKBACK_MS = 48 * 3600 * 1000 // при первом заборе смотрим последние 48ч
 
 if (!DB) {
   console.error('DATABASE_URI is required')
@@ -360,6 +366,126 @@ async function runAuthTask(client, task) {
   })
 }
 
+// Забирает новые письма с ящика VK WorkSpace (настройки в mail_settings) и
+// пишет их в коллекцию emails. Дедуп по message_id; письмо привязывается
+// к клиенту (customers.email) или заявке (applications.client_email).
+async function syncMailOnce() {
+  if (!imap || !client) return
+  let cfg
+  try {
+    const r = await client.query(
+      'SELECT enabled, imap_host, imap_port, username, password FROM mail_settings LIMIT 1',
+    )
+    cfg = r.rows[0]
+  } catch (e) {
+    console.error('mail settings error:', e.message)
+    return
+  }
+  if (!cfg || !cfg.enabled || !cfg.username || !cfg.password) return
+
+  const flow = new imap.ImapFlow({
+    host: cfg.imap_host || 'imap.mail.ru',
+    port: Number(cfg.imap_port) || 993,
+    secure: true,
+    auth: { user: cfg.username, pass: cfg.password },
+    logger: false,
+  })
+
+  try {
+    await flow.connect()
+    const lock = await flow.getMailboxLock('INBOX')
+    try {
+      // Кандидаты: письма за последние 48ч + все непрочитанные (первый забор
+      // подтянет старые непрочитанные тоже).
+      const since = new Date(Date.now() - MAIL_LOOKBACK_MS)
+      let uids = await flow.search({ since })
+      try {
+        const unseen = await flow.search({ seen: false })
+        uids = [...new Set([...uids, ...unseen])]
+      } catch { /* поиск по seen не поддержан — ок */ }
+      if (!uids.length) return
+
+      // Дедуп по message_id (те, кто уже в БД, пропускаем)
+      const newUids = []
+      for (const uid of uids) {
+        let mid = ''
+        try {
+          const env = await flow.fetchOne(uid, { envelope: true }, { uid: true })
+          mid = ((env.envelope && env.envelope.messageId) || '').trim()
+        } catch { continue }
+        if (!mid) { newUids.push(uid); continue }
+        const dup = await client.query('SELECT 1 FROM emails WHERE message_id = $1 LIMIT 1', [mid])
+        if (!dup.rows.length) newUids.push(uid)
+      }
+
+      let imported = 0
+      for (const uid of newUids) {
+        try {
+          const full = await flow.fetchOne(uid, { source: true }, { uid: true })
+          const env = (await flow.fetchOne(uid, { envelope: true }, { uid: true })).envelope || {}
+          const mime = new imap.MimeMessage(full.source)
+          const from = (env.from && env.from[0]) || {}
+          const to = (env.to && env.to[0]) || {}
+          const fromEmail = (from.address || '').toLowerCase()
+          const subject = String(mime.subject || env.subject || '(без темы)').slice(0, 500)
+          const textBody = String(mime.text || '').slice(0, 20000)
+          const dateVal = env.date ? new Date(env.date) : new Date()
+          const messageId = ((env.messageId || '').trim()) || `noid-${fromEmail}-${dateVal.getTime()}-${subject}`
+
+          // Привязка к клиенту/заявке по email отправителя
+          let customerId = null
+          let applicationId = null
+          if (fromEmail) {
+            const cu = await client.query('SELECT id FROM customers WHERE lower(email) = $1 LIMIT 1', [fromEmail])
+            if (cu.rows[0]) {
+              customerId = cu.rows[0].id
+            } else {
+              const ap = await client.query(
+                'SELECT id, customer_id FROM applications WHERE lower(client_email) = $1 ORDER BY id DESC LIMIT 1',
+                [fromEmail],
+              )
+              if (ap.rows[0]) {
+                applicationId = ap.rows[0].id
+                if (!customerId && ap.rows[0].customer_id) customerId = ap.rows[0].customer_id
+              }
+            }
+          }
+
+          await client.query(
+            `INSERT INTO emails
+               (folder, message_id, from_name, from_email, to_email, subject, text,
+                received_at, read, customer_id, application_id, created_at, updated_at)
+             VALUES ('inbox', $1, $2, $3, $4, $5, $6, $7, false, $8, $9, now(), now())`,
+            [
+              messageId,
+              String(from.name || '').slice(0, 200),
+              fromEmail,
+              String(to.address || '').slice(0, 200),
+              subject,
+              textBody,
+              dateVal,
+              customerId,
+              applicationId,
+            ],
+          )
+          await flow.messageFlagsAdd(uid, ['\\Seen'], { uid: true })
+          imported++
+          console.log(`[mail] imported: ${fromEmail || '?'} «${subject.slice(0, 60)}»`)
+        } catch (e) {
+          console.error('mail import error:', e.message)
+        }
+      }
+      if (imported) console.log(`[mail] sync: +${imported} письм(а)`)
+    } finally {
+      lock.release()
+    }
+    await flow.logout()
+  } catch (e) {
+    console.error('mail sync error:', e.message)
+    try { await flow.logout() } catch { /* уже закрыт */ }
+  }
+}
+
 let client = null
 let busy = false
 let agentEnv = {}
@@ -495,6 +621,11 @@ async function main() {
 
   // Периодически обновляем конфиг из БД (редактирование из модалки CRM)
   setInterval(() => { refreshAgentEnv().catch(() => {}) }, 30 * 1000)
+
+  // Почта: забираем письма с ящика (раз в минуту)
+  if (!imap) console.warn('imapflow не установлен — синхронизация почты отключена (запусти install.sh)')
+  syncMailOnce().catch((e) => console.error('mail sync error', e))
+  setInterval(() => { syncMailOnce().catch(() => {}) }, MAIL_SYNC_MS)
 
   setInterval(async () => {
     if (busy) return
