@@ -23,6 +23,7 @@ export default function Mailbox() {
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [folder, setFolder] = useState<'inbox' | 'sent' | 'all'>('inbox')
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   // Форма ответа
   const [replyOpen, setReplyOpen] = useState(false)
   const [replyTo, setReplyTo] = useState('')
@@ -63,6 +64,20 @@ export default function Mailbox() {
       clearInterval(timer)
     }
   }, [load])
+
+  // Кнопка «Обновить»: перезагрузка списка из БД. Сам забор писем с ящика
+  // (IMAP) делает воркер на сервере раз в минуту — он же подтянет новые.
+  const doRefresh = async () => {
+    if (refreshing) return
+    setRefreshing(true)
+    try {
+      await load()
+    } catch {
+      // сеть недоступна — оставляем текущий список (как в авто-опросе)
+    } finally {
+      setRefreshing(false)
+    }
+  }
 
   const visible = folder === 'all' ? emails : emails.filter((m) => m.folder === folder)
   const selected = emails.find((m) => m.id === selectedId) || null
@@ -135,6 +150,10 @@ export default function Mailbox() {
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 16 }}>
         <button type="button" onClick={() => setFolder('inbox')} style={btnStyle(folder === 'inbox')}>{t.crm.mailFolderInbox}</button>
         <button type="button" onClick={() => setFolder('sent')} style={btnStyle(folder === 'sent')}>{t.crm.mailFolderSent}</button>
+        <button type="button" onClick={() => void doRefresh()} disabled={refreshing}
+          style={{ ...btnStyle(false), opacity: refreshing ? 0.55 : 1 }}>
+          {refreshing ? t.crm.mailUpdating : t.crm.mailRefresh}
+        </button>
         <button type="button" onClick={() => setFolder('all')} style={btnStyle(folder === 'all')}>{t.crm.filterAll}</button>
         {selected && (
           <button type="button" onClick={openReply}
