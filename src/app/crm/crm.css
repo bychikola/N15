@@ -56,3 +56,12 @@ body{margin:0}.crm-sidebar{box-sizing:border-box}.crm-chat-panel{box-sizing:bord
 /* Значок sync крутится, пока идёт ручное обновление списка писем */
 .mail-sync-spin{animation:mail-sync-spin 1.1s linear infinite}
 @keyframes mail-sync-spin{to{transform:rotate(360deg)}}
+/* Почта: адаптив под телефоны (инлайн-стили компонента медиа-запросами не
+   переопределить — для узких мест вешаем классы с !important) */
+.crm-mail-toolbar{flex-wrap:wrap}
+.crm-mail-search{width:min(240px,26vw)!important;margin-left:auto}
+@media(max-width:900px){.crm-mail-layout{grid-template-columns:1fr!important}}
+@media(max-width:640px){
+  .crm-mail-search{width:100%!important;margin-left:0!important}
+  .crm-mail-toolbar{gap:6px}
+}

@@ -247,7 +247,7 @@ export default function Mailbox() {
 
   return (
     <div>
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 16 }}>
+      <div className="crm-mail-toolbar" style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 16 }}>
         <button type="button" onClick={() => setFolderBoth('inbox')} style={btnStyle(folder === 'inbox')}>{t.crm.mailFolderInbox}</button>
         <button type="button" onClick={() => setFolderBoth('sent')} style={btnStyle(folder === 'sent')}>{t.crm.mailFolderSent}</button>
         <button type="button" onClick={() => setFolderBoth('all')} style={btnStyle(folder === 'all')}>{t.crm.filterAll}</button>
@@ -264,7 +264,8 @@ export default function Mailbox() {
           onKeyDown={(e) => { if (e.key === 'Enter') doSearch() }}
           placeholder={t.crm.mailSearchPlaceholder}
           aria-label={t.crm.mailSearchPlaceholder}
-          style={{ marginLeft: 'auto', width: 'min(260px, 32vw)', boxSizing: 'border-box', border: '1px solid #d9d1c4', borderRadius: 7, background: '#fff', color: '#25241f', padding: '8px 12px', font: '12px Arial, Helvetica, sans-serif', outline: 'none' }}
+          className="crm-mail-search"
+          style={{ boxSizing: 'border-box', border: '1px solid #d9d1c4', borderRadius: 7, background: '#fff', color: '#25241f', padding: '8px 12px', font: '12px Arial, Helvetica, sans-serif', outline: 'none' }}
         />
         {search && (
           <button type="button" onClick={clearSearch} title={t.crm.mailSearchClear} aria-label={t.crm.mailSearchClear}
@@ -292,7 +293,7 @@ export default function Mailbox() {
           )}
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(280px, 380px) 1fr', gap: 14, alignItems: 'start' }}>
+        <div className="crm-mail-layout" style={{ display: 'grid', gridTemplateColumns: 'minmax(280px, 380px) 1fr', gap: 14, alignItems: 'start' }}>
           {/* Список */}
           <div style={{ background: '#fff', border: '1px solid #e5dfd3', borderRadius: 12, overflow: 'hidden', maxHeight: 'calc(100vh - 260px)', overflowY: 'auto' }}>
             {visible.length === 0 && (
