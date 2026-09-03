@@ -150,11 +150,14 @@ export default function Mailbox() {
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 16 }}>
         <button type="button" onClick={() => setFolder('inbox')} style={btnStyle(folder === 'inbox')}>{t.crm.mailFolderInbox}</button>
         <button type="button" onClick={() => setFolder('sent')} style={btnStyle(folder === 'sent')}>{t.crm.mailFolderSent}</button>
-        <button type="button" onClick={() => void doRefresh()} disabled={refreshing}
-          style={{ ...btnStyle(false), opacity: refreshing ? 0.55 : 1 }}>
-          {refreshing ? t.crm.mailUpdating : t.crm.mailRefresh}
-        </button>
         <button type="button" onClick={() => setFolder('all')} style={btnStyle(folder === 'all')}>{t.crm.filterAll}</button>
+        <button type="button" onClick={() => void doRefresh()} disabled={refreshing}
+          title={refreshing ? t.crm.mailUpdating : t.crm.mailRefresh}
+          aria-label={refreshing ? t.crm.mailUpdating : t.crm.mailRefresh}
+          style={{ ...btnStyle(false), padding: '6px 10px', lineHeight: 1, opacity: refreshing ? 0.55 : 1 }}>
+          <span aria-hidden="true" className={refreshing ? 'material-symbols-outlined mail-sync-spin' : 'material-symbols-outlined'}
+            style={{ fontSize: 16, lineHeight: 1 }}>sync</span>
+        </button>
         {selected && (
           <button type="button" onClick={openReply}
             style={{ marginLeft: 'auto', border: 0, borderRadius: 8, background: '#a7814e', color: '#fff', padding: '10px 18px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', cursor: 'pointer' }}>
