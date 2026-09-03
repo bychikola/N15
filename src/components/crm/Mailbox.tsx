@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useI18n } from '@/i18n/i18n-provider'
 
 const POLL_MS = 30_000
@@ -15,6 +15,43 @@ interface MailItem {
   text?: string
   receivedAt?: string
   read: boolean
+}
+
+// Поиск писем на сервере (Payload where, contains по полям):
+// отправитель (имя/email), тема, текст. Поиск идёт в БД, а не по загруженным 100.
+async function fetchMail(query: string, folder: string): Promise<MailItem[]> {
+  try {
+    const q = query.trim()
+    let url = '/api/emails?limit=100&sort=-receivedAt&depth=0'
+    if (q || folder !== 'all') {
+      const parts: string[] = []
+      if (folder !== 'all') parts.push(`where[and][0][folder][equals]=${folder}`)
+      if (q) {
+        const orIdx = folder !== 'all' ? 1 : 0
+        ;['subject', 'fromName', 'fromEmail', 'text'].forEach((f, i) => {
+          parts.push(`where[and][${orIdx}][or][${i}][${f}][contains]=${encodeURIComponent(q)}`)
+        })
+      }
+      url += '&' + parts.join('&')
+    }
+    const res = await fetch(url, { credentials: 'include' })
+    if (!res.ok) return []
+    const data = await res.json()
+    const docs = (data.docs || []) as Record<string, unknown>[]
+    return docs.map((m) => ({
+      id: m.id as number,
+      folder: m.folder as string,
+      fromName: (m.fromName as string) || undefined,
+      fromEmail: (m.fromEmail as string) || undefined,
+      toEmail: (m.toEmail as string) || undefined,
+      subject: (m.subject as string) || undefined,
+      text: (m.text as string) || undefined,
+      receivedAt: (m.receivedAt as string) || undefined,
+      read: m.read as boolean,
+    }))
+  } catch {
+    return []
+  }
 }
 
 export default function Mailbox() {
@@ -59,30 +96,26 @@ export default function Mailbox() {
     }
   }, [selectedId])
 
-  const load = useCallback(async () => {
-    const res = await fetch('/api/emails?limit=100&sort=-receivedAt&depth=0', { credentials: 'include' })
-    if (!res.ok) return
-    const data = await res.json()
-    const docs = (data.docs || []) as Record<string, unknown>[]
-    setEmails(docs.map((m) => ({
-      id: m.id as number,
-      folder: m.folder as string,
-      fromName: (m.fromName as string) || undefined,
-      fromEmail: (m.fromEmail as string) || undefined,
-      toEmail: (m.toEmail as string) || undefined,
-      subject: (m.subject as string) || undefined,
-      text: (m.text as string) || undefined,
-      receivedAt: (m.receivedAt as string) || undefined,
-      read: m.read as boolean,
-    })))
+  const searchRef = useRef('')
+  const folderRef = useRef<'inbox' | 'sent' | 'all'>('inbox')
+  const [search, setSearch] = useState('')
+  const [activeQuery, setActiveQuery] = useState('')
+
+  const refresh = async () => {
+    const list = await fetchMail(searchRef.current, folderRef.current)
+    setEmails(list)
     setLoading(false)
-  }, [])
+  }
 
   useEffect(() => {
     let cancelled = false
     async function tick() {
       if (cancelled || document.visibilityState !== 'visible') return
-      await load()
+      const list = await fetchMail(searchRef.current, folderRef.current)
+      if (!cancelled) {
+        setEmails(list)
+        setLoading(false)
+      }
     }
     void tick()
     const timer = setInterval(() => { void tick() }, POLL_MS)
@@ -90,7 +123,26 @@ export default function Mailbox() {
       cancelled = true
       clearInterval(timer)
     }
-  }, [load])
+  }, [])
+
+  const setFolderBoth = (f: 'inbox' | 'sent' | 'all') => {
+    folderRef.current = f
+    setFolder(f)
+    void refresh()
+  }
+
+  const doSearch = () => {
+    searchRef.current = search.trim()
+    setActiveQuery(search.trim())
+    void refresh()
+  }
+
+  const clearSearch = () => {
+    setSearch('')
+    searchRef.current = ''
+    setActiveQuery('')
+    void refresh()
+  }
 
   // Кнопка «Обновить»: перезагрузка списка из БД. Сам забор писем с ящика
   // (IMAP) делает воркер на сервере раз в минуту — он же подтянет новые.
@@ -98,7 +150,7 @@ export default function Mailbox() {
     if (refreshing) return
     setRefreshing(true)
     try {
-      await load()
+      await refresh()
     } catch {
       // сеть недоступна — оставляем текущий список (как в авто-опросе)
     } finally {
@@ -149,7 +201,7 @@ export default function Mailbox() {
         return
       }
       setReplyOpen(false)
-      await load()
+      await refresh()
     } catch {
       setSendError(t.crm.mailSendError)
     } finally {
@@ -182,9 +234,9 @@ export default function Mailbox() {
   return (
     <div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 16 }}>
-        <button type="button" onClick={() => setFolder('inbox')} style={btnStyle(folder === 'inbox')}>{t.crm.mailFolderInbox}</button>
-        <button type="button" onClick={() => setFolder('sent')} style={btnStyle(folder === 'sent')}>{t.crm.mailFolderSent}</button>
-        <button type="button" onClick={() => setFolder('all')} style={btnStyle(folder === 'all')}>{t.crm.filterAll}</button>
+        <button type="button" onClick={() => setFolderBoth('inbox')} style={btnStyle(folder === 'inbox')}>{t.crm.mailFolderInbox}</button>
+        <button type="button" onClick={() => setFolderBoth('sent')} style={btnStyle(folder === 'sent')}>{t.crm.mailFolderSent}</button>
+        <button type="button" onClick={() => setFolderBoth('all')} style={btnStyle(folder === 'all')}>{t.crm.filterAll}</button>
         <button type="button" onClick={() => void doRefresh()} disabled={refreshing}
           title={refreshing ? t.crm.mailUpdating : t.crm.mailRefresh}
           aria-label={refreshing ? t.crm.mailUpdating : t.crm.mailRefresh}
@@ -192,9 +244,21 @@ export default function Mailbox() {
           <span aria-hidden="true" className={refreshing ? 'material-symbols-outlined mail-sync-spin' : 'material-symbols-outlined'}
             style={{ fontSize: 16, lineHeight: 1 }}>sync</span>
         </button>
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') doSearch() }}
+          placeholder={t.crm.mailSearchPlaceholder}
+          aria-label={t.crm.mailSearchPlaceholder}
+          style={{ marginLeft: 'auto', width: 'min(260px, 32vw)', boxSizing: 'border-box', border: '1px solid #d9d1c4', borderRadius: 7, background: '#fff', color: '#25241f', padding: '8px 12px', font: '12px Arial, Helvetica, sans-serif', outline: 'none' }}
+        />
+        {search && (
+          <button type="button" onClick={clearSearch} title={t.crm.mailSearchClear} aria-label={t.crm.mailSearchClear}
+            style={{ border: '1px solid #e1d8ca', borderRadius: 7, background: '#fff', color: '#716b62', padding: '7px 10px', cursor: 'pointer', fontSize: 11, lineHeight: 1 }}>✕</button>
+        )}
         {selected && (
           <button type="button" onClick={openReply}
-            style={{ marginLeft: 'auto', border: 0, borderRadius: 8, background: '#a7814e', color: '#fff', padding: '10px 18px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', cursor: 'pointer' }}>
+            style={{ border: 0, borderRadius: 8, background: '#a7814e', color: '#fff', padding: '10px 18px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', cursor: 'pointer' }}>
             {t.crm.mailReply}
           </button>
         )}
@@ -202,10 +266,16 @@ export default function Mailbox() {
 
       {emails.length === 0 ? (
         <div style={{ background: '#fff', border: '1px solid #e5dfd3', borderRadius: 12, padding: 40, textAlign: 'center' }}>
-          <p style={{ margin: '0 0 6px', fontSize: 14, color: '#25241f', fontWeight: 600 }}>{t.crm.mailUnconnected}</p>
-          <p style={{ margin: 0, fontSize: 12, color: '#817b70', lineHeight: 1.7 }}>
-            {t.crm.mailUnconnectedHint}
-          </p>
+          {activeQuery ? (
+            <p style={{ margin: 0, fontSize: 13, color: '#817b70' }}>{t.crm.mailNoResults}</p>
+          ) : (
+            <>
+              <p style={{ margin: '0 0 6px', fontSize: 14, color: '#25241f', fontWeight: 600 }}>{t.crm.mailUnconnected}</p>
+              <p style={{ margin: 0, fontSize: 12, color: '#817b70', lineHeight: 1.7 }}>
+                {t.crm.mailUnconnectedHint}
+              </p>
+            </>
+          )}
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(280px, 380px) 1fr', gap: 14, alignItems: 'start' }}>
