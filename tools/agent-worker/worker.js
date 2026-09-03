@@ -463,11 +463,12 @@ async function syncMailRun() {
             }
           }
 
-          await client.query(
+          const ins = await client.query(
             `INSERT INTO emails
                (folder, message_id, from_name, from_email, to_email, subject, text,
                 received_at, read, customer_id, application_id, created_at, updated_at)
-             VALUES ('inbox', $1, $2, $3, $4, $5, $6, $7, false, $8, $9, now(), now())`,
+             VALUES ('inbox', $1, $2, $3, $4, $5, $6, $7, false, $8, $9, now(), now())
+             RETURNING id`,
             [
               messageId,
               String(from.name || '').slice(0, 200),
@@ -480,6 +481,28 @@ async function syncMailRun() {
               applicationId,
             ],
           )
+          const emailId = ins.rows[0] && ins.rows[0].id
+
+          // Вложения (именованные, без inline-картинок письма) — base64 в БД
+          const attaches = (parsed.attachments || []).filter((a) => a.filename && !a.cid)
+          for (const att of attaches) {
+            if (!att.content || att.content.length > 20 * 1024 * 1024) {
+              console.warn(`[mail] attachment skipped (пустое или >20MB): ${att.filename}`)
+              continue
+            }
+            await client.query(
+              `INSERT INTO mail_attachments (email_id, filename, mime_type, size, data, created_at, updated_at)
+               VALUES ($1, $2, $3, $4, $5, now(), now())`,
+              [
+                emailId,
+                String(att.filename).slice(0, 255),
+                String(att.contentType || 'application/octet-stream').slice(0, 200),
+                att.content.length,
+                att.content.toString('base64'),
+              ],
+            ).catch((e) => console.error('attachment insert error:', e.message))
+          }
+
           await flow.messageFlagsAdd(uid, ['\\Seen'], { uid: true })
           imported++
           console.log(`[mail] imported: ${fromEmail || '?'} «${subject.slice(0, 60)}»`)

@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useI18n } from '@/i18n/i18n-provider'
 
 const POLL_MS = 30_000
@@ -31,6 +31,33 @@ export default function Mailbox() {
   const [replyText, setReplyText] = useState('')
   const [sending, setSending] = useState(false)
   const [sendError, setSendError] = useState('')
+  const [attachments, setAttachments] = useState<{ id: number; filename: string; mimeType?: string; size?: number }[]>([])
+  const selectedIdRef = useRef<number | null>(null)
+
+  // Вложения выбранного письма (без синхронного setState в эффекте —
+  // иначе react-hooks ругается на каскадные рендеры)
+  useEffect(() => {
+    selectedIdRef.current = selectedId
+    if (!selectedId) return
+    let cancelled = false
+    fetch(`/api/mail/attachments?emailId=${selectedId}`, { credentials: 'include' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (cancelled || !d) return
+        const docs = (d.docs || []).map((x: Record<string, unknown>) => ({
+          id: x.id as number,
+          filename: String(x.filename || ''),
+          mimeType: x.mimeType ? String(x.mimeType) : undefined,
+          size: x.size as number | undefined,
+        }))
+        // Переключили письмо, пока шёл запрос — старые вложения не показываем
+        if (selectedIdRef.current === selectedId) setAttachments(docs)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [selectedId])
 
   const load = useCallback(async () => {
     const res = await fetch('/api/emails?limit=100&sort=-receivedAt&depth=0', { credentials: 'include' })
@@ -145,6 +172,13 @@ export default function Mailbox() {
     return new Date(iso).toLocaleString(t.locale, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
   }
 
+  const fmtSize = (bytes?: number) => {
+    if (!bytes) return ''
+    if (bytes < 1024) return `${bytes} Б`
+    if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} КБ`
+    return `${(bytes / (1024 * 1024)).toFixed(1)} МБ`
+  }
+
   return (
     <div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 16 }}>
@@ -222,6 +256,34 @@ export default function Mailbox() {
                 <div style={{ fontSize: 13, color: '#25241f', lineHeight: 1.7, whiteSpace: 'pre-wrap', borderTop: '1px solid #eee9e1', paddingTop: 14 }}>
                   {selected.text || t.crm.mailNoText}
                 </div>
+                {attachments.length > 0 && (
+                  <div style={{ borderTop: '1px solid #eee9e1', marginTop: 14, paddingTop: 12 }}>
+                    <p style={{ margin: '0 0 8px', fontSize: 10, color: '#817b70', textTransform: 'uppercase', letterSpacing: '.08em' }}>
+                      {t.crm.mailAttachments} ({attachments.length})
+                    </p>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {attachments.map((a) => {
+                        const href = `/api/mail/attachment/${a.id}`
+                        const isImg = (a.mimeType || '').startsWith('image/')
+                        return (
+                          <div key={a.id} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                            {isImg && (
+                              <a href={href} target="_blank" rel="noreferrer" style={{ flexShrink: 0 }}>
+                                <img src={href} alt={a.filename} style={{ maxHeight: 140, maxWidth: 200, borderRadius: 8, border: '1px solid #e5dfd3', display: 'block' }} />
+                              </a>
+                            )}
+                            <div style={{ minWidth: 0 }}>
+                              <a href={href} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: '#a7814e', wordBreak: 'break-all' }}>
+                                📎 {a.filename}
+                              </a>
+                              <span style={{ fontSize: 10, color: '#9b958a', marginLeft: 8 }}>{fmtSize(a.size)}</span>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>

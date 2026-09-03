@@ -9,6 +9,7 @@ import { Agents } from './collections/Agents'
 import { Tasks } from './collections/Tasks'
 import { Customers } from './collections/Customers'
 import { Emails } from './collections/Emails'
+import { MailAttachments } from './collections/MailAttachments'
 import { AgentTasks } from './collections/AgentTasks'
 import { Applications } from './collections/Applications'
 import { Messages } from './collections/Messages'
@@ -40,7 +41,7 @@ export default buildConfig({
   routes: {
     admin: process.env.ADMIN_ROUTE || '/admin',
   },
-  collections: [Users, Media, Objects, Agents, Applications, Tasks, Messages, Blog, Pages, Customers, Emails, AgentTasks],
+  collections: [Users, Media, Objects, Agents, Applications, Tasks, Messages, Blog, Pages, Customers, Emails, MailAttachments, AgentTasks],
   globals: [SiteSettings, MailSettings, AgentSettings],
   editor: lexicalEditor(),
   db: process.env.DATABASE_URI

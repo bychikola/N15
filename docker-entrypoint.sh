@@ -51,9 +51,10 @@ if [ -n "$DATABASE_URI" ]; then
       const ms = await c.query(\"SELECT to_regclass('public.mail_settings') AS t\");
       const loc = await c.query(\"SELECT column_name FROM information_schema.columns WHERE table_name='objects_address' AND column_name='locality'\");
       const at = await c.query(\"SELECT to_regclass('public.agent_tasks') AS t\");
+      const ma = await c.query(\"SELECT to_regclass('public.mail_attachments') AS t\");
       const ag = await c.query(\"SELECT 1 FROM payload_globals WHERE slug = 'agent-settings' LIMIT 1\");
       const aa = await c.query(\"SELECT column_name FROM information_schema.columns WHERE table_name='users' AND column_name='agent_access'\");
-      const ok = o.rows[0].t && t.rows[0].t && cu.rows[0].t && lr.rows.length > 0 && un.rows.length > 0 && own.rows.length > 0 && em.rows[0].t && ms.rows[0].t && loc.rows.length > 0 && at.rows[0].t && ag.rows.length > 0 && aa.rows.length > 0;
+      const ok = o.rows[0].t && t.rows[0].t && cu.rows[0].t && lr.rows.length > 0 && un.rows.length > 0 && own.rows.length > 0 && em.rows[0].t && ms.rows[0].t && loc.rows.length > 0 && at.rows[0].t && ma.rows[0].t && ag.rows.length > 0 && aa.rows.length > 0;
       await c.end();
       process.exit(ok ? 0 : 1);
     })().catch(() => process.exit(1));
