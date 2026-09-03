@@ -42,8 +42,7 @@ const AUTH_PROMPT = '__AUTH__' // спец-задача: авторизация 
 const AUTH_JSON = `${process.env.HOME || '/home/n15'}/.codex/auth.json`
 const AUTH_TIMEOUT_MS = 20 * 60 * 1000
 const MAIL_SYNC_MS = 60 * 1000 // почта: интервал забора писем
-const MAIL_LOOKBACK_MS = 48 * 3600 * 1000 // при первом заборе смотрим последние 48ч
-const MAIL_BATCH = 30 // максимум писем за один проход (остальные — следующими)
+const MAIL_BATCH = 50 // максимум писем за один проход (хвост ящика; остальные — следующими)
 
 if (!DB) {
   console.error('DATABASE_URI is required')
@@ -412,24 +411,39 @@ async function syncMailRun() {
     await flow.connect()
     const lock = await flow.getMailboxLock('INBOX')
     try {
-      // Кандидаты: письма за последние 48ч + все непрочитанные (первый забор
-      // подтянет старые непрочитанные тоже).
-      const since = new Date(Date.now() - MAIL_LOOKBACK_MS)
-      let uids = await flow.search({ since })
-      try {
-        const unseen = await flow.search({ seen: false })
-        uids = [...new Set([...uids, ...unseen])]
-      } catch { /* поиск по seen не поддержан — ок */ }
-      if (!uids.length) return
+      // mail.ru иногда возвращает ФАНТОМНЫЕ UID в SEARCH (реальные письма
+      // 1,4,15,18,21, а поиск отдаёт 1..5) — поэтому не ищем, а перечисляем
+      // реальные сообщения (seq 1:*) и берём хвост (новейшие). Уже
+      // импортированные отсекаем по message_id ДО забора тела — лишние
+      // мегабайты не качаем.
+      const list = []
+      for await (const msg of flow.fetch('1:*', { envelope: true, uid: true })) {
+        list.push(msg)
+      }
+      if (!list.length) return
 
-      // Лимит прохода: свежие письма первыми, остальные дойдут следующими
-      // проходами (непрочитанные не теряются — помечаются \Seen после импорта)
-      uids = uids.slice(-MAIL_BATCH)
+      const needUids = []
+      const seenKeys = new Set()
+      for (const msg of list.slice(-MAIL_BATCH)) {
+        const mid = ((msg.envelope && msg.envelope.messageId) || '').trim()
+        const key = mid || `uid-${msg.uid}`
+        if (seenKeys.has(key)) continue
+        seenKeys.add(key)
+        if (mid) {
+          const dup = await client.query('SELECT 1 FROM emails WHERE message_id = $1 LIMIT 1', [mid])
+          if (dup.rows.length) continue
+        }
+        needUids.push(msg.uid)
+      }
 
       let imported = 0
-      for (const uid of uids) {
+      for (const uid of needUids) {
         try {
           const full = await flow.fetchOne(uid, { source: true }, { uid: true })
+          if (!full || !full.source) {
+            console.warn(`[mail] source missing for uid ${uid} — пропускаю`)
+            continue
+          }
           const parsed = await simpleParser(full.source)
           const from = (parsed.from && parsed.from.value && parsed.from.value[0]) || {}
           const to = (parsed.to && parsed.to.value && parsed.to.value[0]) || {}
