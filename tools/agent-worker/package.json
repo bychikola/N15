@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "pg": "^8.13.0",
-    "imapflow": "^1.7.8"
+    "imapflow": "^1.7.8",
+    "mailparser": "^3.9.20"
   }
 }

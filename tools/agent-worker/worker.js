@@ -27,9 +27,11 @@ const { Client } = require('pg')
 const { spawn } = require('child_process')
 const { existsSync } = require('fs')
 
-// IMAP-поллер почты (VK WorkSpace). Пакет ставится install.sh (см. package.json).
+// IMAP-поллер почты (VK WorkSpace). Пакеты ставятся install.sh (package.json).
 let imap = null
 try { imap = require('imapflow') } catch { /* появится после install.sh */ }
+let simpleParser = null
+try { ({ simpleParser } = require('mailparser')) } catch { /* появится после install.sh */ }
 
 const DB = process.env.DATABASE_URI
 const REPO = process.env.N15_REPO || '/root/n15'
@@ -370,7 +372,7 @@ async function runAuthTask(client, task) {
 // пишет их в коллекцию emails. Дедуп по message_id; письмо привязывается
 // к клиенту (customers.email) или заявке (applications.client_email).
 async function syncMailOnce() {
-  if (!imap || !client) return
+  if (!imap || !simpleParser || !client) return
   let cfg
   try {
     const r = await client.query(
@@ -405,32 +407,23 @@ async function syncMailOnce() {
       } catch { /* поиск по seen не поддержан — ок */ }
       if (!uids.length) return
 
-      // Дедуп по message_id (те, кто уже в БД, пропускаем)
-      const newUids = []
-      for (const uid of uids) {
-        let mid = ''
-        try {
-          const env = await flow.fetchOne(uid, { envelope: true }, { uid: true })
-          mid = ((env.envelope && env.envelope.messageId) || '').trim()
-        } catch { continue }
-        if (!mid) { newUids.push(uid); continue }
-        const dup = await client.query('SELECT 1 FROM emails WHERE message_id = $1 LIMIT 1', [mid])
-        if (!dup.rows.length) newUids.push(uid)
-      }
-
       let imported = 0
-      for (const uid of newUids) {
+      for (const uid of uids) {
         try {
           const full = await flow.fetchOne(uid, { source: true }, { uid: true })
-          const env = (await flow.fetchOne(uid, { envelope: true }, { uid: true })).envelope || {}
-          const mime = new imap.MimeMessage(full.source)
-          const from = (env.from && env.from[0]) || {}
-          const to = (env.to && env.to[0]) || {}
+          const parsed = await simpleParser(full.source)
+          const from = (parsed.from && parsed.from.value && parsed.from.value[0]) || {}
+          const to = (parsed.to && parsed.to.value && parsed.to.value[0]) || {}
           const fromEmail = (from.address || '').toLowerCase()
-          const subject = String(mime.subject || env.subject || '(без темы)').slice(0, 500)
-          const textBody = String(mime.text || '').slice(0, 20000)
-          const dateVal = env.date ? new Date(env.date) : new Date()
-          const messageId = ((env.messageId || '').trim()) || `noid-${fromEmail}-${dateVal.getTime()}-${subject}`
+          const subject = String(parsed.subject || '(без темы)').slice(0, 500)
+          const textBody = String(parsed.text || '').slice(0, 20000)
+          const dateVal = parsed.date ? new Date(parsed.date) : new Date()
+          const messageId = (parsed.messageId || '').trim() ||
+            `noid-${fromEmail}-${dateVal.getTime()}-${subject}`
+
+          // Дедуп по message_id: уже импортированные пропускаем
+          const dup = await client.query('SELECT 1 FROM emails WHERE message_id = $1 LIMIT 1', [messageId])
+          if (dup.rows.length) continue
 
           // Привязка к клиенту/заявке по email отправителя
           let customerId = null
