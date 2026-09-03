@@ -26,7 +26,13 @@ ENV NODE_OPTIONS=--max-old-space-size=2048
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN npm run build
+# Кэш сборки Next.js (BuildKit --mount=type=cache): между деплоями
+# переиспользуется результат компиляции неизменившихся модулей — мелкие
+# правки (дизайн, текст и т.п.) вместо полной сборки 15-20 мин занимают
+# пару минут. Кэш хранится на хосте (в образ не попадает, рантайм не
+# затрагивается). При подозрительных ошибках сборки: docker builder prune —
+# кэш очистится, сборка станет полной, это безопасно.
+RUN --mount=type=cache,id=nextjs-build-cache,target=/app/.next/cache npm run build
 
 # ---- runtime ----
 FROM node:22-slim AS runner
