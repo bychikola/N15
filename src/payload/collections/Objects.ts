@@ -275,6 +275,12 @@ export const Objects: CollectionConfig = {
       name: 'coordinates',
       type: 'group',
       label: 'Координаты',
+      // Ручной ввод убран: координаты ставит карта в форме CRM (поиск адреса,
+      // метка перетаскивается). Поля остаются в схеме — значения приходят
+      // через REST, как и раньше.
+      admin: {
+        hidden: true,
+      },
       fields: [
         { name: 'lat', type: 'number', label: 'Широта' },
         { name: 'lng', type: 'number', label: 'Долгота' },

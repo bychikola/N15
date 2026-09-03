@@ -1,8 +1,9 @@
 'use client'
 
-import { useCallback, useEffect, useState, type FC } from 'react'
+import { useCallback, useEffect, useRef, useState, type FC } from 'react'
 import type { Dict } from '@/i18n/dictionaries'
 import { DISTRICT_OPTIONS, LOCALITIES_BY_DISTRICT, LOCALITY_OPTIONS } from '@/lib/districts'
+import { loadYmaps, type Ymaps } from '@/lib/ymaps'
 
 interface ObjectRow {
   id: number
@@ -40,9 +41,11 @@ const emptyForm = {
 
 type FormState = typeof emptyForm
 
+// Шрифт полей не задаём здесь: его даёт crm.css (.crm-property-form input),
+// на телефонах он увеличивается до 16px, чтобы iOS не приближала страницу при вводе
 const inputStyle: React.CSSProperties = {
   width: '100%', boxSizing: 'border-box', border: '1px solid #d9d1c4', borderRadius: 7,
-  background: 'white', color: '#25241f', padding: 12, font: '12px Arial, Helvetica, sans-serif',
+  background: 'white', color: '#25241f', padding: 12,
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -50,6 +53,261 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     <label style={{ display: 'flex', flexDirection: 'column', gap: 7, color: '#6f6a61', fontSize: 9, textTransform: 'uppercase', letterSpacing: '.08em' }}>
       {label}{children}
     </label>
+  )
+}
+
+// --- Карта с меткой в форме объекта ---
+// Точный адрес (населённый пункт + улица + дом) ищется на Яндекс.Картах
+// автоматически, кнопка «Найти на карте» ищет по любому заполненному адресу.
+// Метку можно передвинуть пальцем/мышью или поставить кликом — координаты
+// уходят в скрытые поля формы (lat/lng) и сохраняются с объектом без ручного ввода.
+
+// Начальный центр карты для новых объектов (по умолчанию город — Владикавказ)
+const VLAV_CENTER: [number, number] = [43.0205, 44.6819]
+
+const round6 = (v: number) => Math.round(v * 1e6) / 1e6
+
+// Адрес одной строкой для поиска на карте: населённый пункт (или город),
+// затем улица и дом. Для пунктов в черте Владикавказа город добавляем следом,
+// чтобы геокодер не увёл запрос в другой регион.
+const addressForMap = (f: FormState): string => {
+  const city = f.city.trim()
+  const locality = f.locality.trim()
+  const place = locality && locality !== city
+    ? (f.district === 'Владикавказский городской округ' ? `${locality}, ${city}` : locality)
+    : city
+  return [place, f.street.trim(), f.house.trim()].filter(Boolean).join(', ')
+}
+
+const toNum = (v: string): number | null => {
+  if (!v.trim()) return null
+  const n = Number(v)
+  return Number.isFinite(n) ? n : null
+}
+
+const isLat = (v: number | null): v is number => v !== null && v >= -90 && v <= 90
+const isLng = (v: number | null): v is number => v !== null && v >= -180 && v <= 180
+
+interface ObjMapProps {
+  t: Dict
+  /** Адрес одной строкой для геокодирования */
+  address: string
+  /** Адрес «точный» (улица и дом заполнены) — включается авто-поиск */
+  autoSearch: boolean
+  /** Пользователь менял адресные поля с момента открытия формы */
+  addrTouched: boolean
+  /** Координаты объекта при открытии формы ('' — нет) */
+  lat: string
+  lng: string
+  /** Новые координаты метки; null — метку убрали */
+  onCoords: (lat: number | null, lng: number | null) => void
+}
+
+const ObjMapEditor: FC<ObjMapProps> = ({ t, address, autoSearch, addrTouched, lat, lng, onCoords }) => {
+  const apiKey = process.env.NEXT_PUBLIC_YANDEX_MAPS_API_KEY
+  const containerRef = useRef<HTMLDivElement | null>(null)
+  const mapRef = useRef<Ymaps | null>(null)
+  const markerRef = useRef<Ymaps | null>(null)
+  const ymapsRef = useRef<Ymaps | null>(null)
+  const [ready, setReady] = useState(false)
+  const [searching, setSearching] = useState(false)
+  const [err, setErr] = useState<'notfound' | 'noaddress' | 'unavailable' | null>(null)
+  // Актуальные пропсы для асинхронных колбэков карты (dragend, click, geocode)
+  const propsRef = useRef({ address, autoSearch, addrTouched, lat, lng, onCoords })
+  useEffect(() => {
+    propsRef.current = { address, autoSearch, addrTouched, lat, lng, onCoords }
+  }, [address, autoSearch, addrTouched, lat, lng, onCoords])
+  // Поколение поиска: ответы устаревших запросов геокодера игнорируем
+  const genRef = useRef(0)
+
+  const removePin = useCallback(() => {
+    const mk = markerRef.current
+    if (mk && mapRef.current) mapRef.current.geoObjects.remove(mk)
+    markerRef.current = null
+  }, [])
+
+  // Ставит метку (заменяя старую); метку можно перетаскивать
+  const putPin = useCallback((coords: [number, number]) => {
+    const ym = ymapsRef.current
+    const map = mapRef.current
+    if (!ym || !map) return
+    removePin()
+    const pin = new ym.Placemark(
+      coords,
+      { hintContent: propsRef.current.address },
+      { preset: 'islands#circleIcon', iconColor: '#a7814e', draggable: true },
+    )
+    pin.events.add('dragend', () => {
+      genRef.current++ // ручная установка важнее незавершённого авто-поиска
+      const c = pin.geometry.getCoordinates() as [number, number]
+      propsRef.current.onCoords(round6(c[0]), round6(c[1]))
+    })
+    map.geoObjects.add(pin)
+    markerRef.current = pin
+  }, [removePin])
+
+  // Геокодирование строки адреса; null — ничего не найдено
+  const geocode = useCallback(async (text: string): Promise<[number, number] | null> => {
+    const ym = ymapsRef.current
+    if (!ym) return null
+    const result = await ym.geocode(text, { results: 1 })
+    const geoObject = result.geoObjects.get(0)
+    if (!geoObject) return null
+    const c = geoObject.geometry.getCoordinates() as [number, number]
+    return [round6(c[0]), round6(c[1])]
+  }, [])
+
+  // Инициализация карты при открытии формы: центр — координаты объекта,
+  // если они есть (туда же ставим метку), иначе — Владикавказ
+  useEffect(() => {
+    if (!apiKey) return
+    const el = containerRef.current
+    if (!el) return
+    let disposed = false
+
+    loadYmaps(apiKey)
+      .then((ym) => {
+        if (disposed) return
+        ymapsRef.current = ym
+        const sLat = toNum(propsRef.current.lat)
+        const sLng = toNum(propsRef.current.lng)
+        const known = isLat(sLat) && isLng(sLng)
+        const center: [number, number] = known ? [sLat, sLng] : VLAV_CENTER
+        const map = new ym.Map(el, {
+          center,
+          zoom: known ? 17 : 12,
+          controls: ['zoomControl'],
+        })
+        mapRef.current = map
+        if (known) putPin(center)
+        // Клик по карте — быстрая установка метки (удобно с телефона)
+        map.events.add('click', (e: Ymaps) => {
+          const c = e.get('coords') as [number, number] | undefined
+          if (!c) return
+          genRef.current++ // ручная установка важнее незавершённого авто-поиска
+          const coords: [number, number] = [round6(c[0]), round6(c[1])]
+          putPin(coords)
+          propsRef.current.onCoords(coords[0], coords[1])
+        })
+        setReady(true)
+      })
+      .catch(() => {
+        // Карта не загрузилась (нет сети, заблокирован скрипт) — сообщаем
+        if (!disposed) setErr('unavailable')
+      })
+
+    return () => {
+      disposed = true
+      try {
+        mapRef.current?.destroy()
+      } catch {
+        // карта могла не успеть создаться
+      }
+      mapRef.current = null
+      ymapsRef.current = null
+      markerRef.current = null
+    }
+  }, [apiKey, putPin])
+
+  // Авто-поиск по точному адресу: после паузы в вводе ищем адрес и ставим
+  // метку. Если адрес перестал быть точным — метку убираем, чтобы объект
+  // не остался привязан к старой точке.
+  useEffect(() => {
+    if (!ready) return
+    const gen = ++genRef.current
+    if (!autoSearch) {
+      // Форму только открыли — метку и координаты не трогаем
+      if (!addrTouched) return
+      const timer = setTimeout(() => {
+        setSearching(false)
+        setErr(null)
+        removePin()
+        propsRef.current.onCoords(null, null)
+      }, 600)
+      return () => clearTimeout(timer)
+    }
+    // Метка уже стоит по сохранённым координатам, адрес не правили — без поиска
+    if (!addrTouched && isLat(toNum(propsRef.current.lat)) && isLng(toNum(propsRef.current.lng))) {
+      return
+    }
+    const text = address.trim()
+    if (!text) return
+    const timer = setTimeout(() => {
+      setSearching(true)
+      setErr(null)
+      void (async () => {
+        try {
+          const found = await geocode(text)
+          if (gen !== genRef.current) return
+          if (found) {
+            // Карта могла быть закрыта, пока шёл запрос — тогда ничего не трогаем
+            if (mapRef.current) {
+              mapRef.current.setCenter(found, 17)
+              putPin(found)
+              propsRef.current.onCoords(found[0], found[1])
+            }
+          } else {
+            setErr('notfound')
+          }
+        } finally {
+          if (gen === genRef.current) setSearching(false)
+        }
+      })()
+    }, 900)
+    return () => clearTimeout(timer)
+  }, [ready, address, autoSearch, addrTouched, removePin, putPin, geocode])
+
+  // Кнопка «Найти на карте»: поиск по любому заполненному адресу (без debounce)
+  const findOnMap = useCallback(() => {
+    const text = propsRef.current.address.trim()
+    if (!text) {
+      setErr('noaddress')
+      return
+    }
+    const gen = ++genRef.current
+    setSearching(true)
+    setErr(null)
+    void (async () => {
+      try {
+        const found = await geocode(text)
+        if (gen !== genRef.current) return
+        if (found) {
+          // Карта могла быть закрыта, пока шёл запрос — тогда ничего не трогаем
+          if (mapRef.current) {
+            // Полный адрес (пункт, улица, дом) — крупный план, иначе — вид города
+            mapRef.current.setCenter(found, text.includes(',') ? 17 : 14)
+            putPin(found)
+            propsRef.current.onCoords(found[0], found[1])
+          }
+        } else {
+          setErr('notfound')
+        }
+      } finally {
+        if (gen === genRef.current) setSearching(false)
+      }
+    })()
+  }, [geocode, putPin])
+
+  const noKey = !apiKey
+  const statusText = err === 'unavailable' || noKey
+    ? t.crm.objMapNoKey
+    : err === 'notfound'
+      ? t.crm.objMapNotFound
+      : err === 'noaddress'
+        ? t.crm.objMapNoAddress
+        : t.crm.objMapHint
+
+  return (
+    <div>
+      <div className="crm-map-bar">
+        <button type="button" onClick={findOnMap} disabled={!ready || searching}>
+          {t.crm.objMapFind}
+        </button>
+        {searching && <span>{t.crm.objMapSearch}</span>}
+      </div>
+      <div ref={containerRef} className="crm-map-canvas" />
+      <p className={noKey || err ? 'crm-map-status err' : 'crm-map-status'}>{statusText}</p>
+    </div>
   )
 }
 
@@ -72,6 +330,8 @@ export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) =>
   const [statusFilter, setStatusFilter] = useState('')
   // Найденные дубли объекта (модалка подтверждения)
   const [duplicates, setDuplicates] = useState<DuplicateInfo[] | null>(null)
+  // Адрес менялся с момента открытия формы — для авто-поиска метки на карте
+  const [addrTouched, setAddrTouched] = useState(false)
 
   const load = useCallback(async () => {
     const [objectsRes, agentsRes] = await Promise.all([
@@ -116,12 +376,14 @@ export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) =>
     setFeatures([])
     setSaveError('')
     setDuplicates(null)
+    setAddrTouched(false)
   }
 
   const startEdit = (o: Record<string, unknown>) => {
     setModalOpen(true)
     setDuplicates(null)
     setSaveError('')
+    setAddrTouched(false)
     const addr = o.address as Record<string, unknown> | undefined
     const coords = o.coordinates as Record<string, unknown> | undefined
     const agentRel = o.agent as Record<string, unknown> | undefined
@@ -367,6 +629,28 @@ export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) =>
 
   const set = (k: keyof FormState, v: string) => setForm((prev) => ({ ...prev, [k]: v }))
 
+  // Адресные поля: помечаем, что адрес менялся (для авто-поиска на карте).
+  // При смене района сбрасываем населённый пункт, если он не входит в новый район.
+  const setAddr = (k: 'city' | 'district' | 'locality' | 'street' | 'house' | 'apartment', v: string) => {
+    setAddrTouched(true)
+    setForm((prev) => ({
+      ...prev,
+      [k]: v,
+      ...(k === 'district' && v && prev.locality && !(LOCALITIES_BY_DISTRICT[v] || []).includes(prev.locality)
+        ? { locality: '' }
+        : {}),
+    }))
+  }
+
+  // Координаты приходят с карты: живут в скрытых полях формы и уходят с объектом
+  const setMapCoords = (plat: number | null, plng: number | null) => {
+    setForm((prev) => ({
+      ...prev,
+      lat: plat != null ? String(plat) : '',
+      lng: plng != null ? String(plng) : '',
+    }))
+  }
+
   // Фильтр по статусу (черновик / опубликован / архив)
   const visibleRows = statusFilter ? rows.filter((o) => o.status === statusFilter) : rows
 
@@ -481,46 +765,74 @@ export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) =>
             <option value="Есть" /><option value="Нет" />
           </datalist>
 
-          <div className="span-2" style={{ gridColumn: '1 / -1', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr 1fr', gap: 10 }}>
-            <Field label={t.crm.objCity}><input value={form.city} onChange={(e) => set('city', e.target.value)} style={inputStyle} /></Field>
-            <Field label={t.crm.objDistrict}>
-              <select
-                value={form.district}
-                onChange={(e) => {
-                  const v = e.target.value
-                  set('district', v)
-                  // При смене района сбрасываем пункт, если он не входит в новый район
-                  if (v && form.locality && !(LOCALITIES_BY_DISTRICT[v] || []).includes(form.locality)) {
-                    set('locality', '')
-                  }
-                }}
-                style={inputStyle}
-              >
-                <option value="">—</option>
-                {DISTRICT_OPTIONS.map((d) => (
-                  <option key={d} value={d}>{d}</option>
-                ))}
-              </select>
-            </Field>
-            <Field label={t.crm.objLocality}>
-              <select value={form.locality} onChange={(e) => set('locality', e.target.value)} style={inputStyle}>
-                <option value="">—</option>
+          {/* Адрес: широкие поля, удобные для заполнения с телефона */}
+          <div className="crm-addr span-2" style={{ gridColumn: '1 / -1' }}>
+            <div className="crm-addr-full">
+              <Field label={t.crm.objCity}>
+                <input value={form.city} onChange={(e) => setAddr('city', e.target.value)} style={inputStyle} />
+              </Field>
+            </div>
+            <div className="crm-addr-full">
+              <Field label={t.crm.objDistrict}>
+                <select value={form.district} onChange={(e) => setAddr('district', e.target.value)} style={inputStyle}>
+                  <option value="">—</option>
+                  {DISTRICT_OPTIONS.map((d) => (
+                    <option key={d} value={d}>{d}</option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+            <div className="crm-addr-full">
+              <Field label={t.crm.objLocality}>
+                <input list="crm-localities" value={form.locality} onChange={(e) => setAddr('locality', e.target.value)} style={inputStyle} />
+              </Field>
+              <datalist id="crm-localities">
                 {(form.district ? LOCALITIES_BY_DISTRICT[form.district] || [] : LOCALITY_OPTIONS).map((l) => (
-                  <option key={l} value={l}>{l}</option>
+                  <option key={l} value={l} />
                 ))}
-              </select>
-            </Field>
-            <Field label={t.crm.objStreet}><input value={form.street} onChange={(e) => set('street', e.target.value)} style={inputStyle} /></Field>
-            <Field label={t.crm.objHouse}><input value={form.house} onChange={(e) => set('house', e.target.value)} style={inputStyle} /></Field>
-            <Field label={t.crm.objApartment}><input value={form.apartment} onChange={(e) => set('apartment', e.target.value)} style={inputStyle} /></Field>
+              </datalist>
+            </div>
+            <div className="crm-addr-full">
+              <Field label={t.crm.objStreet}>
+                <input value={form.street} onChange={(e) => setAddr('street', e.target.value)} style={inputStyle} />
+              </Field>
+            </div>
+            <div className="crm-addr-half">
+              <Field label={t.crm.objHouse}>
+                <input value={form.house} onChange={(e) => setAddr('house', e.target.value)} style={inputStyle} />
+              </Field>
+            </div>
+            <div className="crm-addr-half">
+              <Field label={t.crm.objApartment}>
+                <input value={form.apartment} onChange={(e) => setAddr('apartment', e.target.value)} style={inputStyle} />
+              </Field>
+            </div>
           </div>
-          <Field label={t.crm.objLat}><input value={form.lat} onChange={(e) => set('lat', e.target.value)} style={inputStyle} /></Field>
-          <Field label={t.crm.objLng}><input value={form.lng} onChange={(e) => set('lng', e.target.value)} style={inputStyle} /></Field>
 
-          <div className="span-2" style={{ gridColumn: '1 / -1', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
-            <Field label={t.crm.objOwnerName}><input value={form.ownerName} onChange={(e) => set('ownerName', e.target.value)} style={inputStyle} /></Field>
-            <Field label={t.crm.objOwnerPhone}><input value={form.ownerPhone} onChange={(e) => set('ownerPhone', e.target.value)} style={inputStyle} /></Field>
-            <Field label={t.crm.objCadastral}><input value={form.cadastralNumber} onChange={(e) => set('cadastralNumber', e.target.value)} style={inputStyle} /></Field>
+          {/* Карта: авто-поиск точного адреса, метку можно передвинуть */}
+          <div className="crm-map-block span-2" style={{ gridColumn: '1 / -1' }}>
+            <ObjMapEditor
+              t={t}
+              address={addressForMap(form)}
+              autoSearch={Boolean(form.city.trim() || form.locality.trim()) && Boolean(form.street.trim()) && Boolean(form.house.trim())}
+              addrTouched={addrTouched}
+              lat={form.lat}
+              lng={form.lng}
+              onCoords={setMapCoords}
+            />
+          </div>
+
+          {/* Данные собственника: на телефоне поля становятся во всю ширину */}
+          <div className="crm-owner span-2" style={{ gridColumn: '1 / -1' }}>
+            <Field label={t.crm.objOwnerName}>
+              <input value={form.ownerName} onChange={(e) => set('ownerName', e.target.value)} style={inputStyle} />
+            </Field>
+            <Field label={t.crm.objOwnerPhone}>
+              <input inputMode="tel" value={form.ownerPhone} onChange={(e) => set('ownerPhone', e.target.value)} style={inputStyle} />
+            </Field>
+            <Field label={t.crm.objCadastral}>
+              <input value={form.cadastralNumber} onChange={(e) => set('cadastralNumber', e.target.value)} style={inputStyle} />
+            </Field>
           </div>
 
           <div className="span-2" style={{ gridColumn: '1 / -1' }}>
