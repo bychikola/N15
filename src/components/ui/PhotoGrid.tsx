@@ -24,9 +24,20 @@ export const PhotoGrid: FC<Props> = ({ slides }) => {
   const [lightbox, setLightbox] = useState(false)
   const [lightboxIdx, setLightboxIdx] = useState(0)
   const [expanded, setExpanded] = useState(false)
+  const [isDesktop, setIsDesktop] = useState(false)
   const count = slides.length
 
-  const COLLAPSE_AT = 6
+  // Плиток до «+N»: на ПК (3 колонки) — 6 (3 ряда), на телефоне (2 колонки) —
+  // 5, иначе плитка «+N» выпадает на новую строку и стоит там одна.
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 768px)')
+    const update = () => setIsDesktop(mq.matches)
+    update()
+    mq.addEventListener('change', update)
+    return () => mq.removeEventListener('change', update)
+  }, [])
+
+  const COLLAPSE_AT = isDesktop ? 6 : 5
   const hiddenCount = expanded ? 0 : Math.max(0, count - COLLAPSE_AT)
   const visibleSlides = hiddenCount > 0 ? slides.slice(0, COLLAPSE_AT) : slides
 
