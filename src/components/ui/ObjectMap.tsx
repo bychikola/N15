@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type FC } from 'react'
 import { useI18n } from '@/i18n/i18n-provider'
 import { loadYmaps, type Ymaps } from '@/lib/ymaps'
+import { geocodeAddress } from '@/lib/geocode'
 
 interface ObjectMapProps {
   /** Адрес для геокодирования и фолбэк-ссылки (город, улица, дом). */
@@ -15,15 +16,14 @@ interface ObjectMapProps {
 type Status = 'loading' | 'ready' | 'error'
 
 /**
- * Геокодирование через JS API (ymaps.geocode). На бесплатном тарифе
- * HTTP-геокодер отдельным ключом не работает — геокод доступен только
- * через JavaScript API, используя ключ карты (NEXT_PUBLIC_YANDEX_MAPS_API_KEY).
+ * Геокодирование — HTTP-геокодер отдельным ключом
+ * (NEXT_PUBLIC_YANDEX_GEOCODER_API_KEY). Ключ JavaScript API к геокодеру
+ * доступа не имеет (403), поэтому ymaps.geocode не используем.
  */
-async function resolveCoords(ymaps: Ymaps, address: string): Promise<[number, number]> {
-  const result = await ymaps.geocode(address, { results: 1 })
-  const geoObject = result.geoObjects.get(0)
-  if (!geoObject) throw new Error('no geocode results')
-  return geoObject.geometry.getCoordinates() as [number, number]
+async function resolveCoords(address: string): Promise<[number, number]> {
+  const coords = await geocodeAddress(address)
+  if (!coords) throw new Error('no geocode results')
+  return coords
 }
 
 function isValidCoord(value: number | undefined, min: number, max: number): value is number {
@@ -54,7 +54,7 @@ export const ObjectMap: FC<ObjectMapProps> = ({ address, lat, lng }) => {
         if (cancelled) return
         const coords: [number, number] = hasManualCoords
           ? [lat!, lng!]
-          : await resolveCoords(ymaps, address)
+          : await resolveCoords(address)
         if (cancelled) return
 
         const map = new ymaps.Map(el, {

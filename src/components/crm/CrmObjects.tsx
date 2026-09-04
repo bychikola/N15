@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, type FC } from 'react'
 import type { Dict } from '@/i18n/dictionaries'
 import { DISTRICT_OPTIONS, LOCALITIES_BY_DISTRICT, LOCALITY_OPTIONS } from '@/lib/districts'
 import { loadYmaps, type Ymaps } from '@/lib/ymaps'
+import { geocodeAddress } from '@/lib/geocode'
 
 interface ObjectRow {
   id: number
@@ -146,15 +147,12 @@ const ObjMapEditor: FC<ObjMapProps> = ({ t, address, autoSearch, addrTouched, la
     markerRef.current = pin
   }, [removePin])
 
-  // Геокодирование строки адреса; null — ничего не найдено
+  // Геокодирование строки адреса; null — ничего не найдено.
+  // Через HTTP-геокодер (отдельный ключ): ymaps.geocode с ключом JS API — 403.
   const geocode = useCallback(async (text: string): Promise<[number, number] | null> => {
-    const ym = ymapsRef.current
-    if (!ym) return null
-    const result = await ym.geocode(text, { results: 1 })
-    const geoObject = result.geoObjects.get(0)
-    if (!geoObject) return null
-    const c = geoObject.geometry.getCoordinates() as [number, number]
-    return [round6(c[0]), round6(c[1])]
+    const coords = await geocodeAddress(text)
+    if (!coords) return null
+    return [round6(coords[0]), round6(coords[1])]
   }, [])
 
   // Инициализация карты при открытии формы: центр — координаты объекта,
