@@ -7,8 +7,10 @@ import { useI18n } from '@/i18n/i18n-provider'
 interface Slide {
   url: string
   alt: string
-  /** Лёгкая версия для плиток (Payload thumbnail/card); url — оригинал для просмотра */
+  /** Миниатюра для мелкой ленты внизу лайтбокса */
   thumb?: string
+  /** Версия для плиток сетки (card 800px — большая плитка не мылится) */
+  tile?: string
 }
 
 // next/image в Next 16 отклоняет абсолютные URL (даже своего хоста) —
@@ -136,7 +138,7 @@ export const PhotoGrid: FC<Props> = ({ slides }) => {
               aria-label={isCollapseTile ? `+${hiddenCount}` : `${t.slider.openFullscreen} ${i + 1}`}
             >
               <img
-                src={slide.thumb || slide.url}
+                src={slide.tile || slide.thumb || slide.url}
                 alt={slide.alt}
                 loading={i === 0 ? 'eager' : 'lazy'}
                 className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
@@ -202,7 +204,7 @@ export const PhotoGrid: FC<Props> = ({ slides }) => {
                         : 'border-[var(--n15-gold)]/10 hover:border-[var(--n15-gold)]/30 opacity-40 hover:opacity-100'
                     }`}
                   >
-                    <img src={slide.thumb || slide.url} alt={slide.alt} className="w-full h-full object-cover" loading="lazy" />
+                    <img src={slide.thumb || slide.tile || slide.url} alt={slide.alt} className="w-full h-full object-cover" loading="lazy" />
                   </button>
                 ))}
               </div>

@@ -74,22 +74,30 @@ export default async function ObjectPage({ params }: PageProps) {
     images?: { id: number; url?: string; alt?: string; filename?: string; sizes?: { thumbnail?: { url?: string }; card?: { url?: string } } }[]
   }
 
-  // Плитки грузят лёгкую миниатюру (thumbnail/card), большой просмотр —
-  // оригинал через next/image (ресайз+webp на лету, без кропа)
+  // Плитки сетки грузят card (800px) — большая плитка 2×2 и retina-экраны
+  // иначе мылятся на 400px-миниатюре; мелкая лента в лайтбоксе — thumbnail.
+  // Большой просмотр — оригинал через next/image (ресайз+webp, без кропа).
   const slideThumb = (img?: { url?: string; sizes?: { thumbnail?: { url?: string }; card?: { url?: string } } }) =>
     img?.sizes?.thumbnail?.url || img?.sizes?.card?.url || img?.url || ''
+  const slideTile = (img?: { url?: string; sizes?: { thumbnail?: { url?: string }; card?: { url?: string } } }) =>
+    img?.sizes?.card?.url || img?.sizes?.thumbnail?.url || img?.url || ''
 
   const features = obj.features?.map((f: { feature?: string }) => f.feature).filter(Boolean) || []
   const pricePerMeter = obj.area ? Math.round(obj.price / obj.area) : null
   const gallery = obj.images?.filter((i) => i.url) || []
 
-  const allSlides: { url: string; alt: string; thumb?: string }[] = []
+  const allSlides: { url: string; alt: string; thumb?: string; tile?: string }[] = []
   if (obj.primaryImage?.url) {
-    allSlides.push({ url: obj.primaryImage.url, alt: obj.primaryImage.alt || obj.title, thumb: slideThumb(obj.primaryImage) })
+    allSlides.push({
+      url: obj.primaryImage.url,
+      alt: obj.primaryImage.alt || obj.title,
+      thumb: slideThumb(obj.primaryImage),
+      tile: slideTile(obj.primaryImage),
+    })
   }
   for (const img of gallery) {
     if (!allSlides.some((s) => s.url === img.url)) {
-      allSlides.push({ url: img.url!, alt: img.alt || obj.title, thumb: slideThumb(img) })
+      allSlides.push({ url: img.url!, alt: img.alt || obj.title, thumb: slideThumb(img), tile: slideTile(img) })
     }
   }
 
