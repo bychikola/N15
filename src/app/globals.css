@@ -520,19 +520,22 @@ html[data-theme='dark'] span.theme-icon-moon { display: block; }
 .lp-place-chip:hover { color: #c5a46d; border-color: #c5a46d; background: rgba(197,164,109,.08); }
 
 /* Услуги — аккордеон (как на живом прототипе) */
-.lp-services { width: min(90%, 1280px); margin: 114px auto; }
+.lp-services { width: min(90%, 1280px); margin: 96px auto; }
 .lp-design-disclosure { border-top: 1px solid #d8d1c4; border-bottom: 1px solid #d8d1c4; }
-.lp-design-disclosure > summary { cursor: pointer; grid-template-columns: 1fr 40px; align-items: center; gap: 24px; min-height: 184px; list-style: none; display: grid; }
+.lp-design-disclosure > summary {
+  cursor: pointer; grid-template-columns: 1fr 32px; align-items: center; gap: 18px;
+  min-height: 128px; padding: 12px clamp(2px, 1.6vw, 22px); list-style: none; display: grid;
+}
 .lp-design-disclosure > summary::-webkit-details-marker { display: none; }
-.lp-design-disclosure > summary h2 { letter-spacing: -.04em; margin: 0; font-family: 'New Standard', Georgia, serif; font-weight: 400; font-size: clamp(38px, 4.4vw, 61px); line-height: 1.03; color: inherit; }
-.lp-design-disclosure > summary i { color: #a87c3f; justify-self: end; font: 31px Arial, sans-serif; transition: transform .2s; }
+.lp-design-disclosure > summary h2 { letter-spacing: -.04em; margin: 0; font-family: 'New Standard', Georgia, serif; font-weight: 400; font-size: clamp(28px, 3.4vw, 46px); line-height: 1.06; color: inherit; }
+.lp-design-disclosure > summary i { color: #a87c3f; justify-self: end; font: 25px Arial, sans-serif; transition: transform .2s; }
 .lp-design-disclosure[open] > summary i { transform: rotate(45deg); }
-.lp-service-list { display: grid; grid-template-columns: repeat(2, 1fr); border-top: 1px solid #d8d1c4; margin-top: 26px; }
-.lp-service-list article { border-bottom: 1px solid #d8d1c4; border-right: 1px solid #d8d1c4; min-height: 200px; padding: 26px 21px; }
+.lp-service-list { display: grid; grid-template-columns: repeat(2, 1fr); border-top: 1px solid #d8d1c4; margin-top: 18px; }
+.lp-service-list article { border-bottom: 1px solid #d8d1c4; border-right: 1px solid #d8d1c4; min-height: 172px; padding: 22px 26px; }
 .lp-service-list article:nth-child(2n) { border-right: 0; }
 .lp-home-service { background: #f3eee3; }
-.lp-home-service span { color: #a87c3f; letter-spacing: .15em; font-size: 9px; }
-.lp-home-service h3 { margin: 42px 0 10px; font-family: 'New Standard', Georgia, serif; font-weight: 400; font-size: 22px; color: inherit; }
+.lp-home-service span { display: block; color: #a87c3f; letter-spacing: .15em; font-size: 9px; line-height: 1; }
+.lp-home-service h3 { margin: 16px 0 9px; font-family: 'New Standard', Georgia, serif; font-weight: 400; font-size: 20px; line-height: 1.2; color: inherit; }
 .lp-home-service p { margin: 0; color: #777267; font-size: 12px; line-height: 1.6; }
 
 /* Юр-блок (тёмная секция) */
@@ -606,7 +609,7 @@ html[data-theme='dark'] span.theme-icon-moon { display: block; }
   .lp-country { padding: 72px 22px; }
   .lp-country-heading { grid-template-columns: 1fr; gap: 18px; }
   .lp-service-list { grid-template-columns: 1fr; }
-  .lp-service-list article { border-right: 0; min-height: 0; padding: 24px 18px; }
+  .lp-service-list article { border-right: 0; min-height: 0; padding: 22px 24px; }
   .lp-legal { padding: 72px 22px; }
   .lp-legal-heading { grid-template-columns: 1fr; gap: 18px; }
   .lp-legal-grid { grid-template-columns: 1fr; }

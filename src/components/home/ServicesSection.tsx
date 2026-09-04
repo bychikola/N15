@@ -5,14 +5,11 @@ export default function ServicesSection({ t }: { t: Dict }) {
     <section className="lp-section lp-services" id="design">
       <details className="lp-design-disclosure">
         <summary>
-          <div>
-            <p className="lp-eyebrow">{t.landing.servicesEyebrow}</p>
-            <h2>
-              {t.landing.servicesTitle1}
-              <br />
-              {t.landing.servicesTitle2}
-            </h2>
-          </div>
+          <h2>
+            {t.landing.servicesTitle1}
+            <br />
+            {t.landing.servicesTitle2}
+          </h2>
           <i>+</i>
         </summary>
         <div className="lp-service-list">
