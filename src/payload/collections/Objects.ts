@@ -4,19 +4,6 @@ import { DISTRICT_OPTIONS } from '@/lib/districts'
 const normPhone = (v?: string) => (v || '').replace(/[^\d+]/g, '')
 const normCadastral = (v?: string) => (v || '').toLowerCase().replace(/\s+/g, '')
 
-// База slug из названия: только латиница в нижнем регистре, цифры и дефисы.
-// Любые прочие символы (кириллица, пробелы, спецсимволы) заменяются на дефис
-// и затем подчищаются по краям. Если в названии не осталось ни одной
-// латинской буквы (русские названия) — возвращается пустая строка,
-// и вызывающий берёт резервный вариант object-<идентификатор>.
-const toSlugBase = (title: string): string => {
-  const base = title
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-  return /[a-z]/.test(base) ? base : ''
-}
-
 export const Objects: CollectionConfig = {
   slug: 'objects',
   admin: {
@@ -31,66 +18,27 @@ export const Objects: CollectionConfig = {
     delete: ({ req: { user } }) => user?.role === 'admin',
   },
   hooks: {
-    beforeChange: [
-      // Автогенерация slug при каждом сохранении (создание и правка).
-      // Отдельным хуком — чтобы работал и при force=true: следующий хук
-      // при force выходит раньше времени. Правила:
-      //  - название не менялось (или его нет в данных) — slug не трогаем,
-      //    иначе каждая правка цены/статуса переименовывала бы объект;
-      //  - название на латинице → slug из него; при конфликте
-      //    уникальности добавляется суффикс -2, -3, …;
-      //  - кириллическое/пустое название → резервный object-<идентификатор>
-      //    (на правке — id записи, при создании — случайный: id БД выдаёт
-      //    уже после хуков).
-      // ВАЖНО: на update Payload подмешивает в data текущий документ, но id
-      // кладёт только в originalDoc — «самого себя» при проверке уникальности
-      // исключаем по originalDoc.id, иначе slug рос бы -2, -2-2, -2-2-2…
-      // при каждом редактировании.
-      async ({ data, req, originalDoc }) => {
+    // Slug — чисто служебное поле: его генерирует сервер ДО валидации и
+    // записи (beforeValidate выполняется раньше проверок полей и beforeChange),
+    // поэтому формам и API присылать slug не нужно, а поле в схеме не
+    // обязательное. Формат — object-<уникальный-id>: id записи БД выдаёт уже
+    // после хуков, поэтому уникальность даёт сам UUID (полный), а не проверка
+    // занятости с суффиксами -2, -3… У старых записей slug остаётся как есть.
+    beforeValidate: [
+      async ({ data, operation }) => {
         if (!data) return data
-        // Slug пересобираем, только когда в данных есть название: частичный
-        // PATCH (например, один статус) не должен переименовывать объект.
-        if (typeof data.title !== 'string') return data
-        const orig = originalDoc as { id?: number | string; title?: string } | undefined
-        const curId = orig?.id ?? (data.id as number | string | undefined)
-        const curSlug = typeof data.slug === 'string' ? data.slug : ''
-        const title = data.title.trim()
-        // Название не изменилось — сохраняем текущий slug как есть.
-        // Пустой curSlug (легаси-записи без slug) всё равно заполняем ниже.
-        if (orig?.title !== undefined && orig.title === data.title && curSlug) {
-          return data
+        if (operation === 'create') {
+          // Всегда пересобираем: присланный клиентом slug не принимаем.
+          data.slug = `object-${crypto.randomUUID()}`
+        } else {
+          // На правке slug не трогаем и клиентские значения игнорируем:
+          // изменение названия/цены/статуса не должно переименовывать объект.
+          delete data.slug
         }
-        // База slug: латиница названия либо резервный object-<идентификатор>.
-        // Уже существующий резервный slug не переписываем: случайная правка
-        // кириллического названия не должна переименовывать объект.
-        const base =
-          toSlugBase(title) ||
-          (curSlug.startsWith('object-') ? curSlug : `object-${curId ?? crypto.randomUUID().slice(0, 8)}`)
-        // Совпало с текущим — менять нечего (например, правка латинского
-        // названия при пустом/устаревшем slug в БД).
-        if (curSlug && curSlug === base) return data
-        const isTaken = async (slug: string) => {
-          const where: Where = curId
-            ? { and: [{ slug: { equals: slug } }, { id: { not_equals: curId } }] }
-            : { slug: { equals: slug } }
-          const { docs } = await req.payload.find({
-            collection: 'objects',
-            where,
-            limit: 1,
-            depth: 0,
-            overrideAccess: true,
-          })
-          return docs.length > 0
-        }
-        let slug = base
-        let n = 2
-        while (await isTaken(slug)) {
-          slug = `${base}-${n}`
-          n += 1
-        }
-        data.slug = slug
         return data
       },
+    ],
+    beforeChange: [
       // Нормализация полей собственника + защита от жёстких дублей.
       // Полный анализ (включая адрес и имя) делает клиент через
       // /api/objects/check-duplicate; здесь — телефон и кадастровый,
@@ -155,8 +103,8 @@ export const Objects: CollectionConfig = {
       type: 'text',
       label: 'URL-путь',
       unique: true,
-      // Поле служебное: slug всегда генерируется автоматически при
-      // сохранении (см. хук beforeChange выше), пользователю не показываем.
+      // Поле служебное: slug всегда генерируется сервером автоматически
+      // (см. хук beforeValidate выше), пользователю не показываем.
       admin: {
         hidden: true,
       },
