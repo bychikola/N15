@@ -90,7 +90,7 @@ export default function ObjectCard({ obj, lang, t }: ObjectCardProps) {
           src="/img/ornamet_na_object.png"
           alt=""
           aria-hidden="true"
-          className="pointer-events-none absolute bottom-2 right-2 h-12 w-auto opacity-70 object-contain"
+          className="pointer-events-none absolute -bottom-1 -right-1 h-24 w-auto opacity-80 object-contain"
         />
         <h3 className="text-lg font-[family-name:var(--font-display)] text-[var(--n15-white)] mb-1.5 group-hover:text-[var(--n15-gold)] transition-colors">
           {obj.title}
