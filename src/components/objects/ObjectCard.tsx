@@ -11,7 +11,7 @@ export interface ObjectListItem {
   rooms?: number
   floor?: number
   totalFloors?: number
-  address?: { city?: string; street?: string; house?: string }
+  address?: { city?: string; district?: string; locality?: string; snt?: string; street?: string; house?: string }
   primaryImage?: {
     url?: string
     alt?: string
@@ -89,7 +89,7 @@ export default function ObjectCard({ obj, lang, t }: ObjectCardProps) {
           {obj.title}
         </h3>
         <p className="text-xs text-[var(--n15-muted)] mb-2">
-          {[obj.address?.street, obj.address?.house].filter(Boolean).join(', ')}
+          {[obj.address?.snt, obj.address?.street, obj.address?.house].filter(Boolean).join(', ')}
         </p>
         {meta && <p className="text-[10px] tracking-[0.18em] uppercase text-[var(--n15-muted)] mb-3">{meta}</p>}
         {obj.agent?.name && (

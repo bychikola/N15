@@ -31,6 +31,7 @@ function CatalogContent() {
     areaMin: searchParams.get('area_min') ?? '',
     district: searchParams.get('district') ?? '',
     locality: searchParams.get('locality') ?? '',
+    snt: searchParams.get('snt') ?? '',
   }))
 
   const where = useMemo(() => buildWhere(filters, q), [filters, q])
@@ -88,6 +89,7 @@ function CatalogContent() {
       areaMin: searchParams.get('area_min') ?? '',
       district: searchParams.get('district') ?? '',
       locality: searchParams.get('locality') ?? '',
+      snt: searchParams.get('snt') ?? '',
     }
     setFilters((prev) =>
       Object.entries(next).every(([k, v]) => prev[k as keyof FiltersState] === v)

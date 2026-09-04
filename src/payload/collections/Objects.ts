@@ -274,6 +274,14 @@ export const Objects: CollectionConfig = {
             description: 'Например: Владикавказ, Ногир, Заводской…',
           },
         },
+        {
+          name: 'snt',
+          type: 'text',
+          label: 'СТ/СНТ/СНО',
+          admin: {
+            description: 'Садовое товарищество для участков и домов в СТ/СНТ/СНО/ДНТ. Например: СТ Кобань, СНТ Мичурино',
+          },
+        },
         { name: 'street', type: 'text', label: 'Улица' },
         { name: 'house', type: 'text', label: 'Дом' },
         { name: 'apartment', type: 'text', label: 'Квартира' },

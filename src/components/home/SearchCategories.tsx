@@ -96,7 +96,7 @@ export default function SearchCategories({ t, lang }: Props) {
             </div>
             <div className="lp-settlement-filter">
               <small>СТ, СНТ, СНО и ДНТ</small>
-              <Chips items={SNT_AREAS} hrefBuilder={() => catalog('category=house')} />
+              <Chips items={SNT_AREAS} hrefBuilder={(snt) => catalog(`category=house&snt=${encodeURIComponent(snt)}`)} />
             </div>
           </div>
         </details>
@@ -141,7 +141,7 @@ export default function SearchCategories({ t, lang }: Props) {
             </div>
             <div className="lp-settlement-filter">
               <small>СТ, СНТ, СНО и ДНТ</small>
-              <Chips items={SNT_AREAS} hrefBuilder={() => catalog('category=land')} />
+              <Chips items={SNT_AREAS} hrefBuilder={(snt) => catalog(`category=land&snt=${encodeURIComponent(snt)}`)} />
             </div>
           </div>
         </details>

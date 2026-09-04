@@ -3,6 +3,8 @@
 import { useState } from 'react'
 import type { Dict } from '@/i18n/dictionaries'
 import { DISTRICT_OPTIONS, LOCALITIES_BY_DISTRICT, LOCALITY_OPTIONS } from '@/lib/districts'
+// Садовые товарищества — тот же справочник, что в разделах СТ/СНТ/СНО на главной
+import { SNT_AREAS } from '@/components/home/landing-data'
 
 export interface FiltersState {
   type: string
@@ -13,10 +15,11 @@ export interface FiltersState {
   areaMin: string
   district: string
   locality: string
+  snt: string
 }
 
 export const emptyFilters: FiltersState = {
-  type: '', category: '', rooms: '', priceMin: '', priceMax: '', areaMin: '', district: '', locality: '',
+  type: '', category: '', rooms: '', priceMin: '', priceMax: '', areaMin: '', district: '', locality: '', snt: '',
 }
 
 export function buildWhere(f: FiltersState, q: string): Record<string, unknown> {
@@ -27,6 +30,7 @@ export function buildWhere(f: FiltersState, q: string): Record<string, unknown> 
   if (f.category) conds.push({ category: { equals: f.category } })
   if (f.district) conds.push({ 'address.district': { equals: f.district } })
   if (f.locality) conds.push({ 'address.locality': { equals: f.locality } })
+  if (f.snt) conds.push({ 'address.snt': { equals: f.snt } })
   if (f.rooms) {
     conds.push(f.rooms === '4'
       ? { rooms: { greater_than_equal: 4 } }
@@ -90,7 +94,7 @@ export default function CatalogFilters({ state, onChange, t }: CatalogFiltersPro
   const localityOptions = state.district
     ? (LOCALITIES_BY_DISTRICT[state.district] || []).map((l) => ({ value: l, label: l }))
     : LOCALITY_OPTIONS.map((l) => ({ value: l, label: l }))
-  const hasFilters = state.type || state.category || state.rooms || state.priceMin || state.priceMax || state.areaMin || state.district || state.locality
+  const hasFilters = state.type || state.category || state.rooms || state.priceMin || state.priceMax || state.areaMin || state.district || state.locality || state.snt
 
   return (
     <div className="flex flex-wrap items-end gap-3 p-4 border border-[var(--n15-gold)]/10 bg-[var(--n15-black)]/30">
@@ -118,6 +122,11 @@ export default function CatalogFilters({ state, onChange, t }: CatalogFiltersPro
         <Dropdown label={t.catalog.localityLabel} value={state.locality}
           options={localityOptions}
           onSelect={(v) => onChange({ locality: v })} />
+      </div>
+      <div className="w-48">
+        <Dropdown label={t.catalog.sntLabel} value={state.snt}
+          options={SNT_AREAS.map((s) => ({ value: s, label: s }))}
+          onSelect={(v) => onChange({ snt: v })} />
       </div>
       <div className="w-48">
         <div className={labelCls + ' mb-1'}>{t.catalog.priceLabel}</div>

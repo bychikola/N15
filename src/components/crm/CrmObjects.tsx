@@ -3,6 +3,9 @@
 import { useCallback, useEffect, useRef, useState, type FC } from 'react'
 import type { Dict } from '@/i18n/dictionaries'
 import { DISTRICT_OPTIONS, LOCALITIES_BY_DISTRICT, LOCALITY_OPTIONS } from '@/lib/districts'
+// Справочник садовых товариществ (СТ/СНТ/СНО/ДНТ) — тот же, что в разделах
+// «Участки» и «Дома» на главной странице сайта.
+import { SNT_AREAS } from '@/components/home/landing-data'
 import { loadYmaps, type Ymaps } from '@/lib/ymaps'
 import { geocodeAddress } from '@/lib/geocode'
 
@@ -35,7 +38,7 @@ const emptyForm = {
   title: '', type: 'sale', category: 'apartment', price: '', area: '', livingArea: '',
   kitchenArea: '', rooms: '', floor: '', totalFloors: '', buildingType: '', condition: '',
   heating: '', balcony: '', water: '', sewerage: '', electricity: '', gas: '', internet: '',
-  city: 'Владикавказ', district: '', locality: '', street: '', house: '', apartment: '',
+  city: 'Владикавказ', district: '', locality: '', snt: '', street: '', house: '', apartment: '',
   lat: '', lng: '', description: '', status: 'draft', agent: '',
   ownerName: '', ownerPhone: '', cadastralNumber: '',
 }
@@ -410,6 +413,7 @@ export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) =>
       city: (addr?.city as string) || 'Владикавказ',
       district: (addr?.district as string) || '',
       locality: (addr?.locality as string) || '',
+      snt: (addr?.snt as string) || '',
       street: (addr?.street as string) || '',
       house: (addr?.house as string) || '',
       apartment: (addr?.apartment as string) || '',
@@ -551,6 +555,7 @@ export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) =>
         city: form.city,
         district: form.district,
         locality: form.locality,
+        snt: form.snt.trim(),
         street: form.street,
         house: form.house,
         apartment: form.apartment,
@@ -790,6 +795,21 @@ export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) =>
                 ))}
               </datalist>
             </div>
+            {/* СТ/СНТ/СНО — раздел как на главной сайта: только для загородных
+                категорий (дом в СНТ, участок в товариществе), у городской
+                недвижимости поля нет. Значение — в address.snt объекта. */}
+            {(form.category === 'land' || form.category === 'house') && (
+              <div className="crm-addr-full">
+                <Field label={t.crm.objSnt}>
+                  <input list="crm-snt" value={form.snt} onChange={(e) => set('snt', e.target.value)} style={inputStyle} placeholder="Например: СНТ Кобань" />
+                </Field>
+                <datalist id="crm-snt">
+                  {SNT_AREAS.map((s) => (
+                    <option key={s} value={s} />
+                  ))}
+                </datalist>
+              </div>
+            )}
             <div className="crm-addr-full">
               <Field label={t.crm.objStreet}>
                 <input value={form.street} onChange={(e) => setAddr('street', e.target.value)} style={inputStyle} />
