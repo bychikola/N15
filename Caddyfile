@@ -1,6 +1,13 @@
 # Caddy автоматически получает и продлевает SSL-сертификаты (Let's Encrypt).
 # Домен берётся из переменной окружения DOMAIN (задаётся в .env через deploy.sh).
 
+# HTTP/3 (QUIC) — быстрее на мобильных сетях; порт 443/udp уже проброшен в docker.
+{
+	servers {
+		protocols h1 h2 h3
+	}
+}
+
 # ── HTTP-запросы: файл верификации домена (Mail.ru) отдаём без редиректа,
 #    остальное — перенаправляем на HTTPS (иначе Caddy отвечает 308, и
 #    проверяющий сервис не следует за редиректом). ──
@@ -26,11 +33,13 @@ http://{$DOMAIN} {
 
 	reverse_proxy app:3000
 
-	# Кэш статики
-	@static path /_next/static/* /media/* /public/* /favicon.ico /logo.svg
+	# Кэш статики: Next-сборка, загруженные фото (Payload отдаёт их через
+	# /api/media/file/*) — повторные заходы мгновенные, без повторной загрузки
+	@static path /_next/static/* /media/* /api/media/file/* /public/* /favicon.ico /logo.svg
 	header @static Cache-Control "public, max-age=604800"
 
-	encode gzip
+	# Сжатие: zstd (современные браузеры) + gzip (остальные)
+	encode zstd gzip
 }
 
 # ── Поддомен админки: недоступен с основного домена, проксируется на Payload. ──

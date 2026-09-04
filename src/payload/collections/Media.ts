@@ -37,11 +37,12 @@ export const Media: CollectionConfig = {
     ],
     adminThumbnail: 'thumbnail',
     mimeTypes: ['image/*'],
-    // Качество генерируемых размеров (по умолчанию Payload сжимает ~80 —
-    // на карточках сайта фото выглядят заметно хуже оригинала)
+    // Размеры (thumbnail/card/hero) генерируются в WebP: весит на 30–40%
+    // меньше JPEG при том же визуальном качестве (quality 86 ≈ jpeg 92).
+    // Оригинал хранится как загружен — не пережимается.
     formatOptions: {
-      format: 'jpeg',
-      options: { quality: 92 },
+      format: 'webp',
+      options: { quality: 86 },
     },
   },
   hooks: {
