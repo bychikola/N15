@@ -40,14 +40,17 @@ async function getAboutData(): Promise<AboutData & { agents: { name: string; pos
     depth: 1,
   })
 
-  const agentList = (agents as unknown as { name: string; position?: string; objectsSold?: number; experience?: number; photo?: { url?: string; alt?: string } }[]).map((a) => ({
-    name: a.name,
-    position: a.position,
-    objectsSold: a.objectsSold,
-    experience: a.experience,
-    photoUrl: a.photo?.url,
-    initials: a.name.split(' ').map((n) => n[0]).join('').slice(0, 2),
-  }))
+  const agentList = (agents as unknown as { name: string; position?: string; objectsSold?: number; experience?: number; photo?: { url?: string; alt?: string } }[])
+    .map((a) => ({
+      name: a.name,
+      position: a.position,
+      objectsSold: a.objectsSold,
+      experience: a.experience,
+      photoUrl: a.photo?.url,
+      initials: a.name.split(' ').map((n) => n[0]).join('').slice(0, 2),
+    }))
+    // Агенты в алфавитном порядке по имени (локализованное сравнение для кириллицы)
+    .sort((a, b) => a.name.trim().localeCompare(b.name.trim(), 'ru'))
 
   return {
     heroTitle: (about?.heroTitle as string) || 'Об агентстве',
