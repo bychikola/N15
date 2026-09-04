@@ -72,7 +72,8 @@ export const OrnamentDivider: FC<OrnamentDividerProps> = ({
   }[variant]
 
   return (
-    <div className={`my-16 ${className}`}>
+    // Отступы задаёт вызывающая сторона (className); по умолчанию — my-16
+    <div className={className || 'my-16'}>
       <Pattern />
     </div>
   )
