@@ -84,14 +84,7 @@ export default function ObjectCard({ obj, lang, t }: ObjectCardProps) {
         </div>
       </div>
 
-      <div className="relative px-4 pt-4 pb-4">
-        {/* Орнамент в правом нижнем углу карточки (декор, кликам не мешает) */}
-        <img
-          src="/img/ornamet_na_object.png"
-          alt=""
-          aria-hidden="true"
-          className="pointer-events-none absolute bottom-2 right-2 h-24 w-auto opacity-50 object-contain"
-        />
+      <div className="px-4 pt-4 pb-4">
         <h3 className="text-lg font-[family-name:var(--font-display)] text-[var(--n15-white)] mb-1.5 group-hover:text-[var(--n15-gold)] transition-colors">
           {obj.title}
         </h3>
