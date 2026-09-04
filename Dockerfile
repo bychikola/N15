@@ -45,9 +45,10 @@ ENV HOSTNAME=0.0.0.0
 # Копируем весь проект (нужен payload CLI для миграций и src/payload для конфига)
 COPY --from=builder /app ./
 
-# Резервная копия production-сборки: entrypoint может временно запускать
-# dev-сервер для создания схемы БД, после чего восстанавливает .next из этого бэкапа.
-RUN cp -r .next .next-prod
+# Резервная копия production-сборки (сжатая): entrypoint после dev-push схемы
+# восстанавливает .next из неё. tar.gz вместо дублирующей копии — образ легче
+# на ~2/3 объёма .next, экспорт и распаковка образа заметно быстрее.
+RUN tar -czf /app/.next-prod.tar.gz -C /app .next
 
 EXPOSE 3000
 CMD ["sh", "docker-entrypoint.sh"]

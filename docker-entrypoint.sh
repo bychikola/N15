@@ -75,9 +75,9 @@ if [ -n "$DATABASE_URI" ]; then
     done
     kill "$DEV_PID" 2>/dev/null || true
     wait "$DEV_PID" 2>/dev/null || true
-    # Восстанавливаем production-сборку
+    # Восстанавливаем production-сборку из сжатого бэкапа
     rm -rf .next
-    cp -r .next-prod .next
+    tar -xzf .next-prod.tar.gz -C /app
     if [ "$INIT_OK" != "1" ]; then
       echo "Schema init failed. Dev log:" >&2
       tail -60 /tmp/dev-init.log >&2
