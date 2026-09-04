@@ -4,6 +4,24 @@ import { DISTRICT_OPTIONS } from '@/lib/districts'
 const normPhone = (v?: string) => (v || '').replace(/[^\d+]/g, '')
 const normCadastral = (v?: string) => (v || '').toLowerCase().replace(/\s+/g, '')
 
+// База slug из названия: только латиница в нижнем регистре, цифры и дефисы.
+// Любые прочие символы (кириллица, пробелы, спецсимволы) заменяются на дефис
+// и затем подчищаются по краям. Если в названии не осталось ни одной
+// латинской буквы (русские названия) — возвращается пустая строка,
+// и вызывающий берёт резервный вариант object-<идентификатор>.
+const toSlugBase = (title: string): string => {
+  const base = title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+  return /[a-z]/.test(base) ? base : ''
+}
+
+// Резервный идентификатор для slug на время создания: id записи ещё не
+// существует (его выдаёт БД уже после хуков), поэтому берём случайный.
+const fallbackSlug = (id?: number | string): string =>
+  `object-${id ?? crypto.randomUUID().slice(0, 8)}`
+
 export const Objects: CollectionConfig = {
   slug: 'objects',
   admin: {
@@ -19,6 +37,46 @@ export const Objects: CollectionConfig = {
   },
   hooks: {
     beforeChange: [
+      // Автогенерация slug при каждом сохранении (создание и правка).
+      // Отдельным хуком — чтобы работал и при force=true: следующий хук
+      // при force выходит раньше времени. Slug всегда пересобирается из
+      // названия; при конфликте уникальности добавляется суффикс -2, -3, …
+      async ({ data, req }) => {
+        if (!data) return data
+        // Slug пересобираем, только когда в данных есть название: частичный
+        // PATCH (например, один статус) не должен переименовывать объект.
+        if (typeof data.title !== 'string') return data
+        const title = data.title.trim()
+        // Если из названия не вышло латинских букв/цифр (например, название
+        // целиком на кириллице) — резервный вариант object-<идентификатор>.
+        // Уже существующий резервный slug не переписываем: случайная правка
+        // объекта не должна переименовывать его.
+        const existingFallback =
+          typeof data.slug === 'string' && data.slug.startsWith('object-') ? data.slug : ''
+        const base =
+          toSlugBase(title) || existingFallback || fallbackSlug(data.id as number | string | undefined)
+        const isTaken = async (slug: string) => {
+          const where: Where = data.id
+            ? { and: [{ slug: { equals: slug } }, { id: { not_equals: data.id } }] }
+            : { slug: { equals: slug } }
+          const { docs } = await req.payload.find({
+            collection: 'objects',
+            where,
+            limit: 1,
+            depth: 0,
+            overrideAccess: true,
+          })
+          return docs.length > 0
+        }
+        let slug = base
+        let n = 2
+        while (await isTaken(slug)) {
+          slug = `${base}-${n}`
+          n += 1
+        }
+        data.slug = slug
+        return data
+      },
       // Нормализация полей собственника + защита от жёстких дублей.
       // Полный анализ (включая адрес и имя) делает клиент через
       // /api/objects/check-duplicate; здесь — телефон и кадастровый,
@@ -83,23 +141,10 @@ export const Objects: CollectionConfig = {
       type: 'text',
       label: 'URL-путь',
       unique: true,
+      // Поле служебное: slug всегда генерируется автоматически при
+      // сохранении (см. хук beforeChange выше), пользователю не показываем.
       admin: {
-        position: 'sidebar',
-      },
-      hooks: {
-        beforeValidate: [
-          ({ data }) => {
-            if (data?.slug) return data.slug
-            if (data?.title) {
-              return data.title
-                .toLowerCase()
-                .replace(/[^a-zа-яё0-9\s]/g, '')
-                .replace(/\s+/g, '-')
-                .replace(/-+/g, '-')
-                .replace(/^-|-$/g, '')
-            }
-          },
-        ],
+        hidden: true,
       },
     },
     {
