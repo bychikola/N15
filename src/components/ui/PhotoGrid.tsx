@@ -1,11 +1,14 @@
 'use client'
 
+import Image from 'next/image'
 import { useState, useEffect, useRef, type FC } from 'react'
 import { useI18n } from '@/i18n/i18n-provider'
 
 interface Slide {
   url: string
   alt: string
+  /** Лёгкая версия для плиток (Payload thumbnail/card); url — оригинал для просмотра */
+  thumb?: string
 }
 
 interface Props {
@@ -122,7 +125,7 @@ export const PhotoGrid: FC<Props> = ({ slides }) => {
               aria-label={isCollapseTile ? `+${hiddenCount}` : `${t.slider.openFullscreen} ${i + 1}`}
             >
               <img
-                src={slide.url}
+                src={slide.thumb || slide.url}
                 alt={slide.alt}
                 loading={i === 0 ? 'eager' : 'lazy'}
                 className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
@@ -158,13 +161,19 @@ export const PhotoGrid: FC<Props> = ({ slides }) => {
             </button>
           </div>
 
-          {/* Image — full height, proportional width, room for thumbs at bottom */}
-          <div className="absolute inset-0 flex items-center justify-center pt-10 pb-20 px-8 md:px-16">
-            <img
+          {/* Image — full height, proportional width, room for thumbs at bottom.
+              next/image: ресайз под экран + webp без кропа — качество оригинала,
+              вес в разы меньше (как у alaniadom.ru) */}
+          <div className="absolute inset-0 pt-10 pb-20 px-8 md:px-16">
+            <Image
               src={slides[lightboxIdx].url}
               alt={slides[lightboxIdx].alt}
-              className="h-full w-auto max-w-full object-contain"
+              fill
+              sizes="100vw"
+              quality={85}
+              priority
               draggable={false}
+              className="object-contain"
             />
           </div>
 
@@ -182,7 +191,7 @@ export const PhotoGrid: FC<Props> = ({ slides }) => {
                         : 'border-[var(--n15-gold)]/10 hover:border-[var(--n15-gold)]/30 opacity-40 hover:opacity-100'
                     }`}
                   >
-                    <img src={slide.url} alt={slide.alt} className="w-full h-full object-cover" loading="lazy" />
+                    <img src={slide.thumb || slide.url} alt={slide.alt} className="w-full h-full object-cover" loading="lazy" />
                   </button>
                 ))}
               </div>
