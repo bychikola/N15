@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, type FC } from 'react'
+import { useState, useEffect, useRef, type FC } from 'react'
 import { useI18n } from '@/i18n/i18n-provider'
 
 interface Slide {
@@ -64,6 +64,24 @@ export const PhotoGrid: FC<Props> = ({ slides }) => {
   const lightboxPrev = () => setLightboxIdx((prev) => (prev - 1 + count) % count)
   const lightboxNext = () => setLightboxIdx((prev) => (prev + 1) % count)
 
+  // Свайпы на телефоне: горизонтальное движение пальцем листает фото
+  const touchStart = useRef<{ x: number; y: number } | null>(null)
+  const onPointerDown = (e: React.PointerEvent) => {
+    touchStart.current = { x: e.clientX, y: e.clientY }
+  }
+  const onPointerUp = (e: React.PointerEvent) => {
+    const s = touchStart.current
+    touchStart.current = null
+    if (!s || count < 2) return
+    const dx = e.clientX - s.x
+    const dy = e.clientY - s.y
+    // Свайп вбок, а не скролл вверх/вниз
+    if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+      if (dx < 0) lightboxNext()
+      else lightboxPrev()
+    }
+  }
+
   // Keyboard nav
   useEffect(() => {
     if (!lightbox) return
@@ -118,6 +136,9 @@ export const PhotoGrid: FC<Props> = ({ slides }) => {
       {lightbox && (
         <div
           className="fixed inset-0 z-[9999] bg-[var(--lightbox-bg)] backdrop-blur-sm select-none"
+          style={{ touchAction: 'pan-y' }}
+          onPointerDown={onPointerDown}
+          onPointerUp={onPointerUp}
           onClick={(e) => { if (e.target === e.currentTarget) closeLightbox() }}
         >
           {/* Top bar */}
