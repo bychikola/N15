@@ -18,12 +18,12 @@ export async function generateMetadata({ params }: LayoutProps): Promise<Metadat
   const { lang } = await params
   const t = getDictionary(lang)
   return {
-    title: { default: t.meta.title, template: '%s | N15' },
+    title: { default: t.meta.title, template: '%s | Н15' },
     description: t.meta.description,
     openGraph: {
       type: 'website',
       locale: t.meta.ogLocale,
-      siteName: 'N15',
+      siteName: 'Н15',
       title: t.meta.title,
       description: t.meta.description,
     },

@@ -39,10 +39,10 @@ export const Footer: FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-10">
           {/* Brand column */}
           <div>
-            <a href={`/${lang}`} className="flex items-center mb-4" aria-label="N15 — на главную">
+            <a href={`/${lang}`} className="flex items-center mb-4" aria-label="Н15 — на главную">
               <img
                 src="/logo.png"
-                alt="N15"
+                alt="Н15"
                 width={48}
                 height={32}
                 className="h-8 w-auto"
@@ -80,7 +80,7 @@ export const Footer: FC = () => {
         {/* Bottom bar */}
         <div className="mt-12 pt-6 border-t border-[var(--n15-gold)]/10 flex flex-col sm:flex-row items-center justify-between gap-4">
           <p className="text-xs text-[var(--n15-muted)]">
-            &copy; {new Date().getFullYear()} N15. {t.footer.rights}
+            &copy; {new Date().getFullYear()} Н15. {t.footer.rights}
           </p>
           <p className="text-xs text-[var(--n15-muted)]">
             {t.footer.made}

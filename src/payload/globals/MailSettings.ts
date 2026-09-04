@@ -74,7 +74,7 @@ export const MailSettings: GlobalConfig = {
       type: 'text',
       label: 'Имя отправителя',
       admin: {
-        description: 'Как будет подписан отправитель, например: Агентство N15',
+        description: 'Как будет подписан отправитель, например: Агентство Н15',
       },
     },
   ],

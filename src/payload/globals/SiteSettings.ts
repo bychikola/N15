@@ -10,7 +10,7 @@ export const SiteSettings: GlobalConfig = {
       name: 'siteName',
       type: 'text',
       label: 'Название сайта',
-      defaultValue: 'N15',
+      defaultValue: 'Н15',
     },
     {
       name: 'logo',
@@ -50,7 +50,7 @@ export const SiteSettings: GlobalConfig = {
       name: 'defaultMetaTitle',
       type: 'text',
       label: 'SEO: Заголовок по умолчанию',
-      defaultValue: 'N15 — Агентство недвижимости',
+      defaultValue: 'Н15 — Агентство недвижимости',
     },
     {
       name: 'defaultMetaDescription',
@@ -78,13 +78,13 @@ export const SiteSettings: GlobalConfig = {
           name: 'heroDescription',
           type: 'textarea',
           label: 'Описание под заголовком',
-          defaultValue: 'N15 — это премиальное агентство недвижимости с осетинским характером. Мы работаем с 2014 года и за это время провели более 850 успешных сделок.',
+          defaultValue: 'Н15 — это премиальное агентство недвижимости с осетинским характером. Мы работаем с 2014 года и за это время провели более 850 успешных сделок.',
         },
         {
           name: 'whyTitle',
           type: 'text',
           label: 'Заголовок блока «Почему выбирают»',
-          defaultValue: 'Почему выбирают N15',
+          defaultValue: 'Почему выбирают Н15',
         },
         {
           name: 'whyItems',

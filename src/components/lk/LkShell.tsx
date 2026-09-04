@@ -96,7 +96,7 @@ export const LkShell: FC<{ children: ReactNode; active?: string }> = ({ children
             <div className="flex items-center gap-3 mb-3">
               <div className="w-10 h-10 rounded-full bg-[var(--n15-black)] border border-[var(--n15-gold)]/25 flex items-center justify-center">
                 <span className="font-[family-name:var(--font-display)] text-[var(--n15-gold)] text-sm">
-                  {user?.name ? user.name.split(' ').map((n) => n[0]).join('').slice(0, 2) : 'N'}
+                  {user?.name ? user.name.split(' ').map((n) => n[0]).join('').slice(0, 2) : 'Н'}
                 </span>
               </div>
               <div className="min-w-0">

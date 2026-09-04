@@ -54,8 +54,8 @@ async function getAboutData(): Promise<AboutData & { agents: { name: string; pos
 
   return {
     heroTitle: (about?.heroTitle as string) || 'Об агентстве',
-    heroDescription: (about?.heroDescription as string) || 'N15 — это премиальное агентство недвижимости с осетинским характером. Мы работаем с 2014 года и за это время провели более 850 успешных сделок.',
-    whyTitle: (about?.whyTitle as string) || 'Почему выбирают N15',
+    heroDescription: (about?.heroDescription as string) || 'Н15 — это премиальное агентство недвижимости с осетинским характером. Мы работаем с 2014 года и за это время провели более 850 успешных сделок.',
+    whyTitle: (about?.whyTitle as string) || 'Почему выбирают Н15',
     whyItems: (about?.whyItems as { title: string; description: string; id?: string }[]) || [
       { title: 'Экспертиза рынка', description: 'Знаем каждый район, каждую улицу. 12 лет на рынке недвижимости Северной Осетии.' },
       { title: 'Полное сопровождение', description: 'От поиска до подписания договора. Юридическая проверка, оценка, переговоры.' },
@@ -83,8 +83,8 @@ export default async function AboutPage({ params }: PageProps) {
   } catch {
     data = {
       heroTitle: 'Об агентстве',
-      heroDescription: 'N15 — это премиальное агентство недвижимости с осетинским характером.',
-      whyTitle: 'Почему выбирают N15',
+      heroDescription: 'Н15 — это премиальное агентство недвижимости с осетинским характером.',
+      whyTitle: 'Почему выбирают Н15',
       whyItems: [
         { title: 'Экспертиза рынка', description: 'Знаем каждый район, каждую улицу.' },
         { title: 'Полное сопровождение', description: 'От поиска до подписания договора.' },

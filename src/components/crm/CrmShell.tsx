@@ -31,13 +31,13 @@ export function CrmShell({ user, t, active, children }: Props) {
     window.location.href = '/'
   }
 
-  const initial = user.name.trim().charAt(0).toUpperCase() || 'N'
+  const initial = user.name.trim().charAt(0).toUpperCase() || 'Н'
 
   return (
     <main className="crm-shell">
       <aside className="crm-sidebar">
         <div className="crm-brand">
-          <img className="crm-logo" src="/logo.png" alt="N15" />
+          <img className="crm-logo" src="/logo.png" alt="Н15" />
           <span>{t.crm.sidebarCaption}</span>
         </div>
         <nav className="crm-nav" aria-label="Разделы CRM">

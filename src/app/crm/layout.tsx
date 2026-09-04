@@ -3,7 +3,7 @@ import './vars.css'
 import './crm.css'
 
 export const metadata: Metadata = {
-  title: { default: 'CRM N15', template: '%s · CRM N15' },
+  title: { default: 'CRM Н15', template: '%s · CRM Н15' },
   robots: { index: false, follow: false },
 }
 

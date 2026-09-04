@@ -43,7 +43,7 @@ export const CrmLogin: FC<{ t: Dict }> = ({ t }) => {
     <main className="crm-login">
       <section className="crm-login-card">
         <div className="crm-login-brand">
-          <img className="crm-logo large" src="/logo.png" alt="N15" />
+          <img className="crm-logo large" src="/logo.png" alt="Н15" />
           <span>CRM</span>
         </div>
         <p className="crm-login-kicker">{t.crm.loginKicker}</p>

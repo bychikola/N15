@@ -11,7 +11,7 @@ export const CrmDenied = ({ t }: { t: Dict }) => {
   return (
     <main className="crm-access-denied">
       <div>
-        <strong>N15</strong>
+        <strong>Н15</strong>
         <h1>{t.crm.deniedTitle}</h1>
         <p>{t.crm.deniedText}</p>
         <button type="button" className="crm-denied-back" onClick={() => void logout()} style={{ background: 'none', border: 0, cursor: 'pointer', color: 'inherit' }}>
