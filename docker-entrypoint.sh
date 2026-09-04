@@ -60,6 +60,9 @@ if [ -n "$DATABASE_URI" ]; then
     })().catch(() => process.exit(1));
   "; then
     echo "Schema missing — starting dev server to create tables..."
+    # Бэкап production-сборки в рантайме (в образ не кладём): dev-сервер
+    # перезапишет .next, после инициализации восстановим его из архива.
+    tar -czf /app/.next-prod.tar.gz -C /app .next
     NODE_ENV=development node_modules/.bin/next dev -p 3001 >/tmp/dev-init.log 2>&1 &
     DEV_PID=$!
     INIT_OK=0
@@ -75,9 +78,10 @@ if [ -n "$DATABASE_URI" ]; then
     done
     kill "$DEV_PID" 2>/dev/null || true
     wait "$DEV_PID" 2>/dev/null || true
-    # Восстанавливаем production-сборку из сжатого бэкапа
+    # Восстанавливаем production-сборку из рантайм-бэкапа и убираем архив
     rm -rf .next
     tar -xzf .next-prod.tar.gz -C /app
+    rm -f /app/.next-prod.tar.gz
     if [ "$INIT_OK" != "1" ]; then
       echo "Schema init failed. Dev log:" >&2
       tail -60 /tmp/dev-init.log >&2
