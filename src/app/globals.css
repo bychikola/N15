@@ -432,41 +432,32 @@ html[data-theme='dark'] span.theme-icon-moon { display: block; }
 .lp-settlement-groups p { margin: 0; padding: 0 4px 12px; color: #777267; font-size: 9px; line-height: 1.9; }
 .lp-settlement-count { color: #8e7049; font-size: 9px; letter-spacing: .08em; }
 
-/* Избранные объекты */
-.lp-featured { margin: 0 auto 61px; }
+/* Избранные объекты — карточки и сетка «как в каталоге» (ObjectCard).
+   Колонки (телефон 1 / планшет 2 / ноутбук 3 / компьютер 4) заданы
+   tailwind-классами в компоненте — здесь только ширина контейнера. */
+.lp-featured {
+  margin: 0 auto 61px;
+  /* Лендинг всегда светлый (палитра прототипа), а карточки каталога
+     читают переменные темы: фиксируем светлые значения внутри секции,
+     чтобы тёмная тема не делала их тёмными на светлом фоне */
+  --search-bg: rgba(255, 255, 255, .6);
+  --n15-charcoal: #EFE8D9;
+  --n15-white: #2B2B28;
+  --n15-muted: #8A8377;
+  --n15-gold: #97692D;
+  --n15-gold-light: #C8A44E;
+  --card-price-fg: #F6F2E9;
+  --card-gradient: linear-gradient(to top, rgba(176, 141, 62, .68), rgba(176, 141, 62, 0) 60%);
+  --pill-bg: rgba(246, 242, 233, .92);
+  --pill-fg: #722F37;
+}
+/* В лендинге секция всегда светлая — золотая рамка карточек «тёмной темы» не нужна */
+html[data-theme='dark'] .lp-featured .object-card { border: 0; }
 .lp-featured-title { width: min(90%, 1280px); margin: 0 auto 23px; }
 .lp-featured-filter { display: flex; flex-wrap: wrap; align-items: baseline; gap: 16px; margin-top: 12px; }
 .lp-featured-filter-summary { font-size: 12px; color: #777267; }
 .lp-featured-filter-reset { font-size: 10px; text-transform: uppercase; letter-spacing: .13em; color: #a87c3f; text-decoration: underline; }
-.lp-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; width: min(90%, 1280px); margin: 0 auto; }
-.lp-cards-duo { grid-template-columns: 1.25fr .75fr; }
-.lp-property-card {
-  min-height: 256px; padding: 14px; position: relative; display: flex; flex-direction: column;
-  justify-content: space-between; color: #fff; overflow: hidden; text-decoration: none;
-  background-position: center; background-size: cover; flex: 1;
-  /* Лёгкая тень текста — подстраховка на светлых участках фото */
-  text-shadow: 0 1px 2px rgba(12, 10, 6, .35), 0 2px 10px rgba(12, 10, 6, .28);
-}
-/* Мягкое затемнение: верх (под бейджем), чистая середина, тёмный низ под текстом */
-.lp-property-card:before {
-  content: ""; position: absolute; inset: 0;
-  background: linear-gradient(180deg,
-    rgba(14, 12, 9, .32) 0%,
-    rgba(14, 12, 9, .08) 24%,
-    rgba(14, 12, 9, .12) 44%,
-    rgba(14, 12, 9, .5) 64%,
-    rgba(14, 12, 9, .84) 86%,
-    rgba(14, 12, 9, .92) 100%);
-}
-.lp-property-card > * { position: relative; z-index: 1; }
-.lp-property-badge {
-  align-self: flex-start; padding: 4px 9px; background: rgba(255,255,255,.16);
-  backdrop-filter: blur(4px); font-size: 9px; text-transform: uppercase; letter-spacing: .12em;
-}
-.lp-property-info p { margin: 0 0 5px; font-size: 11px; color: rgba(255,255,255,.82); }
-.lp-property-info h3 { margin: 0 0 7px; font-family: 'New Standard', Georgia, serif; font-weight: 400; font-size: 21px; color: #fff; line-height: 1.18; }
-.lp-property-info span { font-size: 11px; color: rgba(255,255,255,.9); }
-.lp-property-open { display: block; margin-top: 8px; font-size: 10px; text-transform: uppercase; letter-spacing: .13em; color: #d7ba8b; }
+.lp-cards { width: min(90%, 1280px); margin: 0 auto; }
 
 /* Калькулятор — скруглённая карточка-аккордеон (как на живом прототипе) */
 .lp-mortgage { color: #fff; background: #262722; border-radius: 24px; grid-template-columns: minmax(185px, .55fr) minmax(0, 1.45fr); gap: 33px; width: min(910px, 100% - 64px); margin: 61px auto; padding: 28px; display: grid; box-shadow: 0 24px 70px rgba(38, 39, 34, .12); }
@@ -608,7 +599,7 @@ html[data-theme='dark'] span.theme-icon-moon { display: block; }
   .lp-filters, .lp-land-filters { grid-template-columns: 1fr; padding: 0 0 24px; }
   .lp-filters > div { padding: 16px 0; }
   .lp-land-filters .lp-settlement-filter { grid-column: auto; }
-  .lp-cards { grid-template-columns: repeat(2, 1fr); width: auto; margin: 0 22px; }
+  .lp-cards { width: auto; margin: 0 22px; }
   .lp-mortgage { width: auto; margin: 44px 22px; padding: 22px 18px; grid-template-columns: 1fr; gap: 26px; }
   .lp-mortgage-disclosure > summary { grid-template-columns: 1fr 28px; gap: 16px; min-height: 190px; }
   .lp-mortgage-disclosure > summary h2 { font-size: 36px; }
@@ -635,5 +626,4 @@ html[data-theme='dark'] span.theme-icon-moon { display: block; }
   .lp-hero h1 { font-size: 46px; }
   .lp-eyebrow { letter-spacing: .22em; }
   .lp-hero-copy { font-size: 15px; }
-  .lp-cards { grid-template-columns: 1fr; }
 }

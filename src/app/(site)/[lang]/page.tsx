@@ -6,7 +6,8 @@ import { Header } from '@/components/layout/Header'
 import { getDictionary } from '@/i18n/dictionaries'
 import LandingHero from '@/components/home/LandingHero'
 import SearchCategories from '@/components/home/SearchCategories'
-import FeaturedObjects, { type LandingObject } from '@/components/home/FeaturedObjects'
+import FeaturedObjects from '@/components/home/FeaturedObjects'
+import type { ObjectListItem } from '@/components/objects/ObjectCard'
 import MortgageCalculator from '@/components/home/MortgageCalculator'
 import CountryGuide from '@/components/home/CountryGuide'
 import ServicesSection from '@/components/home/ServicesSection'
@@ -57,20 +58,33 @@ export default async function HomePage({ params, searchParams }: PageProps) {
     depth: 1,
   })
 
-  const objects: LandingObject[] = docs.map((d) => {
+  // Карточки «как в каталоге»: ObjectCard ждёт полный набор полей —
+  // тип сделки, адрес улицы/дома и изображение с Payload-размерами
+  const objects: ObjectListItem[] = docs.map((d) => {
     const o = d as unknown as Record<string, unknown>
-    const img = o.primaryImage as { url?: string } | undefined
-    const addr = o.address as { city?: string; district?: string } | undefined
+    const img = o.primaryImage as
+      | {
+          url?: string
+          alt?: string
+          focalPoint?: { x?: number; y?: number }
+          sizes?: { thumbnail?: { url?: string }; card?: { url?: string } }
+        }
+      | undefined
+    const addr = o.address as ObjectListItem['address'] | undefined
     return {
       id: o.id as number,
       title: o.title as string,
+      type: (o.type as 'sale' | 'rent') || 'sale',
+      category: (o.category as string) || '',
       price: o.price as number,
-      category: CATEGORY_LABELS[o.category as string] || (o.category as string),
-      location: addr?.city,
-      district: addr?.district,
       area: o.area as number | undefined,
       rooms: o.rooms as number | undefined,
-      imageUrl: img?.url,
+      floor: o.floor as number | undefined,
+      totalFloors: o.totalFloors as number | undefined,
+      address: addr,
+      primaryImage: img
+        ? { url: img.url, alt: img.alt, focalPoint: img.focalPoint, sizes: img.sizes }
+        : undefined,
     }
   })
 

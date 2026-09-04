@@ -1,69 +1,80 @@
 import type { Dict } from '@/i18n/dictionaries'
-
-export interface LandingObject {
-  id: number
-  title: string
-  price: number
-  category: string
-  location?: string
-  district?: string
-  area?: number
-  rooms?: number
-  imageUrl?: string
-}
+import ObjectCard, { type ObjectListItem } from '@/components/objects/ObjectCard'
 
 interface Props {
-  objects: LandingObject[]
+  objects: ObjectListItem[]
   t: Dict
   lang: string
   filterSummary?: string
 }
 
+// Заглушка при пустой выдаче: та же карточка-каталога, но со статичным
+// фото/текстом и ссылкой на каталог (объекта с таким id нет).
+function PlaceholderCard({
+  lang,
+  t,
+  img,
+  title,
+  address,
+}: {
+  lang: string
+  t: Dict
+  img: string
+  title: string
+  address: string
+}) {
+  return (
+    <a href={`/${lang}/catalog`} className="object-card group block flex h-full flex-col bg-[var(--search-bg)]">
+      <div className="object-card__media bg-[var(--n15-charcoal)]">
+        <img src={img} alt={title} loading="lazy" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
+        <span className="object-card__pill">{t.object.sale}</span>
+        <div className="object-card__overlay" />
+      </div>
+      <div className="flex flex-1 flex-col px-4 pt-3 pb-3">
+        <h3 className="text-lg font-[family-name:var(--font-display)] text-[var(--n15-white)] mb-1">{title}</h3>
+        <p className="text-xs text-[var(--n15-muted)]">{address}</p>
+      </div>
+    </a>
+  )
+}
+
 export default function FeaturedObjects({ objects, t, lang, filterSummary }: Props) {
-  const details = (o: LandingObject) =>
-    [
-      o.area ? `${o.area} м²` : null,
-      o.rooms ? `${o.rooms} комн.` : null,
-    ].filter(Boolean).join(' · ')
-
   const cards = objects.length
-    ? objects.map((o) => (
-        <a
-          key={o.id}
-          href={`/${lang}/catalog/${o.id}`}
-          className="lp-property-card"
-          style={o.imageUrl ? { backgroundImage: `url(${o.imageUrl})` } : undefined}
-        >
-          <span className="lp-property-badge">{o.category}</span>
-          <div className="lp-property-info">
-            <p>{[o.location, o.district].filter(Boolean).join(' · ')}</p>
-            <h3>{o.title}</h3>
-            <span>{details(o) || o.price.toLocaleString('ru-RU') + ' ₽'}</span>
-            <small className="lp-property-open">{t.landing.openObject} →</small>
-          </div>
-        </a>
-      ))
+    ? objects.map((o) => <ObjectCard key={o.id} obj={o} lang={lang} t={t} />)
     : [
-        <a key="ph1" href="#contact" className="lp-property-card" style={{ backgroundImage: "url('/img/apartment.png')" }}>
-          <span className="lp-property-badge">Квартира</span>
-          <div className="lp-property-info">
-            <p>Владикавказ · Иристонский район</p>
-            <h3>Квартира с панорамным видом</h3>
-            <span>95 м² · 3 комнаты</span>
-          </div>
-        </a>,
-        <a key="ph2" href="#contact" className="lp-property-card" style={{ backgroundImage: "url('/img/villa.png')" }}>
-          <span className="lp-property-badge">Частный дом</span>
-          <div className="lp-property-info">
-            <p>Владикавказ</p>
-            <h3>Современная резиденция</h3>
-            <span>284 м² · участок 20 соток</span>
-          </div>
-        </a>,
+        <PlaceholderCard
+          key="ph1"
+          lang={lang}
+          t={t}
+          img="/img/apartment.png"
+          title="Квартира с панорамным видом"
+          address="Владикавказ · Иристонский район"
+        />,
+        <PlaceholderCard
+          key="ph2"
+          lang={lang}
+          t={t}
+          img="/img/villa.png"
+          title="Современная резиденция"
+          address="Владикавказ"
+        />,
+        <PlaceholderCard
+          key="ph3"
+          lang={lang}
+          t={t}
+          img="/img/apartment.png"
+          title="Квартира с панорамным видом"
+          address="Владикавказ · Иристонский район"
+        />,
+        <PlaceholderCard
+          key="ph4"
+          lang={lang}
+          t={t}
+          img="/img/villa.png"
+          title="Современная резиденция"
+          address="Владикавказ"
+        />,
       ]
-
-  // Как в прототипе: ≤2 карточки — крупная пара (1.25fr/.75fr), больше — сетка по 3
-  const cardsCls = cards.length > 2 ? 'lp-cards' : 'lp-cards lp-cards-duo'
 
   return (
     <section className="lp-section lp-featured" id="featured">
@@ -79,7 +90,11 @@ export default function FeaturedObjects({ objects, t, lang, filterSummary }: Pro
           </div>
         )}
       </div>
-      <div className={cardsCls}>{cards}</div>
+      {/* Сетка как в каталоге: телефон — 1, планшет — 2, ноутбук — 3,
+          компьютер (≥1280px) — 4 одинаковых карточки в ряд */}
+      <div className="lp-cards grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-6 gap-y-8">
+        {cards}
+      </div>
     </section>
   )
 }
