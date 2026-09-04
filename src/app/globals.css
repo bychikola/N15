@@ -217,22 +217,30 @@ a:hover {
 .object-card__overlay {
   position: absolute;
   inset: auto 0 0 0;
-  height: 42%;
-  background: var(--card-gradient);
+  height: 48%;
+  /* Снизу тёмный скрим — цена читается даже на светлом фото; поверх него
+     остаётся фирменная золотая дымка (var(--card-gradient)) */
+  background:
+    linear-gradient(to top, rgba(18, 14, 8, .82) 0%, rgba(18, 14, 8, .2) 52%, rgba(18, 14, 8, 0) 74%),
+    var(--card-gradient);
   pointer-events: none;
 }
 .object-card__pill {
   position: absolute;
-  top: .75rem;
-  left: .75rem;
+  top: .55rem;
+  left: .55rem;
   background: var(--pill-bg);
   color: var(--pill-fg);
-  font-size: 9px;
-  letter-spacing: .2em;
+  font-size: 8.5px;
+  letter-spacing: .16em;
   text-transform: uppercase;
-  padding: .35rem .8rem;
+  padding: .3rem .7rem;
   border-radius: 999px;
   font-weight: 600;
+}
+/* Цена на фото карточки — лёгкая тень для читаемости на светлых участках */
+.object-card__price {
+  text-shadow: 0 1px 3px rgba(20, 16, 8, .55);
 }
 .catalog-search {
   display: flex;
@@ -421,23 +429,35 @@ html[data-theme='dark'] span.theme-icon-moon { display: block; }
 .lp-featured-filter { display: flex; flex-wrap: wrap; align-items: baseline; gap: 16px; margin-top: 12px; }
 .lp-featured-filter-summary { font-size: 12px; color: #777267; }
 .lp-featured-filter-reset { font-size: 10px; text-transform: uppercase; letter-spacing: .13em; color: #a87c3f; text-decoration: underline; }
-.lp-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; width: min(90%, 1280px); margin: 0 auto; }
+.lp-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; width: min(90%, 1280px); margin: 0 auto; }
 .lp-cards-duo { grid-template-columns: 1.25fr .75fr; }
 .lp-property-card {
-  min-height: 290px; padding: 18px; position: relative; display: flex; flex-direction: column;
+  min-height: 256px; padding: 14px; position: relative; display: flex; flex-direction: column;
   justify-content: space-between; color: #fff; overflow: hidden; text-decoration: none;
   background-position: center; background-size: cover; flex: 1;
+  /* Лёгкая тень текста — подстраховка на светлых участках фото */
+  text-shadow: 0 1px 2px rgba(12, 10, 6, .35), 0 2px 10px rgba(12, 10, 6, .28);
 }
-.lp-property-card:before { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,.05), rgba(0,0,0,.66)); }
+/* Мягкое затемнение: верх (под бейджем), чистая середина, тёмный низ под текстом */
+.lp-property-card:before {
+  content: ""; position: absolute; inset: 0;
+  background: linear-gradient(180deg,
+    rgba(14, 12, 9, .32) 0%,
+    rgba(14, 12, 9, .08) 24%,
+    rgba(14, 12, 9, .12) 44%,
+    rgba(14, 12, 9, .5) 64%,
+    rgba(14, 12, 9, .84) 86%,
+    rgba(14, 12, 9, .92) 100%);
+}
 .lp-property-card > * { position: relative; z-index: 1; }
 .lp-property-badge {
-  align-self: flex-start; padding: 6px 10px; background: rgba(255,255,255,.14);
-  backdrop-filter: blur(4px); font-size: 9px; text-transform: uppercase; letter-spacing: .13em;
+  align-self: flex-start; padding: 4px 9px; background: rgba(255,255,255,.16);
+  backdrop-filter: blur(4px); font-size: 9px; text-transform: uppercase; letter-spacing: .12em;
 }
-.lp-property-info p { margin: 0 0 6px; font-size: 10px; color: rgba(255,255,255,.75); }
-.lp-property-info h3 { margin: 0 0 6px; font-family: 'New Standard', Georgia, serif; font-weight: 400; font-size: 19px; color: #fff; line-height: 1.15; }
-.lp-property-info span { font-size: 10px; color: rgba(255,255,255,.8); }
-.lp-property-open { display: block; margin-top: 9px; font-size: 9px; text-transform: uppercase; letter-spacing: .13em; color: #d7ba8b; }
+.lp-property-info p { margin: 0 0 5px; font-size: 11px; color: rgba(255,255,255,.82); }
+.lp-property-info h3 { margin: 0 0 7px; font-family: 'New Standard', Georgia, serif; font-weight: 400; font-size: 21px; color: #fff; line-height: 1.18; }
+.lp-property-info span { font-size: 11px; color: rgba(255,255,255,.9); }
+.lp-property-open { display: block; margin-top: 8px; font-size: 10px; text-transform: uppercase; letter-spacing: .13em; color: #d7ba8b; }
 
 /* Калькулятор — скруглённая карточка-аккордеон (как на живом прототипе) */
 .lp-mortgage { color: #fff; background: #262722; border-radius: 24px; grid-template-columns: minmax(185px, .55fr) minmax(0, 1.45fr); gap: 33px; width: min(910px, 100% - 64px); margin: 61px auto; padding: 28px; display: grid; box-shadow: 0 24px 70px rgba(38, 39, 34, .12); }

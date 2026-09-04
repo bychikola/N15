@@ -124,7 +124,7 @@ export const PhotoGrid: FC<Props> = ({ slides }) => {
 
   return (
     <div>
-      <div className="grid grid-cols-2 md:grid-cols-3 auto-rows-[170px] md:auto-rows-[200px] gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 auto-rows-[150px] md:auto-rows-[176px] gap-3">
         {visibleSlides.map((slide, i) => {
           const isCollapseTile = hiddenCount > 0 && i === COLLAPSE_AT - 1
           return (
