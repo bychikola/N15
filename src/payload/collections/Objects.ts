@@ -17,11 +17,6 @@ const toSlugBase = (title: string): string => {
   return /[a-z]/.test(base) ? base : ''
 }
 
-// Резервный идентификатор для slug на время создания: id записи ещё не
-// существует (его выдаёт БД уже после хуков), поэтому берём случайный.
-const fallbackSlug = (id?: number | string): string =>
-  `object-${id ?? crypto.randomUUID().slice(0, 8)}`
-
 export const Objects: CollectionConfig = {
   slug: 'objects',
   admin: {
@@ -39,25 +34,44 @@ export const Objects: CollectionConfig = {
     beforeChange: [
       // Автогенерация slug при каждом сохранении (создание и правка).
       // Отдельным хуком — чтобы работал и при force=true: следующий хук
-      // при force выходит раньше времени. Slug всегда пересобирается из
-      // названия; при конфликте уникальности добавляется суффикс -2, -3, …
-      async ({ data, req }) => {
+      // при force выходит раньше времени. Правила:
+      //  - название не менялось (или его нет в данных) — slug не трогаем,
+      //    иначе каждая правка цены/статуса переименовывала бы объект;
+      //  - название на латинице → slug из него; при конфликте
+      //    уникальности добавляется суффикс -2, -3, …;
+      //  - кириллическое/пустое название → резервный object-<идентификатор>
+      //    (на правке — id записи, при создании — случайный: id БД выдаёт
+      //    уже после хуков).
+      // ВАЖНО: на update Payload подмешивает в data текущий документ, но id
+      // кладёт только в originalDoc — «самого себя» при проверке уникальности
+      // исключаем по originalDoc.id, иначе slug рос бы -2, -2-2, -2-2-2…
+      // при каждом редактировании.
+      async ({ data, req, originalDoc }) => {
         if (!data) return data
         // Slug пересобираем, только когда в данных есть название: частичный
         // PATCH (например, один статус) не должен переименовывать объект.
         if (typeof data.title !== 'string') return data
+        const orig = originalDoc as { id?: number | string; title?: string } | undefined
+        const curId = orig?.id ?? (data.id as number | string | undefined)
+        const curSlug = typeof data.slug === 'string' ? data.slug : ''
         const title = data.title.trim()
-        // Если из названия не вышло латинских букв/цифр (например, название
-        // целиком на кириллице) — резервный вариант object-<идентификатор>.
+        // Название не изменилось — сохраняем текущий slug как есть.
+        // Пустой curSlug (легаси-записи без slug) всё равно заполняем ниже.
+        if (orig?.title !== undefined && orig.title === data.title && curSlug) {
+          return data
+        }
+        // База slug: латиница названия либо резервный object-<идентификатор>.
         // Уже существующий резервный slug не переписываем: случайная правка
-        // объекта не должна переименовывать его.
-        const existingFallback =
-          typeof data.slug === 'string' && data.slug.startsWith('object-') ? data.slug : ''
+        // кириллического названия не должна переименовывать объект.
         const base =
-          toSlugBase(title) || existingFallback || fallbackSlug(data.id as number | string | undefined)
+          toSlugBase(title) ||
+          (curSlug.startsWith('object-') ? curSlug : `object-${curId ?? crypto.randomUUID().slice(0, 8)}`)
+        // Совпало с текущим — менять нечего (например, правка латинского
+        // названия при пустом/устаревшем slug в БД).
+        if (curSlug && curSlug === base) return data
         const isTaken = async (slug: string) => {
-          const where: Where = data.id
-            ? { and: [{ slug: { equals: slug } }, { id: { not_equals: data.id } }] }
+          const where: Where = curId
+            ? { and: [{ slug: { equals: slug } }, { id: { not_equals: curId } }] }
             : { slug: { equals: slug } }
           const { docs } = await req.payload.find({
             collection: 'objects',
