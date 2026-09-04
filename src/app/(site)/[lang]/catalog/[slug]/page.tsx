@@ -106,10 +106,8 @@ export default async function ObjectPage({ params }: PageProps) {
     limit: 3,
     depth: 1,
   })
-  // WhatsApp: номер из поля whatsapp, при пустом — из phone агента (защита от «https://wa.me/» без номера)
-  const agentWaNumber = obj.agent?.whatsapp
-    ? obj.agent.whatsapp.replace(/\D/g, '') || (obj.agent.phone || '').replace(/\D/g, '')
-    : ''
+  // WhatsApp: номер из поля whatsapp, при пустом/битом — из phone агента (защита от «https://wa.me/» без номера)
+  const agentWaNumber = (obj.agent?.whatsapp || '').replace(/\D/g, '') || (obj.agent?.phone || '').replace(/\D/g, '')
   // Telegram: юзернейм после t.me/ (защита от пустой ссылки «https://t.me/»)
   const agentTgHandle = (obj.agent?.telegram || '').replace(/^https?:\/\/(www\.)?t\.me\//, '').replace(/^@/, '')
 

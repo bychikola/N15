@@ -31,6 +31,9 @@ export default async function AgentsPage({ params }: PageProps) {
   }[]).map((a) => ({
     ...a,
     initials: a.name.split(' ').map((n) => n[0]).join('').slice(0, 2),
+    // WhatsApp-номер: цифры из поля whatsapp, при пустом/битом — из phone
+    // агента (защита от ссылки «https://wa.me/» без номера, как на объекте)
+    waNumber: (a.whatsapp || '').replace(/\D/g, '') || (a.phone || '').replace(/\D/g, ''),
   }))
 
   return (
@@ -67,8 +70,8 @@ export default async function AgentsPage({ params }: PageProps) {
                       <Button variant="outline" size="sm" className="w-full text-xs">{agent.phone}</Button>
                     </a>
                   )}
-                  {agent.whatsapp && (
-                    <a href={`https://wa.me/${agent.whatsapp.replace(/\D/g, '')}`} target="_blank" rel="noreferrer" className="block text-center">
+                  {agent.waNumber && (
+                    <a href={`https://wa.me/${agent.waNumber}`} target="_blank" rel="noreferrer" className="block text-center">
                       <Button variant="ghost" size="sm" className="w-full text-xs">WhatsApp</Button>
                     </a>
                   )}
