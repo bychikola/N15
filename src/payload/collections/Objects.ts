@@ -1,5 +1,8 @@
 import type { CollectionConfig, Where } from 'payload'
 import { DISTRICT_OPTIONS } from '@/lib/districts'
+// Садовые товарищества — тот же справочник, что в разделах СТ/СНТ/СНО
+// на главной, в каталоге и форме CRM (landing-data.ts)
+import { SNT_AREAS } from '@/components/home/landing-data'
 
 const normPhone = (v?: string) => (v || '').replace(/[^\d+]/g, '')
 const normCadastral = (v?: string) => (v || '').toLowerCase().replace(/\s+/g, '')
@@ -276,10 +279,14 @@ export const Objects: CollectionConfig = {
         },
         {
           name: 'snt',
-          type: 'text',
+          type: 'select',
           label: 'СТ/СНТ/СНО',
+          // Выпадающий список разделов — как на сайте: админке не нужно
+          // вписывать товарищество вручную
+          options: SNT_AREAS.map((s) => ({ label: s, value: s })),
           admin: {
-            description: 'Садовое товарищество для участков и домов в СТ/СНТ/СНО/ДНТ. Например: СТ Кобань, СНТ Мичурино',
+            isClearable: true,
+            description: 'Товарищество (СТ/СНТ/СНО/ДНТ) для участков и домов вне города, например СТ Кобань. Пусто — если объект не в товариществе',
           },
         },
         { name: 'street', type: 'text', label: 'Улица' },

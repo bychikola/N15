@@ -795,19 +795,20 @@ export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) =>
                 ))}
               </datalist>
             </div>
-            {/* СТ/СНТ/СНО — раздел как на главной сайта: только для загородных
-                категорий (дом в СНТ, участок в товариществе), у городской
-                недвижимости поля нет. Значение — в address.snt объекта. */}
+            {/* СТ/СНТ/СНО — выпадающий список разделов (как на главной сайта):
+                только для загородных категорий (дом в СНТ, участок в
+                товариществе), у городской недвижимости поля нет.
+                Значение — в address.snt объекта. */}
             {(form.category === 'land' || form.category === 'house') && (
               <div className="crm-addr-full">
                 <Field label={t.crm.objSnt}>
-                  <input list="crm-snt" value={form.snt} onChange={(e) => set('snt', e.target.value)} style={inputStyle} placeholder="Например: СНТ Кобань" />
+                  <select value={form.snt} onChange={(e) => set('snt', e.target.value)} style={inputStyle}>
+                    <option value="">—</option>
+                    {SNT_AREAS.map((s) => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
                 </Field>
-                <datalist id="crm-snt">
-                  {SNT_AREAS.map((s) => (
-                    <option key={s} value={s} />
-                  ))}
-                </datalist>
               </div>
             )}
             <div className="crm-addr-full">
