@@ -47,14 +47,15 @@ export async function POST(req: NextRequest) {
       headers: { Referer: referer },
     })
     if (!res.ok) {
-      console.warn(`geocode: yandex http ${res.status} for «${address.slice(0, 80)}»`)
+      // адрес в лог не пишем (данные клиента)
+      console.warn(`geocode: yandex http ${res.status}`)
       return NextResponse.json({ error: 'geocoder error' }, { status: 502 })
     }
     const data = await res.json()
     const meta = data?.response?.GeoObjectCollection?.metaDataProperty?.GeocoderResponseMetaData
     const pos = data?.response?.GeoObjectCollection?.featureMember?.[0]?.GeoObject?.Point?.pos
     if (typeof pos !== 'string') {
-      console.warn(`geocode: empty result for «${address.slice(0, 80)}» (yandex found: ${meta?.found ?? '?'})`)
+      console.warn(`geocode: empty result (yandex found: ${meta?.found ?? '?'})`)
       return NextResponse.json({ found: false })
     }
     const [lng, lat] = pos.split(' ').map(Number)
