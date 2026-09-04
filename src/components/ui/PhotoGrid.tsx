@@ -11,6 +11,17 @@ interface Slide {
   thumb?: string
 }
 
+// next/image в Next 16 отклоняет абсолютные URL (даже своего хоста) —
+// отдаём оптимизатору только путь, без origin
+function localPath(u: string): string {
+  try {
+    const parsed = new URL(u)
+    return parsed.pathname + parsed.search
+  } catch {
+    return u
+  }
+}
+
 interface Props {
   slides: Slide[]
 }
@@ -166,7 +177,7 @@ export const PhotoGrid: FC<Props> = ({ slides }) => {
               вес в разы меньше (как у alaniadom.ru) */}
           <div className="absolute inset-0 pt-10 pb-20 px-8 md:px-16">
             <Image
-              src={slides[lightboxIdx].url}
+              src={localPath(slides[lightboxIdx].url)}
               alt={slides[lightboxIdx].alt}
               fill
               sizes="100vw"
