@@ -32,6 +32,8 @@ services:
       DATABASE_URI: postgres://${POSTGRES_USER:-n15}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-n15}
       NEXT_PUBLIC_SERVER_URL: ${NEXT_PUBLIC_SERVER_URL:-https://${DOMAIN:-n15-realty.ru}}
       NEXT_PUBLIC_YANDEX_MAPS_API_KEY: ${NEXT_PUBLIC_YANDEX_MAPS_API_KEY}
+      # Серверный ключ геокодера — только в рантайме контейнера, в клиент не попадает
+      YANDEX_GEOCODER_API_KEY: ${YANDEX_GEOCODER_API_KEY:-}
       ADMIN_ROUTE: ${ADMIN_ROUTE:-/admin}
     volumes:
       - media:/app/media
