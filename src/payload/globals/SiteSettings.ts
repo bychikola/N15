@@ -2,6 +2,7 @@ import type { GlobalConfig } from 'payload'
 
 export const SiteSettings: GlobalConfig = {
   slug: 'site-settings',
+  label: 'Настройки сайта',
   admin: {
     group: 'Система',
   },
@@ -30,7 +31,7 @@ export const SiteSettings: GlobalConfig = {
     {
       name: 'email',
       type: 'email',
-      label: 'Email',
+      label: 'Электронная почта',
     },
     {
       name: 'address',

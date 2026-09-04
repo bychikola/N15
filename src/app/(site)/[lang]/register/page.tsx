@@ -102,7 +102,7 @@ export default function RegisterPage() {
                   <label className="text-xs tracking-wider uppercase text-[var(--n15-muted)] mb-2 block">{t.auth.emailOptional}</label>
                   <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
                     className="w-full bg-[var(--n15-black)] border border-[var(--n15-gold)]/20 px-4 py-3 text-sm text-[var(--n15-silver)] placeholder:text-[var(--n15-muted)] focus:outline-none focus:border-[var(--n15-gold)]/50"
-                    placeholder="your@email.com" />
+                    placeholder="адрес@n15-realty.ru" />
                 </div>
 
                 <div>

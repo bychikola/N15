@@ -12,6 +12,7 @@ function participantWhere(userId: number | string): Where {
 
 export const Messages: CollectionConfig = {
   slug: 'messages',
+  labels: { singular: 'Сообщение', plural: 'Сообщения' },
   admin: {
     useAsTitle: 'text',
     group: 'Агентство',

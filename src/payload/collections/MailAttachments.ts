@@ -5,6 +5,7 @@ import type { CollectionConfig } from 'payload'
 // отдаётся через /api/mail/attachment/[id] (роли агент/админ).
 export const MailAttachments: CollectionConfig = {
   slug: 'mail-attachments',
+  labels: { singular: 'Вложение', plural: 'Вложения' },
   admin: {
     useAsTitle: 'filename',
     group: 'Агентство',

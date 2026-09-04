@@ -158,7 +158,7 @@ export default async function ObjectPage({ params }: PageProps) {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
             <div className="lg:col-span-2">
               {/* Breadcrumbs */}
-              <nav aria-label="Breadcrumb" className="mb-4">
+              <nav aria-label="Хлебные крошки" className="mb-4">
                 <a href={`/${lang}/catalog`} className="text-xs uppercase tracking-[0.2em] text-[var(--n15-muted)] hover:text-[var(--n15-gold)] transition-colors">
                   {t.object.breadcrumbCatalog}
                 </a>

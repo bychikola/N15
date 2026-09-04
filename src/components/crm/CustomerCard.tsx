@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useI18n } from '@/i18n/i18n-provider'
+import { APPLICATION_TYPE_LABELS } from '@/components/lk/FunnelCard'
 
 interface AppItem {
   id: number
@@ -30,7 +31,7 @@ export default function CustomerCard({ id }: { id: number }) {
       const obj = a.object as Record<string, unknown> | undefined
       return {
         id: a.id as number,
-        objectTitle: (obj?.title as string) || (a.type as string) || '—',
+        objectTitle: (obj?.title as string) || APPLICATION_TYPE_LABELS[a.type as string] || '—',
         createdAt: a.createdAt as string,
       }
     }))

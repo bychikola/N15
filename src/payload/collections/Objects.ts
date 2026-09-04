@@ -6,6 +6,7 @@ const normCadastral = (v?: string) => (v || '').toLowerCase().replace(/\s+/g, ''
 
 export const Objects: CollectionConfig = {
   slug: 'objects',
+  labels: { singular: 'Объект', plural: 'Объекты' },
   admin: {
     useAsTitle: 'title',
     group: 'Недвижимость',

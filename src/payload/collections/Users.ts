@@ -2,6 +2,7 @@ import type { CollectionConfig } from 'payload'
 
 export const Users: CollectionConfig = {
   slug: 'users',
+  labels: { singular: 'Пользователь', plural: 'Пользователи' },
   auth: {
     // Вход по номеру телефона (username) или email. Почта необязательна —
     // регистрация идёт по телефону, он и есть логин. requireUsername: false —

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useI18n } from '@/i18n/i18n-provider'
-import { STAGES, stageLabel } from './FunnelCard'
+import { APPLICATION_TYPE_LABELS, STAGES, stageLabel } from './FunnelCard'
 
 interface ConversationItem {
   applicationId: number
@@ -104,7 +104,7 @@ export default function ChatList({ lang, basePath = '/lk/messages', variant = 'l
 
         convs.push({
           applicationId: appId,
-          objectTitle: (obj?.title as string) || (app.type as string) || '',
+          objectTitle: (obj?.title as string) || APPLICATION_TYPE_LABELS[app.type as string] || '',
           objectImage: ((obj?.primaryImage as Record<string, unknown>)?.url as string) || undefined,
           personName:
             me.role === 'agent' || me.role === 'admin'

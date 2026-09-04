@@ -2,6 +2,7 @@ import type { CollectionConfig } from 'payload'
 
 export const Emails: CollectionConfig = {
   slug: 'emails',
+  labels: { singular: 'Письмо', plural: 'Письма' },
   admin: {
     useAsTitle: 'subject',
     group: 'Агентство',
@@ -41,12 +42,12 @@ export const Emails: CollectionConfig = {
     {
       name: 'fromEmail',
       type: 'text',
-      label: 'От (email)',
+      label: 'От (эл. почта)',
     },
     {
       name: 'toEmail',
       type: 'text',
-      label: 'Кому (email)',
+      label: 'Кому (эл. почта)',
     },
     {
       name: 'subject',
@@ -75,7 +76,7 @@ export const Emails: CollectionConfig = {
       label: 'Заявка',
       relationTo: 'applications',
       admin: {
-        description: 'Привязка письма к заявке (по email клиента)',
+        description: 'Привязка письма к заявке (по эл. почте клиента)',
       },
     },
     {

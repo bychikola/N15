@@ -56,7 +56,7 @@ export const MailSettings: GlobalConfig = {
     {
       name: 'username',
       type: 'text',
-      label: 'Логин (email ящика)',
+      label: 'Логин (адрес ящика)',
       admin: {
         description: 'Например: info@n15-realty.ru',
       },

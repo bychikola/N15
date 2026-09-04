@@ -52,7 +52,7 @@ export const CrmLogin: FC<{ t: Dict }> = ({ t }) => {
         <form className="crm-login-form" onSubmit={(e) => void submit(e)}>
           <label>
             {t.crm.loginEmail}
-            <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@n15-realty.ru" />
+            <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="адрес@n15-realty.ru" />
           </label>
           <label>
             {t.crm.loginPassword}

@@ -2,6 +2,7 @@ import type { CollectionConfig } from 'payload'
 
 export const Agents: CollectionConfig = {
   slug: 'agents',
+  labels: { singular: 'Агент', plural: 'Агенты' },
   admin: {
     useAsTitle: 'name',
     group: 'Агентство',
@@ -39,7 +40,7 @@ export const Agents: CollectionConfig = {
     {
       name: 'email',
       type: 'email',
-      label: 'Email',
+      label: 'Электронная почта',
     },
     {
       name: 'telegram',

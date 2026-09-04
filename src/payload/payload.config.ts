@@ -1,4 +1,5 @@
 import { buildConfig } from 'payload'
+import { ru } from '@payloadcms/translations/languages/ru'
 import { sqliteAdapter } from '@payloadcms/db-sqlite'
 import { postgresAdapter } from '@payloadcms/db-postgres'
 import { lexicalEditor } from '@payloadcms/richtext-lexical'
@@ -44,6 +45,11 @@ export default buildConfig({
   collections: [Users, Media, Objects, Agents, Applications, Tasks, Messages, Blog, Pages, Customers, Emails, MailAttachments, AgentTasks],
   globals: [SiteSettings, MailSettings, AgentSettings],
   editor: lexicalEditor(),
+  i18n: {
+    // Интерфейс админки — только на русском (без переключателя языков)
+    supportedLanguages: { ru },
+    fallbackLanguage: 'ru',
+  },
   db: process.env.DATABASE_URI
     ? postgresAdapter({
         pool: { connectionString: process.env.DATABASE_URI },

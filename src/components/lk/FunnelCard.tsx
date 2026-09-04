@@ -35,7 +35,8 @@ export function stageLabel(t: Dict, stage: string): string {
   return (t.crm as unknown as Record<string, string>)[key.split('.')[1]] || stage
 }
 
-const typeKeys: Record<string, string> = {
+// Типы заявок: код из коллекции applications → русское название (общее для ЛК и CRM)
+export const APPLICATION_TYPE_LABELS: Record<string, string> = {
   viewing: 'Просмотр', callback: 'Обратный звонок', mortgage: 'Ипотека', consultation: 'Консультация',
 }
 
@@ -96,7 +97,7 @@ export default function FunnelCard({ app, lang, t, onMoveLeft, onMoveRight, onOp
       </div>
 
       <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 8, fontSize: 9, color: '#817b70', textTransform: 'uppercase', letterSpacing: '.08em' }}>
-        <span style={pillStyle}>{typeKeys[app.type] || app.type}</span>
+        <span style={pillStyle}>{APPLICATION_TYPE_LABELS[app.type] || app.type}</span>
         <span>{t.crm.updated}: {new Date(lastAction).toLocaleDateString(t.locale, { day: 'numeric', month: 'short' })}</span>
       </div>
 

@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
     const payload = await getPayload({ config })
     const me = await payload.auth({ headers: req.headers })
     if (!me.user || !me.user.agentAccess) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      return NextResponse.json({ error: 'Доступ запрещён' }, { status: 403 })
     }
     const { docs } = await payload.find({
       collection: 'agent-tasks',
@@ -30,16 +30,16 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const prompt = (body.prompt as string | undefined)?.trim()
     if (!prompt) {
-      return NextResponse.json({ error: 'prompt is required' }, { status: 400 })
+      return NextResponse.json({ error: 'Текст запроса не указан' }, { status: 400 })
     }
     if (prompt.length > 4000) {
-      return NextResponse.json({ error: 'prompt too long' }, { status: 400 })
+      return NextResponse.json({ error: 'Запрос слишком длинный' }, { status: 400 })
     }
 
     const payload = await getPayload({ config })
     const me = await payload.auth({ headers: req.headers })
     if (!me.user || !me.user.agentAccess) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      return NextResponse.json({ error: 'Доступ запрещён' }, { status: 403 })
     }
 
     const task = await payload.create({

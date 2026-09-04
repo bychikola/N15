@@ -4,6 +4,7 @@ import type { CollectionConfig } from 'payload'
 // пушит и деплоит. Доступ — только администратор.
 export const AgentTasks: CollectionConfig = {
   slug: 'agent-tasks',
+  labels: { singular: 'Задача агента', plural: 'Задачи агента' },
   admin: {
     useAsTitle: 'prompt',
     group: 'Система',

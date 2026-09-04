@@ -64,7 +64,7 @@ export default function ChatThread({ applicationId, lang, variant = 'lk' }: { ap
     ])
     if (!appRes.ok) {
       // Нет доступа к заявке или она не найдена — не оставляем вечную загрузку
-      setLoadError(`HTTP ${appRes.status}`)
+      setLoadError(`Ошибка сервера (HTTP ${appRes.status})`)
       setLoading(false)
       return
     }

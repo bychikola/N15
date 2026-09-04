@@ -6,7 +6,7 @@ import { getDictionary } from '@/i18n/dictionaries'
 import { canAccessCrm, getCrmUser } from './auth'
 import { CrmShell } from '@/components/crm/CrmShell'
 import { CrmDenied } from '@/components/crm/CrmDenied'
-import { STAGES, stageLabel } from '@/components/lk/FunnelCard'
+import { APPLICATION_TYPE_LABELS, STAGES, stageLabel } from '@/components/lk/FunnelCard'
 
 export const dynamic = 'force-dynamic'
 
@@ -115,7 +115,7 @@ export default async function CrmPage({ searchParams }: PageProps) {
     return {
       id: a.id as number,
       client: (clientUser?.name as string) || (a.clientName as string) || '—',
-      object: (obj?.title as string) || (a.type as string) || '—',
+      object: (obj?.title as string) || APPLICATION_TYPE_LABELS[a.type as string] || '—',
       stage: stageLabel(t, (a.status as string) || 'new'),
       agent: (agent?.name as string) || '—',
     }

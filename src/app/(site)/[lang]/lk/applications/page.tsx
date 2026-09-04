@@ -6,6 +6,7 @@ import { Header } from '@/components/layout/Header'
 import { Footer } from '@/components/layout/Footer'
 import { LkShell } from '@/components/lk/LkShell'
 import { useI18n } from '@/i18n/i18n-provider'
+import { APPLICATION_TYPE_LABELS } from '@/components/lk/FunnelCard'
 
 interface ApplicationItem {
   id: number
@@ -14,10 +15,6 @@ interface ApplicationItem {
   createdAt: string
   objectTitle?: string
   agentName?: string
-}
-
-const typeKeys: Record<string, string> = {
-  viewing: 'Просмотр', callback: 'Обратный звонок', mortgage: 'Ипотека', consultation: 'Консультация',
 }
 
 const statusStyles: Record<string, string> = {
@@ -109,7 +106,7 @@ export default function ApplicationsPage() {
                   className="flex items-center justify-between gap-4 bg-[var(--n15-charcoal)] border border-[var(--n15-gold)]/15 p-5 hover:border-[var(--n15-gold)]/40 transition-colors group">
                   <div className="min-w-0">
                     <div className="text-sm text-[var(--n15-white)] group-hover:text-[var(--n15-gold)] transition-colors">
-                      {typeKeys[app.type] || app.type}
+                      {APPLICATION_TYPE_LABELS[app.type] || app.type}
                       {app.objectTitle && (
                         <span className="text-[var(--n15-muted)]"> · {app.objectTitle}</span>
                       )}

@@ -2,6 +2,7 @@ import type { CollectionConfig, Where } from 'payload'
 
 export const Applications: CollectionConfig = {
   slug: 'applications',
+  labels: { singular: 'Заявка', plural: 'Заявки' },
   admin: {
     useAsTitle: 'clientName',
     group: 'Агентство',
@@ -124,7 +125,7 @@ export const Applications: CollectionConfig = {
     {
       name: 'clientEmail',
       type: 'email',
-      label: 'Email',
+      label: 'Электронная почта',
     },
     {
       name: 'message',
