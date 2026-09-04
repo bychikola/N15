@@ -104,6 +104,17 @@ else
   sudo -u "$N15_USER" npm install --silent
 fi
 
+# ---------- [5b/10] Зависимости РЕПОЗИТОРИЯ (гейт tsc/lint воркера) ----------
+# Воркер проверяет правки агента через `tsc --noEmit` прямо в /root/n15 —
+# node_modules там должен соответствовать package.json, иначе гейт падает на
+# «Cannot find module ...» (например nodemailer) и ни один деплой не проходит.
+echo "[5b/10] Синхронизирую node_modules в $REPO_DIR (для tsc/lint-гейта)..."
+if [ -f "$REPO_DIR/package.json" ]; then
+  sudo -u "$N15_USER" npm install --no-audit --no-fund --prefix "$REPO_DIR" >/dev/null 2>&1 \
+    && echo "  node_modules репозитория синхронизированы" \
+    || echo "  ⚠ npm install в репо не удался — гейт tsc может падать (проверь вручную)"
+fi
+
 # ---------- 6. DATABASE_URI ----------
 echo "[6/10] Собираю DATABASE_URI из $REPO_DIR/.env..."
 if [ ! -f "$REPO_DIR/.env" ]; then
