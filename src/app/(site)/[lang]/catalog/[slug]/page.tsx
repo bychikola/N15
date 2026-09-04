@@ -70,25 +70,21 @@ export default async function ObjectPage({ params }: PageProps) {
       whatsapp?: string
       photo?: { url?: string; focalPoint?: { x?: number; y?: number } }
     }
-    primaryImage?: { id: number; url?: string; alt?: string; filename?: string; sizes?: { hero?: { url?: string }; card?: { url?: string } } }
-    images?: { id: number; url?: string; alt?: string; filename?: string; sizes?: { hero?: { url?: string }; card?: { url?: string } } }[]
+    primaryImage?: { id: number; url?: string; alt?: string; filename?: string }
+    images?: { id: number; url?: string; alt?: string; filename?: string }[]
   }
-
-  // Слайдер грузит Payload-размер hero (≤1920px), а не оригинал с телефона (МБ)
-  const slideUrl = (img?: { url?: string; sizes?: { hero?: { url?: string }; card?: { url?: string } } }) =>
-    img?.sizes?.hero?.url || img?.sizes?.card?.url || img?.url || ''
 
   const features = obj.features?.map((f: { feature?: string }) => f.feature).filter(Boolean) || []
   const pricePerMeter = obj.area ? Math.round(obj.price / obj.area) : null
   const gallery = obj.images?.filter((i) => i.url) || []
 
-  // Merge all images for slider: primaryImage first, then the rest
+  // Страница объекта показывает ОРИГИНАЛЫ фото (максимальное качество — кроп
+  // hero-размера резал вертикальные снимки). Лёгкие версии — только в карточках.
   const allSlides: { url: string; alt: string }[] = []
-  if (obj.primaryImage?.url) allSlides.push({ url: slideUrl(obj.primaryImage), alt: obj.primaryImage.alt || obj.title })
+  if (obj.primaryImage?.url) allSlides.push({ url: obj.primaryImage.url, alt: obj.primaryImage.alt || obj.title })
   for (const img of gallery) {
-    const u = slideUrl(img)
-    if (u && !allSlides.some((s) => s.url === u)) {
-      allSlides.push({ url: u, alt: img.alt || obj.title })
+    if (!allSlides.some((s) => s.url === img.url)) {
+      allSlides.push({ url: img.url!, alt: img.alt || obj.title })
     }
   }
 
