@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useI18n } from '@/i18n/i18n-provider'
+import { sortAgents } from '@/lib/agents-sort'
 import FunnelCard, { STAGES, stageLabel, type FunnelApplication } from './FunnelCard'
 
 const POLL_MS = 30_000
@@ -95,7 +96,8 @@ export default function FunnelBoard({ lang }: { lang: string }) {
     if (me.role === 'admin') {
       const agentsRes = await fetch('/api/agents?limit=100&depth=0', { credentials: 'include' })
       const agentsData = await agentsRes.json()
-      setAgents(((agentsData.docs || []) as { id: number; name: string }[]).map((a) => ({ id: a.id, name: a.name })))
+      // Агенты в алфавитном порядке по фамилии (единый порядок для сайта и CRM)
+      setAgents(sortAgents(((agentsData.docs || []) as { id: number; name: string }[]).map((a) => ({ id: a.id, name: a.name }))))
     }
     setLoading(false)
   }, [agentFilter])

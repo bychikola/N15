@@ -7,6 +7,7 @@ import { OrnamentBorder } from '@/components/ui/OrnamentBorder'
 import { OrnamentDivider } from '@/components/ui/OrnamentDivider'
 import { Button } from '@/components/ui/Button'
 import { getDictionary } from '@/i18n/dictionaries'
+import { compareAgents } from '@/lib/agents-sort'
 
 export const dynamic = 'force-dynamic'
 
@@ -49,8 +50,8 @@ async function getAboutData(): Promise<AboutData & { agents: { name: string; pos
       photoUrl: a.photo?.url,
       initials: a.name.split(' ').map((n) => n[0]).join('').slice(0, 2),
     }))
-    // Агенты в алфавитном порядке по имени (локализованное сравнение для кириллицы)
-    .sort((a, b) => a.name.trim().localeCompare(b.name.trim(), 'ru'))
+    // Агенты в алфавитном порядке по фамилии (единый порядок со страницей «Наши агенты» и CRM)
+    .sort(compareAgents)
 
   return {
     heroTitle: (about?.heroTitle as string) || 'Об агентстве',

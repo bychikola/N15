@@ -274,7 +274,7 @@ export default async function ObjectPage({ params }: PageProps) {
                         ) : (
                           <div className="w-14 h-14 rounded-full bg-[var(--n15-charcoal)] border border-[var(--n15-gold)]/20 flex items-center justify-center">
                             <span className="text-lg font-[family-name:var(--font-display)] text-[var(--n15-gold)]">
-                              {obj.agent.name?.split(' ').map((n) => n[0]).join('').slice(0, 2) || 'АК'}
+                              {obj.agent.name?.split(' ').map((n) => n[0]).join('').slice(0, 2) || 'Н15'}
                             </span>
                           </div>
                         )}

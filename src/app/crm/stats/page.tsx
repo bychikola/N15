@@ -5,6 +5,7 @@ import { getDictionary } from '@/i18n/dictionaries'
 import { canAccessCrm, getCrmUser } from '../auth'
 import { CrmShell } from '@/components/crm/CrmShell'
 import { STAGES, stageLabel } from '@/components/lk/FunnelCard'
+import { sortAgents } from '@/lib/agents-sort'
 
 export const dynamic = 'force-dynamic'
 
@@ -66,8 +67,8 @@ export default async function CrmStatsPage({ searchParams }: PageProps) {
   }
   const lossReasons = Array.from(lossCounts.entries()).sort((x, y) => y[1] - x[1])
 
-  // Отчёт по агентам
-  const agentRows = ((agentsRes.docs || []) as { id: number; name?: string }[]).map((a) => {
+  // Отчёт по агентам (в алфавитном порядке по фамилии)
+  const agentRows = sortAgents((agentsRes.docs || []) as { id: number; name?: string }[]).map((a) => {
     const mine = apps.filter((app) => app.agent?.id === a.id)
     const mineActive = mine.filter((app) => app.status !== 'closed' && app.status !== 'rejected')
     const mineClosed = mine.filter((app) => app.status === 'closed' && keyOf(app.updatedAt) >= startKey)

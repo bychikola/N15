@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useI18n } from '@/i18n/i18n-provider'
+import { sortAgents } from '@/lib/agents-sort'
 import { APPLICATION_TYPE_LABELS, STAGES, stageLabel } from './FunnelCard'
 
 interface ConversationItem {
@@ -121,7 +122,8 @@ export default function ChatList({ lang, basePath = '/lk/messages', variant = 'l
       if (me.role === 'admin') {
         const agentsRes = await fetch('/api/agents?limit=100&depth=0', { credentials: 'include' })
         const agentsData = await agentsRes.json()
-        setAgents(((agentsData.docs || []) as { id: number; name: string }[]).map((a) => ({ id: a.id, name: a.name })))
+        // Агенты в алфавитном порядке по фамилии (единый порядок для сайта и CRM)
+        setAgents(sortAgents(((agentsData.docs || []) as { id: number; name: string }[]).map((a) => ({ id: a.id, name: a.name }))))
       }
       setItems(convs)
     } finally {

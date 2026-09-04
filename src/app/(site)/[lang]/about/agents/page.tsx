@@ -5,6 +5,7 @@ import { Footer } from '@/components/layout/Footer'
 import { SectionWrapper } from '@/components/ui/SectionWrapper'
 import { Button } from '@/components/ui/Button'
 import { getDictionary } from '@/i18n/dictionaries'
+import { sortAgents } from '@/lib/agents-sort'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,7 +24,8 @@ export default async function AgentsPage({ params }: PageProps) {
     depth: 1,
   })
 
-  const agentsList = (agents as unknown as {
+  // Агенты в алфавитном порядке по фамилии (все разделы сайта и CRM — один порядок)
+  const agentsList = sortAgents((agents as unknown as {
     id: number; name: string; position?: string; phone?: string
     email?: string; telegram?: string; whatsapp?: string
     objectsSold?: number; experience?: number
@@ -34,7 +36,7 @@ export default async function AgentsPage({ params }: PageProps) {
     // WhatsApp-номер: цифры из поля whatsapp, при пустом/битом — из phone
     // агента (защита от ссылки «https://wa.me/» без номера, как на объекте)
     waNumber: (a.whatsapp || '').replace(/\D/g, '') || (a.phone || '').replace(/\D/g, ''),
-  }))
+  })))
 
   return (
     <>

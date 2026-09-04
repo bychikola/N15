@@ -8,6 +8,7 @@ import { DISTRICT_OPTIONS, LOCALITIES_BY_DISTRICT, LOCALITY_OPTIONS } from '@/li
 import { SNT_AREAS } from '@/components/home/landing-data'
 import { loadYmaps, type Ymaps } from '@/lib/ymaps'
 import { geocodeAddress } from '@/lib/geocode'
+import { sortAgents } from '@/lib/agents-sort'
 
 interface ObjectRow {
   id: number
@@ -356,7 +357,8 @@ export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) =>
         }
       }),
     )
-    setAgents(((agentsData.docs || []) as { id: number; name: string }[]).map((a) => ({ id: a.id, name: a.name })))
+    // Агенты в алфавитном порядке по фамилии (единый порядок для сайта и CRM)
+    setAgents(sortAgents(((agentsData.docs || []) as { id: number; name: string }[]).map((a) => ({ id: a.id, name: a.name }))))
     setLoading(false)
   }, [])
 
