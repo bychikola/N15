@@ -112,7 +112,7 @@ export const PhotoGrid: FC<Props> = ({ slides }) => {
 
   if (count === 0) {
     return (
-      <div className="w-full h-[400px] bg-[var(--n15-charcoal)] flex items-center justify-center border border-[var(--n15-gold)]/10">
+      <div className="w-full h-[360px] bg-[var(--n15-charcoal)] flex items-center justify-center border border-[var(--n15-gold)]/10">
         <svg width="80" height="80" viewBox="0 0 80 80" fill="none" className="opacity-20">
           <rect x="6" y="16" width="68" height="54" stroke="#C8A44E" strokeWidth="1" />
           <path d="M6 46 L30 26 L50 40 L74 16" stroke="#C8A44E" strokeWidth="1" />

@@ -87,7 +87,7 @@ export const ObjectMap: FC<ObjectMapProps> = ({ address, lat, lng }) => {
   // Фолбэк: нет ключа / ошибка скрипта / геокод не нашёл / нет адреса.
   if (showFallback || status === 'error') {
     return (
-      <div className="w-full h-[360px] md:h-[420px] flex flex-col items-center justify-center gap-3 bg-[var(--n15-charcoal)] border border-[var(--n15-gold)]/20 px-6 text-center">
+      <div className="w-full h-[320px] md:h-[380px] flex flex-col items-center justify-center gap-3 bg-[var(--n15-charcoal)] border border-[var(--n15-gold)]/20 px-6 text-center">
         {address && <p className="text-sm text-[var(--n15-silver)]">{address}</p>}
         {address && (
           <a
@@ -107,7 +107,7 @@ export const ObjectMap: FC<ObjectMapProps> = ({ address, lat, lng }) => {
     <div className="relative">
       <div
         ref={containerRef}
-        className="w-full h-[360px] md:h-[420px] bg-[var(--n15-charcoal)] border border-[var(--n15-gold)]/20"
+        className="w-full h-[320px] md:h-[380px] bg-[var(--n15-charcoal)] border border-[var(--n15-gold)]/20"
       />
       {status === 'loading' && (
         <div className="absolute inset-0 z-10 flex items-center justify-center bg-[var(--n15-charcoal)]/70 text-xs tracking-wider uppercase text-[var(--n15-muted)]">
