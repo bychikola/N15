@@ -56,7 +56,7 @@ export default async function ObjectPage({ params }: PageProps) {
     rooms?: number; floor?: number; totalFloors?: number
     buildingType?: string; condition?: string; heating?: string; balcony?: string
     water?: string; sewerage?: string; electricity?: string; gas?: string; internet?: string
-    address?: { city?: string; district?: string; locality?: string; snt?: string; street?: string; house?: string; apartment?: string }
+    address?: { city?: string; district?: string; cityDistrict?: string; locality?: string; snt?: string; street?: string; house?: string; apartment?: string }
     coordinates?: { lat?: number; lng?: number }
     description?: { root?: { children?: unknown[] } }
     features?: { feature?: string }[]
@@ -174,7 +174,15 @@ export default async function ObjectPage({ params }: PageProps) {
 
               <h1 className="text-3xl md:text-4xl font-[family-name:var(--font-display)] text-[var(--n15-white)] mb-3">{obj.title}</h1>
               <p className="text-[var(--n15-muted)] mb-4">
-                {[obj.address?.city, obj.address?.district, obj.address?.snt, obj.address?.street, obj.address?.house].filter(Boolean).join(', ')}
+                {/* Район города (объект в черте Владикавказа) заменяет в строке
+                    муниципальный район — округ и так ясен из города */}
+                {[
+                  obj.address?.city,
+                  obj.address?.cityDistrict ? `${obj.address.cityDistrict} район` : obj.address?.district,
+                  obj.address?.snt,
+                  obj.address?.street,
+                  obj.address?.house,
+                ].filter(Boolean).join(', ')}
               </p>
 
               {/* Hero price */}

@@ -30,6 +30,7 @@ function CatalogContent() {
     priceMax: searchParams.get('price_max') ?? '',
     areaMin: searchParams.get('area_min') ?? '',
     district: searchParams.get('district') ?? '',
+    cityDistrict: searchParams.get('cityDistrict') ?? '',
     locality: searchParams.get('locality') ?? '',
     snt: searchParams.get('snt') ?? '',
   }))
@@ -88,6 +89,7 @@ function CatalogContent() {
       priceMax: searchParams.get('price_max') ?? '',
       areaMin: searchParams.get('area_min') ?? '',
       district: searchParams.get('district') ?? '',
+      cityDistrict: searchParams.get('cityDistrict') ?? '',
       locality: searchParams.get('locality') ?? '',
       snt: searchParams.get('snt') ?? '',
     }

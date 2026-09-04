@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import type { Dict } from '@/i18n/dictionaries'
-import { DISTRICT_OPTIONS, LOCALITIES_BY_DISTRICT, LOCALITY_OPTIONS } from '@/lib/districts'
+import { DISTRICT_OPTIONS, LOCALITIES_BY_DISTRICT, LOCALITY_OPTIONS, CITY_DISTRICT_OPTIONS } from '@/lib/districts'
 // Садовые товарищества — тот же справочник, что в разделах СТ/СНТ/СНО на главной
 import { SNT_AREAS } from '@/components/home/landing-data'
 
@@ -14,12 +14,13 @@ export interface FiltersState {
   priceMax: string
   areaMin: string
   district: string
+  cityDistrict: string
   locality: string
   snt: string
 }
 
 export const emptyFilters: FiltersState = {
-  type: '', category: '', rooms: '', priceMin: '', priceMax: '', areaMin: '', district: '', locality: '', snt: '',
+  type: '', category: '', rooms: '', priceMin: '', priceMax: '', areaMin: '', district: '', cityDistrict: '', locality: '', snt: '',
 }
 
 export function buildWhere(f: FiltersState, q: string): Record<string, unknown> {
@@ -29,6 +30,7 @@ export function buildWhere(f: FiltersState, q: string): Record<string, unknown> 
   if (f.type) conds.push({ type: { equals: f.type } })
   if (f.category) conds.push({ category: { equals: f.category } })
   if (f.district) conds.push({ 'address.district': { equals: f.district } })
+  if (f.cityDistrict) conds.push({ 'address.cityDistrict': { equals: f.cityDistrict } })
   if (f.locality) conds.push({ 'address.locality': { equals: f.locality } })
   if (f.snt) conds.push({ 'address.snt': { equals: f.snt } })
   if (f.rooms) {
@@ -94,7 +96,7 @@ export default function CatalogFilters({ state, onChange, t }: CatalogFiltersPro
   const localityOptions = state.district
     ? (LOCALITIES_BY_DISTRICT[state.district] || []).map((l) => ({ value: l, label: l }))
     : LOCALITY_OPTIONS.map((l) => ({ value: l, label: l }))
-  const hasFilters = state.type || state.category || state.rooms || state.priceMin || state.priceMax || state.areaMin || state.district || state.locality || state.snt
+  const hasFilters = state.type || state.category || state.rooms || state.priceMin || state.priceMax || state.areaMin || state.district || state.cityDistrict || state.locality || state.snt
 
   return (
     <div className="flex flex-wrap items-end gap-3 p-4 border border-[var(--n15-gold)]/10 bg-[var(--n15-black)]/30">
@@ -117,6 +119,11 @@ export default function CatalogFilters({ state, onChange, t }: CatalogFiltersPro
             }
             onChange(patch)
           }} />
+      </div>
+      <div className="w-48">
+        <Dropdown label={t.catalog.cityDistrictLabel} value={state.cityDistrict}
+          options={CITY_DISTRICT_OPTIONS.map((d) => ({ value: d, label: d }))}
+          onSelect={(v) => onChange({ cityDistrict: v })} />
       </div>
       <div className="w-48">
         <Dropdown label={t.catalog.localityLabel} value={state.locality}

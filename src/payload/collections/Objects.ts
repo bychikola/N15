@@ -1,5 +1,5 @@
 import type { CollectionConfig, Where } from 'payload'
-import { DISTRICT_OPTIONS } from '@/lib/districts'
+import { DISTRICT_OPTIONS, CITY_DISTRICT_OPTIONS } from '@/lib/districts'
 // Садовые товарищества — тот же справочник, что в разделах СТ/СНТ/СНО
 // на главной, в каталоге и форме CRM (landing-data.ts)
 import { SNT_AREAS } from '@/components/home/landing-data'
@@ -268,6 +268,18 @@ export const Objects: CollectionConfig = {
           type: 'select',
           label: 'Район',
           options: DISTRICT_OPTIONS.map((d) => ({ label: d, value: d })),
+        },
+        {
+          name: 'cityDistrict',
+          type: 'select',
+          label: 'Район города',
+          // Внутригородские районы Владикавказа — отдельно от района республики
+          // (address.district): квартиры и дома в черте города.
+          options: CITY_DISTRICT_OPTIONS.map((d) => ({ label: d, value: d })),
+          admin: {
+            isClearable: true,
+            description: 'Район внутри Владикавказа (Иристонский, Затеречный и др.). Пусто — если объект вне города',
+          },
         },
         {
           name: 'locality',

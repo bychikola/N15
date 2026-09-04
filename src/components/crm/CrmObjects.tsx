@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type FC } from 'react'
 import type { Dict } from '@/i18n/dictionaries'
-import { DISTRICT_OPTIONS, LOCALITIES_BY_DISTRICT, LOCALITY_OPTIONS } from '@/lib/districts'
+import { DISTRICT_OPTIONS, LOCALITIES_BY_DISTRICT, LOCALITY_OPTIONS, CITY_DISTRICT_OPTIONS } from '@/lib/districts'
 // Справочник садовых товариществ (СТ/СНТ/СНО/ДНТ) — тот же, что в разделах
 // «Участки» и «Дома» на главной странице сайта.
 import { SNT_AREAS } from '@/components/home/landing-data'
@@ -39,7 +39,7 @@ const emptyForm = {
   title: '', type: 'sale', category: 'apartment', price: '', area: '', livingArea: '',
   kitchenArea: '', rooms: '', floor: '', totalFloors: '', buildingType: '', condition: '',
   heating: '', balcony: '', water: '', sewerage: '', electricity: '', gas: '', internet: '',
-  city: 'Владикавказ', district: '', locality: '', snt: '', street: '', house: '', apartment: '',
+  city: 'Владикавказ', district: '', cityDistrict: '', locality: '', snt: '', street: '', house: '', apartment: '',
   lat: '', lng: '', description: '', status: 'draft', agent: '',
   ownerName: '', ownerPhone: '', cadastralNumber: '',
 }
@@ -414,6 +414,7 @@ export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) =>
       internet: (o.internet as string) || '',
       city: (addr?.city as string) || 'Владикавказ',
       district: (addr?.district as string) || '',
+      cityDistrict: (addr?.cityDistrict as string) || '',
       locality: (addr?.locality as string) || '',
       snt: (addr?.snt as string) || '',
       street: (addr?.street as string) || '',
@@ -556,6 +557,7 @@ export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) =>
       address: {
         city: form.city,
         district: form.district,
+        cityDistrict: form.cityDistrict,
         locality: form.locality,
         snt: form.snt.trim(),
         street: form.street,
@@ -636,7 +638,7 @@ export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) =>
 
   // Адресные поля: помечаем, что адрес менялся (для авто-поиска на карте).
   // При смене района сбрасываем населённый пункт, если он не входит в новый район.
-  const setAddr = (k: 'city' | 'district' | 'locality' | 'street' | 'house' | 'apartment', v: string) => {
+  const setAddr = (k: 'city' | 'district' | 'cityDistrict' | 'locality' | 'street' | 'house' | 'apartment', v: string) => {
     setAddrTouched(true)
     setForm((prev) => ({
       ...prev,
@@ -782,6 +784,19 @@ export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) =>
                 <select value={form.district} onChange={(e) => setAddr('district', e.target.value)} style={inputStyle}>
                   <option value="">—</option>
                   {DISTRICT_OPTIONS.map((d) => (
+                    <option key={d} value={d}>{d}</option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+            {/* Район города — внутригородской район Владикавказа (Иристонский
+                и др.), отдельно от района республики (address.district).
+                Значение — в address.cityDistrict объекта. */}
+            <div className="crm-addr-full">
+              <Field label={t.crm.objCityDistrict}>
+                <select value={form.cityDistrict} onChange={(e) => setAddr('cityDistrict', e.target.value)} style={inputStyle}>
+                  <option value="">—</option>
+                  {CITY_DISTRICT_OPTIONS.map((d) => (
                     <option key={d} value={d}>{d}</option>
                   ))}
                 </select>
