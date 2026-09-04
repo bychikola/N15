@@ -45,14 +45,18 @@ export function buildWhere(f: FiltersState, q: string): Record<string, unknown> 
   return conds.length ? { and: conds } : {}
 }
 
-const labelCls = 'text-[10px] tracking-[0.2em] uppercase text-[var(--n15-muted)]'
+// Подписи фильтров всегда в одну строку (whitespace-nowrap), чтобы все фильтры были одинаковой высоты.
+// Для длинных подписей (например «Населённый пункт») — компактный вариант с меньшим шрифтом.
+const labelCls = (compact = false) =>
+  `${compact ? 'text-[9px] tracking-[0.15em]' : 'text-[10px] tracking-[0.2em]'} uppercase text-[var(--n15-muted)] whitespace-nowrap`
 const ddBtnCls = 'flex items-center justify-between gap-3 w-full px-4 py-2.5 text-sm text-[var(--n15-silver)] border border-[var(--n15-gold)]/20 bg-[var(--n15-black)]/40 hover:border-[var(--n15-gold)]/40 transition-colors'
 
-function Dropdown({ label, value, options, onSelect }: {
+function Dropdown({ label, value, options, onSelect, compactLabel }: {
   label: string
   value: string
   options: { value: string; label: string }[]
   onSelect: (v: string) => void
+  compactLabel?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const current = options.find((o) => o.value === value)
@@ -60,7 +64,7 @@ function Dropdown({ label, value, options, onSelect }: {
     <div className="relative">
       <button type="button" onClick={() => setOpen(!open)} className={ddBtnCls} aria-expanded={open}>
         <span className="flex flex-col items-start">
-          <span className={labelCls}>{label}</span>
+          <span className={labelCls(compactLabel)}>{label}</span>
           <span>{current?.label ?? 'Любой'}</span>
         </span>
         <span className={`text-[10px] transition-transform ${open ? 'rotate-180' : ''}`}>▼</span>
@@ -126,8 +130,9 @@ export default function CatalogFilters({ state, onChange, t }: CatalogFiltersPro
           onSelect={(v) => onChange({ cityDistrict: v })} />
       </div>
       <div className="w-48">
+        {/* «Населённый пункт» — длинная подпись: компактный шрифт, чтобы помещалась в одну строку */}
         <Dropdown label={t.catalog.localityLabel} value={state.locality}
-          options={localityOptions}
+          options={localityOptions} compactLabel
           onSelect={(v) => onChange({ locality: v })} />
       </div>
       <div className="w-48">
@@ -136,7 +141,7 @@ export default function CatalogFilters({ state, onChange, t }: CatalogFiltersPro
           onSelect={(v) => onChange({ snt: v })} />
       </div>
       <div className="w-48">
-        <div className={labelCls + ' mb-1'}>{t.catalog.priceLabel}</div>
+        <div className={labelCls() + ' mb-1'}>{t.catalog.priceLabel}</div>
         <div className="flex gap-2">
           <input type="number" min="0" placeholder="от" value={state.priceMin}
             onChange={(e) => onChange({ priceMin: e.target.value })}
@@ -147,13 +152,13 @@ export default function CatalogFilters({ state, onChange, t }: CatalogFiltersPro
         </div>
       </div>
       <div className="w-40">
-        <div className={labelCls + ' mb-1'}>{t.catalog.areaLabel}</div>
+        <div className={labelCls() + ' mb-1'}>{t.catalog.areaLabel}</div>
         <input type="number" min="0" placeholder="от, м²" value={state.areaMin}
           onChange={(e) => onChange({ areaMin: e.target.value })}
           className="w-full px-3 py-2 text-sm bg-[var(--n15-black)]/40 border border-[var(--n15-gold)]/20 text-[var(--n15-silver)] placeholder:text-[var(--n15-muted)] focus:outline-none focus:border-[var(--n15-gold)]/50" />
       </div>
       <div>
-        <div className={labelCls + ' mb-1'}>{t.catalog.roomsLabel}</div>
+        <div className={labelCls() + ' mb-1'}>{t.catalog.roomsLabel}</div>
         <div className="flex gap-1">
           {['', '1', '2', '3', '4'].map((r) => (
             <button key={r} type="button" onClick={() => onChange({ rooms: state.rooms === r ? '' : r })}
