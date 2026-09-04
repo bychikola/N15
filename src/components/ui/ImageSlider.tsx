@@ -71,6 +71,23 @@ export const ImageSlider: FC<Props> = ({ slides }) => {
     setLightboxIdx((prev) => (prev + 1) % count)
   }
 
+  // Свайпы на телефоне: горизонтальное движение пальцем листает фото
+  const swipeStart = useRef<{ x: number; y: number } | null>(null)
+  const onSwipeDown = (e: React.PointerEvent) => {
+    swipeStart.current = { x: e.clientX, y: e.clientY }
+  }
+  const onSwipeUp = (e: React.PointerEvent) => {
+    const s = swipeStart.current
+    swipeStart.current = null
+    if (!s || count < 2) return
+    const dx = e.clientX - s.x
+    const dy = e.clientY - s.y
+    if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+      if (dx < 0) lightboxNext()
+      else lightboxPrev()
+    }
+  }
+
   // Keyboard nav
   useEffect(() => {
     if (!lightbox) return
@@ -167,6 +184,9 @@ export const ImageSlider: FC<Props> = ({ slides }) => {
       {lightbox && (
         <div
           className="fixed inset-0 z-[9999] bg-[var(--lightbox-bg)] backdrop-blur-sm select-none"
+          style={{ touchAction: 'pan-y' }}
+          onPointerDown={onSwipeDown}
+          onPointerUp={onSwipeUp}
           onClick={(e) => { if (e.target === e.currentTarget) closeLightbox() }}
         >
           {/* Top bar */}
