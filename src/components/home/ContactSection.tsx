@@ -6,8 +6,8 @@ interface Props {
 }
 
 export default function ContactSection({ t, phone }: Props) {
-  const phoneHref = phone ? `tel:${phone.replace(/\s+/g, '')}` : 'tel:+79188374111'
-  const phoneLabel = phone || '+7 (918) 837-41-11'
+  const phoneHref = phone ? `tel:${phone.replace(/\s+/g, '')}` : 'tel:+79581161515'
+  const phoneLabel = phone || '8 958 116-15-15'
 
   return (
     <section className="lp-contact" id="contact">

@@ -113,8 +113,8 @@ export default async function HomePage({ params, searchParams }: PageProps) {
             <br />
             {t.landing.footerText2}
           </p>
-          <a className="lp-footer-phone" href={phone ? `tel:${phone.replace(/\s+/g, '')}` : 'tel:+79188374111'}>
-            {phone || '+7 (918) 837-41-11'}
+          <a className="lp-footer-phone" href={phone ? `tel:${phone.replace(/\s+/g, '')}` : 'tel:+79581161515'}>
+            {phone || '8 958 116-15-15'}
           </a>
           <Link className="lp-team-login" href="/crm">{t.landing.footerTeam}</Link>
           <p>© {new Date().getFullYear()} Н15</p>

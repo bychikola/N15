@@ -79,8 +79,8 @@ export default async function ContactsPage({ params }: PageProps) {
   // Default fallback if no data in admin
   if (contacts.length === 0) {
     contacts = [
-      { label: t.contacts.phone, value: '+7 (8672) 12-34-56', href: 'tel:+78672123456' },
-      { label: 'WhatsApp', value: '+7 (928) 123-45-67', href: 'https://wa.me/79281234567' },
+      { label: t.contacts.phone, value: '+7 (958) 116-15-15', href: 'tel:+79581161515' },
+      { label: 'WhatsApp', value: '+7 (958) 116-15-15', href: 'https://wa.me/79581161515' },
       { label: 'Telegram', value: '@n15_realty', href: 'https://t.me/n15_realty' },
       { label: t.contacts.email, value: 'info@n15-realty.ru', href: 'mailto:info@n15-realty.ru' },
       { label: t.contacts.address, value: t.meta.ogLocale === 'os_RU' ? 'Дзæуджыхъæу, Мирæйы проспект, 15, офис 42' : 'г. Владикавказ, пр. Мира, 15, офис 42', href: null },
