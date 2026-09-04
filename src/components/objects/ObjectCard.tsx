@@ -12,8 +12,17 @@ export interface ObjectListItem {
   floor?: number
   totalFloors?: number
   address?: { city?: string; street?: string; house?: string }
-  primaryImage?: { url?: string; alt?: string; focalPoint?: { x?: number; y?: number } }
-  agent?: { name?: string; photo?: { url?: string; focalPoint?: { x?: number; y?: number } } }
+  primaryImage?: {
+    url?: string
+    alt?: string
+    focalPoint?: { x?: number; y?: number }
+    // Payload-размеры: карточки грузят маленькую версию, а не оригинал (МБ)
+    sizes?: { thumbnail?: { url?: string }; card?: { url?: string } }
+  }
+  agent?: {
+    name?: string
+    photo?: { url?: string; focalPoint?: { x?: number; y?: number }; sizes?: { thumbnail?: { url?: string } } }
+  }
 }
 
 // Фокальная точка из админки (кроп при загрузке) — object-position для object-cover,
@@ -44,12 +53,15 @@ export default function ObjectCard({ obj, lang, t }: ObjectCardProps) {
   // Next.js (дают 404), числовой id работает всегда. Роут [slug] умеет оба вида.
   const href = `/${lang}/catalog/${obj.id}`
 
+  // Карточка грузит Payload-размер card/thumbnail, а не оригинал (экономия МБ)
+  const primarySrc = obj.primaryImage?.sizes?.card?.url || obj.primaryImage?.sizes?.thumbnail?.url || obj.primaryImage?.url
+
   return (
     <a href={href} className="object-card group block bg-[var(--search-bg)]">
       <div className="object-card__media bg-[var(--n15-charcoal)]">
-        {obj.primaryImage?.url ? (
+        {primarySrc && obj.primaryImage ? (
           <img
-            src={obj.primaryImage.url}
+            src={primarySrc}
             alt={obj.primaryImage.alt || obj.title}
             loading="lazy"
             style={focalPosition(obj.primaryImage.focalPoint)}
@@ -83,7 +95,7 @@ export default function ObjectCard({ obj, lang, t }: ObjectCardProps) {
         {obj.agent?.name && (
           <div className="flex items-center gap-2">
             {obj.agent.photo?.url ? (
-              <img src={obj.agent.photo.url} alt={obj.agent.name} style={focalPosition(obj.agent.photo.focalPoint)} className="w-7 h-7 rounded-full object-cover" />
+              <img src={obj.agent.photo.sizes?.thumbnail?.url || obj.agent.photo.url} alt={obj.agent.name} style={focalPosition(obj.agent.photo.focalPoint)} className="w-7 h-7 rounded-full object-cover" />
             ) : (
               <span className="w-7 h-7 rounded-full bg-[var(--n15-charcoal)] border border-[var(--n15-gold)]/20 flex items-center justify-center text-[10px] font-[family-name:var(--font-display)] text-[var(--n15-gold)]">
                 {agentInitials}
