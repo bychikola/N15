@@ -98,10 +98,14 @@ cp "$REPO_DIR/tools/agent-worker/worker.js" "$AGENT_DIR/worker.js"
 cp "$REPO_DIR/tools/agent-worker/package.json" "$AGENT_DIR/package.json"
 chown -R "$N15_USER:$N15_USER" "$AGENT_DIR"
 cd "$AGENT_DIR"
+# Ограничиваем кучу Node: на VPS память на пределе, npm без лимита умирает по OOM
+# (set -e тогда молча обрывает установщик). Ошибка npm — не фатальна, лечится повтором.
 if [ ! -d node_modules ]; then
-  sudo -u "$N15_USER" npm install
+  sudo -u "$N15_USER" env NODE_OPTIONS=--max-old-space-size=1024 npm install --no-audit --no-fund \
+    || echo "  ⚠ npm install (воркер) не удался — повтори install.sh позже"
 else
-  sudo -u "$N15_USER" npm install --silent
+  sudo -u "$N15_USER" env NODE_OPTIONS=--max-old-space-size=1024 npm install --no-audit --no-fund --silent \
+    || echo "  ⚠ npm install (воркер) не удался — повтори install.sh позже"
 fi
 
 # ---------- [5b/10] Зависимости РЕПОЗИТОРИЯ (гейт tsc/lint воркера) ----------
@@ -110,9 +114,9 @@ fi
 # «Cannot find module ...» (например nodemailer) и ни один деплой не проходит.
 echo "[5b/10] Синхронизирую node_modules в $REPO_DIR (для tsc/lint-гейта)..."
 if [ -f "$REPO_DIR/package.json" ]; then
-  sudo -u "$N15_USER" npm install --no-audit --no-fund --prefix "$REPO_DIR" >/dev/null 2>&1 \
+  sudo -u "$N15_USER" env NODE_OPTIONS=--max-old-space-size=1024 npm install --no-audit --no-fund --prefix "$REPO_DIR" \
     && echo "  node_modules репозитория синхронизированы" \
-    || echo "  ⚠ npm install в репо не удался — гейт tsc может падать (проверь вручную)"
+    || echo "  ⚠ npm install в репо не удался — гейт tsc может падать (повтори install.sh)"
 fi
 
 # ---------- 6. DATABASE_URI ----------
