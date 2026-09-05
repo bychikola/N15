@@ -1,4 +1,5 @@
 import type { Dict } from '@/i18n/dictionaries'
+import { areaHuman, type AreaUnit } from '@/lib/area-format'
 
 export interface ObjectListItem {
   id: number
@@ -8,6 +9,8 @@ export interface ObjectListItem {
   category: string
   price: number
   area?: number
+  /** Единица, в которой агент вводил площадь участка (are — «6 соток») */
+  areaUnit?: AreaUnit
   rooms?: number
   floor?: number
   totalFloors?: number
@@ -39,8 +42,12 @@ interface ObjectCardProps {
 }
 
 export default function ObjectCard({ obj, lang, t }: ObjectCardProps) {
+  // Участок, сохранённый в сотках, показываем «6 соток» (как ввёл агент);
+  // м² и остальные категории — как раньше: «600 м²»
+  const areaLabel = areaHuman(obj.area, obj.areaUnit, t.catalog.areaUnits, (n) =>
+    n.toLocaleString(t.locale, { maximumFractionDigits: 3 }))
   const meta = [
-    obj.area && `${obj.area} ${t.catalog.sqm}`,
+    areaLabel,
     obj.rooms && `${obj.rooms} ${t.catalog.rooms}`,
     (obj.floor || obj.totalFloors) && `${obj.floor || '?'}/${obj.totalFloors || '?'} ${t.object.floor.toLowerCase()}`,
   ].filter(Boolean).join(' • ')

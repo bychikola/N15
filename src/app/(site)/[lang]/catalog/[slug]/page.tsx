@@ -16,6 +16,7 @@ import ObjectCard, { focalPosition, type ObjectListItem } from '@/components/obj
 import { ObjectActions } from '@/components/objects/ObjectActions'
 import { ViewRequestForm } from '@/components/objects/ViewRequestForm'
 import { getDictionary, type Dict } from '@/i18n/dictionaries'
+import { areaHuman, type AreaUnit } from '@/lib/area-format'
 
 interface PageProps {
   params: Promise<{ lang: string; slug: string }>
@@ -52,7 +53,7 @@ export default async function ObjectPage({ params }: PageProps) {
 
   const obj = object as unknown as {
     id: number; title: string; type: string; category: string
-    price: number; area?: number; livingArea?: number; kitchenArea?: number
+    price: number; area?: number; areaUnit?: AreaUnit; livingArea?: number; kitchenArea?: number
     rooms?: number; floor?: number; totalFloors?: number
     buildingType?: string; condition?: string; heating?: string; balcony?: string
     water?: string; sewerage?: string; electricity?: string; gas?: string; internet?: string
@@ -84,6 +85,9 @@ export default async function ObjectPage({ params }: PageProps) {
 
   const features = obj.features?.map((f: { feature?: string }) => f.feature).filter(Boolean) || []
   const pricePerMeter = obj.area ? Math.round(obj.price / obj.area) : null
+  // Площадь участка, введённая в сотках, показывается «6 соток» (как ввёл агент)
+  const areaFmt = (n: number) => n.toLocaleString(t.locale, { maximumFractionDigits: 3 })
+  const areaHumanLabel = areaHuman(obj.area, obj.areaUnit, t.catalog.areaUnits, areaFmt)
   const gallery = obj.images?.filter((i) => i.url) || []
 
   const allSlides: { url: string; alt: string; thumb?: string; tile?: string }[] = []
@@ -127,6 +131,7 @@ export default async function ObjectPage({ params }: PageProps) {
     category: d.category as string,
     price: d.price as number,
     area: d.area as number | undefined,
+    areaUnit: d.areaUnit as ObjectListItem['areaUnit'],
     rooms: d.rooms as number | undefined,
     floor: d.floor as number | undefined,
     totalFloors: d.totalFloors as number | undefined,
@@ -199,7 +204,7 @@ export default async function ObjectPage({ params }: PageProps) {
                 <dl className="grid grid-cols-1 md:grid-cols-2 border-t border-[var(--n15-gold)]/15">
                   {[
                     { label: t.object.objectType, value: obj.category ? t.categoryLabels[obj.category as keyof typeof t.categoryLabels] : null },
-                    { label: t.object.area, value: obj.area ? `${obj.area} ${t.catalog.sqm}` : null },
+                    { label: t.object.area, value: areaHumanLabel },
                     { label: t.object.living, value: obj.livingArea ? `${obj.livingArea} ${t.catalog.sqm}` : null },
                     { label: t.object.kitchen, value: obj.kitchenArea ? `${obj.kitchenArea} ${t.catalog.sqm}` : null },
                     { label: t.object.rooms, value: obj.rooms?.toString() },

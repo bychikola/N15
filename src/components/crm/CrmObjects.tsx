@@ -9,6 +9,8 @@ import { SNT_AREAS } from '@/components/home/landing-data'
 import { loadYmaps, type Ymaps } from '@/lib/ymaps'
 import { geocodeAddress } from '@/lib/geocode'
 import { sortAgents } from '@/lib/agents-sort'
+// Площадь участков: сотки ↔ м² (1 сотка = 100 м²), чтение «11,5» с запятой
+import { areToSqm, areaNumberText, parseAreaNumber, sqmToAre } from '@/lib/area-format'
 
 interface ObjectRow {
   id: number
@@ -18,6 +20,9 @@ interface ObjectRow {
   status: string
   agentName?: string
   thumb?: string
+  /** Сводка «Где размещён объект» для мини-подписи на плитке */
+  plChecked: boolean
+  plFound: number
 }
 
 interface PhotoItem {
@@ -35,8 +40,108 @@ interface DuplicateInfo {
   strength: 'strong' | 'weak'
 }
 
+// --- Блок «Где размещён объект» ------------------------------------------------
+// Привязанные к объекту объявления площадок и метки проверок живут в скрытой
+// группе placements объекта (заполняет сервер, см. src/lib/placements-service.ts).
+interface PlacementItemUi {
+  id?: number | string
+  platform?: string
+  url?: string
+  title?: string
+  source?: string
+  status?: string
+  match?: number | null
+  price?: number | null
+  priceInitial?: number | null
+  firstSeenAt?: string | null
+  lastCheckedAt?: string | null
+  note?: string
+}
+
+interface PlacementsUi {
+  lastCheckedAt?: string | null
+  note?: string | null
+  items?: PlacementItemUi[]
+}
+
+interface PlacementLink {
+  slug: string
+  name: string
+  url: string
+}
+
+// Названия площадок для показа (серверный справочник — src/lib/listing-check.ts,
+// здесь только имена для быстрого отображения без лишнего запроса)
+const PLATFORM_NAMES: Record<string, string> = {
+  avito: 'Авито',
+  cian: 'ЦИАН',
+  domclick: 'Домклик',
+  yandex: 'Яндекс Недвижимость',
+}
+const platformName = (slug?: string) => (slug ? PLATFORM_NAMES[slug] || slug : '—')
+
+// Домены ссылок площадок — для автоподстановки площадки в форме добавления
+// (сервер при сохранении всё равно проверяет домен — см. placements-manage)
+const PLATFORM_DOMAINS: Record<string, string[]> = {
+  avito: ['avito.ru'],
+  cian: ['cian.ru'],
+  domclick: ['domclick.ru'],
+  yandex: ['realty.yandex.ru', 'realty.yandex.com'],
+}
+
+/** Площадка по домену ссылки ('' — не распознана) */
+const platformSlugByUrl = (url: string): string => {
+  try {
+    const host = new URL(url).hostname.toLowerCase()
+    const hit = Object.entries(PLATFORM_DOMAINS).find(([, ds]) =>
+      ds.some((d) => host === d || host.endsWith(`.${d}`)),
+    )
+    return hit ? hit[0] : ''
+  } catch {
+    return ''
+  }
+}
+
+// Подстановка %d/%s в строку словаря; '%%' в конце — литеральный процент
+const fmt = (tpl: string, ...vals: (string | number)[]): string => {
+  let out = tpl
+  for (const v of vals) out = out.replace(/%d|%s/, String(v))
+  return out.replace(/%%/g, '%')
+}
+const rub = (v: number) => new Intl.NumberFormat('ru-RU').format(v)
+
+// «только что / N мин назад / N ч назад / N дн назад / дата» — для меток проверок
+const agoText = (t: Dict, isoAt?: string | null): string => {
+  if (!isoAt) return '—'
+  const at = new Date(isoAt).getTime()
+  if (!Number.isFinite(at)) return '—'
+  const diffMs = Date.now() - at
+  if (diffMs < 60_000) return t.crm.plAgoJust
+  const min = Math.floor(diffMs / 60_000)
+  if (min < 60) return fmt(t.crm.plAgoMin, min)
+  const hours = Math.floor(min / 60)
+  if (hours < 24) return fmt(t.crm.plAgoHour, hours)
+  const days = Math.floor(hours / 24)
+  if (days < 14) return fmt(t.crm.plAgoDay, days)
+  return new Date(at).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+
+// Извлечение группы placements из документа объекта (REST Payload)
+const placementsFromDoc = (o: Record<string, unknown>): PlacementsUi => {
+  const p = o.placements as PlacementsUi | undefined
+  return p && typeof p === 'object' ? p : { items: [] }
+}
+
+// Сводка для плитки списка: сколько площадок с активным объявлением
+const rowPlacementSummary = (o: Record<string, unknown>): { checked: boolean; found: number } => {
+  const p = placementsFromDoc(o)
+  const items = p.items || []
+  const active = new Set(items.filter((it) => it.status === 'active').map((it) => it.platform))
+  return { checked: !!p.lastCheckedAt, found: active.size }
+}
+
 const emptyForm = {
-  title: '', type: 'sale', category: 'apartment', price: '', area: '', livingArea: '',
+  title: '', type: 'sale', category: 'apartment', price: '', area: '', areaUnit: 'sqm', livingArea: '',
   kitchenArea: '', rooms: '', floor: '', totalFloors: '', buildingType: '', condition: '',
   heating: '', balcony: '', water: '', sewerage: '', electricity: '', gas: '', internet: '',
   city: 'Владикавказ', district: '', cityDistrict: '', locality: '', snt: '', street: '', house: '', apartment: '',
@@ -334,6 +439,11 @@ export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) =>
   const [duplicates, setDuplicates] = useState<DuplicateInfo[] | null>(null)
   // Адрес менялся с момента открытия формы — для авто-поиска метки на карте
   const [addrTouched, setAddrTouched] = useState(false)
+  // «Где размещён объект»: привязанные объявления площадок открытого объекта
+  const [pl, setPl] = useState<PlacementsUi | null>(null)
+  const [plLinks, setPlLinks] = useState<PlacementLink[]>([])
+  const [plBusy, setPlBusy] = useState(false)
+  const [plErr, setPlErr] = useState('')
 
   const load = useCallback(async () => {
     const [objectsRes, agentsRes] = await Promise.all([
@@ -346,6 +456,7 @@ export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) =>
       ((objectsData.docs || []) as Record<string, unknown>[]).map((o) => {
         const img = o.primaryImage as { url?: string } | undefined
         const agent = o.agent as { name?: string } | undefined
+        const plSum = rowPlacementSummary(o)
         return {
           id: o.id as number,
           title: o.title as string,
@@ -354,6 +465,8 @@ export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) =>
           status: o.status as string,
           agentName: agent?.name,
           thumb: img?.url,
+          plChecked: plSum.checked,
+          plFound: plSum.found,
         }
       }),
     )
@@ -372,6 +485,37 @@ export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) =>
     return () => { cancelled = true }
   }, [load])
 
+  // Автоматическая периодическая проверка площадок: пока страница открыта,
+  // раз в минуту предлагаем серверу обработать объекты с наступившим сроком
+  // (плюс отдельный серверный таймер — src/instrumentation.ts). Обработка
+  // идемпотентна и ограничена порциями, так что частые вызовы безопасны.
+  useEffect(() => {
+    if (loading) return
+    let cancelled = false
+    const sweep = async () => {
+      try {
+        const res = await fetch('/api/objects/placements-sweep', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ limit: 10 }),
+        })
+        if (!res.ok) return
+        const data = (await res.json()) as { checked?: number }
+        // Что-то проверилось — обновляем подписи «на площадках» на плитках
+        if (!cancelled && data.checked) await load()
+      } catch {
+        // фоновая проверка не должна мешать работе со списком
+      }
+    }
+    void sweep()
+    const timer = setInterval(() => void sweep(), 60_000)
+    return () => {
+      cancelled = true
+      clearInterval(timer)
+    }
+  }, [loading, load])
+
   const resetForm = () => {
     setForm(emptyForm)
     setEditId(null)
@@ -380,6 +524,9 @@ export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) =>
     setSaveError('')
     setDuplicates(null)
     setAddrTouched(false)
+    setPl(null)
+    setPlLinks([])
+    setPlErr('')
   }
 
   const startEdit = (o: Record<string, unknown>) => {
@@ -391,13 +538,23 @@ export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) =>
     const coords = o.coordinates as Record<string, unknown> | undefined
     const agentRel = o.agent as Record<string, unknown> | undefined
     setEditId(o.id as number)
+    // Площадь участка показываем в той единице, в которой её вводили
+    // (сотки — «6», а не «600»); у остальных категорий и старых объектов
+    // без единицы — как раньше, в м².
+    const areaUnit: 'sqm' | 'are' =
+      o.category === 'land' && (o.areaUnit as string | undefined) === 'are' ? 'are' : 'sqm'
     setForm({
       ...emptyForm,
       title: (o.title as string) || '',
       type: (o.type as string) || 'sale',
       category: (o.category as string) || 'apartment',
       price: o.price != null ? String(o.price) : '',
-      area: o.area != null ? String(o.area) : '',
+      area: o.area != null
+        ? areaUnit === 'are'
+          ? areaNumberText(sqmToAre(o.area as number))
+          : String(o.area)
+        : '',
+      areaUnit,
       livingArea: o.livingArea != null ? String(o.livingArea) : '',
       kitchenArea: o.kitchenArea != null ? String(o.kitchenArea) : '',
       rooms: o.rooms != null ? String(o.rooms) : '',
@@ -441,6 +598,14 @@ export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) =>
     const rt = o.description as { root?: { children?: { children?: { text?: string }[] }[] } } | undefined
     const descText = (rt?.root?.children || []).map((p) => (p.children || []).map((c) => c.text || '').join('')).filter(Boolean).join('\n')
     setForm((prev) => ({ ...prev, description: descText }))
+    // Блок «Где размещён объект»: привязанные объявления площадок; ссылки
+    // ручного поиска по адресу подгружаем отдельным запросом
+    setPl(placementsFromDoc(o))
+    setPlErr('')
+    void fetch(`/api/objects/placement-links?id=${o.id as number}`, { credentials: 'include' })
+      .then((r) => (r.ok ? (r.json() as Promise<{ links?: PlacementLink[] }>) : null))
+      .then((d) => setPlLinks(d?.links || []))
+      .catch(() => setPlLinks([]))
   }
 
   const onPhotoPick = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -533,13 +698,24 @@ export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) =>
       return
     }
     setSaveError('')
+    // Площадь в БД всегда хранится в м²: участок «6 соток» сохраняется как
+    // 600 м² + единица «сотки» для показа; техрасчёты (оценка, фильтры) —
+    // только по м², конвертацию больше никто не повторяет
+    const areaNum = form.area.trim() ? parseAreaNumber(form.area) : null
+    const isAre = form.category === 'land' && form.areaUnit === 'are'
+    const area = areaNum != null && areaNum > 0
+      ? isAre
+        ? Math.round(areToSqm(areaNum) * 100) / 100
+        : areaNum
+      : undefined
     const mediaIds = photos.map((p) => p.id).filter((id): id is number => id !== null)
     const body: Record<string, unknown> = {
       title: form.title.trim(),
       type: form.type,
       category: form.category,
       price: form.price ? Number(form.price) : undefined,
-      area: form.area ? Number(form.area) : undefined,
+      area,
+      areaUnit: form.category === 'land' ? (isAre ? 'are' : 'sqm') : undefined,
       livingArea: form.livingArea ? Number(form.livingArea) : undefined,
       kitchenArea: form.kitchenArea ? Number(form.kitchenArea) : undefined,
       rooms: form.rooms ? Number(form.rooms) : undefined,
@@ -636,6 +812,34 @@ export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) =>
 
   const set = (k: keyof FormState, v: string) => setForm((prev) => ({ ...prev, [k]: v }))
 
+  // Категория: единица «сотки» доступна только участкам. При смене категории
+  // площадь снова читается в м² — число в поле не трогаем (его вводили под
+  // старую категорию), единица молча возвращается к м².
+  const setCategory = (v: string) => {
+    setForm((prev) => ({
+      ...prev,
+      category: v,
+      areaUnit: v === 'land' ? prev.areaUnit : 'sqm',
+    }))
+  }
+
+  // Смена единицы площади участка: переводим введённое число, чтобы площадь
+  // не изменилась — «600» м² становятся «6» соток, «11,5» соток — «1150» м²
+  const setAreaUnit = (v: string) => {
+    const next = v === 'are' ? 'are' : 'sqm'
+    setForm((prev) => {
+      if (prev.areaUnit === next) return prev
+      const n = prev.area.trim() ? parseAreaNumber(prev.area) : null
+      return {
+        ...prev,
+        areaUnit: next,
+        area: n != null
+          ? areaNumberText(next === 'are' ? sqmToAre(n) : areToSqm(n))
+          : prev.area,
+      }
+    })
+  }
+
   // Адресные поля: помечаем, что адрес менялся (для авто-поиска на карте).
   // При смене района сбрасываем населённый пункт, если он не входит в новый район.
   const setAddr = (k: 'city' | 'district' | 'cityDistrict' | 'locality' | 'street' | 'house' | 'apartment', v: string) => {
@@ -660,6 +864,38 @@ export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) =>
 
   // Фильтр по статусу (черновик / опубликован / архив)
   const visibleRows = statusFilter ? rows.filter((o) => o.status === statusFilter) : rows
+
+  // Кнопка «Проверить сейчас»: сервер прогоняет сверку площадок объекта
+  const runPlacementCheck = async () => {
+    if (!editId || plBusy) return
+    setPlBusy(true)
+    setPlErr('')
+    try {
+      const res = await fetch('/api/objects/check-placements', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ objectId: editId }),
+      })
+      const data = (await res.json()) as { error?: string; placements?: PlacementsUi; searchLinks?: PlacementLink[] }
+      if (!res.ok || !data.placements) throw new Error(data.error || '')
+      setPl(data.placements)
+      if (data.searchLinks) setPlLinks(data.searchLinks)
+      await load()
+    } catch {
+      setPlErr(t.crm.plCheckErr)
+    } finally {
+      setPlBusy(false)
+    }
+  }
+
+  // Привязанные объявления изменились (добавили/убрали/подтвердили) — обновляем
+  // блок и подписи на плитках
+  const applyPlacements = async (placements: PlacementsUi) => {
+    setPl(placements)
+    setPlErr('')
+    await load()
+  }
 
   return (
     <div>
@@ -697,6 +933,21 @@ export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) =>
                 ✕
               </button>
             </div>
+            {/* Блок «Где размещён объект» — привязанные объявления площадок.
+                Доступен у сохранённого объекта (editId); у нового — появится
+                после первого сохранения. */}
+            {editId && (
+              <PlacementBlock
+                t={t}
+                objectId={editId}
+                value={pl}
+                links={plLinks}
+                busy={plBusy}
+                err={plErr}
+                onRun={runPlacementCheck}
+                onChanged={applyPlacements}
+              />
+            )}
             <div className="crm-property-form">
           <Field label={t.crm.objTitle}><input value={form.title} onChange={(e) => set('title', e.target.value)} style={inputStyle} /></Field>
           <Field label={t.crm.objType}>
@@ -705,12 +956,40 @@ export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) =>
             </select>
           </Field>
           <Field label={t.crm.objCategory}>
-            <select value={form.category} onChange={(e) => set('category', e.target.value)} style={inputStyle}>
+            <select value={form.category} onChange={(e) => setCategory(e.target.value)} style={inputStyle}>
               <option value="apartment">Квартира</option><option value="house">Дом</option><option value="townhouse">Таунхаус</option><option value="commercial">Коммерческая</option><option value="land">Участок</option>
             </select>
           </Field>
           <Field label={t.crm.objPrice}><input type="number" value={form.price} onChange={(e) => set('price', e.target.value)} style={inputStyle} /></Field>
-          <Field label={t.crm.objArea}><input type="number" value={form.area} onChange={(e) => set('area', e.target.value)} style={inputStyle} /></Field>
+          {/* Площадь: у земельного участка агент выбирает единицу (м² или сотки,
+              пример «6 соток» = 600 м²); у квартир/домов/коммерции — только м².
+              В БД значение всегда сохраняется в м² (см. save), сотки запоминаем
+              отдельным полем areaUnit и показываем так же на сайте. */}
+          {form.category === 'land' ? (
+            <Field label={form.areaUnit === 'are' ? t.crm.objAreaAre : t.crm.objArea}>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  type={form.areaUnit === 'are' ? 'text' : 'number'}
+                  inputMode={form.areaUnit === 'are' ? 'decimal' : undefined}
+                  value={form.area}
+                  onChange={(e) => set('area', e.target.value)}
+                  placeholder={form.areaUnit === 'are' ? 'Например: 6 или 11,5' : undefined}
+                  style={{ ...inputStyle, flex: 1, minWidth: 0 }}
+                />
+                <select
+                  value={form.areaUnit}
+                  onChange={(e) => setAreaUnit(e.target.value)}
+                  aria-label="Единица площади"
+                  style={{ ...inputStyle, width: 96, flexShrink: 0 }}
+                >
+                  <option value="sqm">м²</option>
+                  <option value="are">сотки</option>
+                </select>
+              </div>
+            </Field>
+          ) : (
+            <Field label={t.crm.objArea}><input type="number" value={form.area} onChange={(e) => set('area', e.target.value)} style={inputStyle} /></Field>
+          )}
           <Field label={t.crm.objLivingArea}><input type="number" value={form.livingArea} onChange={(e) => set('livingArea', e.target.value)} style={inputStyle} /></Field>
           <Field label={t.crm.objKitchenArea}><input type="number" value={form.kitchenArea} onChange={(e) => set('kitchenArea', e.target.value)} style={inputStyle} /></Field>
           <Field label={t.crm.objRooms}><input type="number" value={form.rooms} onChange={(e) => set('rooms', e.target.value)} style={inputStyle} /></Field>
@@ -1055,6 +1334,14 @@ export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) =>
                 </strong>
                 {o.agentName && <span style={{ fontSize: 10, color: '#8a857b' }}>{o.agentName}</span>}
               </div>
+              {/* «Где размещён объект» — краткая сводка на плитке */}
+              <div style={{ marginTop: 6, fontSize: 10, color: '#8a857b' }}>
+                {o.plChecked
+                  ? o.plFound > 0
+                    ? fmt(t.crm.plTileFound, o.plFound)
+                    : t.crm.plTileOnly
+                  : t.crm.plTileNone}
+              </div>
               <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid #eee9e1', display: 'flex', gap: 6 }}>
                 <button type="button" onClick={async () => { const res = await fetch(`/api/objects/${o.id}`, { credentials: 'include' }); const d = await res.json(); startEdit(d) }}
                   style={{ flex: 1, border: '1px solid #e1d8ca', borderRadius: 6, background: '#faf7f2', color: '#716b62', padding: '8px 10px', fontSize: 9, textTransform: 'uppercase', letterSpacing: '.07em', cursor: 'pointer' }}>
@@ -1077,6 +1364,381 @@ export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) =>
             style={{ border: 0, borderRadius: 8, background: '#a7814e', color: '#fff', padding: '12px 20px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.1em', cursor: 'pointer' }}>
             + {t.crm.objAdd}
           </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Блок «Где размещён объект» в карточке объекта CRM
+// ---------------------------------------------------------------------------
+
+const PL_STATUS_STYLE: Record<string, { bg: string; color: string }> = {
+  active: { bg: '#e6efe1', color: '#3f6b34' },
+  removed: { bg: '#efeadf', color: '#817b70' },
+  needsCheck: { bg: '#f7e6cf', color: '#a1661f' },
+}
+
+interface PlacementBlockProps {
+  t: Dict
+  objectId: number
+  value: PlacementsUi | null
+  links: PlacementLink[]
+  busy: boolean
+  err: string
+  onRun: () => Promise<void>
+  onChanged: (placements: PlacementsUi) => Promise<void>
+}
+
+/** Одна строка блока: объявление площадки, привязанное к объекту */
+function PlacementRow({
+  t,
+  item,
+  onManage,
+}: {
+  t: Dict
+  item: PlacementItemUi
+  onManage: (action: 'status' | 'remove', itemId: number | string, status?: string) => Promise<void>
+}) {
+  const status = item.status || 'needsCheck'
+  const pill = PL_STATUS_STYLE[status] || PL_STATUS_STYLE.needsCheck
+  const statusLabel =
+    status === 'active' ? t.crm.plStatusActive : status === 'removed' ? t.crm.plStatusRemoved : t.crm.plStatusNeeds
+  const manual = item.source !== 'auto'
+  const price = item.price
+  const initial = item.priceInitial
+  const delta =
+    typeof price === 'number' && typeof initial === 'number' && initial > 0 && price !== initial
+      ? price - initial
+      : null
+  const deltaPct = delta != null ? Math.round((Math.abs(delta) / initial!) * 100) : null
+
+  const small: React.CSSProperties = { fontSize: 10, color: '#8a857b' }
+  const chipBtn: React.CSSProperties = {
+    border: '1px solid #e1d8ca',
+    borderRadius: 5,
+    background: '#fff',
+    color: '#716b62',
+    padding: '5px 8px',
+    fontSize: 9,
+    cursor: 'pointer',
+    textTransform: 'uppercase',
+    letterSpacing: '.05em',
+  }
+
+  return (
+    <div style={{ padding: '11px 0', borderBottom: '1px solid #ece5d9' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <b style={{ fontSize: 13, color: '#25241f' }}>{platformName(item.platform)}</b>
+        <span style={small}>
+          {manual ? t.crm.plSourceManual : t.crm.plSourceAuto}
+          {item.match != null ? ` · ${fmt(t.crm.plMatchPct, item.match)}` : ` · ${t.crm.plMatchNone}`}
+        </span>
+        <span
+          style={{
+            marginLeft: 'auto',
+            padding: '3px 9px',
+            borderRadius: 999,
+            fontSize: 9,
+            textTransform: 'uppercase',
+            letterSpacing: '.06em',
+            background: pill.bg,
+            color: pill.color,
+          }}
+        >
+          {statusLabel}
+        </span>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 5 }}>
+        <span style={small}>
+          {typeof price === 'number'
+            ? fmt(t.crm.plItemPrice, rub(price))
+            : t.crm.plItemPriceNone}
+          {delta != null && (
+            <b style={{ color: delta > 0 ? '#8b5a2b' : '#3f6b34', fontWeight: 600 }}>
+              {' '}
+              {delta > 0
+                ? fmt(t.crm.plDeltaUp, rub(delta), `+${deltaPct}`)
+                : fmt(t.crm.plDeltaDown, rub(-delta), `-${deltaPct}`)}
+            </b>
+          )}
+        </span>
+        <span style={small}>
+          {fmt(t.crm.plCheckedLabel, agoText(t, item.lastCheckedAt || item.firstSeenAt))}
+        </span>
+        {item.note && <span style={{ ...small, fontStyle: 'italic' }}>{item.note}</span>}
+        <span style={{ marginLeft: 'auto', display: 'flex', gap: 5, alignItems: 'center' }}>
+          {item.url && (
+            <a
+              href={item.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ ...chipBtn, color: '#8d6b40', textDecoration: 'none', borderColor: '#dccbb0' }}
+            >
+              {t.crm.plOpenBtn} ↗
+            </a>
+          )}
+          {manual && item.id != null && (
+            <>
+              {status !== 'active' && (
+                <button type="button" style={chipBtn} onClick={() => void onManage('status', item.id!, 'active')}>
+                  {t.crm.plBtnActive}
+                </button>
+              )}
+              {status !== 'removed' && (
+                <button type="button" style={chipBtn} onClick={() => void onManage('status', item.id!, 'removed')}>
+                  {t.crm.plBtnRemoved}
+                </button>
+              )}
+              {status !== 'needsCheck' && (
+                <button type="button" style={chipBtn} onClick={() => void onManage('status', item.id!, 'needsCheck')}>
+                  {t.crm.plStatusNeeds}
+                </button>
+              )}
+              <button
+                type="button"
+                style={{ ...chipBtn, borderColor: '#e3cfc7', color: '#9b4e43' }}
+                onClick={() => void onManage('remove', item.id!)}
+                title={t.crm.objDelete}
+              >
+                ✕
+              </button>
+            </>
+          )}
+        </span>
+      </div>
+    </div>
+  )
+}
+
+function PlacementBlock({ t, objectId, value, links, busy, err, onRun, onChanged }: PlacementBlockProps) {
+  const items = value?.items || []
+  const checked = !!value?.lastCheckedAt
+  const activePlatforms = new Set(items.filter((it) => it.status === 'active').map((it) => it.platform)).size
+  const [addOpen, setAddOpen] = useState(false)
+  const [url, setUrl] = useState('')
+  const [platform, setPlatform] = useState('')
+  const [platTouched, setPlatTouched] = useState(false)
+  const [price, setPrice] = useState('')
+  const [addStatus, setAddStatus] = useState('active')
+  const [busyRow, setBusyRow] = useState(false)
+  const [addErr, setAddErr] = useState('')
+
+  const summary = !checked
+    ? t.crm.plNotChecked
+    : activePlatforms > 0
+      ? activePlatforms === 1
+        ? t.crm.plFoundOne
+        : fmt(t.crm.plFoundOther, activePlatforms)
+      : t.crm.plOnlyN15
+
+  const manage = async (action: 'add' | 'status' | 'remove', extra: Record<string, unknown> = {}) => {
+    if (busyRow) return
+    setBusyRow(true)
+    setAddErr('')
+    try {
+      const res = await fetch('/api/objects/placements-manage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ action, objectId, ...extra }),
+      })
+      const data = (await res.json()) as { error?: string; placements?: PlacementsUi }
+      if (!res.ok || !data.placements) {
+        setAddErr(data.error || t.crm.plAddErr)
+        return
+      }
+      if (action === 'add') {
+        setUrl('')
+        setPrice('')
+        setPlatform('')
+        setPlatTouched(false)
+        setAddOpen(false)
+      }
+      await onChanged(data.placements)
+    } catch {
+      setAddErr(action === 'add' ? t.crm.plAddErr : t.crm.plCheckErr)
+    } finally {
+      setBusyRow(false)
+    }
+  }
+
+  const tryAdd = () => void manage('add', {
+    url: url.trim(),
+    platform: platform || undefined,
+    status: addStatus,
+    price: price.trim() ? Number(price) : null,
+  })
+
+  const smallBtn: React.CSSProperties = {
+    border: 0,
+    borderRadius: 7,
+    background: '#a7814e',
+    color: '#fff',
+    padding: '10px 16px',
+    fontSize: 9,
+    textTransform: 'uppercase',
+    letterSpacing: '.08em',
+    cursor: 'pointer',
+  }
+  const ghostBtn: React.CSSProperties = {
+    border: '1px solid #e1d8ca',
+    borderRadius: 7,
+    background: '#fff',
+    color: '#716b62',
+    padding: '10px 14px',
+    fontSize: 9,
+    textTransform: 'uppercase',
+    letterSpacing: '.07em',
+    cursor: 'pointer',
+  }
+
+  return (
+    <div
+      style={{
+        background: '#fbf8f1',
+        border: '1px solid #e8dfd0',
+        borderRadius: 10,
+        padding: '14px 16px',
+        marginBottom: 18,
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <div style={{ minWidth: 0 }}>
+          <h3 style={{ margin: 0, fontFamily: "'New Standard', Georgia, serif", fontWeight: 400, fontSize: 16, color: '#25241f' }}>
+            {t.crm.plTitle}
+          </h3>
+          <p style={{ margin: '3px 0 0', fontSize: 10, color: '#8a857b' }}>{t.crm.plSubtitle}</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => void onRun()}
+          disabled={busy || busyRow}
+          style={{ ...smallBtn, marginLeft: 'auto', opacity: busy ? 0.7 : 1 }}
+        >
+          {busy ? t.crm.plChecking : t.crm.plCheckNow}
+        </button>
+      </div>
+
+      {/* Сводная строка: найдено / только в Н15 / ещё не проверялось */}
+      <div style={{ marginTop: 10, display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+        <b style={{ fontSize: 13, color: activePlatforms > 0 ? '#3f6b34' : '#25241f' }}>{summary}</b>
+        {checked && (
+          <span style={{ fontSize: 10, color: '#8a857b' }}>
+            {fmt(t.crm.plCheckedLabel, agoText(t, value?.lastCheckedAt))}
+          </span>
+        )}
+        {err && <span style={{ fontSize: 10, color: '#9b4e43' }}>{err}</span>}
+        {addErr && <span style={{ fontSize: 10, color: '#9b4e43' }}>{addErr}</span>}
+      </div>
+      {value?.note && (
+        <p style={{ margin: '6px 0 0', fontSize: 10, color: '#9b958a', fontStyle: 'italic', lineHeight: 1.5 }}>{value.note}</p>
+      )}
+
+      {/* Привязанные объявления */}
+      {items.length ? (
+        <div style={{ marginTop: 8 }}>
+          {items.map((it) => (
+            <PlacementRow
+              key={String(it.id ?? `${it.platform}-${it.url}`)}
+              t={t}
+              item={it}
+              onManage={(action, itemId, status) => manage(action, { itemId, status })}
+            />
+          ))}
+        </div>
+      ) : (
+        <p style={{ margin: '10px 0 0', fontSize: 11, color: '#9b958a' }}>{t.crm.plEmpty}</p>
+      )}
+
+      {/* Добавление ручной ссылки */}
+      {addOpen ? (
+        <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px dashed #dccbb0' }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            <label style={{ flex: '2 1 260px', display: 'flex', flexDirection: 'column', gap: 5, color: '#6f6a61', fontSize: 9, textTransform: 'uppercase', letterSpacing: '.06em' }}>
+              {t.crm.plUrlLabel}
+              <input
+                value={url}
+                onChange={(e) => {
+                  setUrl(e.target.value)
+                  // Площадка подставляется по домену ссылки, пока агент не
+                  // выбрал её сам (тогда выбор агента не сбрасываем)
+                  if (!platTouched) setPlatform(platformSlugByUrl(e.target.value))
+                }}
+                placeholder={t.crm.plUrlPh}
+                style={{ ...inputStyle, fontSize: 12, textTransform: 'none' }}
+              />
+            </label>
+            <label style={{ flex: '0 1 150px', display: 'flex', flexDirection: 'column', gap: 5, color: '#6f6a61', fontSize: 9, textTransform: 'uppercase', letterSpacing: '.06em' }}>
+              {t.crm.plPlatformLabel}
+              <select
+                value={platform}
+                onChange={(e) => { setPlatTouched(true); setPlatform(e.target.value) }}
+                style={{ ...inputStyle, fontSize: 12 }}
+              >
+                <option value="">—</option>
+                {Object.entries(PLATFORM_NAMES).map(([slug, name]) => (
+                  <option key={slug} value={slug}>{name}</option>
+                ))}
+              </select>
+            </label>
+            <label style={{ flex: '1 1 150px', display: 'flex', flexDirection: 'column', gap: 5, color: '#6f6a61', fontSize: 9, textTransform: 'uppercase', letterSpacing: '.06em' }}>
+              {t.crm.plPriceLabel}
+              <input
+                type="number"
+                value={price}
+                onChange={(e) => setPrice(e.target.value)}
+                placeholder="—"
+                style={{ ...inputStyle, fontSize: 12, textTransform: 'none' }}
+              />
+            </label>
+            <label style={{ flex: '0 1 150px', display: 'flex', flexDirection: 'column', gap: 5, color: '#6f6a61', fontSize: 9, textTransform: 'uppercase', letterSpacing: '.06em' }}>
+              {t.crm.plAddStatusLabel}
+              <select value={addStatus} onChange={(e) => setAddStatus(e.target.value)} style={{ ...inputStyle, fontSize: 12 }}>
+                <option value="active">{t.crm.plStatusActive}</option>
+                <option value="removed">{t.crm.plStatusRemoved}</option>
+                <option value="needsCheck">{t.crm.plStatusNeeds}</option>
+              </select>
+            </label>
+            <button type="button" onClick={tryAdd} disabled={busyRow} style={{ ...smallBtn, opacity: busyRow ? 0.7 : 1 }}>
+              {t.crm.plAddBtn}
+            </button>
+            <button type="button" onClick={() => setAddOpen(false)} style={ghostBtn}>
+              ✕
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => { setAddOpen(true); setAddErr('') }}
+          style={{ ...ghostBtn, marginTop: 12, borderStyle: 'dashed' }}
+        >
+          + {t.crm.plAddTitle}
+        </button>
+      )}
+
+      {/* Ручная проверка: ссылки на поиск площадок по адресу */}
+      {links.length > 0 && (
+        <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px dashed #e3d9c8' }}>
+          <div style={{ fontSize: 9, color: '#8a857b', textTransform: 'uppercase', letterSpacing: '.07em' }}>
+            {t.crm.plManualTitle}
+          </div>
+          <p style={{ margin: '4px 0 8px', fontSize: 10, color: '#9b958a', lineHeight: 1.45 }}>{t.crm.plManualHint}</p>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {links.map((l) => (
+              <a
+                key={l.slug}
+                href={l.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ ...ghostBtn, textDecoration: 'none' }}
+              >
+                {l.name} ↗
+              </a>
+            ))}
+          </div>
         </div>
       )}
     </div>

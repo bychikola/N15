@@ -78,6 +78,7 @@ export default async function HomePage({ params, searchParams }: PageProps) {
       category: (o.category as string) || '',
       price: o.price as number,
       area: o.area as number | undefined,
+      areaUnit: o.areaUnit as ObjectListItem['areaUnit'],
       rooms: o.rooms as number | undefined,
       floor: o.floor as number | undefined,
       totalFloors: o.totalFloors as number | undefined,

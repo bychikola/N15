@@ -250,13 +250,26 @@ export const Objects: CollectionConfig = {
       // Полный анализ (включая адрес и имя) делает клиент через
       // /api/objects/check-duplicate; здесь — телефон и кадастровый,
       // чтобы дубль нельзя было создать ни через API, ни через админку.
-      async ({ data, req }) => {
+      async ({ data, req, originalDoc }) => {
         if (!data) return data
         if (data.ownerPhone) {
           data.ownerPhone = normPhone(data.ownerPhone)
         }
         if (data.cadastralNumber) {
           data.cadastralNumber = normCadastral(data.cadastralNumber)
+        }
+        // Единица площади участка: подсказка показа («6 соток» у участка,
+        // «600 м²» у квартиры). Сама площадь ВСЕГДА хранится в м² — конвертацию
+        // (1 сотка = 100 м²) делает форма CRM, движок оценки и фильтры.
+        // У не-участков и у присланных значений поле приводим к м².
+        if (data.areaUnit !== undefined || data.category !== undefined) {
+          const prev = originalDoc as { category?: string } | undefined
+          const category = data.category !== undefined ? data.category : prev?.category
+          if (category !== 'land') {
+            data.areaUnit = 'sqm'
+          } else if (data.areaUnit !== undefined) {
+            data.areaUnit = data.areaUnit === 'are' ? 'are' : 'sqm'
+          }
         }
         // force=true приходит query-параметром (см. flagFromReq)
         if (flagFromReq(req, 'force')) return data
@@ -352,6 +365,24 @@ export const Objects: CollectionConfig = {
       name: 'area',
       type: 'number',
       label: 'Площадь (м²)',
+      admin: {
+        description: 'Всегда в м² (у участков 6 соток = 600 м²). Какую единицу показывать на сайте — см. «Единица площади»',
+      },
+    },
+    {
+      name: 'areaUnit',
+      type: 'select',
+      label: 'Единица площади',
+      options: [
+        { label: 'м²', value: 'sqm' },
+        { label: 'сотки', value: 'are' },
+      ],
+      defaultValue: 'sqm',
+      // Поле только для участков: квартиры, дома и коммерция — всегда м²
+      admin: {
+        condition: (_data, siblingData) => (siblingData as { category?: string } | undefined)?.category === 'land',
+        description: 'Для земельных участков: в каких единицах агент вводил площадь. На сайте показывается «6 соток»; в базе площадь хранится в м² (1 сотка = 100 м²)',
+      },
     },
     {
       name: 'livingArea',
@@ -699,6 +730,95 @@ export const Objects: CollectionConfig = {
         { name: 'manualNote', type: 'textarea', label: 'Комментарий к ручной правке' },
         { name: 'manualBy', type: 'text', label: 'Кто скорректировал' },
         { name: 'manualAt', type: 'date', label: 'Когда скорректировано' },
+      ],
+    },
+    {
+      // «Где размещён объект» — внутренний инструмент CRM. Привязанные к
+      // карточке объявления площадок (Авито, ЦИАН, Домклик, Яндекс и др.)
+      // и служебные метки проверок заполняет сервер (см. src/lib/listing-check.ts
+      // и placements-service.ts); в админ-панели группа скрыта — работа ведётся
+      // в интерфейсе CRM (блок «Где размещён объект»).
+      name: 'placements',
+      type: 'group',
+      label: 'Где размещён объект (внутреннее)',
+      admin: {
+        hidden: true,
+        description:
+          'Объявления на площадках недвижимости, привязанные к объекту. Проверки запускает кнопка «Проверить сейчас» и автоматический проход',
+      },
+      fields: [
+        {
+          name: 'lastCheckedAt',
+          type: 'date',
+          label: 'Последняя проверка площадок',
+        },
+        {
+          name: 'nextCheckAt',
+          type: 'date',
+          label: 'Следующая автоматическая проверка',
+        },
+        {
+          name: 'note',
+          type: 'textarea',
+          label: 'Пометка о режиме проверки',
+        },
+        {
+          name: 'items',
+          type: 'array',
+          label: 'Найденные объявления',
+          labels: { singular: 'Объявление на площадке', plural: 'Объявления на площадках' },
+          fields: [
+            {
+              name: 'platform',
+              type: 'text',
+              label: 'Площадка',
+              required: true,
+              admin: { description: 'Код площадки: avito, cian, domclick, yandex…' },
+            },
+            { name: 'url', type: 'text', label: 'Ссылка на объявление' },
+            { name: 'title', type: 'text', label: 'Название объявления' },
+            {
+              name: 'source',
+              type: 'select',
+              label: 'Откуда запись',
+              options: [
+                { label: 'Ручная ссылка агента', value: 'manual' },
+                { label: 'Автоматическая сверка', value: 'auto' },
+              ],
+              defaultValue: 'manual',
+            },
+            {
+              name: 'status',
+              type: 'select',
+              label: 'Статус объявления',
+              options: [
+                { label: 'Активно', value: 'active' },
+                { label: 'Снято', value: 'removed' },
+                { label: 'Требует проверки', value: 'needsCheck' },
+              ],
+              defaultValue: 'needsCheck',
+            },
+            {
+              name: 'match',
+              type: 'number',
+              label: 'Степень совпадения, %',
+              min: 0,
+              max: 100,
+              admin: { description: 'Насколько объявление похоже на объект Н15 (пересечение признаков)' },
+            },
+            {
+              name: 'matchParams',
+              type: 'text',
+              hasMany: true,
+              label: 'Совпавшие признаки',
+            },
+            { name: 'price', type: 'number', label: 'Цена в объявлении, ₽' },
+            { name: 'priceInitial', type: 'number', label: 'Цена при первом обнаружении, ₽' },
+            { name: 'firstSeenAt', type: 'date', label: 'Когда обнаружено' },
+            { name: 'lastCheckedAt', type: 'date', label: 'Последняя реальная проверка' },
+            { name: 'note', type: 'text', label: 'Пометка' },
+          ],
+        },
       ],
     },
   ],

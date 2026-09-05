@@ -51,6 +51,7 @@ export default function FavoritesPage() {
           category: f.category as string,
           price: f.price as number,
           area: f.area as number | undefined,
+          areaUnit: f.areaUnit as ObjectListItem['areaUnit'],
           rooms: f.rooms as number | undefined,
           floor: f.floor as number | undefined,
           totalFloors: f.totalFloors as number | undefined,

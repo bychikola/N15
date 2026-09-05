@@ -10,6 +10,39 @@ import CatalogFilters, { buildWhere, emptyFilters, type FiltersState } from '@/c
 
 const PAGE_SIZE = 12
 
+// Имена URL-параметров фильтров. Цены и площади — отдельные ключи
+// (price_min, area_max…), по которым фильтры читаются и внешними ссылками
+// (футер, разделы главной), поэтому пишем в URL те же имена, что читаем.
+const URL_PARAM: Record<keyof FiltersState, string> = {
+  type: 'type',
+  category: 'category',
+  rooms: 'rooms',
+  priceMin: 'price_min',
+  priceMax: 'price_max',
+  areaMin: 'area_min',
+  areaMax: 'area_max',
+  areaUnit: 'area_unit',
+  district: 'district',
+  cityDistrict: 'cityDistrict',
+  locality: 'locality',
+  snt: 'snt',
+}
+
+const filtersFromParams = (sp: URLSearchParams): FiltersState => ({
+  type: sp.get('type') ?? '',
+  category: sp.get('category') ?? '',
+  rooms: sp.get('rooms') ?? '',
+  priceMin: sp.get('price_min') ?? '',
+  priceMax: sp.get('price_max') ?? '',
+  areaMin: sp.get('area_min') ?? '',
+  areaMax: sp.get('area_max') ?? '',
+  areaUnit: sp.get('area_unit') === 'are' ? 'are' : sp.get('area_unit') === 'sqm' ? 'sqm' : '',
+  district: sp.get('district') ?? '',
+  cityDistrict: sp.get('cityDistrict') ?? '',
+  locality: sp.get('locality') ?? '',
+  snt: sp.get('snt') ?? '',
+})
+
 function CatalogContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
@@ -22,18 +55,7 @@ function CatalogContent() {
   const [loadingMore, setLoadingMore] = useState(false)
   const [q, setQ] = useState(searchParams.get('q') ?? '')
   const [sort, setSort] = useState(searchParams.get('sort') ?? '')
-  const [filters, setFilters] = useState<FiltersState>(() => ({
-    type: searchParams.get('type') ?? '',
-    category: searchParams.get('category') ?? '',
-    rooms: searchParams.get('rooms') ?? '',
-    priceMin: searchParams.get('price_min') ?? '',
-    priceMax: searchParams.get('price_max') ?? '',
-    areaMin: searchParams.get('area_min') ?? '',
-    district: searchParams.get('district') ?? '',
-    cityDistrict: searchParams.get('cityDistrict') ?? '',
-    locality: searchParams.get('locality') ?? '',
-    snt: searchParams.get('snt') ?? '',
-  }))
+  const [filters, setFilters] = useState<FiltersState>(() => filtersFromParams(searchParams))
 
   const where = useMemo(() => buildWhere(filters, q), [filters, q])
   const sortParam = sort || '-createdAt'
@@ -59,10 +81,11 @@ function CatalogContent() {
   useEffect(() => {
     const params = new URLSearchParams(searchParams.toString())
     Object.entries(filters).forEach(([k, v]) => {
+      const param = URL_PARAM[k as keyof FiltersState]
       if (v) {
-        params.set(k, v)
+        params.set(param, v)
       } else {
-        params.delete(k)
+        params.delete(param)
       }
     })
     if (sort) {
@@ -81,18 +104,7 @@ function CatalogContent() {
   const [prevSearchParams, setPrevSearchParams] = useState(searchParams)
   if (prevSearchParams !== searchParams) {
     setPrevSearchParams(searchParams)
-    const next: FiltersState = {
-      type: searchParams.get('type') ?? '',
-      category: searchParams.get('category') ?? '',
-      rooms: searchParams.get('rooms') ?? '',
-      priceMin: searchParams.get('price_min') ?? '',
-      priceMax: searchParams.get('price_max') ?? '',
-      areaMin: searchParams.get('area_min') ?? '',
-      district: searchParams.get('district') ?? '',
-      cityDistrict: searchParams.get('cityDistrict') ?? '',
-      locality: searchParams.get('locality') ?? '',
-      snt: searchParams.get('snt') ?? '',
-    }
+    const next: FiltersState = filtersFromParams(searchParams)
     setFilters((prev) =>
       Object.entries(next).every(([k, v]) => prev[k as keyof FiltersState] === v)
         ? prev
@@ -110,6 +122,7 @@ function CatalogContent() {
     price: d.price as number,
     slug: d.slug as string | undefined,
     area: d.area as number | undefined,
+    areaUnit: d.areaUnit as ObjectListItem['areaUnit'],
     rooms: d.rooms as number | undefined,
     floor: d.floor as number | undefined,
     totalFloors: d.totalFloors as number | undefined,
