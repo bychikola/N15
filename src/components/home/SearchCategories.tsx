@@ -77,7 +77,8 @@ export default function SearchCategories({ t, lang }: Props) {
             </div>
             <div>
               <small>{t.landing.countryNearby}</small>
-              <Chips items={NEAR_VIK} hrefBuilder={() => catalog('category=house')} />
+              {/* Каждый пригород фильтрует по своему населённому пункту */}
+              <Chips items={NEAR_VIK} hrefBuilder={(v) => catalog(`category=house&locality=${encodeURIComponent(v)}`)} />
             </div>
             <div className="lp-settlement-filter">
               <small>Населённые пункты по официальным районам</small>
@@ -118,7 +119,8 @@ export default function SearchCategories({ t, lang }: Props) {
             </div>
             <div>
               <small>{t.landing.countryNearby}</small>
-              <Chips items={NEAR_VIK} hrefBuilder={() => catalog('category=land')} />
+              {/* Каждый пригород фильтрует по своему населённому пункту */}
+              <Chips items={NEAR_VIK} hrefBuilder={(v) => catalog(`category=land&locality=${encodeURIComponent(v)}`)} />
             </div>
             <div>
               <small>{t.landing.districtLabel}</small>

@@ -6,6 +6,9 @@ interface Props {
   t: Dict
   lang: string
   filterSummary?: string
+  /** Текст вместо декоративных карточек-заглушек, если подбор пуст
+   *  (например: «В этом населённом пункте пока нет доступных объектов»). */
+  emptyNote?: string
 }
 
 // Заглушка при пустой выдаче: та же карточка-каталога, но со статичным
@@ -38,7 +41,7 @@ function PlaceholderCard({
   )
 }
 
-export default function FeaturedObjects({ objects, t, lang, filterSummary }: Props) {
+export default function FeaturedObjects({ objects, t, lang, filterSummary, emptyNote }: Props) {
   const cards = objects.length
     ? objects.map((o) => <ObjectCard key={o.id} obj={o} lang={lang} t={t} />)
     : [
@@ -92,9 +95,18 @@ export default function FeaturedObjects({ objects, t, lang, filterSummary }: Pro
       </div>
       {/* Сетка как в каталоге: телефон — 1, планшет — 2, ноутбук — 3,
           компьютер (≥1280px) — 4 одинаковых карточки в ряд */}
-      <div className="lp-cards grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-6 gap-y-8">
-        {cards}
-      </div>
+      {objects.length === 0 && emptyNote ? (
+        <div className="lp-featured-empty">
+          <p className="lp-featured-empty-text">{emptyNote}</p>
+          <a className="lp-featured-filter-reset" href={`/${lang}/catalog`}>
+            {t.landing.featuredShowAll}
+          </a>
+        </div>
+      ) : (
+        <div className="lp-cards grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-6 gap-y-8">
+          {cards}
+        </div>
+      )}
     </section>
   )
 }

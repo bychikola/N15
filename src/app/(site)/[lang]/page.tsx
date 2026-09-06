@@ -35,10 +35,12 @@ export default async function HomePage({ params, searchParams }: PageProps) {
   const t = getDictionary(lang)
   const sp = await searchParams
 
-  // Параметры подбора с лендинга: category, rooms, district, snt (чипы «Что вы ищете?»)
+  // Параметры подбора с лендинга: category, rooms, district, locality, snt
+  // (чипы «Что вы ищете?», в т.ч. «Ближний пригород Владикавказа»)
   const qCategory = typeof sp.category === 'string' ? sp.category : ''
   const qRooms = typeof sp.rooms === 'string' ? sp.rooms : ''
   const qDistrict = typeof sp.district === 'string' ? sp.district : ''
+  const qLocality = typeof sp.locality === 'string' ? sp.locality : ''
   const qSnt = typeof sp.snt === 'string' ? sp.snt : ''
 
   const payload = await getPayload({ config })
@@ -48,6 +50,7 @@ export default async function HomePage({ params, searchParams }: PageProps) {
   if (qRooms === '4') where.rooms = { greater_than_equal: 4 }
   else if (qRooms) where.rooms = { equals: parseInt(qRooms, 10) }
   if (qDistrict) where['address.district'] = { equals: qDistrict }
+  if (qLocality) where['address.locality'] = { equals: qLocality }
   if (qSnt) where['address.snt'] = { equals: qSnt }
 
   const { docs } = await payload.find({
@@ -95,15 +98,21 @@ export default async function HomePage({ params, searchParams }: PageProps) {
   const phone = sitePhones[0]?.phone
 
   // Сводка подбора для секции «Результаты подбора» (как на живом прототипе)
-  const hasFilter = Boolean(qCategory || qRooms || qDistrict || qSnt)
+  const hasFilter = Boolean(qCategory || qRooms || qDistrict || qLocality || qSnt)
   const filterSummary = hasFilter
     ? [
         qCategory ? CATEGORY_LABELS[qCategory] || qCategory : null,
         qRooms ? `${qRooms === '4' ? '4+' : qRooms} комн.` : null,
         qDistrict || null,
+        qLocality || null,
         qSnt || null,
       ].filter(Boolean).join(' · ')
     : undefined
+
+  // Подбор по населённому пункту пуст — вместо декоративных карточек-заглушек
+  // показываем честное сообщение (объектов в этом пункте пока нет)
+  const localityEmptyNote =
+    qLocality && docs.length === 0 ? t.catalog.nothingInLocality : undefined
 
   return (
     <>
@@ -111,7 +120,13 @@ export default async function HomePage({ params, searchParams }: PageProps) {
       <main>
         <LandingHero t={t} lang={lang} />
         <SearchCategories t={t} lang={lang} />
-        <FeaturedObjects objects={objects} t={t} lang={lang} filterSummary={filterSummary} />
+        <FeaturedObjects
+          objects={objects}
+          t={t}
+          lang={lang}
+          filterSummary={filterSummary}
+          emptyNote={localityEmptyNote}
+        />
         <MortgageCalculator t={t} />
         <CountryGuide t={t} lang={lang} />
         <ServicesSection t={t} />

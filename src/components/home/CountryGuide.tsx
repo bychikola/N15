@@ -24,7 +24,19 @@ export default function CountryGuide({ t, lang }: { t: Dict; lang: string }) {
           <span>{t.landing.countryNearby}</span>
           <i>+</i>
         </summary>
-        <p>{NEAR_VIK.join(' · ')}</p>
+        {/* Каждый пригород — отдельная ссылка на каталог с фильтром
+            по населённому пункту (address.locality), а не общая строка */}
+        <div className="lp-nearby-places">
+          {NEAR_VIK.map((place) => (
+            <Link
+              key={place}
+              href={`/${lang}/catalog?locality=${encodeURIComponent(place)}`}
+              className="lp-place-chip lp-place-chip-nearby"
+            >
+              {place}
+            </Link>
+          ))}
+        </div>
       </details>
 
       <details className="lp-country-disclosure">

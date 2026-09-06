@@ -458,6 +458,9 @@ html[data-theme='dark'] .lp-featured .object-card { border: 0; }
 .lp-featured-filter-summary { font-size: 12px; color: #777267; }
 .lp-featured-filter-reset { font-size: 10px; text-transform: uppercase; letter-spacing: .13em; color: #a87c3f; text-decoration: underline; }
 .lp-cards { width: min(90%, 1280px); margin: 0 auto; }
+/* Подбор по нас. пункту пуст — сообщение вместо карточек-заглушек */
+.lp-featured-empty { display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center; }
+.lp-featured-empty-text { margin: 0; font-size: 15px; color: #6f6758; }
 
 /* Калькулятор — скруглённая карточка-аккордеон (как на живом прототипе) */
 .lp-mortgage { color: #fff; background: #262722; border-radius: 24px; grid-template-columns: minmax(185px, .55fr) minmax(0, 1.45fr); gap: 33px; width: min(910px, 100% - 64px); margin: 61px auto; padding: 28px; display: grid; box-shadow: 0 24px 70px rgba(38, 39, 34, .12); }
@@ -498,8 +501,12 @@ html[data-theme='dark'] .lp-featured .object-card { border: 0; }
 .lp-nearby summary::-webkit-details-marker, .lp-country-disclosure > summary::-webkit-details-marker { display: none; }
 .lp-nearby summary i, .lp-country-disclosure > summary i { font: 22px Arial; transition: transform .2s; }
 .lp-nearby[open] summary i, .lp-country-disclosure[open] > summary i { transform: rotate(45deg); }
-/* Открытый список пригородов — тонкая линия под шапкой, как у районов */
-.lp-nearby p { border-top: 1px solid rgba(255,255,255,.15); color: rgba(255,255,255,.72); margin: 0; padding: 18px 0 26px; font-size: 11px; line-height: 1.9; }
+/* Открытый список пригородов — тонкая линия под шапкой, как у районов;
+   сами пункты — чипы-ссылки (см. .lp-place-chip-nearby ниже) */
+.lp-nearby-places {
+  border-top: 1px solid rgba(255,255,255,.15); margin: 0; padding: 18px 0 26px;
+  display: flex; flex-wrap: wrap; gap: 8px;
+}
 .lp-districts { border-top: 1px solid rgba(255,255,255,.15); }
 .lp-districts details { border-bottom: 1px solid rgba(255,255,255,.2); }
 .lp-districts summary { cursor: pointer; grid-template-columns: 48px 1fr 30px; align-items: center; min-height: 67px; list-style: none; display: grid; }
@@ -514,9 +521,14 @@ html[data-theme='dark'] .lp-featured .object-card { border: 0; }
 .lp-place-chip {
   padding: 6px 11px; border: 1px solid rgba(255,255,255,.22); border-radius: 999px;
   color: rgba(255,255,255,.75); font-size: 11px; letter-spacing: .02em; text-decoration: none;
-  transition: color .2s, border-color .2s, background .2s;
+  cursor: pointer; transition: color .2s, border-color .2s, background .2s;
 }
 .lp-place-chip:hover { color: #c5a46d; border-color: #c5a46d; background: rgba(197,164,109,.08); }
+/* Пригороды «Ближнего пригорода Владикавказа» — крупнее рядовых чипов:
+   заметная область нажатия пальцем, надпись не сливается с соседями */
+.lp-nearby-places .lp-place-chip-nearby {
+  padding: 11px 16px; font-size: 12px; color: rgba(255,255,255,.88);
+}
 
 /* Услуги — аккордеон (как на живом прототипе) */
 .lp-services { width: min(90%, 1280px); margin: 96px auto; }
