@@ -583,6 +583,50 @@ html[data-theme='dark'] .lp-featured .object-card { border: 0; }
 .lp-about { background: #f3eee3; grid-template-columns: 1fr 1fr; min-height: 420px; display: grid; }
 .lp-about-image { position: relative; color: rgba(255,255,255,.28); background: linear-gradient(rgba(31, 32, 29, .72), rgba(31, 32, 29, .78)), url('/img/villa.png') 50%/cover; place-items: center; display: grid; overflow: hidden; }
 .lp-about-image img { position: absolute; inset: 0; margin: auto; max-width: 90%; max-height: 90%; object-fit: contain; display: block; }
+
+/* Карточка-история Фатимы: мягко появляется при наведении на фото
+   (на телефоне открывается по нажатию), лицо и фигуру не закрывает —
+   лежит в углу тёмной подложки. */
+.lp-fatima-card {
+  position: absolute; z-index: 3; left: 20px; bottom: 20px;
+  box-sizing: border-box; width: min(236px, 46%);
+  padding: 15px 17px 14px;
+  color: #45423c; background: #f5f0e6;
+  border: 1px solid rgba(168, 124, 63, .5); border-radius: 12px;
+  box-shadow: 0 22px 44px -20px rgba(13, 12, 8, .55);
+  font-size: 12px; line-height: 1.62;
+  opacity: 0; visibility: hidden; pointer-events: none;
+  transform: translateY(12px);
+  transition: opacity .3s ease, transform .3s ease, visibility 0s linear .3s;
+}
+.lp-fatima-card-text { margin: 0 0 8px; color: #777267; }
+.lp-fatima-card-text:last-child { margin-bottom: 0; }
+.lp-fatima-card-title {
+  margin: 0 0 9px; padding-right: 22px;
+  font-family: 'New Standard', Georgia, serif; font-weight: 400;
+  font-size: 17px; line-height: 1.32; letter-spacing: -.01em; color: #24231f;
+}
+.lp-fatima-card--open {
+  opacity: 1; visibility: visible; pointer-events: auto; transform: none;
+  transition: opacity .3s ease .06s, transform .3s ease .06s, visibility 0s;
+}
+@media (hover: hover) and (pointer: fine) {
+  .lp-about-image:hover .lp-fatima-card {
+    opacity: 1; visibility: visible; pointer-events: auto; transform: none;
+    transition: opacity .3s ease .06s, transform .3s ease .06s, visibility 0s;
+  }
+}
+.lp-fatima-card-close {
+  position: absolute; top: 10px; right: 10px; width: 24px; height: 24px; padding: 0;
+  display: grid; place-items: center; cursor: pointer;
+  color: #97692d; background: transparent;
+  border: 1px solid rgba(151, 105, 45, .4); border-radius: 50%;
+  font-size: 15px; line-height: 1;
+}
+.lp-fatima-card-close:hover { background: rgba(151, 105, 45, .12); }
+@media (prefers-reduced-motion: reduce) {
+  .lp-fatima-card, .lp-fatima-card--open, .lp-about-image:hover .lp-fatima-card { transition: none; }
+}
 .lp-about-copy { flex-direction: column; justify-content: center; padding: 52px max(4.4vw, 35px); display: flex; }
 .lp-about-copy h2 { margin: 0 0 22px; color: inherit; }
 .lp-about-copy > p { color: #777267; line-height: 1.8; max-width: 550px; }
@@ -644,7 +688,12 @@ html[data-theme='dark'] .lp-featured .object-card { border: 0; }
   .lp-legal-grid { grid-template-columns: 1fr; }
   .lp-legal-grid article { min-height: 0; }
   .lp-about { grid-template-columns: 1fr; min-height: 0; }
+  /* Фото Фатимы на телефоне: задаём высоту (иначе ряд схлопывается),
+     чтобы образ был виден и карточку можно было открыть нажатием */
+  .lp-about-image { aspect-ratio: 4 / 5; max-height: 640px; touch-action: manipulation; }
   .lp-about-copy { padding: 54px 22px; }
+  .lp-fatima-card { left: 14px; right: 14px; bottom: 14px; width: auto; max-width: 342px; font-size: 13px; }
+  .lp-fatima-card-title { font-size: 18px; }
   .lp-contact { grid-template-columns: 1fr; gap: 26px; padding: 68px 22px; }
   .lp-footer { flex-wrap: wrap; gap: 16px; padding: 36px 22px; }
 }
