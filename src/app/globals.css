@@ -489,18 +489,17 @@ html[data-theme='dark'] .lp-featured .object-card { border: 0; }
 .lp-country { padding: 105px max(5vw, 28px); background: #292a26; color: #fff; }
 .lp-country-heading { width: min(100%, 1280px); margin: 0 auto 48px; display: grid; grid-template-columns: 1.2fr .8fr; gap: 52px; align-items: end; }
 .lp-country-heading > p { max-width: 440px; margin: 0 0 7px; color: rgba(255,255,255,.58); font-size: 13px; line-height: 1.8; }
-.lp-nearby { box-sizing: border-box; background: rgba(255,255,255,.035); border: 1px solid rgba(197, 164, 109, .42); width: min(100%, 1280px); margin: 0 auto 24px; padding: 19px 21px; }
-.lp-nearby summary { cursor: pointer; justify-content: space-between; align-items: center; list-style: none; display: flex; }
-.lp-nearby summary::-webkit-details-marker { display: none; }
-.lp-nearby summary span { color: #c5a46d; text-transform: uppercase; letter-spacing: .16em; margin-bottom: 9px; font-size: 9px; display: block; }
-.lp-nearby summary i { color: #c5a46d; font: 22px Arial; transition: transform .2s; }
-.lp-nearby[open] summary i { transform: rotate(45deg); }
-.lp-nearby p { color: rgba(255,255,255,.72); margin: 0; font-size: 11px; line-height: 1.9; }
-.lp-country-disclosure { border-top: 1px solid rgba(255,255,255,.2); border-bottom: 1px solid rgba(255,255,255,.2); width: min(100%, 1280px); margin: 0 auto; }
-.lp-country-disclosure > summary { cursor: pointer; color: #c5a46d; justify-content: space-between; align-items: center; padding: 21px 0; font-family: 'New Standard', Georgia, serif; font-weight: 400; font-size: 19px; list-style: none; display: flex; }
-.lp-country-disclosure > summary::-webkit-details-marker { display: none; }
-.lp-country-disclosure > summary i { font: 22px Arial; transition: transform .2s; }
-.lp-country-disclosure[open] > summary i { transform: rotate(45deg); }
+/* «Ближний пригород» и «Районы…» — единые заголовки-разделители:
+   одинаковый шрифт, размер, цвет, межбуквенный интервал и отступы;
+   без рамки-коробки — только тонкие горизонтальные линии */
+.lp-nearby, .lp-country-disclosure { border-top: 1px solid rgba(255,255,255,.2); width: min(100%, 1280px); margin: 0 auto; }
+.lp-country-disclosure { border-bottom: 1px solid rgba(255,255,255,.2); }
+.lp-nearby summary, .lp-country-disclosure > summary { cursor: pointer; color: #c5a46d; justify-content: space-between; align-items: center; padding: 21px 0; font-family: 'New Standard', Georgia, serif; font-weight: 400; font-size: 19px; list-style: none; display: flex; }
+.lp-nearby summary::-webkit-details-marker, .lp-country-disclosure > summary::-webkit-details-marker { display: none; }
+.lp-nearby summary i, .lp-country-disclosure > summary i { font: 22px Arial; transition: transform .2s; }
+.lp-nearby[open] summary i, .lp-country-disclosure[open] > summary i { transform: rotate(45deg); }
+/* Открытый список пригородов — тонкая линия под шапкой, как у районов */
+.lp-nearby p { border-top: 1px solid rgba(255,255,255,.15); color: rgba(255,255,255,.72); margin: 0; padding: 18px 0 26px; font-size: 11px; line-height: 1.9; }
 .lp-districts { border-top: 1px solid rgba(255,255,255,.15); }
 .lp-districts details { border-bottom: 1px solid rgba(255,255,255,.2); }
 .lp-districts summary { cursor: pointer; grid-template-columns: 48px 1fr 30px; align-items: center; min-height: 67px; list-style: none; display: grid; }
