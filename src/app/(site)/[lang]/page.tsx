@@ -45,6 +45,9 @@ export default async function HomePage({ params, searchParams }: PageProps) {
 
   const payload = await getPayload({ config })
 
+  // Блок «Актуальные объекты»: только опубликованные (черновики скрыты).
+  // Проданные, снятые с публикации и архивные в CRM переводятся в статус
+  // «Архив» — такой объект автоматически исчезает из блока.
   const where: Where = { status: { equals: 'published' } }
   if (qCategory) where.category = { equals: qCategory }
   if (qRooms === '4') where.rooms = { greater_than_equal: 4 }
@@ -53,11 +56,13 @@ export default async function HomePage({ params, searchParams }: PageProps) {
   if (qLocality) where['address.locality'] = { equals: qLocality }
   if (qSnt) where['address.snt'] = { equals: qSnt }
 
+  // 4 объекта: на компьютере — одна полная строка (в сетке блока xl: 4 колонки),
+  // на планшете 2×2, на телефоне — в столбик
   const { docs } = await payload.find({
     collection: 'objects',
     where,
     sort: '-createdAt',
-    limit: 6,
+    limit: 4,
     depth: 1,
   })
 

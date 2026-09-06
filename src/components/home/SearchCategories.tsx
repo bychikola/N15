@@ -18,7 +18,7 @@ function Chips({ items, hrefBuilder }: { items: string[]; hrefBuilder: (item: st
 
 export default function SearchCategories({ t, lang }: Props) {
   // Фильтрация работает прямо на лендинге: чипы ведут на главную с параметрами,
-  // секция «Избранные объекты» (#featured) показывает результат подбора.
+  // секция «Актуальные объекты» (#featured) показывает результат подбора.
   const catalog = (params: string) => `/${lang}?${params}#featured`
 
   return (
