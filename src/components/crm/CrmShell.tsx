@@ -46,6 +46,13 @@ export function CrmShell({ user, t, active, children }: Props) {
               {item.label}
             </Link>
           ))}
+          {/* На телефоне меню кабинета сворачивается в сетку — рядом с разделами
+              держим кнопку «+ Добавить объект» (на десктопе она на «Обзоре»
+              и в разделе «Объекты», в сайдбаре не дублируется: .crm-nav-add
+              показывается только на экранах до 900px) */}
+          <Link className="crm-nav-add" href="/crm/objects?add=1">
+            + {t.crm.objAdd}
+          </Link>
         </nav>
         <div className="crm-sidebar-bottom">
           <Link className="crm-site-link" href="/">{t.crm.openSite}</Link>

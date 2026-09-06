@@ -65,3 +65,12 @@ body{margin:0}.crm-sidebar{box-sizing:border-box}.crm-chat-panel{box-sizing:bord
   .crm-mail-search{width:100%!important;margin-left:0!important}
   .crm-mail-toolbar{gap:6px}
 }
+
+/* Кнопка «+ Добавить объект» в меню кабинета: на компьютере меню — колонка
+   сайдбара, кнопка там не нужна (она на «Обзоре» и в разделе «Объекты»),
+   а на телефоне меню сворачивается в сетку разделов — держим кнопку в ней. */
+.crm-nav-add{display:none}
+@media(max-width:900px){
+  .crm-nav-add{display:block;margin-top:2px;background:#a7814e;color:#fff;border-radius:8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;text-align:center}
+  .crm-nav-add:hover{background:#b38a52;color:#fff}
+}

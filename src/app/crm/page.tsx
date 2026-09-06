@@ -124,7 +124,9 @@ export default async function CrmPage({ searchParams }: PageProps) {
 
   return (
     <CrmShell user={user} t={t} active="overview">
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16, alignItems: 'center' }}>
+      {/* Кнопка «Добавить объект» и периоды: на узких экранах ряд переносится,
+          иначе кнопка справа не помещается рядом с тремя периодами */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 16, alignItems: 'center' }}>
         {(['today', 'week', 'month'] as const).map((p) => (
           <a
             key={p}

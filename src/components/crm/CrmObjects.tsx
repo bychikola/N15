@@ -930,7 +930,7 @@ export const CrmObjects: FC<{
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, marginBottom: 18 }}>
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
