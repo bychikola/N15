@@ -14,8 +14,19 @@ import ServicesSection from '@/components/home/ServicesSection'
 import LegalSection from '@/components/home/LegalSection'
 import AboutSection from '@/components/home/AboutSection'
 import ContactSection from '@/components/home/ContactSection'
+// Справочники допустимых значений фильтров: where-запрос по select-полю
+// принимает только значения из его опций — чужое значение роняет страницу
+// серверной ошибкой («This page couldn't load»)
+import { DISTRICT_OPTIONS, CITY_DISTRICT_OPTIONS } from '@/lib/districts'
+import { SNT_AREAS } from '@/components/home/landing-data'
 
 export const dynamic = 'force-dynamic'
+
+// Категории и комнаты параметров подбора — опции одноимённых полей объекта
+// (см. src/payload/collections/Objects.ts); должны совпадать с ними
+const CATEGORY_PARAM_VALUES = ['apartment', 'house', 'townhouse', 'commercial', 'land']
+const ROOMS_PARAM_VALUES = ['1', '2', '3', '4']
+const isKnown = (v: string, options: readonly string[]) => options.includes(v)
 
 interface PageProps {
   params: Promise<{ lang: string }>
@@ -35,13 +46,24 @@ export default async function HomePage({ params, searchParams }: PageProps) {
   const t = getDictionary(lang)
   const sp = await searchParams
 
-  // Параметры подбора с лендинга: category, rooms, district, locality, snt
-  // (чипы «Что вы ищете?», в т.ч. «Ближний пригород Владикавказа»)
-  const qCategory = typeof sp.category === 'string' ? sp.category : ''
-  const qRooms = typeof sp.rooms === 'string' ? sp.rooms : ''
-  const qDistrict = typeof sp.district === 'string' ? sp.district : ''
+  // Параметры подбора с лендинга: category, rooms, district/cityDistrict,
+  // locality, snt (чипы «Что вы ищете?», в т.ч. «Ближний пригород
+  // Владикавказа»). Значения сверяем со справочниками — иначе where-запрос
+  // по select-полю с чужим значением падает серверной ошибкой.
+  const qCategory = typeof sp.category === 'string' && isKnown(sp.category, CATEGORY_PARAM_VALUES) ? sp.category : ''
+  const qRooms = typeof sp.rooms === 'string' && isKnown(sp.rooms, ROOMS_PARAM_VALUES) ? sp.rooms : ''
+  // Районы города (Иристонский и др.) в параметре district — устаревшие
+  // ссылки: раньше чипы лендинга слали их как district. Уводим в cityDistrict
+  const qDistrictParam = typeof sp.district === 'string' ? sp.district : ''
+  const qCityDistrictParam = typeof sp.cityDistrict === 'string' ? sp.cityDistrict : ''
+  const qCityDistrict = isKnown(qCityDistrictParam, CITY_DISTRICT_OPTIONS)
+    ? qCityDistrictParam
+    : !qCityDistrictParam && isKnown(qDistrictParam, CITY_DISTRICT_OPTIONS)
+      ? qDistrictParam
+      : ''
+  const qDistrict = isKnown(qDistrictParam, DISTRICT_OPTIONS) ? qDistrictParam : ''
   const qLocality = typeof sp.locality === 'string' ? sp.locality : ''
-  const qSnt = typeof sp.snt === 'string' ? sp.snt : ''
+  const qSnt = typeof sp.snt === 'string' && isKnown(sp.snt, SNT_AREAS) ? sp.snt : ''
 
   const payload = await getPayload({ config })
 
@@ -53,6 +75,7 @@ export default async function HomePage({ params, searchParams }: PageProps) {
   if (qRooms === '4') where.rooms = { greater_than_equal: 4 }
   else if (qRooms) where.rooms = { equals: parseInt(qRooms, 10) }
   if (qDistrict) where['address.district'] = { equals: qDistrict }
+  if (qCityDistrict) where['address.cityDistrict'] = { equals: qCityDistrict }
   if (qLocality) where['address.locality'] = { equals: qLocality }
   if (qSnt) where['address.snt'] = { equals: qSnt }
 
@@ -103,21 +126,28 @@ export default async function HomePage({ params, searchParams }: PageProps) {
   const phone = sitePhones[0]?.phone
 
   // Сводка подбора для секции «Результаты подбора» (как на живом прототипе)
-  const hasFilter = Boolean(qCategory || qRooms || qDistrict || qLocality || qSnt)
+  const hasFilter = Boolean(qCategory || qRooms || qDistrict || qCityDistrict || qLocality || qSnt)
   const filterSummary = hasFilter
     ? [
         qCategory ? CATEGORY_LABELS[qCategory] || qCategory : null,
         qRooms ? `${qRooms === '4' ? '4+' : qRooms} комн.` : null,
-        qDistrict || null,
+        qDistrict || qCityDistrict || null,
         qLocality || null,
         qSnt || null,
       ].filter(Boolean).join(' · ')
     : undefined
 
-  // Подбор по населённому пункту пуст — вместо декоративных карточек-заглушек
-  // показываем честное сообщение (объектов в этом пункте пока нет)
-  const localityEmptyNote =
-    qLocality && docs.length === 0 ? t.catalog.nothingInLocality : undefined
+  // Подбор по местоположению пуст (населённый пункт, район, район города,
+  // товарищество) — вместо декоративных карточек-заглушек показываем честное
+  // сообщение, что объектов там пока нет
+  const filterEmptyNote =
+    docs.length === 0
+      ? qLocality
+        ? t.catalog.nothingInLocality
+        : qDistrict || qCityDistrict || qSnt
+          ? t.catalog.nothingFound
+          : undefined
+      : undefined
 
   return (
     <>
@@ -130,7 +160,7 @@ export default async function HomePage({ params, searchParams }: PageProps) {
           t={t}
           lang={lang}
           filterSummary={filterSummary}
-          emptyNote={localityEmptyNote}
+          emptyNote={filterEmptyNote}
         />
         <MortgageCalculator t={t} />
         <CountryGuide t={t} lang={lang} />

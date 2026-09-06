@@ -55,7 +55,11 @@ export default function SearchCategories({ t, lang }: Props) {
             </div>
             <div>
               <small>{t.landing.districtLabel}</small>
-              <Chips items={DISTRICTS} hrefBuilder={(d) => catalog(`category=apartment&district=${encodeURIComponent(d)}`)} />
+              {/* Районы города Владикавказа (Иристонский и др.) живут в
+                  address.cityDistrict объекта — фильтруем параметром
+                  cityDistrict, district принимает только районы республики
+                  (иначе запрос падает с серверной ошибкой) */}
+              <Chips items={DISTRICTS} hrefBuilder={(d) => catalog(`category=apartment&cityDistrict=${encodeURIComponent(d)}`)} />
             </div>
           </div>
         </details>
@@ -73,7 +77,8 @@ export default function SearchCategories({ t, lang }: Props) {
           <div className="lp-filters lp-land-filters">
             <div>
               <small>{t.landing.districtLabel}</small>
-              <Chips items={DISTRICTS} hrefBuilder={(d) => catalog(`category=house&district=${encodeURIComponent(d)}`)} />
+              {/* Районы города Владикавказа — в address.cityDistrict (см. выше) */}
+              <Chips items={DISTRICTS} hrefBuilder={(d) => catalog(`category=house&cityDistrict=${encodeURIComponent(d)}`)} />
             </div>
             <div>
               <small>{t.landing.countryNearby}</small>
@@ -124,7 +129,8 @@ export default function SearchCategories({ t, lang }: Props) {
             </div>
             <div>
               <small>{t.landing.districtLabel}</small>
-              <Chips items={DISTRICTS} hrefBuilder={(d) => catalog(`category=land&district=${encodeURIComponent(d)}`)} />
+              {/* Районы города Владикавказа — в address.cityDistrict (см. выше) */}
+              <Chips items={DISTRICTS} hrefBuilder={(d) => catalog(`category=land&cityDistrict=${encodeURIComponent(d)}`)} />
             </div>
             <div className="lp-settlement-filter">
               <small>Населённые пункты по официальным районам</small>
@@ -161,7 +167,8 @@ export default function SearchCategories({ t, lang }: Props) {
           <div className="lp-filters">
             <div>
               <small>{t.landing.districtLabel}</small>
-              <Chips items={DISTRICTS} hrefBuilder={(d) => catalog(`category=commercial&district=${encodeURIComponent(d)}`)} />
+              {/* Районы города Владикавказа — в address.cityDistrict (см. выше) */}
+              <Chips items={DISTRICTS} hrefBuilder={(d) => catalog(`category=commercial&cityDistrict=${encodeURIComponent(d)}`)} />
             </div>
           </div>
         </details>

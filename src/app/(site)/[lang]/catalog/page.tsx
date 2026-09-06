@@ -6,7 +6,10 @@ import { Header } from '@/components/layout/Header'
 import { Footer } from '@/components/layout/Footer'
 import { useI18n } from '@/i18n/i18n-provider'
 import ObjectCard, { type ObjectListItem } from '@/components/objects/ObjectCard'
-import CatalogFilters, { buildWhere, emptyFilters, type FiltersState } from '@/components/objects/CatalogFilters'
+import CatalogFilters, { buildWhere, emptyFilters, OBJECT_TYPES, OBJECT_CATEGORIES, OBJECT_ROOMS, type FiltersState } from '@/components/objects/CatalogFilters'
+// Справочники допустимых значений локаций — те же, что в фильтрах каталога
+import { DISTRICT_OPTIONS, CITY_DISTRICT_OPTIONS } from '@/lib/districts'
+import { SNT_AREAS } from '@/components/home/landing-data'
 
 const PAGE_SIZE = 12
 
@@ -28,20 +31,35 @@ const URL_PARAM: Record<keyof FiltersState, string> = {
   snt: 'snt',
 }
 
-const filtersFromParams = (sp: URLSearchParams): FiltersState => ({
-  type: sp.get('type') ?? '',
-  category: sp.get('category') ?? '',
-  rooms: sp.get('rooms') ?? '',
-  priceMin: sp.get('price_min') ?? '',
-  priceMax: sp.get('price_max') ?? '',
-  areaMin: sp.get('area_min') ?? '',
-  areaMax: sp.get('area_max') ?? '',
-  areaUnit: sp.get('area_unit') === 'are' ? 'are' : sp.get('area_unit') === 'sqm' ? 'sqm' : '',
-  district: sp.get('district') ?? '',
-  cityDistrict: sp.get('cityDistrict') ?? '',
-  locality: sp.get('locality') ?? '',
-  snt: sp.get('snt') ?? '',
-})
+// Значения select-фильтров сверяем с опциями полей (списки и зачем — см.
+// CatalogFilters): чужие значения устаревших ссылок отбрасываем при чтении
+const isKnown = (v: string, options: readonly string[]) => options.includes(v)
+
+function filtersFromParams(sp: URLSearchParams): FiltersState {
+  // Район города (Иристонский и др.) старые ссылки могли передавать
+  // в параметре district — такой параметр направляем в cityDistrict
+  const districtParam = sp.get('district') ?? ''
+  const cityDistrictParam = sp.get('cityDistrict') ?? ''
+  const legacyCityDistrict = !cityDistrictParam && isKnown(districtParam, CITY_DISTRICT_OPTIONS)
+  return {
+    type: isKnown(sp.get('type') ?? '', OBJECT_TYPES) ? (sp.get('type') as string) : '',
+    category: isKnown(sp.get('category') ?? '', OBJECT_CATEGORIES) ? (sp.get('category') as string) : '',
+    rooms: isKnown(sp.get('rooms') ?? '', OBJECT_ROOMS) ? (sp.get('rooms') as string) : '',
+    priceMin: sp.get('price_min') ?? '',
+    priceMax: sp.get('price_max') ?? '',
+    areaMin: sp.get('area_min') ?? '',
+    areaMax: sp.get('area_max') ?? '',
+    areaUnit: sp.get('area_unit') === 'are' ? 'are' : sp.get('area_unit') === 'sqm' ? 'sqm' : '',
+    district: !legacyCityDistrict && isKnown(districtParam, DISTRICT_OPTIONS) ? districtParam : '',
+    cityDistrict: legacyCityDistrict
+      ? districtParam
+      : isKnown(cityDistrictParam, CITY_DISTRICT_OPTIONS)
+        ? cityDistrictParam
+        : '',
+    locality: sp.get('locality') ?? '',
+    snt: isKnown(sp.get('snt') ?? '', SNT_AREAS) ? (sp.get('snt') as string) : '',
+  }
+}
 
 function CatalogContent() {
   const searchParams = useSearchParams()

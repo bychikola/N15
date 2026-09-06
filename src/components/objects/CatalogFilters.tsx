@@ -5,8 +5,18 @@ import type { Dict } from '@/i18n/dictionaries'
 // Садовые товарищества (СНТ/СНО/ДНТ) — те же справочники, что в подразделе
 // лендинга: категории из GARDENING_AREAS, всё внутри Владикавказского округа
 import { DISTRICT_OPTIONS, LOCALITIES_BY_DISTRICT, LOCALITY_OPTIONS, CITY_DISTRICT_OPTIONS, GARDENING_CATEGORY_ORDER, GARDENING_AREAS } from '@/lib/districts'
+import { SNT_AREAS } from '@/components/home/landing-data'
 // Конвертация площади участков: 1 сотка = 100 м² (см. также хелперы ввода)
 import { SQM_PER_ARE, areaNumberText, parseAreaNumber } from '@/lib/area-format'
+
+// Допустимые значения select-фильтров — опции одноимённых полей объекта
+// (src/payload/collections/Objects.ts). Где-запрос к /api/objects с чужим
+// значением (мусорный или устаревший параметр URL) падает серверной
+// ошибкой, поэтому такие значения отбрасываем, а не отправляем.
+export const OBJECT_TYPES = ['sale', 'rent']
+export const OBJECT_CATEGORIES = ['apartment', 'house', 'townhouse', 'commercial', 'land']
+export const OBJECT_ROOMS = ['1', '2', '3', '4']
+const isKnown = (v: string, options: readonly string[]) => options.includes(v)
 
 export interface FiltersState {
   type: string
@@ -37,28 +47,31 @@ export function buildWhere(f: FiltersState, q: string): Record<string, unknown> 
   const conds: Record<string, unknown>[] = []
   // На сайте показываем только опубликованные (черновики и архив скрыты)
   conds.push({ status: { equals: 'published' } })
-  if (f.type) conds.push({ type: { equals: f.type } })
-  if (f.category) conds.push({ category: { equals: f.category } })
-  if (f.district) conds.push({ 'address.district': { equals: f.district } })
-  if (f.cityDistrict) conds.push({ 'address.cityDistrict': { equals: f.cityDistrict } })
+  // Select-поля фильтруем только значениями из их опций (см. isKnown выше)
+  if (f.type && isKnown(f.type, OBJECT_TYPES)) conds.push({ type: { equals: f.type } })
+  if (f.category && isKnown(f.category, OBJECT_CATEGORIES)) conds.push({ category: { equals: f.category } })
+  if (f.district && isKnown(f.district, DISTRICT_OPTIONS)) conds.push({ 'address.district': { equals: f.district } })
+  if (f.cityDistrict && isKnown(f.cityDistrict, CITY_DISTRICT_OPTIONS)) conds.push({ 'address.cityDistrict': { equals: f.cityDistrict } })
   if (f.locality) conds.push({ 'address.locality': { equals: f.locality } })
-  if (f.snt) conds.push({ 'address.snt': { equals: f.snt } })
-  if (f.rooms) {
+  if (f.snt && isKnown(f.snt, SNT_AREAS)) conds.push({ 'address.snt': { equals: f.snt } })
+  if (isKnown(f.rooms, OBJECT_ROOMS)) {
     conds.push(f.rooms === '4'
       ? { rooms: { greater_than_equal: 4 } }
       : { rooms: { equals: parseInt(f.rooms, 10) } })
   }
-  if (f.priceMin) conds.push({ price: { greater_than_equal: parseInt(f.priceMin, 10) } })
-  if (f.priceMax) conds.push({ price: { less_than_equal: parseInt(f.priceMax, 10) } })
+  const priceMin = parseInt(f.priceMin, 10)
+  if (f.priceMin && Number.isFinite(priceMin)) conds.push({ price: { greater_than_equal: priceMin } })
+  const priceMax = parseInt(f.priceMax, 10)
+  if (f.priceMax && Number.isFinite(priceMax)) conds.push({ price: { less_than_equal: priceMax } })
   // Площадь в базе всегда в м²; «сотки» выбраны — переводим (1 сотка = 100 м²)
   const areaMul = f.category === 'land' && f.areaUnit === 'are' ? SQM_PER_ARE : 1
   if (f.areaMin) {
     const min = numOf(f.areaMin)
-    if (min != null) conds.push({ area: { greater_than_equal: Math.round(min * areaMul * 100) / 100 } })
+    if (min != null && Number.isFinite(min)) conds.push({ area: { greater_than_equal: Math.round(min * areaMul * 100) / 100 } })
   }
   if (f.areaMax) {
     const max = numOf(f.areaMax)
-    if (max != null) conds.push({ area: { less_than_equal: Math.round(max * areaMul * 100) / 100 } })
+    if (max != null && Number.isFinite(max)) conds.push({ area: { less_than_equal: Math.round(max * areaMul * 100) / 100 } })
   }
   if (q) conds.push({ or: [{ title: { contains: q } }, { 'address.street': { contains: q } }] })
   return conds.length ? { and: conds } : {}
