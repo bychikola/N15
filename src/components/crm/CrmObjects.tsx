@@ -2,10 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState, type FC } from 'react'
 import type { Dict } from '@/i18n/dictionaries'
-import { DISTRICT_OPTIONS, LOCALITIES_BY_DISTRICT, LOCALITY_OPTIONS, CITY_DISTRICT_OPTIONS } from '@/lib/districts'
-// Справочник садовых товариществ (СТ/СНТ/СНО/ДНТ) — тот же, что в разделах
-// «Участки» и «Дома» на главной странице сайта.
-import { SNT_AREAS } from '@/components/home/landing-data'
+// Садовые товарищества — те же справочники, что в подразделе лендинга:
+// категории СНТ/СНО/ДНТ из GARDENING_AREAS (всё внутри Владикавказского округа)
+import { DISTRICT_OPTIONS, LOCALITIES_BY_DISTRICT, LOCALITY_OPTIONS, CITY_DISTRICT_OPTIONS, GARDENING_CATEGORY_ORDER, GARDENING_AREAS } from '@/lib/districts'
 import { loadYmaps, type Ymaps } from '@/lib/ymaps'
 import { geocodeAddress } from '@/lib/geocode'
 import { sortAgents } from '@/lib/agents-sort'
@@ -1091,18 +1090,26 @@ export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) =>
                 ))}
               </datalist>
             </div>
-            {/* СТ/СНТ/СНО — выпадающий список разделов (как на главной сайта):
-                только для загородных категорий (дом в СНТ, участок в
-                товариществе), у городской недвижимости поля нет.
+            {/* Садоводческое товарищество — только для загородных категорий
+                (дом в СНТ, участок в товариществе), у городской недвижимости
+                поля нет. Список сгруппирован по категориям СНТ/СНО/ДНТ —
+                товарищества живут только внутри Владикавказского городского
+                округа, к районам республики не относятся.
                 Значение — в address.snt объекта. */}
             {(form.category === 'land' || form.category === 'house') && (
               <div className="crm-addr-full">
                 <Field label={t.crm.objSnt}>
                   <select value={form.snt} onChange={(e) => set('snt', e.target.value)} style={inputStyle}>
                     <option value="">—</option>
-                    {SNT_AREAS.map((s) => (
-                      <option key={s} value={s}>{s}</option>
-                    ))}
+                    {GARDENING_CATEGORY_ORDER
+                      .filter((c) => GARDENING_AREAS[c].length > 0)
+                      .map((category) => (
+                        <optgroup key={category} label={category}>
+                          {GARDENING_AREAS[category].map((s) => (
+                            <option key={s} value={s}>{s}</option>
+                          ))}
+                        </optgroup>
+                      ))}
                   </select>
                 </Field>
               </div>

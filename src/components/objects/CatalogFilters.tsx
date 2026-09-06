@@ -2,9 +2,9 @@
 
 import { useState } from 'react'
 import type { Dict } from '@/i18n/dictionaries'
-import { DISTRICT_OPTIONS, LOCALITIES_BY_DISTRICT, LOCALITY_OPTIONS, CITY_DISTRICT_OPTIONS } from '@/lib/districts'
-// Садовые товарищества — тот же справочник, что в разделах СТ/СНТ/СНО на главной
-import { SNT_AREAS } from '@/components/home/landing-data'
+// Садовые товарищества (СНТ/СНО/ДНТ) — те же справочники, что в подразделе
+// лендинга: категории из GARDENING_AREAS, всё внутри Владикавказского округа
+import { DISTRICT_OPTIONS, LOCALITIES_BY_DISTRICT, LOCALITY_OPTIONS, CITY_DISTRICT_OPTIONS, GARDENING_CATEGORY_ORDER, GARDENING_AREAS } from '@/lib/districts'
 // Конвертация площади участков: 1 сотка = 100 м² (см. также хелперы ввода)
 import { SQM_PER_ARE, areaNumberText, parseAreaNumber } from '@/lib/area-format'
 
@@ -70,15 +70,31 @@ const labelCls = (compact = false) =>
   `${compact ? 'text-[9px] tracking-[0.15em]' : 'text-[10px] tracking-[0.2em]'} uppercase text-[var(--n15-muted)] whitespace-nowrap`
 const ddBtnCls = 'flex items-center justify-between gap-3 w-full px-4 py-2.5 text-sm text-[var(--n15-silver)] border border-[var(--n15-gold)]/20 bg-[var(--n15-black)]/40 hover:border-[var(--n15-gold)]/40 transition-colors'
 
-function Dropdown({ label, value, options, onSelect, compactLabel }: {
+/** Одна строка раскрытого списка: заголовок группы (СНТ/СНО/ДНТ — не
+ *  выбирается) или пункт с названием товарищества/нас. пункта */
+type DropdownEntry =
+  | { kind: 'header'; label: string }
+  | { kind: 'option'; value: string; label: string }
+
+function Dropdown({ label, value, options, groups, onSelect, compactLabel }: {
   label: string
   value: string
-  options: { value: string; label: string }[]
+  /** Простые пункты без групп (сделка, тип, район…) */
+  options?: { value: string; label: string }[]
+  /** Группы с заголовками — например категории СНТ/СНО/ДНТ садовых
+   *  товариществ. Если заданы, options не используется */
+  groups?: { label: string; options: { value: string; label: string }[] }[]
   onSelect: (v: string) => void
   compactLabel?: boolean
 }) {
   const [open, setOpen] = useState(false)
-  const current = options.find((o) => o.value === value)
+  const entries: DropdownEntry[] = groups
+    ? groups.flatMap((g) => [
+        { kind: 'header', label: g.label },
+        ...g.options.map((o) => ({ kind: 'option' as const, ...o })),
+      ])
+    : (options ?? []).map((o) => ({ kind: 'option' as const, ...o }))
+  const current = entries.find((e): e is Extract<DropdownEntry, { kind: 'option' }> => e.kind === 'option' && e.value === value)
   return (
     <div className="relative">
       <button type="button" onClick={() => setOpen(!open)} className={ddBtnCls} aria-expanded={open}>
@@ -94,11 +110,18 @@ function Dropdown({ label, value, options, onSelect, compactLabel }: {
             className={`w-full text-left px-4 py-2 text-sm hover:bg-[var(--n15-gold)]/8 ${value === '' ? 'text-[var(--n15-gold)]' : 'text-[var(--n15-silver)]'}`}>
             Любой
           </button>
-          {options.map((o) => (
-            <button key={o.value} type="button" onClick={() => { onSelect(o.value); setOpen(false) }}
-              className={`w-full text-left px-4 py-2 text-sm hover:bg-[var(--n15-gold)]/8 ${value === o.value ? 'text-[var(--n15-gold)]' : 'text-[var(--n15-silver)]'}`}>
-              {o.label}
-            </button>
+          {entries.map((e, i) => (
+            e.kind === 'header' ? (
+              /* Заголовок категории в списке — раздел сам не выбирается */
+              <div key={`${e.label}-${i}`} className="px-4 pt-2 pb-0.5 text-[9px] uppercase tracking-[0.2em] text-[var(--n15-muted)]">
+                {e.label}
+              </div>
+            ) : (
+              <button key={e.value} type="button" onClick={() => { onSelect(e.value); setOpen(false) }}
+                className={`w-full text-left px-4 py-2 text-sm hover:bg-[var(--n15-gold)]/8 ${value === e.value ? 'text-[var(--n15-gold)]' : 'text-[var(--n15-silver)]'}`}>
+                {e.label}
+              </button>
+            )
           ))}
         </div>
       )}
@@ -195,9 +218,14 @@ export default function CatalogFilters({ state, onChange, t }: CatalogFiltersPro
           options={localityOptions} compactLabel
           onSelect={(v) => apply({ locality: v })} />
       </div>
-      <div className="w-48">
-        <Dropdown label={t.catalog.sntLabel} value={state.snt}
-          options={SNT_AREAS.map((s) => ({ value: s, label: s }))}
+      <div className="w-56">
+        {/* Садоводческие товарищества: список сгруппирован по категориям
+            СНТ/СНО/ДНТ — товарищества живут только внутри Владикавказского
+            городского округа и не относятся к районам республики */}
+        <Dropdown label={t.catalog.sntLabel} value={state.snt} compactLabel
+          groups={GARDENING_CATEGORY_ORDER
+            .filter((c) => GARDENING_AREAS[c].length > 0)
+            .map((c) => ({ label: c, options: GARDENING_AREAS[c].map((s) => ({ value: s, label: s })) }))}
           onSelect={(v) => apply({ snt: v })} />
       </div>
       <div className="w-48">

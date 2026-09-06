@@ -548,9 +548,10 @@ export const Objects: CollectionConfig = {
         {
           name: 'snt',
           type: 'select',
-          label: 'СТ/СНТ/СНО',
+          label: 'Садоводческое товарищество',
           // Выпадающий список разделов — как на сайте: админке не нужно
-          // вписывать товарищество вручную
+          // вписывать товарищество вручную. Все СНТ/СНО/ДНТ живут только
+          // внутри Владикавказского городского округа (см. src/lib/districts.ts)
           options: SNT_AREAS.map((s) => ({ label: s, value: s })),
           admin: {
             isClearable: true,

@@ -3,6 +3,9 @@
 import Link from 'next/link'
 import type { Dict } from '@/i18n/dictionaries'
 import { COUNTRY_AREAS, NEAR_VIK } from './landing-data'
+// Садоводческие товарищества (СНТ/СНО/ДНТ) живут только внутри
+// Владикавказского городского округа — не относятся к районам республики
+import { VLAV_OKRUG, GARDENING_CATEGORY_ORDER, GARDENING_AREAS } from '@/lib/districts'
 
 export default function CountryGuide({ t, lang }: { t: Dict; lang: string }) {
   return (
@@ -63,6 +66,40 @@ export default function CountryGuide({ t, lang }: { t: Dict; lang: string }) {
                   </Link>
                 ))}
               </div>
+              {/* Подраздел садовых товариществ — после официальных населённых
+                  пунктов и только внутри Владикавказского городского округа:
+                  категории СНТ/СНО/ДНТ раскрываются, каждое товарищество —
+                  отдельная ссылка на каталог с фильтром по нему (address.snt) */}
+              {area.district === VLAV_OKRUG && (
+                <div className="lp-snts">
+                  <p className="lp-snts-title">{t.landing.countrySntTitle}</p>
+                  {GARDENING_CATEGORY_ORDER.map((category) => {
+                    const items = GARDENING_AREAS[category]
+                    // Пустые категории (например ДНТ без товариществ в справочнике)
+                    // не показываем
+                    if (!items.length) return null
+                    return (
+                      <details key={category} className="lp-snt-cat">
+                        <summary>
+                          <span>{category}</span>
+                          <i>+</i>
+                        </summary>
+                        <div className="lp-places">
+                          {items.map((snt) => (
+                            <Link
+                              key={snt}
+                              href={`/${lang}/catalog?snt=${encodeURIComponent(snt)}`}
+                              className="lp-place-chip"
+                            >
+                              {snt}
+                            </Link>
+                          ))}
+                        </div>
+                      </details>
+                    )
+                  })}
+                </div>
+              )}
             </details>
           ))}
         </div>

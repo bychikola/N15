@@ -138,7 +138,9 @@ export const ru = {
     districtLabel: 'Район',
     cityDistrictLabel: 'Район города',
     localityLabel: 'Населённый пункт',
-    sntLabel: 'СТ/СНТ/СНО',
+    // Фильтр товариществ: всё СНТ/СНО/ДНТ живёт внутри Владикавказского
+    // городского округа и не относится к районам республики
+    sntLabel: 'Садоводческие товарищества',
   },
   object: {
     exclusive: 'Эксклюзив',
@@ -595,7 +597,9 @@ export const ru = {
     objDistrict: 'Район',
     objCityDistrict: 'Район города',
     objLocality: 'Населённый пункт',
-    objSnt: 'СТ/СНТ/СНО',
+    // Выбор товарищества для участка/дома: разделы СНТ/СНО/ДНТ внутри
+    // Владикавказского городского округа (см. GARDENING_AREAS)
+    objSnt: 'Садоводческое товарищество',
     objStreet: 'Улица',
     objHouse: 'Дом',
     objApartment: 'Квартира',
@@ -790,6 +794,8 @@ export const ru = {
     countryTitle2: 'по всей республике',
     countrySubtitle: 'Все районы республики собраны в одном разделе. Нажмите на район, чтобы открыть его населённые пункты.',
     countryNearby: 'Ближний пригород Владикавказа',
+    // Подраздел садовых товариществ внутри «Владикавказского городского округа»
+    countrySntTitle: 'Садоводческие товарищества Владикавказа',
     countryDistrictsLabel: 'Районы Республики Северная Осетия — Алания',
     servicesTitle1: 'Дизайн и ремонт',
     servicesTitle2: 'под ключ',
@@ -1001,7 +1007,7 @@ const os: Dict = {
     districtLabel: 'Район',
     cityDistrictLabel: 'Горæты район',
     localityLabel: 'Цæрæнран',
-    sntLabel: 'СТ/СНТ/СНО',
+    sntLabel: 'Дзæхæрадæнты æхсæнæдтæ',
   },
   object: {
     exclusive: 'Сæрмагонд',
@@ -1459,7 +1465,7 @@ const os: Dict = {
     objDistrict: 'Район',
     objCityDistrict: 'Горæты район',
     objLocality: 'Цæрæнран',
-    objSnt: 'СТ/СНТ/СНО',
+    objSnt: 'Дзæхæрадæнты æхсæнад',
     objStreet: 'Уынг',
     objHouse: 'Хæдзар',
     objApartment: 'Квартирæ',
@@ -1654,6 +1660,7 @@ const os: Dict = {
     countryTitle2: 'æппæт республикæйыл',
     countrySubtitle: 'Республикæйы æппæт районтæ иу хайы æмбырд сты. Районыл банкъус — йæ цæрæнрæттæ байгом уыдзысты.',
     countryNearby: 'Дзæуджыхъæуы æввахс горæтгæрон',
+    countrySntTitle: 'Дзæуджыхъæуы дзæхæрадæнты æхсæнæдтæ',
     countryDistrictsLabel: 'Цæгат Ирыстон — Аланийы районтæ',
     servicesTitle1: 'Дизайн æмæ ремонт',
     servicesTitle2: 'дзырддæгтæй',
