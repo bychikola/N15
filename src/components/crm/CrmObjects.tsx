@@ -417,7 +417,16 @@ const ObjMapEditor: FC<ObjMapProps> = ({ t, address, autoSearch, addrTouched, la
   )
 }
 
-export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) => {
+export const CrmObjects: FC<{
+  t: Dict
+  isAdmin: boolean
+  /** Профиль агента текущего пользователя — подставляется в новые объекты */
+  myAgentId?: number | null
+  /** id «своих» объектов агента — только их агент может редактировать */
+  ownObjectIds?: number[]
+  /** Открыть форму нового объекта сразу (?add=1 со страницы «Обзор») */
+  autoOpen?: boolean
+}> = ({ t, isAdmin, myAgentId = null, ownObjectIds = [], autoOpen = false }) => {
   const [rows, setRows] = useState<ObjectRow[]>([])
   const [agents, setAgents] = useState<{ id: number; name: string }[]>([])
   const [form, setForm] = useState<FormState>(emptyForm)
@@ -515,8 +524,11 @@ export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) =>
     }
   }, [loading, load])
 
-  const resetForm = () => {
-    setForm(emptyForm)
+  // Сброс формы к «новому объекту». Агент сразу подставляется в карточку —
+  // иначе новый объект останется «бесхозным» и агент не сможет его
+  // редактировать (править можно только объекты со своим профилем).
+  const resetForm = useCallback(() => {
+    setForm({ ...emptyForm, agent: myAgentId ? String(myAgentId) : '' })
     setEditId(null)
     setPhotos([])
     setFeatures([])
@@ -526,7 +538,21 @@ export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) =>
     setPl(null)
     setPlLinks([])
     setPlErr('')
-  }
+  }, [myAgentId])
+
+  // Кнопка «+ Добавить объект» со страницы «Обзор» ведёт сюда с ?add=1:
+  // открываем форму нового объекта и убираем параметр из адреса, чтобы
+  // обновление страницы не открывало форму заново. Открытие откладываем
+  // на следующий тик — синхронный setState внутри эффекта запрещён линтом.
+  useEffect(() => {
+    if (!autoOpen) return
+    const timer = setTimeout(() => {
+      resetForm()
+      setModalOpen(true)
+      window.history.replaceState(null, '', window.location.pathname)
+    }, 0)
+    return () => clearTimeout(timer)
+  }, [autoOpen, resetForm])
 
   const startEdit = (o: Record<string, unknown>) => {
     setModalOpen(true)
@@ -694,6 +720,12 @@ export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) =>
     if (saving || !form.title.trim()) return
     if (!form.price) {
       setSaveError(t.crm.objPriceRequired)
+      return
+    }
+    // Новый объект агента должен быть привязан к профилю агента: объект без
+    // агента («бесхозный») агент потом не сможет редактировать и публиковать
+    if (!editId && !isAdmin && !form.agent) {
+      setSaveError(t.crm.objAgentRequired)
       return
     }
     setSaveError('')
@@ -1350,10 +1382,14 @@ export const CrmObjects: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) =>
                   : t.crm.plTileNone}
               </div>
               <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid #eee9e1', display: 'flex', gap: 6 }}>
-                <button type="button" onClick={async () => { const res = await fetch(`/api/objects/${o.id}`, { credentials: 'include' }); const d = await res.json(); startEdit(d) }}
-                  style={{ flex: 1, border: '1px solid #e1d8ca', borderRadius: 6, background: '#faf7f2', color: '#716b62', padding: '8px 10px', fontSize: 9, textTransform: 'uppercase', letterSpacing: '.07em', cursor: 'pointer' }}>
-                  {t.crm.objEdit}
-                </button>
+                {/* Чужие объекты агент видит в общей базе, но редактирует и
+                    публикует только свои (сервер это же проверяет при доступе) */}
+                {(isAdmin || ownObjectIds.includes(o.id)) && (
+                  <button type="button" onClick={async () => { const res = await fetch(`/api/objects/${o.id}`, { credentials: 'include' }); const d = await res.json(); startEdit(d) }}
+                    style={{ flex: 1, border: '1px solid #e1d8ca', borderRadius: 6, background: '#faf7f2', color: '#716b62', padding: '8px 10px', fontSize: 9, textTransform: 'uppercase', letterSpacing: '.07em', cursor: 'pointer' }}>
+                    {t.crm.objEdit}
+                  </button>
+                )}
                 {isAdmin && (
                   <button type="button" onClick={() => void remove(o.id)}
                     style={{ border: '1px solid #e3cfc7', borderRadius: 6, background: 'transparent', color: '#9b4e43', padding: '8px 10px', fontSize: 9, textTransform: 'uppercase', letterSpacing: '.07em', cursor: 'pointer' }}>

@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation'
+import Link from 'next/link'
 import { getPayload } from 'payload'
 import type { Where } from 'payload'
 import config from '@payload-config'
@@ -123,7 +124,7 @@ export default async function CrmPage({ searchParams }: PageProps) {
 
   return (
     <CrmShell user={user} t={t} active="overview">
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16, alignItems: 'center' }}>
         {(['today', 'week', 'month'] as const).map((p) => (
           <a
             key={p}
@@ -137,6 +138,17 @@ export default async function CrmPage({ searchParams }: PageProps) {
             {t.crm[p === 'today' ? 'periodToday' : p === 'week' ? 'periodWeek' : 'periodMonth']}
           </a>
         ))}
+        {/* Быстрое добавление объекта: ведёт в раздел «Объекты» с открытой формой */}
+        <Link
+          href="/crm/objects?add=1"
+          style={{
+            marginLeft: 'auto', border: 0, borderRadius: 8, background: '#a7814e', color: '#fff',
+            padding: '12px 20px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.1em',
+            textDecoration: 'none', whiteSpace: 'nowrap',
+          }}
+        >
+          + {t.crm.objAdd}
+        </Link>
       </div>
       <div className="crm-metrics">
         {metrics.map((m) => (

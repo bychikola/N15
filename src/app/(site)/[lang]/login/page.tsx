@@ -47,7 +47,10 @@ export default function LoginPage() {
         }
       }
 
-      router.push(`/${lang}/lk`)
+      // Сотрудники (агент/администратор) после входа попадают в рабочий
+      // кабинет CRM, а не в клиентский личный кабинет
+      const role = (data?.user as { role?: string } | undefined)?.role
+      router.push(role === 'agent' || role === 'admin' ? '/crm' : `/${lang}/lk`)
       router.refresh()
     } catch {
       setError(t.auth.connError)

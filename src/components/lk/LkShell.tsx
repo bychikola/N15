@@ -20,8 +20,11 @@ export const LkShell: FC<{ children: ReactNode; active?: string }> = ({ children
   const { lang, t } = useI18n()
   const router = useRouter()
   const pathname = usePathname()
-  const [user, setUser] = useState<{ name?: string; email?: string } | null>(null)
+  const [user, setUser] = useState<{ name?: string; email?: string; role?: string } | null>(null)
   const [counts, setCounts] = useState<{ favorites: number; applications: number; unread: number } | null>(null)
+  // Сотрудникам (агент/администратор) в клиентском кабинете показываем
+  // заметную кнопку в рабочий кабинет CRM
+  const isStaff = user?.role === 'agent' || user?.role === 'admin'
 
   useEffect(() => {
     let cancelled = false
@@ -108,6 +111,13 @@ export const LkShell: FC<{ children: ReactNode; active?: string }> = ({ children
               className="text-[10px] tracking-[0.15em] uppercase text-[var(--n15-muted)] hover:text-[var(--n15-gold)] transition-colors cursor-pointer">
               {t.lk.logout} →
             </button>
+
+            {isStaff && (
+              <Link href="/crm"
+                className="mt-4 block text-center px-4 py-2.5 text-xs tracking-[0.15em] uppercase bg-[var(--n15-gold)] text-[var(--on-accent)] hover:bg-[var(--n15-gold-light)] transition-colors">
+                {t.lk.crmGo}
+              </Link>
+            )}
           </div>
 
           <nav className="flex lg:flex-col gap-1 overflow-x-auto">

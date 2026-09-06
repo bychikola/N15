@@ -1,4 +1,4 @@
-import type { CollectionBeforeChangeHook, CollectionConfig, Where } from 'payload'
+import type { CollectionBeforeChangeHook, CollectionConfig, Payload, Where } from 'payload'
 import { DISTRICT_OPTIONS, CITY_DISTRICT_OPTIONS } from '@/lib/districts'
 // Садовые товарищества — тот же справочник, что в разделах СТ/СНТ/СНО
 // на главной, в каталоге и форме CRM (landing-data.ts)
@@ -29,6 +29,65 @@ function flagFromReq(req: unknown, name: string): boolean {
     if (v === 'true' || v === '1') return true
   }
   return false
+}
+
+/** Запрос внутри access-функций коллекции (payload + текущий пользователь) */
+type AccessReq = { payload: Payload; user?: { id?: number | string; role?: string } | null }
+
+// Мемоизация поиска агентских профилей пользователя на время одного запроса:
+// полевой read-access вызывается для каждого документа в выдаче, а ids
+// профилей одного пользователя не меняются — лишние запросы к agents не нужны.
+const myAgentIdsCache = new WeakMap<object, Promise<Set<number>>>()
+
+/** ids профилей агентов (коллекция agents), привязанных к текущему пользователю */
+async function myAgentIds(req: AccessReq): Promise<Set<number>> {
+  const cached = myAgentIdsCache.get(req)
+  if (cached) return cached
+  const promise = (async () => {
+    const ids = new Set<number>()
+    const userId = req.user?.id
+    if (userId == null) return ids
+    try {
+      const { docs } = await req.payload.find({
+        collection: 'agents',
+        where: { user: { equals: userId } },
+        limit: 100,
+        depth: 0,
+        overrideAccess: true,
+      })
+      for (const agent of docs) {
+        if (typeof agent.id === 'number') ids.add(agent.id)
+      }
+    } catch {
+      // не нашли профили — считаем, что своих объектов у пользователя нет
+    }
+    return ids
+  })()
+  myAgentIdsCache.set(req, promise)
+  return promise
+}
+
+/** id профиля агента из relationship-поля (в doc лежит id или объект) */
+const agentIdOf = (value: unknown): number | null => {
+  if (typeof value === 'number') return value
+  if (value && typeof value === 'object' && typeof (value as { id?: unknown }).id === 'number') {
+    return (value as { id: number }).id
+  }
+  return null
+}
+
+/**
+ * «Свой» объект для текущего пользователя: в объекте указан профиль агента,
+ * привязанный к его учётной записи (agents.user = этот пользователь).
+ * Объекты без агента и с чужим агентом «своими» не считаются — их контакты
+ * собственника агент не видит и редактировать их не может.
+ */
+async function isOwnObjectFor(req: AccessReq, doc: { agent?: unknown } | null | undefined): Promise<boolean> {
+  if (!doc) return false
+  const agentId = agentIdOf(doc.agent)
+  if (agentId == null) return false
+  const mine = await myAgentIds(req)
+  return mine.has(agentId)
 }
 
 /**
@@ -219,9 +278,26 @@ export const Objects: CollectionConfig = {
     defaultColumns: ['title', 'type', 'category', 'price', 'status'],
   },
   access: {
+    // Каталог на сайте читает объекты без авторизации
     read: () => true,
-    create: ({ req: { user } }) => !!user,
-    update: ({ req: { user } }) => !!user,
+    // Добавлять объекты могут только сотрудники (агент или администратор).
+    // Клиенты регистрируются на сайте и работают через заявки — создание
+    // объекта напрямую из REST им не нужно и раньше было открыто всем.
+    create: ({ req: { user } }) => !!user && (user.role === 'agent' || user.role === 'admin'),
+    // Агент добавляет/редактирует/публикует только «свои» объекты (в карточке
+    // указан его профиль из коллекции agents, agents.user = этот пользователь).
+    // Общую базу агент видит на чтение, править чужие — только администратор.
+    // Возвращаем query-констрейнт — Payload сам ограничит выборку документа.
+    update: async ({ req }) => {
+      const user = req.user as AccessReq['user'] | undefined
+      if (!user) return false
+      if (user.role === 'admin') return true
+      if (user.role !== 'agent') return false
+      const mine = await myAgentIds(req)
+      if (!mine.size) return false
+      const where: Where = { agent: { in: [...mine] } }
+      return where
+    },
     delete: ({ req: { user } }) => user?.role === 'admin',
   },
   hooks: {
@@ -620,6 +696,18 @@ export const Objects: CollectionConfig = {
       name: 'ownerName',
       type: 'text',
       label: 'Собственник (имя)',
+      // Контакты собственника — персональные данные: посетители и клиенты их
+      // не видят вовсе, агент — только у своих объектов (см. isOwnObjectFor),
+      // администратор — у всех. Поле просто исчезает из выдачи REST.
+      access: {
+        read: async ({ req, doc }) => {
+          const user = req.user as AccessReq['user'] | undefined
+          if (!user) return false
+          if (user.role === 'admin') return true
+          if (user.role !== 'agent') return false
+          return isOwnObjectFor(req, doc)
+        },
+      },
       admin: {
         description: 'По имени и телефону собственника система находит дубли объекта',
       },
@@ -628,6 +716,15 @@ export const Objects: CollectionConfig = {
       name: 'ownerPhone',
       type: 'text',
       label: 'Собственник (телефон)',
+      access: {
+        read: async ({ req, doc }) => {
+          const user = req.user as AccessReq['user'] | undefined
+          if (!user) return false
+          if (user.role === 'admin') return true
+          if (user.role !== 'agent') return false
+          return isOwnObjectFor(req, doc)
+        },
+      },
       admin: {
         description: 'Хранится нормализованно: только цифры и +',
       },
@@ -636,6 +733,15 @@ export const Objects: CollectionConfig = {
       name: 'cadastralNumber',
       type: 'text',
       label: 'Кадастровый номер',
+      access: {
+        read: async ({ req, doc }) => {
+          const user = req.user as AccessReq['user'] | undefined
+          if (!user) return false
+          if (user.role === 'admin') return true
+          if (user.role !== 'agent') return false
+          return isOwnObjectFor(req, doc)
+        },
+      },
       admin: {
         description: 'Например: 15:07:0030021:123',
       },

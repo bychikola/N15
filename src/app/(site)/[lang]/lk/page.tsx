@@ -11,9 +11,12 @@ import { useI18n } from '@/i18n/i18n-provider'
 export default function LKDashboard() {
   const router = useRouter()
   const { lang, t } = useI18n()
-  const [user, setUser] = useState<{ name?: string; email?: string } | null>(null)
+  const [user, setUser] = useState<{ name?: string; email?: string; role?: string } | null>(null)
   const [counts, setCounts] = useState<{ favorites: number; applications: number; unread: number } | null>(null)
   const [loading, setLoading] = useState(true)
+  // Сотрудник (агент/администратор): вместо «голого» клиентского кабинета
+  // на обзоре появляется блок рабочего кабинета с разделом «Объекты»
+  const isStaff = user?.role === 'agent' || user?.role === 'admin'
 
   const navItems = [
     { href: `/${lang}/lk/favorites`, icon: 'favorite', label: t.lk.favorites, desc: t.lk.favoritesDesc },
@@ -89,6 +92,35 @@ export default function LKDashboard() {
               {t.lk.welcome} {user.name || user.email}
             </h1>
           </div>
+
+          {/* Сотрудник: блок рабочего кабинета. Объекты ведутся в CRM —
+              «Добавить объект» открывает там полную форму. Клиентам этот
+              блок (и кнопки) не показывается */}
+          {isStaff && (
+            <div className="mb-10 bg-[var(--n15-charcoal)] border border-[var(--n15-gold)]/25 p-6 md:p-8">
+              <div className="text-[10px] tracking-[0.2em] uppercase text-[var(--n15-gold)]">
+                Н15 · CRM
+              </div>
+              <h2 className="mt-2 text-xl md:text-2xl font-[family-name:var(--font-display)] text-[var(--n15-white)]">
+                {t.lk.crmWorkspace}
+              </h2>
+              <p className="mt-2 text-sm text-[var(--n15-muted)] max-w-2xl">{t.lk.crmDesc}</p>
+              <div className="mt-6 flex flex-wrap gap-3">
+                <Link href="/crm/objects?add=1"
+                  className="px-6 py-3 text-xs tracking-[0.15em] uppercase bg-[var(--n15-gold)] text-[var(--on-accent)] hover:bg-[var(--n15-gold-light)] transition-colors">
+                  + {t.crm.objAdd}
+                </Link>
+                <Link href="/crm/objects"
+                  className="px-6 py-3 text-xs tracking-[0.15em] uppercase border border-[var(--n15-gold)]/40 text-[var(--n15-gold)] hover:bg-[var(--n15-gold)]/8 transition-colors">
+                  {t.crm.navObjects}
+                </Link>
+                <Link href="/crm"
+                  className="px-6 py-3 text-xs tracking-[0.15em] uppercase border border-[var(--n15-gold)]/40 text-[var(--n15-gold)] hover:bg-[var(--n15-gold)]/8 transition-colors">
+                  {t.lk.crmGo}
+                </Link>
+              </div>
+            </div>
+          )}
 
           {/* Статистика — крупные цифры на панели */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-10">
