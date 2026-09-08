@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState, type FC } from 'react'
 import type { Dict } from '@/i18n/dictionaries'
 // Садовые товарищества — те же справочники, что в подразделе лендинга:
 // категории СНТ/СНО/ДНТ из GARDENING_AREAS (всё внутри Владикавказского округа)
-import { DISTRICT_OPTIONS, LOCALITIES_BY_DISTRICT, LOCALITY_OPTIONS, CITY_DISTRICT_OPTIONS, GARDENING_CATEGORY_ORDER, GARDENING_AREAS } from '@/lib/districts'
+import { DISTRICT_OPTIONS, LOCALITIES_BY_DISTRICT, LOCALITY_OPTIONS, CITY_DISTRICT_OPTIONS, GARDENING_CATEGORY_ORDER, GARDENING_AREAS, VLAV_OKRUG } from '@/lib/districts'
 import { loadYmaps, type Ymaps } from '@/lib/ymaps'
 import { geocodeAddress } from '@/lib/geocode'
 import { sortAgents } from '@/lib/agents-sort'
@@ -761,12 +761,15 @@ export const CrmObjects: FC<{
       electricity: form.electricity || undefined,
       gas: form.gas || undefined,
       internet: form.internet || undefined,
+      // Адрес: select-поля (район, район города, товарищество) без выбора
+      // уходят null («не указано»), а не '' — Payload отклоняет '' как
+      // недействительный вариант select-поля. Текстовые поля — как есть.
       address: {
         city: form.city,
-        district: form.district,
-        cityDistrict: form.cityDistrict,
+        district: form.district || null,
+        cityDistrict: form.cityDistrict || null,
         locality: form.locality,
-        snt: form.snt.trim(),
+        snt: form.snt.trim() || null,
         street: form.street,
         house: form.house,
         apartment: form.apartment,
@@ -868,6 +871,21 @@ export const CrmObjects: FC<{
           ? areaNumberText(next === 'are' ? sqmToAre(n) : areToSqm(n))
           : prev.area,
       }
+    })
+  }
+
+  // Выбор садоводческого товарищества: СНТ/СНО/ДНТ живут только внутри
+  // Владикавказского городского округа — район проставляется сам (если был
+  // другой или пустой), населённый пункт для товарищества не нужен и при
+  // сохранении не требуется (адрес: город Владикавказ + товарищество).
+  const setSnt = (v: string) => {
+    setForm((prev) => {
+      const next = { ...prev, snt: v }
+      if (v && prev.district !== VLAV_OKRUG) {
+        next.district = VLAV_OKRUG
+        next.locality = ''
+      }
+      return next
     })
   }
 
@@ -1122,16 +1140,16 @@ export const CrmObjects: FC<{
                 ))}
               </datalist>
             </div>
-            {/* Садоводческое товарищество — только для загородных категорий
-                (дом в СНТ, участок в товариществе), у городской недвижимости
-                поля нет. Список сгруппирован по категориям СНТ/СНО/ДНТ —
-                товарищества живут только внутри Владикавказского городского
-                округа, к районам республики не относятся.
-                Значение — в address.snt объекта. */}
-            {(form.category === 'land' || form.category === 'house') && (
+            {/* Садоводческое товарищество — для загородных категорий (дом
+                в СНТ, участок в товариществе) и квартир в домах товариществ;
+                у городской недвижимости поле не нужно. Список сгруппирован
+                по категориям СНТ/СНО/ДНТ — товарищества живут только внутри
+                Владикавказского городского округа, к районам республики не
+                относятся. Значение — в address.snt объекта. */}
+            {(form.category === 'land' || form.category === 'house' || form.category === 'apartment') && (
               <div className="crm-addr-full">
                 <Field label={t.crm.objSnt}>
-                  <select value={form.snt} onChange={(e) => set('snt', e.target.value)} style={inputStyle}>
+                  <select value={form.snt} onChange={(e) => setSnt(e.target.value)} style={inputStyle}>
                     <option value="">—</option>
                     {GARDENING_CATEGORY_ORDER
                       .filter((c) => GARDENING_AREAS[c].length > 0)

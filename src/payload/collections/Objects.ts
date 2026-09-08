@@ -308,6 +308,24 @@ export const Objects: CollectionConfig = {
     // после хуков, поэтому уникальность даёт сам UUID (полный), а не проверка
     // занятости с суффиксами -2, -3… У старых записей slug остаётся как есть.
     beforeValidate: [
+      // Необязательные select-поля адреса (район, район города, товарищество):
+      // Payload считает пустую строку '' недействительным вариантом выбора
+      // («Следующее поле недействительно: Адрес > …») — формы присылают ''
+      // в невыбранных полях. Приводим '' к null («значение не указано»),
+      // как это делает сама админка, до проверки полей.
+      async ({ data }) => {
+        if (!data) return data
+        const addr = data.address
+        if (addr && typeof addr === 'object') {
+          for (const key of ['district', 'cityDistrict', 'snt'] as const) {
+            const value = (addr as Record<string, unknown>)[key]
+            if (typeof value === 'string' && !value.trim()) {
+              ;(addr as Record<string, unknown>)[key] = null
+            }
+          }
+        }
+        return data
+      },
       async ({ data, operation }) => {
         if (!data) return data
         if (operation === 'create') {
