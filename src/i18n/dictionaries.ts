@@ -41,6 +41,7 @@ export const ru = {
     blog: 'Блог',
     contacts: 'Контакты',
     cabinet: 'Личный кабинет',
+    callUs: 'Позвонить нам',
     menu: 'Меню',
   },
   common: {
@@ -1084,6 +1085,7 @@ const os: Dict = {
     blog: 'Блог',
     contacts: 'Контакттæ',
     cabinet: 'Хиуарт кабинет',
+    callUs: 'Нæм радзырд',
     menu: 'Меню',
   },
   common: {

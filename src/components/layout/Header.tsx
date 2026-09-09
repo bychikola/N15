@@ -7,6 +7,27 @@ import { LangSwitcher } from '@/i18n/lang-switcher'
 import { ThemeSwitcher } from '@/components/ui/ThemeSwitcher'
 import CabinetBadge from '@/components/layout/CabinetBadge'
 
+// Иконка телефона — контурная, цвет берёт из currentColor (золотой акцент),
+// чтобы кнопка «Позвонить нам» выглядела в едином стиле с остальной шапкой.
+const phoneIcon = (
+  <svg
+    width="15"
+    height="15"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.8"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+  </svg>
+)
+
+// Общий номер агентства для tel:-ссылки (текстом рядом с кнопкой не показывается)
+const SITE_PHONE_TEL = 'tel:+79581161515'
+
 export const Header: FC = () => {
   const [isOpen, setIsOpen] = useState(false)
   // Раскрытие раздела «Недвижимость»: на компьютере — по наведению/клику,
@@ -252,13 +273,29 @@ export const Header: FC = () => {
               {link.label}
             </Link>
           ))}
-          <Link
-            href={`/${lang}/lk`}
-            className="ml-4 px-5 py-2 text-sm tracking-wider uppercase border border-[var(--n15-gold)]/30 text-[var(--n15-gold)] hover:bg-[var(--n15-gold)]/8 transition-all duration-300 inline-flex items-center"
-          >
-            {t.nav.cabinet}
-            <CabinetBadge />
-          </Link>
+          {/* Правая группа: звонок и «Личный кабинет». Звонок — честная
+              tel:-ссылка на общий номер 8-958-116-15-15 (открывает набор
+              номера на телефоне, системную программу звонков — на
+              компьютере); сам номер текстом не выводится. До xl подпись
+              скрыта, чтобы не теснить меню на нешироких экранах */}
+          <div className="ml-4 flex items-center gap-2">
+            <a
+              href={SITE_PHONE_TEL}
+              aria-label={t.nav.callUs}
+              title={t.nav.callUs}
+              className="inline-flex items-center gap-2 px-2.5 py-2.5 xl:px-4 xl:py-2 text-sm tracking-wider uppercase border border-[var(--n15-gold)]/30 text-[var(--n15-gold)] hover:bg-[var(--n15-gold)]/8 transition-all duration-300"
+            >
+              {phoneIcon}
+              <span className="hidden xl:inline">{t.nav.callUs}</span>
+            </a>
+            <Link
+              href={`/${lang}/lk`}
+              className="px-5 py-2 text-sm tracking-wider uppercase border border-[var(--n15-gold)]/30 text-[var(--n15-gold)] hover:bg-[var(--n15-gold)]/8 transition-all duration-300 inline-flex items-center"
+            >
+              {t.nav.cabinet}
+              <CabinetBadge />
+            </Link>
+          </div>
           <LangSwitcher className="ml-3" />
           <ThemeSwitcher className="ml-3" />
         </nav>
@@ -411,6 +448,16 @@ export const Header: FC = () => {
                 {link.label}
               </Link>
             ))}
+            {/* Звонок — в мобильном меню (не сжимает строку навигации).
+                tel:-ссылка на общий номер; текст номера не показывается */}
+            <a
+              href={SITE_PHONE_TEL}
+              className="flex items-center justify-center gap-2 px-5 py-3 text-sm tracking-wider uppercase border border-[var(--n15-gold)]/30 text-[var(--n15-gold)] hover:bg-[var(--n15-gold)]/8 transition-colors"
+              onClick={() => setIsOpen(false)}
+            >
+              {phoneIcon}
+              {t.nav.callUs}
+            </a>
             <Link
               href={`/${lang}/lk`}
               className="mt-2 px-5 py-3 text-sm tracking-wider uppercase border border-[var(--n15-gold)]/30 text-[var(--n15-gold)] text-center"
