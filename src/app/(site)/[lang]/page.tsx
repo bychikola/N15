@@ -8,7 +8,6 @@ import LandingHero from '@/components/home/LandingHero'
 import SearchCategories from '@/components/home/SearchCategories'
 import FeaturedObjects from '@/components/home/FeaturedObjects'
 import type { ObjectListItem } from '@/components/objects/ObjectCard'
-import MortgageCalculator from '@/components/home/MortgageCalculator'
 import InterregionalGuide from '@/components/home/InterregionalGuide'
 import ServicesSection from '@/components/home/ServicesSection'
 import LegalSection from '@/components/home/LegalSection'
@@ -207,7 +206,6 @@ export default async function HomePage({ params, searchParams }: PageProps) {
           filterSummary={filterSummary}
           emptyNote={filterEmptyNote}
         />
-        <MortgageCalculator t={t} />
         <InterregionalGuide t={t} lang={lang} objectsByCity={interregionalByCity} />
         <ServicesSection t={t} />
         <LegalSection t={t} />

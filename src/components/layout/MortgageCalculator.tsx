@@ -1,7 +1,15 @@
 'use client'
 
-import { useMemo, useState } from 'react'
-import type { Dict } from '@/i18n/dictionaries'
+import { useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
+import { createPortal } from 'react-dom'
+import { useI18n } from '@/i18n/i18n-provider'
+
+// Ипотечный калькулятор. Большой блок на главной убран — калькулятор
+// открывается компактным модальным окном по кнопке «Ипотечный калькулятор»
+// в шапке (десктоп и мобильное меню). Вся логика и поля — как в прежнем
+// блоке: стоимость, первоначальный взнос (в рублях и процентах, синхронно),
+// ставка, срок, ежемесячный платёж, общая выплата и переплата.
 
 const formatResult = (value: number) =>
   new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(
@@ -27,7 +35,8 @@ const displayPercent = (value: number) => {
   return Math.round(value * 10) / 10 + ''
 }
 
-export default function MortgageCalculator({ t }: { t: Dict }) {
+export default function MortgageCalculator({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { t, lang } = useI18n()
   const [priceText, setPriceText] = useState('9 000 000')
   const [downPaymentText, setDownPaymentText] = useState('1 800 000')
   const [downPercentText, setDownPercentText] = useState('20')
@@ -84,19 +93,48 @@ export default function MortgageCalculator({ t }: { t: Dict }) {
     return { principal, payment, total, overpayment: total - principal }
   }, [price, downPayment, years, rate])
 
-  return (
-    <section className="lp-mortgage" id="mortgage">
-      <details className="lp-mortgage-disclosure">
-        <summary>
-          <div>
-            <p className="lp-eyebrow lp-eyebrow-light">{t.landing.calcEyebrow}</p>
-            <h2>{t.landing.calcTitle}</h2>
-            <p>{t.landing.calcOpenHint}</p>
-          </div>
-          <i>+</i>
-        </summary>
+  // Пока окно открыто: Esc закрывает его, фон страницы не прокручивается
+  useEffect(() => {
+    if (!open) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose()
+    }
+    document.addEventListener('keydown', onKey)
+    const prevOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.body.style.overflow = prevOverflow
+    }
+  }, [open, onClose])
+
+  // Окно не открывается при загрузке страницы — только по клику на кнопку
+  // в шапке. Рендерится в портале у <body>, чтобы оверлей не был вложен
+  // в шапку с backdrop-blur (та создаёт containing block для fixed).
+  if (!open) return null
+
+  return createPortal(
+    <div className="lp-calc-overlay" onClick={onClose}>
+      <div
+        className="lp-calc-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label={t.landing.calcTitle}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="lp-calc-head">
+          <h2>{t.landing.calcTitle}</h2>
+          <button
+            type="button"
+            className="lp-calc-close"
+            onClick={onClose}
+            aria-label={t.landing.calcClose}
+            autoFocus
+          >
+            ✕
+          </button>
+        </div>
         <div className="lp-mortgage-content">
-          <h3>{t.landing.calcContentTitle}</h3>
           <p>{t.landing.calcNote}</p>
           <div className="lp-mortgage-panel">
             <div className="lp-mortgage-fields">
@@ -132,11 +170,14 @@ export default function MortgageCalculator({ t }: { t: Dict }) {
               <div><span>{t.landing.calcCredit}</span><b>{formatResult(result.principal)} ₽</b></div>
               <div><span>{t.landing.calcTotal}</span><b>{formatResult(result.total)} ₽</b></div>
               <div><span>{t.landing.calcOverpay}</span><b>{formatResult(result.overpayment)} ₽</b></div>
-              <a href="#contact">{t.landing.calcConsult} <span aria-hidden="true">→</span></a>
+              {/* «Получить консультацию» — якорь контактов главной страницы:
+                  окно закрывается, страница прокручивается к форме заявки */}
+              <Link href={`/${lang}#contact`} onClick={onClose}>{t.landing.calcConsult} <span aria-hidden="true">→</span></Link>
             </div>
           </div>
         </div>
-      </details>
-    </section>
+      </div>
+    </div>,
+    document.body,
   )
 }

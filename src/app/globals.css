@@ -470,17 +470,58 @@ html[data-theme='dark'] .lp-featured .object-card { border: 0; }
 .lp-featured-empty { display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center; }
 .lp-featured-empty-text { margin: 0; font-size: 15px; color: #6f6758; }
 
-/* Калькулятор — скруглённая карточка-аккордеон (как на живом прототипе) */
-.lp-mortgage { color: #fff; background: #262722; border-radius: 24px; grid-template-columns: minmax(185px, .55fr) minmax(0, 1.45fr); gap: 33px; width: min(910px, 100% - 64px); margin: 61px auto; padding: 28px; display: grid; box-shadow: 0 24px 70px rgba(38, 39, 34, .12); }
-.lp-mortgage > details { grid-column: 1 / -1; }
-.lp-mortgage-disclosure > summary { cursor: pointer; grid-template-columns: 1fr 37px; align-items: center; gap: 24px; min-height: 175px; padding: 0; list-style: none; display: grid; }
-.lp-mortgage-disclosure > summary::-webkit-details-marker { display: none; }
-.lp-mortgage-disclosure > summary h2 { letter-spacing: -.045em; max-width: 720px; margin: 0; font-family: 'New Standard', Georgia, serif; font-weight: 400; font-size: clamp(30px, 3.5vw, 45px); line-height: 1.02; color: #fff; }
-.lp-mortgage-disclosure > summary p:last-child { color: rgba(255,255,255,.5); max-width: 460px; margin: 12px 0 0; font-size: 10px; line-height: 1.7; }
-.lp-mortgage-disclosure > summary i { color: #d7ba8b; justify-self: end; font: 28px Arial, sans-serif; transition: transform .2s; }
-.lp-mortgage-disclosure[open] > summary i { transform: rotate(45deg); }
+/* Модальное окно «Ипотечный калькулятор» — открывается кнопкой в шапке
+   вместо прежнего большого блока-аккордеона на главной. Тёмная карточка
+   с палитрой прежнего блока; светлая панель калькулятора внутри
+   переиспользует классы .lp-mortgage-* (см. ниже) */
+.lp-calc-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000; /* выше шапки (50) и лайтбоксов фото (9999) */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(13, 13, 15, .6);
+  overflow-y: auto; /* если окно всё же выше экрана — прокрутка фона */
+}
+.lp-calc-modal {
+  position: relative;
+  width: min(920px, 100%);
+  max-height: calc(100vh - 48px);
+  margin: auto;
+  padding: 26px 28px 30px;
+  overflow-y: auto; /* на невысоких экранах прокручивается само окно */
+  background: #262722;
+  color: #fff;
+  border-radius: 24px;
+  box-shadow: 0 24px 70px rgba(13, 13, 15, .5);
+}
+.lp-calc-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 18px; }
+.lp-calc-head h2 { margin: 0; font-family: 'New Standard', Georgia, serif; font-weight: 400; font-size: clamp(24px, 2.6vw, 34px); line-height: 1.05; letter-spacing: -.04em; color: #fff; }
+/* Кнопка закрытия — золотой кружок с крестиком, подпись не нужна
+   (aria-label на кнопке) */
+.lp-calc-close {
+  flex: 0 0 auto;
+  width: 38px;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(215, 186, 139, .35);
+  border-radius: 50%;
+  background: none;
+  color: #d7ba8b;
+  font: 15px/1 Arial, sans-serif;
+  cursor: pointer;
+  transition: background .2s;
+}
+.lp-calc-close:hover { background: rgba(215, 186, 139, .14); }
+.lp-calc-close:focus-visible { outline: 1px solid #d7ba8b; outline-offset: 2px; }
+/* Тело калькулятора (.lp-mortgage-content) — с линией-разделителем сверху,
+   отступ от заголовка окна */
+.lp-calc-modal .lp-mortgage-content { margin-top: 16px; }
 .lp-mortgage-content { border-top: 1px solid rgba(255,255,255,.17); padding: 22px 0 0; }
-.lp-mortgage-content > h3 { letter-spacing: -.035em; margin: 0 0 9px; font-family: 'New Standard', Georgia, serif; font-weight: 400; font-size: clamp(23px, 2.6vw, 33px); line-height: 1.05; color: #fff; }
 .lp-mortgage-content > p { color: rgba(255,255,255,.5); margin: 0 0 16px; font-size: 10px; line-height: 1.7; }
 .lp-mortgage-panel { background: #f5f0e6; color: #24231f; border-radius: 14px; grid-template-columns: 1fr .78fr; gap: 11px; padding: 12px; display: grid; }
 .lp-mortgage-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
@@ -753,9 +794,11 @@ html[data-theme='dark'] .lp-featured .object-card { border: 0; }
      с заголовком не помещается без сжатия) */
   .lp-featured-head { flex-direction: column; align-items: stretch; row-gap: 16px; }
   .lp-featured-head .lp-featured-all { align-self: flex-start; }
-  .lp-mortgage { width: auto; margin: 44px 22px; padding: 22px 18px; grid-template-columns: 1fr; gap: 26px; }
-  .lp-mortgage-disclosure > summary { grid-template-columns: 1fr 28px; gap: 16px; min-height: 190px; }
-  .lp-mortgage-disclosure > summary h2 { font-size: 36px; }
+  /* Калькулятор на телефоне — на весь удобный экран: без полей и
+     скруглений, без выхода за границы; содержимое прокручивается
+     внутри окна */
+  .lp-calc-overlay { padding: 0; }
+  .lp-calc-modal { width: 100%; height: 100%; max-height: none; border-radius: 0; padding: 22px 16px 24px; }
   .lp-mortgage-content { padding: 20px 0 0; }
   .lp-mortgage-panel { grid-template-columns: 1fr; padding: 14px; }
   .lp-services { width: auto; margin: 72px 22px; }

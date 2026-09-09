@@ -6,6 +6,7 @@ import { useI18n } from '@/i18n/i18n-provider'
 import { LangSwitcher } from '@/i18n/lang-switcher'
 import { ThemeSwitcher } from '@/components/ui/ThemeSwitcher'
 import CabinetBadge from '@/components/layout/CabinetBadge'
+import MortgageCalculator from '@/components/layout/MortgageCalculator'
 
 // Иконка телефона — контурная, цвет берёт из currentColor (золотой акцент),
 // чтобы кнопка «Позвонить нам» выглядела в едином стиле с остальной шапкой.
@@ -25,11 +26,42 @@ const phoneIcon = (
   </svg>
 )
 
+// Иконка калькулятора — контурная, цвет берёт из currentColor (золотой
+// акцент), как у иконки телефона: кнопка «Ипотечный калькулятор» выглядит
+// в едином стиле с остальной шапкой.
+const calculatorIcon = (
+  <svg
+    width="15"
+    height="15"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.8"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <rect x="4" y="2" width="16" height="20" rx="2" />
+    <path d="M8 6h8" />
+    <path d="M8.5 11.5h.01" />
+    <path d="M12 11.5h.01" />
+    <path d="M15.5 11.5h.01" />
+    <path d="M8.5 15h.01" />
+    <path d="M12 15h.01" />
+    <path d="M15.5 15h.01" />
+    <path d="M8.5 18.5h.01" />
+    <path d="M12 18.5h.01" />
+  </svg>
+)
+
 // Общий номер агентства для tel:-ссылки (текстом рядом с кнопкой не показывается)
 const SITE_PHONE_TEL = 'tel:+79581161515'
 
 export const Header: FC = () => {
   const [isOpen, setIsOpen] = useState(false)
+  // Модальное окно ипотечного калькулятора (кнопка «Ипотечный калькулятор»
+  // в шапке и пункт в мобильном меню). При загрузке страницы не открывается.
+  const [calcOpen, setCalcOpen] = useState(false)
   // Раскрытие раздела «Недвижимость»: на компьютере — по наведению/клику,
   // на телефоне — по нажатию (аккордеон). Состояние общее для обоих
   // вариантов меню, но виден на экране только один из них.
@@ -243,7 +275,7 @@ export const Header: FC = () => {
         </Link>
 
         {/* Desktop nav */}
-        <nav className="hidden lg:flex items-center gap-8">
+        <nav className="hidden lg:flex items-center gap-6">
           {/* «Недвижимость»: выпадающий список подразделов по наведению и клику */}
           <div
             className="relative"
@@ -384,11 +416,15 @@ export const Header: FC = () => {
               {link.label}
             </Link>
           ))}
-          {/* Правая группа: звонок и «Личный кабинет». Звонок — честная
-              tel:-ссылка на общий номер 8-958-116-15-15 (открывает набор
-              номера на телефоне, системную программу звонков — на
+          {/* Правая группа: калькулятор, звонок и «Личный кабинет». Звонок —
+              честная tel:-ссылка на общий номер 8-958-116-15-15 (открывает
+              набор номера на телефоне, системную программу звонков — на
               компьютере); сам номер текстом не выводится. До xl подпись
-              скрыта, чтобы не теснить меню на нешироких экранах */}
+              скрыта, чтобы не теснить меню на нешироких экранах. У самого
+              длинного пункта — «Ипотечного калькулятора» — подпись
+              появляется только с 2xl: на экранах до 2xl это компактная
+              иконка (как «Позвонить нам» до xl), полный текст пункта
+              доступен в мобильном меню */}
           <div className="ml-4 flex items-center gap-2">
             <a
               href={SITE_PHONE_TEL}
@@ -399,6 +435,16 @@ export const Header: FC = () => {
               {phoneIcon}
               <span className="hidden xl:inline">{t.nav.callUs}</span>
             </a>
+            <button
+              type="button"
+              onClick={() => setCalcOpen(true)}
+              aria-label={t.nav.calc}
+              title={t.nav.calc}
+              className="inline-flex items-center gap-2 px-2.5 py-2.5 2xl:px-4 2xl:py-2 text-sm tracking-wider uppercase border border-[var(--n15-gold)]/30 text-[var(--n15-gold)] hover:bg-[var(--n15-gold)]/8 transition-all duration-300"
+            >
+              {calculatorIcon}
+              <span className="hidden 2xl:inline">{t.nav.calc}</span>
+            </button>
             <Link
               href={`/${lang}/lk`}
               className="px-5 py-2 text-sm tracking-wider uppercase border border-[var(--n15-gold)]/30 text-[var(--n15-gold)] hover:bg-[var(--n15-gold)]/8 transition-all duration-300 inline-flex items-center"
@@ -583,6 +629,19 @@ export const Header: FC = () => {
               {phoneIcon}
               {t.nav.callUs}
             </a>
+            {/* «Ипотечный калькулятор»: открывает модальное окно калькулятора
+                (меню при этом закрывается, чтобы окно заняло весь экран) */}
+            <button
+              type="button"
+              onClick={() => {
+                setCalcOpen(true)
+                setIsOpen(false)
+              }}
+              className="mt-2 flex items-center justify-center gap-2 px-5 py-3 text-sm tracking-wider uppercase border border-[var(--n15-gold)]/30 text-[var(--n15-gold)] hover:bg-[var(--n15-gold)]/8 transition-colors"
+            >
+              {calculatorIcon}
+              {t.nav.calc}
+            </button>
             <Link
               href={`/${lang}/lk`}
               className="mt-2 px-5 py-3 text-sm tracking-wider uppercase border border-[var(--n15-gold)]/30 text-[var(--n15-gold)] text-center"
@@ -597,6 +656,11 @@ export const Header: FC = () => {
           </nav>
         </div>
       )}
+      {/* Модальное окно ипотечного калькулятора — живёт в шапке, чтобы
+          кнопка работала на всех страницах сайта. Контент окна рендерится
+          порталом к <body>, поэтому backdrop-blur шапки (создаёт containing
+          block для fixed) на него не влияет */}
+      <MortgageCalculator open={calcOpen} onClose={() => setCalcOpen(false)} />
     </header>
   )
 }
