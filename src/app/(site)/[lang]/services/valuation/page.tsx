@@ -1,49 +1,51 @@
-import { Header } from '@/components/layout/Header'
-import { Footer } from '@/components/layout/Footer'
-import { SectionWrapper } from '@/components/ui/SectionWrapper'
-import { Button } from '@/components/ui/Button'
+import { ServiceDirectionPage } from '@/components/services/ServiceDirectionPage'
 import { getDictionary } from '@/i18n/dictionaries'
 
 interface PageProps {
   params: Promise<{ lang: string }>
 }
 
-export default async function ValuationPage({ params }: PageProps) {
+export default async function ValuationServicesPage({ params }: PageProps) {
   const { lang } = await params
   const t = getDictionary(lang)
+  const valuation = t.services.valuation
 
+  // id совпадают с #ссылками пунктов меню «Услуги» в Header.tsx
+  const items = [
+    { id: 'kvartira', title: valuation.kvartira.title, text: valuation.kvartira.text },
+    { id: 'dom', title: valuation.dom.title, text: valuation.dom.text },
+    { id: 'uchastok', title: valuation.uchastok.title, text: valuation.uchastok.text },
+    { id: 'kommercheskiy', title: valuation.kommercheskiy.title, text: valuation.kommercheskiy.text },
+  ]
+
+  // Как проходит оценка: общий порядок работы независимо от типа объекта
   const steps = [
-    { step: '01', title: t.services.valuation.step1Title, desc: t.services.valuation.step1Desc },
-    { step: '02', title: t.services.valuation.step2Title, desc: t.services.valuation.step2Desc },
-    { step: '03', title: t.services.valuation.step3Title, desc: t.services.valuation.step3Desc },
+    { step: '01', title: valuation.step1Title, desc: valuation.step1Desc },
+    { step: '02', title: valuation.step2Title, desc: valuation.step2Desc },
+    { step: '03', title: valuation.step3Title, desc: valuation.step3Desc },
   ]
 
   return (
-    <>
-      <Header />
-      <main className="pt-20">
-        <SectionWrapper variant="dark" ornament="solar">
-          <h1 className="text-4xl md:text-5xl font-[family-name:var(--font-display)] text-[var(--n15-white)] mb-4">{t.services.valuation.title}</h1>
-          <p className="text-[var(--n15-muted)] max-w-2xl mb-8">
-            {t.services.valuation.subtitle}
-          </p>
-        </SectionWrapper>
-        <SectionWrapper variant="charcoal">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
-            {steps.map((s) => (
-              <div key={s.step} className="p-6 border border-[var(--n15-gold)]/10">
-                <div className="text-3xl font-[family-name:var(--font-display)] text-[var(--n15-gold)]/30 mb-4">{s.step}</div>
-                <h3 className="text-sm tracking-wider uppercase text-[var(--n15-white)] mb-2">{s.title}</h3>
-                <p className="text-xs text-[var(--n15-muted)]">{s.desc}</p>
-              </div>
-            ))}
-          </div>
-          <div className="text-center">
-            <Button variant="primary" href={`/${lang}/contacts`}>{t.services.valuation.cta}</Button>
-          </div>
-        </SectionWrapper>
-      </main>
-      <Footer />
-    </>
+    <ServiceDirectionPage
+      title={valuation.title}
+      subtitle={valuation.subtitle}
+      items={items}
+      cta={{ label: valuation.cta, href: `/${lang}/contacts` }}
+    >
+      <div className="mt-14 pt-14 border-t border-[var(--n15-gold)]/10">
+        <h2 className="text-xl md:text-2xl font-[family-name:var(--font-display)] text-[var(--n15-white)] mb-8">
+          {valuation.processTitle}
+        </h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          {steps.map((s) => (
+            <div key={s.step} className="p-6 border border-[var(--n15-gold)]/10">
+              <div className="text-3xl font-[family-name:var(--font-display)] text-[var(--n15-gold)]/30 mb-4">{s.step}</div>
+              <h3 className="text-sm tracking-wider uppercase text-[var(--n15-white)] mb-2">{s.title}</h3>
+              <p className="text-xs text-[var(--n15-muted)]">{s.desc}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </ServiceDirectionPage>
   )
 }

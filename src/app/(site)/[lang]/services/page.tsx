@@ -13,15 +13,15 @@ export default async function ServicesPage({ params }: PageProps) {
   const { lang } = await params
   const t = getDictionary(lang)
 
-  // «Ипотечный брокер» и «Оценка недвижимости» перенесены из юридического
-  // блока на главной в общий раздел услуг (см. их страницы broker/valuation)
-  const services = [
-    { title: t.services.buyTitle, desc: t.services.buyDesc, href: `/${lang}/services/buy`, accent: 'gold' },
-    { title: t.services.sellTitle, desc: t.services.sellDesc, href: `/${lang}/services/sell`, accent: 'gold' },
-    { title: t.services.rentTitle, desc: t.services.rentDesc, href: `/${lang}/services/rent`, accent: 'gold' },
-    { title: t.services.mortgageTitle, desc: t.services.mortgageDesc, href: `/${lang}/services/mortgage`, accent: 'burgundy' },
-    { title: t.services.brokerTitle, desc: t.services.brokerDesc, href: `/${lang}/services/broker`, accent: 'burgundy' },
-    { title: t.services.valuationTitle, desc: t.services.valuationDesc, href: `/${lang}/services/valuation`, accent: 'gold' },
+  // Пять направлений раздела «Услуги» — карточки-ссылки на страницы
+  // направлений (меню шапки раскрывает каждое направление до услуг).
+  // Покупка, продажа и аренда живут в разделе «Недвижимость».
+  const directions = [
+    { title: t.services.mortgage.title, desc: t.services.mortgage.desc, href: `/${lang}/services/mortgage`, accent: 'burgundy' },
+    { title: t.services.legal.title, desc: t.services.legal.desc, href: `/${lang}/services/legal`, accent: 'gold' },
+    { title: t.services.design.title, desc: t.services.design.desc, href: `/${lang}/services/design`, accent: 'burgundy' },
+    { title: t.services.build.title, desc: t.services.build.desc, href: `/${lang}/services/build`, accent: 'gold' },
+    { title: t.services.valuation.title, desc: t.services.valuation.desc, href: `/${lang}/services/valuation`, accent: 'gold' },
   ]
 
   return (
@@ -38,15 +38,15 @@ export default async function ServicesPage({ params }: PageProps) {
         </SectionWrapper>
 
         <SectionWrapper variant="charcoal">
-          {/* Шесть услуг: 1 колонка на телефоне, 2 на планшете, 3 на десктопе */}
+          {/* Пять направлений: 1 колонка на телефоне, 2 на планшете, 3 на десктопе */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {services.map((s) => (
-              <OrnamentBorder key={s.title} cornerOrnament>
+            {directions.map((s) => (
+              <OrnamentBorder key={s.href} cornerOrnament>
                 <div className="p-8 group">
                   <div className={`w-12 h-px mb-6 ${s.accent === 'burgundy' ? 'bg-[var(--n15-burgundy)]' : 'bg-[var(--n15-gold)]'}`} />
-                  <h3 className="text-xl font-[family-name:var(--font-display)] text-[var(--n15-white)] mb-3 group-hover:text-[var(--n15-gold)] transition-colors">
+                  <h2 className="text-xl font-[family-name:var(--font-display)] text-[var(--n15-white)] mb-3 group-hover:text-[var(--n15-gold)] transition-colors">
                     {s.title}
-                  </h3>
+                  </h2>
                   <p className="text-sm text-[var(--n15-muted)] mb-6 leading-relaxed">
                     {s.desc}
                   </p>
@@ -56,6 +56,11 @@ export default async function ServicesPage({ params }: PageProps) {
                 </div>
               </OrnamentBorder>
             ))}
+          </div>
+          <div className="mt-14 text-center">
+            <Button variant="primary" href={`/${lang}/contacts`}>
+              {t.services.ctaConsult}
+            </Button>
           </div>
         </SectionWrapper>
       </main>
