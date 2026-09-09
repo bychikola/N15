@@ -13,14 +13,16 @@ export default async function ServicesPage({ params }: PageProps) {
   const { lang } = await params
   const t = getDictionary(lang)
 
-  // Пять направлений раздела «Услуги» — карточки-ссылки на страницы
-  // направлений (меню шапки раскрывает каждое направление до услуг).
-  // Покупка, продажа и аренда живут в разделе «Недвижимость».
+  // Шесть услуг раздела «Услуги» — карточки-ссылки на страницы услуг,
+  // где раскрыт полный перечень услуг внутри каждой. Порядок — как в
+  // вертикальном списке меню шапки (см. Header.tsx). Покупка, продажа
+  // и аренда живут только в разделе «Недвижимость».
   const directions = [
     { title: t.services.mortgage.title, desc: t.services.mortgage.desc, href: `/${lang}/services/mortgage`, accent: 'burgundy' },
-    { title: t.services.legal.title, desc: t.services.legal.desc, href: `/${lang}/services/legal`, accent: 'gold' },
-    { title: t.services.design.title, desc: t.services.design.desc, href: `/${lang}/services/design`, accent: 'burgundy' },
-    { title: t.services.build.title, desc: t.services.build.desc, href: `/${lang}/services/build`, accent: 'gold' },
+    { title: t.services.broker.title, desc: t.services.broker.desc, href: `/${lang}/services/broker`, accent: 'gold' },
+    { title: t.services.legal.title, desc: t.services.legal.desc, href: `/${lang}/services/legal`, accent: 'burgundy' },
+    { title: t.services.design.title, desc: t.services.design.desc, href: `/${lang}/services/design`, accent: 'gold' },
+    { title: t.services.build.title, desc: t.services.build.desc, href: `/${lang}/services/build`, accent: 'burgundy' },
     { title: t.services.valuation.title, desc: t.services.valuation.desc, href: `/${lang}/services/valuation`, accent: 'gold' },
   ]
 
@@ -38,7 +40,7 @@ export default async function ServicesPage({ params }: PageProps) {
         </SectionWrapper>
 
         <SectionWrapper variant="charcoal">
-          {/* Пять направлений: 1 колонка на телефоне, 2 на планшете, 3 на десктопе */}
+          {/* Шесть услуг: 1 колонка на телефоне, 2 на планшете, 3 на десктопе */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {directions.map((s) => (
               <OrnamentBorder key={s.href} cornerOrnament>

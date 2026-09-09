@@ -10,7 +10,8 @@ export default async function LegalServicesPage({ params }: PageProps) {
   const t = getDictionary(lang)
   const legal = t.services.legal
 
-  // id совпадают с #ссылками пунктов меню «Услуги» в Header.tsx
+  // id строк — якоря для прямых ссылок на конкретную услугу (например
+  // /services/legal#proverka-obekta)
   const items = [
     { id: 'proverka-obekta', title: legal.checkObject.title, text: legal.checkObject.text },
     { id: 'soprovozhdenie-sdelki', title: legal.sdelka.title, text: legal.sdelka.text },

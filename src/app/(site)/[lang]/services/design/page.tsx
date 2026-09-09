@@ -10,7 +10,8 @@ export default async function DesignServicesPage({ params }: PageProps) {
   const t = getDictionary(lang)
   const design = t.services.design
 
-  // id совпадают с #ссылками пунктов меню «Услуги» в Header.tsx
+  // id строк — якоря для прямых ссылок на конкретную услугу (например
+  // /services/design#dizayn-proekt)
   const items = [
     { id: 'dizayn-proekt', title: design.proekt.title, text: design.proekt.text },
     { id: 'planirovka', title: design.planirovka.title, text: design.planirovka.text },

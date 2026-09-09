@@ -53,76 +53,20 @@ export const Header: FC = () => {
     { href: `/${lang}/foreign`, label: t.nav.foreign },
   ]
 
-  // Раздел «Услуги»: пять направлений (Ипотека, Юридические услуги, Дизайн
-  // интерьера, Строительство частных домов, Оценка недвижимости). Колонка
-  // строго вертикальная: у каждого направления — ссылка на его страницу
-  // и список услуг (якоря страницы направления; «Ипотечный брокер» — своя
-  // страница). Купля, продажа и аренда живут только в «Недвижимости».
-  // Ссылки на якоря должны совпадать с id секций страниц направлений
-  // (src/app/(site)/[lang]/services/*/page.tsx).
-  const serviceSections = [
-    {
-      key: 'mortgage',
-      href: `/${lang}/services/mortgage`,
-      label: t.services.mortgage.title,
-      items: [
-        { href: `/${lang}/services/mortgage#soprovozhdenie`, label: t.services.mortgage.support.title },
-        { href: `/${lang}/services/broker`, label: t.services.broker.title },
-        { href: `/${lang}/services/mortgage#raschet`, label: t.services.mortgage.raschet.title },
-        { href: `/${lang}/services/mortgage#dokumenty`, label: t.services.mortgage.dokumenty.title },
-        { href: `/${lang}/services/mortgage#zayavka`, label: t.services.mortgage.zayavka.title },
-      ],
-    },
-    {
-      key: 'legal',
-      href: `/${lang}/services/legal`,
-      label: t.services.legal.title,
-      items: [
-        { href: `/${lang}/services/legal#proverka-obekta`, label: t.services.legal.checkObject.title },
-        { href: `/${lang}/services/legal#soprovozhdenie-sdelki`, label: t.services.legal.sdelka.title },
-        { href: `/${lang}/services/legal#pereplanirovki`, label: t.services.legal.pereplanirovki.title },
-        { href: `/${lang}/services/legal#privatizaciya`, label: t.services.legal.privatizaciya.title },
-        { href: `/${lang}/services/legal#nasledstvo`, label: t.services.legal.nasledstvo.title },
-        { href: `/${lang}/services/legal#proverka-riskov`, label: t.services.legal.risks.title },
-      ],
-    },
-    {
-      key: 'design',
-      href: `/${lang}/services/design`,
-      label: t.services.design.title,
-      items: [
-        { href: `/${lang}/services/design#dizayn-proekt`, label: t.services.design.proekt.title },
-        { href: `/${lang}/services/design#planirovka`, label: t.services.design.planirovka.title },
-        { href: `/${lang}/services/design#vizualizaciya`, label: t.services.design.vizualizaciya.title },
-        { href: `/${lang}/services/design#podbor`, label: t.services.design.podbor.title },
-        { href: `/${lang}/services/design#komplektaciya`, label: t.services.design.komplektaciya.title },
-        { href: `/${lang}/services/design#nadzor`, label: t.services.design.nadzor.title },
-      ],
-    },
-    {
-      key: 'build',
-      href: `/${lang}/services/build`,
-      label: t.services.build.title,
-      items: [
-        { href: `/${lang}/services/build#proektirovanie`, label: t.services.build.proektirovanie.title },
-        { href: `/${lang}/services/build#podryadchiki`, label: t.services.build.podryadchiki.title },
-        { href: `/${lang}/services/build#smeta`, label: t.services.build.smeta.title },
-        { href: `/${lang}/services/build#pod-klyuch`, label: t.services.build.podKlyuch.title },
-        { href: `/${lang}/services/build#kommunikacii`, label: t.services.build.kommunikacii.title },
-        { href: `/${lang}/services/build#otdelka`, label: t.services.build.otdelka.title },
-      ],
-    },
-    {
-      key: 'valuation',
-      href: `/${lang}/services/valuation`,
-      label: t.services.valuation.title,
-      items: [
-        { href: `/${lang}/services/valuation#kvartira`, label: t.services.valuation.kvartira.title },
-        { href: `/${lang}/services/valuation#dom`, label: t.services.valuation.dom.title },
-        { href: `/${lang}/services/valuation#uchastok`, label: t.services.valuation.uchastok.title },
-        { href: `/${lang}/services/valuation#kommercheskiy`, label: t.services.valuation.kommercheskiy.title },
-      ],
-    },
+  // Раздел «Услуги»: шесть услуг строго вертикальным списком (Ипотечное
+  // сопровождение, Ипотечный брокер, Юридические услуги, Дизайн интерьера,
+  // Строительство частных домов, Оценка недвижимости). Каждый пункт —
+  // ссылка на страницу услуги, где раскрыт полный перечень услуг внутри
+  // неё (страницы src/app/(site)/[lang]/services/*/page.tsx). Покупка,
+  // продажа и аренда живут только в разделе «Недвижимость». Один список
+  // для десктопа и мобильного меню.
+  const serviceLinks = [
+    { href: `/${lang}/services/mortgage`, label: t.services.mortgage.title },
+    { href: `/${lang}/services/broker`, label: t.services.broker.title },
+    { href: `/${lang}/services/legal`, label: t.services.legal.title },
+    { href: `/${lang}/services/design`, label: t.services.design.title },
+    { href: `/${lang}/services/build`, label: t.services.build.title },
+    { href: `/${lang}/services/valuation`, label: t.services.valuation.title },
   ]
 
   // Остальные разделы верхнего меню — плоским списком после выпадающих
@@ -201,10 +145,9 @@ export const Header: FC = () => {
             )}
           </div>
 
-          {/* «Услуги»: вертикальная колонка пяти направлений со списками их
-              услуг. Открывается по наведению и по клику; каждый пункт —
-              активная ссылка (направление — на свою страницу, услуга — на
-              якорь страницы направления или на страницу брокера) */}
+          {/* «Услуги»: раскрывающийся вертикальный список шести услуг.
+              Открывается по наведению и по клику; каждый пункт — активная
+              ссылка на страницу услуги с полным перечнем услуг внутри неё */}
           <div
             className="relative"
             onMouseEnter={openServices}
@@ -227,30 +170,16 @@ export const Header: FC = () => {
             </button>
             {servicesOpen && (
               <div className="absolute top-full left-0 pt-2">
-                <div className="w-80 max-h-[calc(100vh-5.5rem)] overflow-y-auto py-2 bg-[var(--n15-black)] border border-[var(--n15-gold)]/15 shadow-xl">
-                  {serviceSections.map((section) => (
-                    <div key={section.key}>
-                      <Link
-                        href={section.href}
-                        onClick={() => setServicesOpen(false)}
-                        className="block px-5 pt-3 pb-1 text-[11px] tracking-[0.22em] uppercase text-[var(--n15-gold)] hover:text-[var(--n15-gold-light)] transition-colors"
-                      >
-                        {section.label}
-                      </Link>
-                      <ul>
-                        {section.items.map((item) => (
-                          <li key={item.href}>
-                            <Link
-                              href={item.href}
-                              onClick={() => setServicesOpen(false)}
-                              className="block px-5 py-1.5 text-[13px] leading-snug text-[var(--n15-silver)] hover:text-[var(--n15-gold)] hover:bg-[var(--n15-gold)]/8 transition-colors"
-                            >
-                              {item.label}
-                            </Link>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
+                <div className="w-72 py-2 bg-[var(--n15-black)] border border-[var(--n15-gold)]/15 shadow-xl">
+                  {serviceLinks.map((link) => (
+                    <Link
+                      key={link.href}
+                      href={link.href}
+                      onClick={() => setServicesOpen(false)}
+                      className="block px-5 py-2.5 text-sm tracking-wider uppercase text-[var(--n15-silver)] hover:text-[var(--n15-gold)] hover:bg-[var(--n15-gold)]/8 transition-colors"
+                    >
+                      {link.label}
+                    </Link>
                   ))}
                   <Link
                     href={`/${lang}/services`}
@@ -375,8 +304,9 @@ export const Header: FC = () => {
               )}
             </div>
 
-            {/* «Услуги»: направления и их услуги раскрываются по нажатию,
-                все пункты — активные ссылки */}
+            {/* «Услуги»: раскрывающийся вертикальный список шести услуг по
+                нажатию; каждый пункт — активная ссылка на страницу услуги
+                с полным перечнем услуг внутри неё */}
             <div className="flex flex-col">
               <button
                 type="button"
@@ -397,32 +327,18 @@ export const Header: FC = () => {
               </button>
               {servicesOpen && (
                 <div className="flex flex-col pl-4 mt-1 border-l border-[var(--n15-gold)]/15">
-                  {serviceSections.map((section) => (
-                    <div key={section.key} className="flex flex-col">
-                      <Link
-                        href={section.href}
-                        className="pt-3 pb-1 text-xs tracking-[0.18em] uppercase text-[var(--n15-gold)] hover:text-[var(--n15-gold-light)] transition-colors"
-                        onClick={() => {
-                          closePanels()
-                          setIsOpen(false)
-                        }}
-                      >
-                        {section.label}
-                      </Link>
-                      {section.items.map((item) => (
-                        <Link
-                          key={item.href}
-                          href={item.href}
-                          className="text-sm text-[var(--n15-silver)] hover:text-[var(--n15-gold)] transition-colors py-1.5"
-                          onClick={() => {
-                            closePanels()
-                            setIsOpen(false)
-                          }}
-                        >
-                          {item.label}
-                        </Link>
-                      ))}
-                    </div>
+                  {serviceLinks.map((link) => (
+                    <Link
+                      key={link.href}
+                      href={link.href}
+                      className="text-sm tracking-wider uppercase text-[var(--n15-silver)] hover:text-[var(--n15-gold)] transition-colors py-2"
+                      onClick={() => {
+                        closePanels()
+                        setIsOpen(false)
+                      }}
+                    >
+                      {link.label}
+                    </Link>
                   ))}
                   <Link
                     href={`/${lang}/services`}

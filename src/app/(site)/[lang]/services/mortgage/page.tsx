@@ -49,14 +49,13 @@ export default async function MortgageServicesPage({ params }: PageProps) {
   const t = getDictionary(lang)
   const mortgage = t.services.mortgage
 
-  // Услуги направления «Ипотека» в порядке пунктов меню шапки. id строк
-  // совпадают с #ссылками в Header.tsx; у «Расчёта ипотечных программ»
+  // Полный перечень услуг внутри «Ипотечного сопровождения» — в порядке
+  // пунктов меню шапки (см. Header.tsx). У «Расчёта ипотечных программ»
   // строка дополнена виджетом банков и калькулятора.
   const rows: { id: string; num: string; title: string; text: string; extra?: ReactNode }[] = [
-    { id: 'soprovozhdenie', num: '01', title: mortgage.support.title, text: mortgage.support.text },
-    { id: 'raschet', num: '02', title: mortgage.raschet.title, text: mortgage.raschet.text, extra: <MortgageCalcPanel t={t} /> },
-    { id: 'dokumenty', num: '03', title: mortgage.dokumenty.title, text: mortgage.dokumenty.text },
-    { id: 'zayavka', num: '04', title: mortgage.zayavka.title, text: mortgage.zayavka.text },
+    { id: 'raschet', num: '01', title: mortgage.raschet.title, text: mortgage.raschet.text, extra: <MortgageCalcPanel t={t} /> },
+    { id: 'dokumenty', num: '02', title: mortgage.dokumenty.title, text: mortgage.dokumenty.text },
+    { id: 'zayavka', num: '03', title: mortgage.zayavka.title, text: mortgage.zayavka.text },
   ]
 
   return (
@@ -101,7 +100,7 @@ export default async function MortgageServicesPage({ params }: PageProps) {
             <Button variant="primary" href={`/${lang}/contacts`}>
               {t.services.ctaConsult}
             </Button>
-            {/* Услуга «Ипотечный брокер» — отдельная страница направления */}
+            {/* «Ипотечный брокер» — отдельная услуга раздела со своей страницей */}
             <Button variant="outline" href={`/${lang}/services/broker`}>
               {t.services.broker.title}
             </Button>

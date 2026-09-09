@@ -10,7 +10,8 @@ export default async function BuildServicesPage({ params }: PageProps) {
   const t = getDictionary(lang)
   const build = t.services.build
 
-  // id совпадают с #ссылками пунктов меню «Услуги» в Header.tsx
+  // id строк — якоря для прямых ссылок на конкретную услугу (например
+  // /services/build#podryadchiki)
   const items = [
     { id: 'proektirovanie', title: build.proektirovanie.title, text: build.proektirovanie.text },
     { id: 'podryadchiki', title: build.podryadchiki.title, text: build.podryadchiki.text },

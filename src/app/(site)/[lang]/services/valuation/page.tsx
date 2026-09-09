@@ -10,7 +10,8 @@ export default async function ValuationServicesPage({ params }: PageProps) {
   const t = getDictionary(lang)
   const valuation = t.services.valuation
 
-  // id совпадают с #ссылками пунктов меню «Услуги» в Header.tsx
+  // id строк — якоря для прямых ссылок на конкретную услугу (например
+  // /services/valuation#kvartira)
   const items = [
     { id: 'kvartira', title: valuation.kvartira.title, text: valuation.kvartira.text },
     { id: 'dom', title: valuation.dom.title, text: valuation.dom.text },
