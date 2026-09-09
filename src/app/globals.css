@@ -453,7 +453,15 @@ html[data-theme='dark'] span.theme-icon-moon { display: block; }
 }
 /* В лендинге секция всегда светлая — золотая рамка карточек «тёмной темы» не нужна */
 html[data-theme='dark'] .lp-featured .object-card { border: 0; }
-.lp-featured-title { width: min(90%, 1280px); margin: 0 auto 23px; }
+/* Шапка блока «Актуальные объекты»: слева заголовок (eyebrow + h2), справа —
+   кнопка-ссылка «Показать все →» на каталог (там все опубликованные объекты
+   всех категорий и фильтры). flex-wrap страхует узкие экраны; на телефоне
+   кнопка уходит под заголовок (см. мобильный медиа-запрос ниже). */
+.lp-featured-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 14px 44px; width: min(90%, 1280px); margin: 0 auto 23px; }
+.lp-featured-title { margin: 0; }
+/* Контурная золотая кнопка; при наведении заливается, как .lp-button */
+.lp-featured-all { display: inline-flex; align-items: center; gap: 9px; padding: 12px 17px; border: 1px solid #a87c3f; color: #a87c3f; font-size: 11px; text-transform: uppercase; letter-spacing: .13em; white-space: nowrap; transition: background .2s, color .2s; }
+.lp-featured-all:hover, .lp-featured-all:focus-visible { background: #a87c3f; color: #fff; }
 .lp-featured-filter { display: flex; flex-wrap: wrap; align-items: baseline; gap: 16px; margin-top: 12px; }
 .lp-featured-filter-summary { font-size: 12px; color: #777267; }
 .lp-featured-filter-reset { font-size: 10px; text-transform: uppercase; letter-spacing: .13em; color: #a87c3f; text-decoration: underline; }
@@ -741,6 +749,10 @@ html[data-theme='dark'] .lp-featured .object-card { border: 0; }
   .lp-filters > div { padding: 16px 0; }
   .lp-land-filters .lp-settlement-filter { grid-column: auto; }
   .lp-cards { width: auto; margin: 0 22px; }
+  /* «Показать все →» на телефоне — под заголовком, слева (в одну строку
+     с заголовком не помещается без сжатия) */
+  .lp-featured-head { flex-direction: column; align-items: stretch; row-gap: 16px; }
+  .lp-featured-head .lp-featured-all { align-self: flex-start; }
   .lp-mortgage { width: auto; margin: 44px 22px; padding: 22px 18px; grid-template-columns: 1fr; gap: 26px; }
   .lp-mortgage-disclosure > summary { grid-template-columns: 1fr 28px; gap: 16px; min-height: 190px; }
   .lp-mortgage-disclosure > summary h2 { font-size: 36px; }

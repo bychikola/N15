@@ -81,16 +81,29 @@ export default function FeaturedObjects({ objects, t, lang, filterSummary, empty
 
   return (
     <section className="lp-section lp-featured" id="featured">
-      <div className="lp-featured-title">
-        <p className="lp-eyebrow">{filterSummary ? t.landing.featuredFilteredEyebrow : t.landing.featuredEyebrow}</p>
-        <h2 className="lp-h2">{filterSummary ? t.landing.featuredFilteredTitle : t.landing.featuredTitle}</h2>
-        {filterSummary && (
-          <div className="lp-featured-filter">
-            <span className="lp-featured-filter-summary">{filterSummary}</span>
-            <a className="lp-featured-filter-reset" href={`/${lang}/catalog`}>
-              {t.landing.featuredShowAll}
-            </a>
-          </div>
+      {/* Шапка: слева заголовок, справа — кнопка «Показать все →» на полный
+          каталог (в нём все опубликованные объекты всех категорий и фильтры).
+          В режиме подбора кнопку не дублируем: под сводкой уже есть ссылка
+          «Показать все» в каталог. На телефоне кнопка переносится под
+          заголовок (flex-wrap + медиа-запрос в globals.css). */}
+      <div className="lp-featured-head">
+        <div className="lp-featured-title">
+          <p className="lp-eyebrow">{filterSummary ? t.landing.featuredFilteredEyebrow : t.landing.featuredEyebrow}</p>
+          <h2 className="lp-h2">{filterSummary ? t.landing.featuredFilteredTitle : t.landing.featuredTitle}</h2>
+          {filterSummary && (
+            <div className="lp-featured-filter">
+              <span className="lp-featured-filter-summary">{filterSummary}</span>
+              <a className="lp-featured-filter-reset" href={`/${lang}/catalog`}>
+                {t.landing.featuredShowAll}
+              </a>
+            </div>
+          )}
+        </div>
+        {!filterSummary && (
+          <a className="lp-featured-all" href={`/${lang}/catalog`}>
+            <span>{t.landing.featuredShowAll}</span>
+            <span aria-hidden="true">→</span>
+          </a>
         )}
       </div>
       {/* Сетка как в каталоге: телефон — 1, планшет — 2, ноутбук — 3,
