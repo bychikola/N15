@@ -6,6 +6,9 @@ import type { Dict } from '@/i18n/dictionaries'
 // лендинга: категории из GARDENING_AREAS, всё внутри Владикавказского округа
 import { DISTRICT_OPTIONS, LOCALITIES_BY_DISTRICT, LOCALITY_OPTIONS, CITY_DISTRICT_OPTIONS, GARDENING_CATEGORY_ORDER, GARDENING_AREAS } from '@/lib/districts'
 import { SNT_AREAS } from '@/components/home/landing-data'
+// Города «Межрегиональной недвижимости» — справочник регионов/городов,
+// по которым Н15 показывает объекты за пределами Северной Осетии
+import { INTERREGIONAL_REGIONS, INTERREGIONAL_CITIES } from '@/lib/interregional'
 // Конвертация площади участков: 1 сотка = 100 м² (см. также хелперы ввода)
 import { SQM_PER_ARE, areaNumberText, parseAreaNumber } from '@/lib/area-format'
 
@@ -34,14 +37,27 @@ export interface FiltersState {
   cityDistrict: string
   locality: string
   snt: string
+  /** Город вне Северной Осетии (межрегиональные объекты). Взаимоисключается
+   *  с осетинскими адресными фильтрами: район/нас. пункт/товарищество. */
+  city: string
 }
 
 export const emptyFilters: FiltersState = {
-  type: '', category: '', rooms: '', priceMin: '', priceMax: '', areaMin: '', areaMax: '', areaUnit: '', district: '', cityDistrict: '', locality: '', snt: '',
+  type: '', category: '', rooms: '', priceMin: '', priceMax: '', areaMin: '', areaMax: '', areaUnit: '', district: '', cityDistrict: '', locality: '', snt: '', city: '',
 }
 
 // Число из фильтра: позволяет и «600», и «11,5» (запятая — как вводят вручную)
 const numOf = (v: string): number | null => parseAreaNumber(v)
+
+// Группы фильтра «Город»: города справочника по регионам. Подгруппа
+// с label (Ленинградская область внутри «Санкт-Петербурга») становится
+// отдельной группой, чтобы города разных регионов не смешивались.
+const CITY_GROUPS = INTERREGIONAL_REGIONS.flatMap((region) =>
+  region.groups.map((group) => ({
+    label: group.label ?? region.title,
+    options: group.cities.map((city) => ({ value: city, label: city })),
+  })),
+)
 
 export function buildWhere(f: FiltersState, q: string): Record<string, unknown> {
   const conds: Record<string, unknown>[] = []
@@ -54,6 +70,7 @@ export function buildWhere(f: FiltersState, q: string): Record<string, unknown> 
   if (f.cityDistrict && isKnown(f.cityDistrict, CITY_DISTRICT_OPTIONS)) conds.push({ 'address.cityDistrict': { equals: f.cityDistrict } })
   if (f.locality) conds.push({ 'address.locality': { equals: f.locality } })
   if (f.snt && isKnown(f.snt, SNT_AREAS)) conds.push({ 'address.snt': { equals: f.snt } })
+  if (f.city && isKnown(f.city, INTERREGIONAL_CITIES)) conds.push({ 'address.city': { equals: f.city } })
   if (isKnown(f.rooms, OBJECT_ROOMS)) {
     conds.push(f.rooms === '4'
       ? { rooms: { greater_than_equal: 4 } }
@@ -158,7 +175,7 @@ export default function CatalogFilters({ state, onChange, t }: CatalogFiltersPro
   // Единица площади действует только для участков; не выбрана — подразумеваются м²
   const isLand = state.category === 'land'
   const areaUnit = isLand && state.areaUnit === 'are' ? 'are' : 'sqm'
-  const hasFilters = state.type || state.category || state.rooms || state.priceMin || state.priceMax || state.areaMin || state.areaMax || state.district || state.cityDistrict || state.locality || state.snt
+  const hasFilters = state.type || state.category || state.rooms || state.priceMin || state.priceMax || state.areaMin || state.areaMax || state.district || state.cityDistrict || state.locality || state.snt || state.city
 
   /**
    * Смена единицы площади (кнопки «м²/сотки»): числа в полях «от/до»
@@ -209,6 +226,15 @@ export default function CatalogFilters({ state, onChange, t }: CatalogFiltersPro
           onSelect={(v) => apply({ category: v })} />
       </div>
       <div className="w-48">
+        {/* «Город» — объекты за пределами Северной Осетии (межрегиональные
+            направления Н15): города сгруппированы по регионам справочника.
+            Выбор города снимает осетинские адресные фильтры — и наоборот */}
+        <Dropdown label={t.catalog.cityLabel} value={state.city} groups={CITY_GROUPS} compactLabel
+          onSelect={(v) => apply(v
+            ? { city: v, district: '', cityDistrict: '', locality: '', snt: '' }
+            : { city: '' })} />
+      </div>
+      <div className="w-48">
         <Dropdown label={t.catalog.districtLabel} value={state.district}
           options={DISTRICT_OPTIONS.map((d) => ({ value: d, label: d }))}
           onSelect={(v) => {
@@ -217,19 +243,19 @@ export default function CatalogFilters({ state, onChange, t }: CatalogFiltersPro
             if (v && state.locality && !(LOCALITIES_BY_DISTRICT[v] || []).includes(state.locality)) {
               patch.locality = ''
             }
-            apply(patch)
+            apply(v ? { ...patch, city: '' } : patch)
           }} />
       </div>
       <div className="w-48">
         <Dropdown label={t.catalog.cityDistrictLabel} value={state.cityDistrict}
           options={CITY_DISTRICT_OPTIONS.map((d) => ({ value: d, label: d }))}
-          onSelect={(v) => apply({ cityDistrict: v })} />
+          onSelect={(v) => apply(v ? { cityDistrict: v, city: '' } : { cityDistrict: v })} />
       </div>
       <div className="w-48">
         {/* «Населённый пункт» — длинная подпись: компактный шрифт, чтобы помещалась в одну строку */}
         <Dropdown label={t.catalog.localityLabel} value={state.locality}
           options={localityOptions} compactLabel
-          onSelect={(v) => apply({ locality: v })} />
+          onSelect={(v) => apply(v ? { locality: v, city: '' } : { locality: v })} />
       </div>
       <div className="w-56">
         {/* Садоводческие товарищества: список сгруппирован по категориям
@@ -239,7 +265,7 @@ export default function CatalogFilters({ state, onChange, t }: CatalogFiltersPro
           groups={GARDENING_CATEGORY_ORDER
             .filter((c) => GARDENING_AREAS[c].length > 0)
             .map((c) => ({ label: c, options: GARDENING_AREAS[c].map((s) => ({ value: s, label: s })) }))}
-          onSelect={(v) => apply({ snt: v })} />
+          onSelect={(v) => apply(v ? { snt: v, city: '' } : { snt: v })} />
       </div>
       <div className="w-48">
         <div className={labelCls() + ' mb-1'}>{t.catalog.priceLabel}</div>

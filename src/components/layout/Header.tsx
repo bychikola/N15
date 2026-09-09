@@ -9,10 +9,27 @@ import CabinetBadge from '@/components/layout/CabinetBadge'
 
 export const Header: FC = () => {
   const [isOpen, setIsOpen] = useState(false)
+  // Раскрытие раздела «Недвижимость»: на компьютере — по наведению/клику,
+  // на телефоне — по нажатию (аккордеон). Состояние общее для обоих
+  // вариантов меню, но виден на экране только один из них.
+  const [realtyOpen, setRealtyOpen] = useState(false)
   const { lang, t } = useI18n()
 
+  // Раздел «Недвижимость»: общий каталог + направления. Каждый пункт ведёт
+  // на свою страницу: каталог с фильтром (Покупка/Аренда) или отдельную
+  // страницу направления (Новостройки, Межрегиональные объекты,
+  // Зарубежная недвижимость). Один список для десктопа и мобильного меню.
+  const realtyLinks = [
+    { href: `/${lang}/catalog`, label: t.nav.allObjects },
+    { href: `/${lang}/catalog?type=sale`, label: t.nav.buy },
+    { href: `/${lang}/catalog?type=rent`, label: t.nav.rent },
+    { href: `/${lang}/newbuildings`, label: t.nav.newBuildings },
+    { href: `/${lang}/interregional`, label: t.nav.interregional },
+    { href: `/${lang}/foreign`, label: t.nav.foreign },
+  ]
+
+  // Остальные разделы верхнего меню — плоским списком после «Недвижимости»
   const navLinks = [
-    { href: `/${lang}/catalog`, label: t.nav.catalog },
     { href: `/${lang}/services`, label: t.nav.services },
     { href: `/${lang}/about`, label: t.nav.about },
     { href: `/${lang}/blog`, label: t.nav.blog },
@@ -35,6 +52,44 @@ export const Header: FC = () => {
 
         {/* Desktop nav */}
         <nav className="hidden lg:flex items-center gap-8">
+          {/* «Недвижимость»: выпадающий список подразделов по наведению */}
+          <div
+            className="relative"
+            onMouseEnter={() => setRealtyOpen(true)}
+            onMouseLeave={() => setRealtyOpen(false)}
+          >
+            <button
+              type="button"
+              onClick={() => setRealtyOpen((v) => !v)}
+              aria-expanded={realtyOpen}
+              aria-haspopup="true"
+              className="flex items-center gap-2 text-sm tracking-wider uppercase text-[var(--n15-silver)] hover:text-[var(--n15-gold)] transition-colors duration-300 cursor-pointer"
+              style={{ background: 'none', border: 0, cursor: 'pointer' }}
+            >
+              {t.nav.realty}
+              <span
+                className={`text-[9px] text-[var(--n15-gold)] transition-transform duration-300 ${realtyOpen ? 'rotate-180' : ''}`}
+              >
+                ▼
+              </span>
+            </button>
+            {realtyOpen && (
+              <div className="absolute top-full left-0 pt-2">
+                <div className="min-w-56 py-2 bg-[var(--n15-black)] border border-[var(--n15-gold)]/15 shadow-xl">
+                  {realtyLinks.map((link) => (
+                    <Link
+                      key={link.href}
+                      href={link.href}
+                      onClick={() => setRealtyOpen(false)}
+                      className="block px-5 py-2.5 text-sm tracking-wider uppercase text-[var(--n15-silver)] hover:text-[var(--n15-gold)] hover:bg-[var(--n15-gold)]/8 transition-colors"
+                    >
+                      {link.label}
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
           {navLinks.map((link) => (
             <Link
               key={link.href}
@@ -95,6 +150,40 @@ export const Header: FC = () => {
       {isOpen && (
         <div className="lg:hidden bg-[var(--n15-charcoal)] border-b border-[var(--n15-gold)]/10">
           <nav className="n15-container flex flex-col py-6 gap-4">
+            {/* «Недвижимость»: подразделы раскрываются по нажатию */}
+            <div className="flex flex-col">
+              <button
+                type="button"
+                onClick={() => setRealtyOpen((v) => !v)}
+                aria-expanded={realtyOpen}
+                className="flex items-center justify-between w-full text-sm tracking-wider uppercase text-[var(--n15-silver)] py-2 cursor-pointer"
+                style={{ background: 'none', border: 0, cursor: 'pointer' }}
+              >
+                {t.nav.realty}
+                <span
+                  className={`text-[9px] text-[var(--n15-gold)] transition-transform duration-300 ${realtyOpen ? 'rotate-180' : ''}`}
+                >
+                  ▼
+                </span>
+              </button>
+              {realtyOpen && (
+                <div className="flex flex-col gap-1 pl-4 mt-1 border-l border-[var(--n15-gold)]/15">
+                  {realtyLinks.map((link) => (
+                    <Link
+                      key={link.href}
+                      href={link.href}
+                      className="text-sm tracking-wider uppercase text-[var(--n15-silver)] hover:text-[var(--n15-gold)] transition-colors py-2"
+                      onClick={() => {
+                        setRealtyOpen(false)
+                        setIsOpen(false)
+                      }}
+                    >
+                      {link.label}
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
             {navLinks.map((link) => (
               <Link
                 key={link.href}

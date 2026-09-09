@@ -9,7 +9,7 @@ import SearchCategories from '@/components/home/SearchCategories'
 import FeaturedObjects from '@/components/home/FeaturedObjects'
 import type { ObjectListItem } from '@/components/objects/ObjectCard'
 import MortgageCalculator from '@/components/home/MortgageCalculator'
-import CountryGuide from '@/components/home/CountryGuide'
+import InterregionalGuide from '@/components/home/InterregionalGuide'
 import ServicesSection from '@/components/home/ServicesSection'
 import LegalSection from '@/components/home/LegalSection'
 import AboutSection from '@/components/home/AboutSection'
@@ -19,6 +19,8 @@ import ContactSection from '@/components/home/ContactSection'
 // серверной ошибкой («This page couldn't load»)
 import { DISTRICT_OPTIONS, CITY_DISTRICT_OPTIONS } from '@/lib/districts'
 import { SNT_AREAS } from '@/components/home/landing-data'
+// Города блоков «Межрегиональной недвижимости» (регионы, где есть объекты Н15)
+import { INTERREGIONAL_CITIES } from '@/lib/interregional'
 
 export const dynamic = 'force-dynamic'
 
@@ -66,6 +68,26 @@ export default async function HomePage({ params, searchParams }: PageProps) {
   const qSnt = typeof sp.snt === 'string' && isKnown(sp.snt, SNT_AREAS) ? sp.snt : ''
 
   const payload = await getPayload({ config })
+
+  // Города «Межрегиональной недвижимости»: только опубликованные объекты
+  // в городах справочника регионов (address.city). Показываем город в блоке,
+  // только если в нём реально есть объекты.
+  const { docs: interregionalDocs } = await payload.find({
+    collection: 'objects',
+    where: {
+      and: [
+        { status: { equals: 'published' } },
+        { 'address.city': { in: [...INTERREGIONAL_CITIES] } },
+      ],
+    },
+    limit: 500,
+    depth: 0,
+  })
+  const interregionalCities = new Set<string>()
+  for (const d of interregionalDocs) {
+    const addr = (d as unknown as { address?: { city?: string } }).address
+    if (addr?.city) interregionalCities.add(addr.city)
+  }
 
   // Блок «Актуальные объекты»: только опубликованные (черновики скрыты).
   // Проданные, снятые с публикации и архивные в CRM переводятся в статус
@@ -163,7 +185,7 @@ export default async function HomePage({ params, searchParams }: PageProps) {
           emptyNote={filterEmptyNote}
         />
         <MortgageCalculator t={t} />
-        <CountryGuide t={t} lang={lang} />
+        <InterregionalGuide t={t} lang={lang} cities={interregionalCities} />
         <ServicesSection t={t} />
         <LegalSection t={t} />
         <AboutSection t={t} />

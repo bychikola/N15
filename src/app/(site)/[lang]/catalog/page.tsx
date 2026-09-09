@@ -10,6 +10,8 @@ import CatalogFilters, { buildWhere, emptyFilters, OBJECT_TYPES, OBJECT_CATEGORI
 // Справочники допустимых значений локаций — те же, что в фильтрах каталога
 import { DISTRICT_OPTIONS, CITY_DISTRICT_OPTIONS } from '@/lib/districts'
 import { SNT_AREAS } from '@/components/home/landing-data'
+// Города «Межрегиональной недвижимости» (address.city вне Северной Осетии)
+import { INTERREGIONAL_CITIES } from '@/lib/interregional'
 
 const PAGE_SIZE = 12
 
@@ -29,6 +31,7 @@ const URL_PARAM: Record<keyof FiltersState, string> = {
   cityDistrict: 'cityDistrict',
   locality: 'locality',
   snt: 'snt',
+  city: 'city',
 }
 
 // Значения select-фильтров сверяем с опциями полей (списки и зачем — см.
@@ -58,6 +61,7 @@ function filtersFromParams(sp: URLSearchParams): FiltersState {
         : '',
     locality: sp.get('locality') ?? '',
     snt: isKnown(sp.get('snt') ?? '', SNT_AREAS) ? (sp.get('snt') as string) : '',
+    city: isKnown(sp.get('city') ?? '', INTERREGIONAL_CITIES) ? (sp.get('city') as string) : '',
   }
 }
 
