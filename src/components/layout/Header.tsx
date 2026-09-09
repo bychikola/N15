@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, type FC } from 'react'
+import { useEffect, useRef, useState, type FC } from 'react'
 import Link from 'next/link'
 import { useI18n } from '@/i18n/i18n-provider'
 import { LangSwitcher } from '@/i18n/lang-switcher'
@@ -36,6 +36,18 @@ export const Header: FC = () => {
   const [realtyOpen, setRealtyOpen] = useState(false)
   // Раскрытие раздела «Услуги» — те же правила, что у «Недвижимости»
   const [servicesOpen, setServicesOpen] = useState(false)
+  // Направление «Услуг», чей второй уровень раскрыт; null — показывается
+  // только первый уровень (направления). Общее для десктопа и мобильного
+  const [servicesDir, setServicesDir] = useState<string | null>(null)
+  // Выпадающее меню «Услуги» раскрывается от левого края кнопки; если
+  // справа не хватает места — от правого края влево (см. ниже)
+  const [servicesAlignRight, setServicesAlignRight] = useState(false)
+  // Области выпадающих панелей — для закрытия по клику вне меню
+  const servicesWrapRef = useRef<HTMLDivElement>(null)
+  const realtyWrapRef = useRef<HTMLDivElement>(null)
+  // Выпадающее меню «Услуги» — для оценки ширины при переключении
+  // направлений (ширина панели после переключения ещё не отрисована)
+  const servicesPanelRef = useRef<HTMLDivElement>(null)
   const { lang, t } = useI18n()
 
   // Раздел «Недвижимость»: общий каталог + направления. Каждый пункт ведёт
@@ -53,21 +65,77 @@ export const Header: FC = () => {
     { href: `/${lang}/foreign`, label: t.nav.foreign },
   ]
 
-  // Раздел «Услуги»: шесть услуг строго вертикальным списком (Ипотечное
-  // сопровождение, Ипотечный брокер, Юридические услуги, Дизайн интерьера,
-  // Строительство частных домов, Оценка недвижимости). Каждый пункт —
-  // ссылка на страницу услуги, где раскрыт полный перечень услуг внутри
-  // неё (страницы src/app/(site)/[lang]/services/*/page.tsx). Покупка,
-  // продажа и аренда живут только в разделе «Недвижимость». Один список
+  // Раздел «Услуги»: двухуровневое меню. Первый уровень — пять направлений
+  // (Ипотека, Юридические услуги, Дизайн интерьера, Строительство частных
+  // домов, Оценка недвижимости) — кнопки, раскрывают второй уровень.
+  // Второй уровень — услуги направления, каждый пункт ссылкой на страницу
+  // услуги или на якорь её описания внутри страницы направления (id якорей
+  // совпадают с id блоков на страницах: /services/legal#proverka-obekta
+  // и т.д.). Покупка, продажа и аренда живут только в разделе
+  // «Недвижимость». Названия пунктов, не совпадающие с заголовками
+  // страниц и блоков, лежат в словаре (services.menu.*). Один список
   // для десктопа и мобильного меню.
-  const serviceLinks = [
-    { href: `/${lang}/services/mortgage`, label: t.services.mortgage.title },
-    { href: `/${lang}/services/broker`, label: t.services.broker.title },
-    { href: `/${lang}/services/legal`, label: t.services.legal.title },
-    { href: `/${lang}/services/design`, label: t.services.design.title },
-    { href: `/${lang}/services/build`, label: t.services.build.title },
-    { href: `/${lang}/services/valuation`, label: t.services.valuation.title },
+  const serviceDirs = [
+    {
+      key: 'ipoteka',
+      label: t.services.menu.ipoteka,
+      items: [
+        { href: `/${lang}/services/mortgage`, label: t.services.mortgage.title },
+        { href: `/${lang}/services/broker`, label: t.services.broker.title },
+        { href: `/${lang}/services/mortgage#raschet`, label: t.services.mortgage.raschet.title },
+        { href: `/${lang}/services/mortgage#dokumenty`, label: t.services.menu.mortgage.dokumenty },
+        { href: `/${lang}/services/mortgage#zayavka`, label: t.services.mortgage.zayavka.title },
+      ],
+    },
+    {
+      key: 'legal',
+      label: t.services.legal.title,
+      items: [
+        { href: `/${lang}/services/legal#proverka-obekta`, label: t.services.legal.checkObject.title },
+        { href: `/${lang}/services/legal#soprovozhdenie-sdelki`, label: t.services.legal.sdelka.title },
+        { href: `/${lang}/services/legal#pereplanirovki`, label: t.services.legal.pereplanirovki.title },
+        { href: `/${lang}/services/legal#privatizaciya`, label: t.services.legal.privatizaciya.title },
+        { href: `/${lang}/services/legal#nasledstvo`, label: t.services.legal.nasledstvo.title },
+        { href: `/${lang}/services/legal#proverka-riskov`, label: t.services.legal.risks.title },
+      ],
+    },
+    {
+      key: 'design',
+      label: t.services.design.title,
+      items: [
+        { href: `/${lang}/services/design#dizayn-proekt`, label: t.services.design.proekt.title },
+        { href: `/${lang}/services/design#planirovka`, label: t.services.design.planirovka.title },
+        { href: `/${lang}/services/design#vizualizaciya`, label: t.services.design.vizualizaciya.title },
+        { href: `/${lang}/services/design#podbor`, label: t.services.menu.design.podbor },
+        { href: `/${lang}/services/design#komplektaciya`, label: t.services.design.komplektaciya.title },
+        { href: `/${lang}/services/design#nadzor`, label: t.services.design.nadzor.title },
+      ],
+    },
+    {
+      key: 'build',
+      label: t.services.build.title,
+      items: [
+        { href: `/${lang}/services/build#proektirovanie`, label: t.services.menu.build.proektirovanie },
+        { href: `/${lang}/services/build#podryadchiki`, label: t.services.build.podryadchiki.title },
+        { href: `/${lang}/services/build#smeta`, label: t.services.build.smeta.title },
+        { href: `/${lang}/services/build#pod-klyuch`, label: t.services.build.podKlyuch.title },
+        { href: `/${lang}/services/build#kommunikacii`, label: t.services.build.kommunikacii.title },
+        { href: `/${lang}/services/build#otdelka`, label: t.services.build.otdelka.title },
+      ],
+    },
+    {
+      key: 'valuation',
+      label: t.services.valuation.title,
+      items: [
+        { href: `/${lang}/services/valuation#kvartira`, label: t.services.menu.valuation.kvartira },
+        { href: `/${lang}/services/valuation#dom`, label: t.services.menu.valuation.dom },
+        { href: `/${lang}/services/valuation#uchastok`, label: t.services.menu.valuation.uchastok },
+        { href: `/${lang}/services/valuation#kommercheskiy`, label: t.services.menu.valuation.kommercheskiy },
+      ],
+    },
   ]
+  // Направление, чей второй уровень раскрыт сейчас
+  const activeDir = serviceDirs.find((dir) => dir.key === servicesDir)
 
   // Остальные разделы верхнего меню — плоским списком после выпадающих
   const navLinks = [
@@ -76,10 +144,14 @@ export const Header: FC = () => {
     { href: `/${lang}/contacts`, label: t.nav.contacts },
   ]
 
-  // Панели «Недвижимость» и «Услуги» не должны быть открыты одновременно
+  // Панели «Недвижимость» и «Услуги» не должны быть открыты одновременно.
+  // При открытии «Услуг» показываем только первый уровень: выбранное ранее
+  // направление сбрасываем — подпункты не раскрываются «сразу».
   const openServices = () => {
     setServicesOpen(true)
     setRealtyOpen(false)
+    setServicesDir(null)
+    setServicesAlignRight(false)
   }
   const openRealty = () => {
     setRealtyOpen(true)
@@ -88,7 +160,73 @@ export const Header: FC = () => {
   const closePanels = () => {
     setServicesOpen(false)
     setRealtyOpen(false)
+    setServicesDir(null)
   }
+  // Клик по кнопке «Услуги» / «Недвижимость»: открытие закрывает соседнюю
+  // панель, закрытие сбрасывает и раскрытое направление
+  const toggleServices = () => {
+    if (servicesOpen) {
+      closePanels()
+    } else {
+      openServices()
+    }
+  }
+  const toggleRealty = () => {
+    if (realtyOpen) {
+      setRealtyOpen(false)
+    } else {
+      openRealty()
+    }
+  }
+  // Клик по направлению «Услуг» раскрывает его второй уровень, повторный
+  // клик по раскрытому направлению закрывает второй уровень
+  const toggleDir = (key: string) => {
+    const closing = servicesDir === key
+    setServicesDir(closing ? null : key)
+    fitServicesMenuToScreen(closing)
+  }
+
+  // Меню «Услуги» раскрывается от левого края кнопки; когда раскрыт
+  // второй уровень (две колонки рядом), на узких экранах ему может не
+  // хватить места справа — тогда раскрываем от правого края кнопки
+  // влево, чтобы меню не выходило за границу экрана. Вызывается из
+  // обработчиков, когда DOM ещё со старой шириной панели, поэтому
+  // ширину после переключения оцениваем по текущей (ширины колонок
+  // заданы классами w-72; вторая колонка 288px + разделитель 1px).
+  const fitServicesMenuToScreen = (closing: boolean) => {
+    const wrapper = servicesWrapRef.current
+    const panel = servicesPanelRef.current
+    // На телефоне панель не видна (скрыта вместе с десктопной
+    // навигацией) — выравнивание не требуется
+    if (!wrapper || !panel || panel.offsetWidth === 0) return
+    const dirExtraWidth = 289
+    const width = closing
+      ? panel.offsetWidth - dirExtraWidth
+      : panel.offsetWidth + (servicesDir === null ? dirExtraWidth : 0)
+    const rect = wrapper.getBoundingClientRect()
+    const gap = 8 // небольшой отступ меню от края экрана
+    const fitsRight = rect.left + width <= window.innerWidth - gap
+    // Влево раскрываем только тогда, когда справа места нет, а слева есть
+    setServicesAlignRight(!fitsRight && rect.right - width >= gap)
+  }
+
+  // Клик вне выпадающих меню (по странице) закрывает их: слушаем нажатия
+  // на документе, пока открыта хотя бы одна из панелей
+  useEffect(() => {
+    if (!servicesOpen && !realtyOpen) return
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node
+      const inServices = servicesWrapRef.current?.contains(target) ?? false
+      const inRealty = realtyWrapRef.current?.contains(target) ?? false
+      if (!inServices && !inRealty) {
+        setServicesOpen(false)
+        setRealtyOpen(false)
+        setServicesDir(null)
+      }
+    }
+    document.addEventListener('pointerdown', onPointerDown)
+    return () => document.removeEventListener('pointerdown', onPointerDown)
+  }, [servicesOpen, realtyOpen])
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-[var(--n15-black)]/80 backdrop-blur-md border-b border-[var(--n15-gold)]/10">
@@ -109,12 +247,13 @@ export const Header: FC = () => {
           {/* «Недвижимость»: выпадающий список подразделов по наведению и клику */}
           <div
             className="relative"
+            ref={realtyWrapRef}
             onMouseEnter={openRealty}
-            onMouseLeave={() => setRealtyOpen(false)}
+            onMouseLeave={() => closePanels()}
           >
             <button
               type="button"
-              onClick={() => setRealtyOpen((v) => !v)}
+              onClick={() => toggleRealty()}
               aria-expanded={realtyOpen}
               aria-haspopup="true"
               className="flex items-center gap-2 text-sm tracking-wider uppercase text-[var(--n15-silver)] hover:text-[var(--n15-gold)] transition-colors duration-300 cursor-pointer"
@@ -145,17 +284,20 @@ export const Header: FC = () => {
             )}
           </div>
 
-          {/* «Услуги»: раскрывающийся вертикальный список шести услуг.
-              Открывается по наведению и по клику; каждый пункт — активная
-              ссылка на страницу услуги с полным перечнем услуг внутри неё */}
+          {/* «Услуги»: двухуровневое меню. Открывается по наведению и по
+              клику, но показывается только первый уровень — пять
+              направлений; подпункты при открытии не видны и по наведению
+              не раскрываются. Второй уровень (услуги направления)
+              открывается кликом по направлению — справа от списка */}
           <div
             className="relative"
+            ref={servicesWrapRef}
             onMouseEnter={openServices}
-            onMouseLeave={() => setServicesOpen(false)}
+            onMouseLeave={() => closePanels()}
           >
             <button
               type="button"
-              onClick={() => setServicesOpen((v) => !v)}
+              onClick={() => toggleServices()}
               aria-expanded={servicesOpen}
               aria-haspopup="true"
               className="flex items-center gap-2 text-sm tracking-wider uppercase text-[var(--n15-silver)] hover:text-[var(--n15-gold)] transition-colors duration-300 cursor-pointer"
@@ -169,22 +311,62 @@ export const Header: FC = () => {
               </span>
             </button>
             {servicesOpen && (
-              <div className="absolute top-full left-0 pt-2">
-                <div className="w-72 py-2 bg-[var(--n15-black)] border border-[var(--n15-gold)]/15 shadow-xl">
-                  {serviceLinks.map((link) => (
-                    <Link
-                      key={link.href}
-                      href={link.href}
-                      onClick={() => setServicesOpen(false)}
-                      className="block px-5 py-2.5 text-sm tracking-wider uppercase text-[var(--n15-silver)] hover:text-[var(--n15-gold)] hover:bg-[var(--n15-gold)]/8 transition-colors"
-                    >
-                      {link.label}
-                    </Link>
-                  ))}
+              <div
+                ref={servicesPanelRef}
+                className={`absolute top-full pt-2 ${servicesAlignRight ? 'right-0' : 'left-0'}`}
+              >
+                <div className="flex flex-col bg-[var(--n15-black)] border border-[var(--n15-gold)]/15 shadow-xl">
+                  <div className="flex">
+                    {/* Первый уровень: направления — кнопки */}
+                    <div className="flex flex-col py-2 w-72">
+                      {serviceDirs.map((dir) => {
+                        const isActive = servicesDir === dir.key
+                        return (
+                          <button
+                            key={dir.key}
+                            type="button"
+                            onClick={() => toggleDir(dir.key)}
+                            aria-expanded={isActive}
+                            className={`flex items-center justify-between gap-3 px-5 py-2.5 w-full text-sm tracking-wider uppercase text-left transition-colors cursor-pointer ${
+                              isActive
+                                ? 'bg-[var(--n15-gold)]/8 text-[var(--n15-gold)]'
+                                : 'text-[var(--n15-silver)] hover:bg-[var(--n15-gold)]/8 hover:text-[var(--n15-gold)]'
+                            }`}
+                            style={{ border: 0, cursor: 'pointer' }}
+                          >
+                            {dir.label}
+                            <span
+                              className={`text-[10px] leading-none transition-colors ${isActive ? 'text-[var(--n15-gold)]' : 'text-[var(--n15-gold)]/40'}`}
+                              aria-hidden="true"
+                            >
+                              ›
+                            </span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                    {/* Второй уровень: услуги выбранного направления —
+                        ссылки на страницы услуг и якоря описаний */}
+                    {activeDir && (
+                      <div className="flex flex-col py-2 w-72 border-l border-[var(--n15-gold)]/15">
+                        {activeDir.items.map((item) => (
+                          <Link
+                            key={item.href}
+                            href={item.href}
+                            onClick={() => closePanels()}
+                            className="block px-5 py-2.5 text-sm tracking-wider uppercase text-[var(--n15-silver)] hover:bg-[var(--n15-gold)]/8 hover:text-[var(--n15-gold)] transition-colors"
+                          >
+                            {item.label}
+                          </Link>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  {/* Полный перечень услуг — отдельной страницей */}
                   <Link
                     href={`/${lang}/services`}
-                    onClick={() => setServicesOpen(false)}
-                    className="block px-5 pt-3 pb-2 mt-2 border-t border-[var(--n15-gold)]/10 text-sm tracking-wider uppercase text-[var(--n15-silver)] hover:text-[var(--n15-gold)] transition-colors"
+                    onClick={() => closePanels()}
+                    className="block px-5 pt-3 pb-2 border-t border-[var(--n15-gold)]/10 text-sm tracking-wider uppercase text-[var(--n15-silver)] hover:text-[var(--n15-gold)] transition-colors"
                   >
                     {t.services.viewAll} →
                   </Link>
@@ -273,7 +455,7 @@ export const Header: FC = () => {
             <div className="flex flex-col">
               <button
                 type="button"
-                onClick={() => setRealtyOpen((v) => !v)}
+                onClick={() => toggleRealty()}
                 aria-expanded={realtyOpen}
                 className="flex items-center justify-between w-full text-sm tracking-wider uppercase text-[var(--n15-silver)] py-2 cursor-pointer"
                 style={{ background: 'none', border: 0, cursor: 'pointer' }}
@@ -304,16 +486,14 @@ export const Header: FC = () => {
               )}
             </div>
 
-            {/* «Услуги»: раскрывающийся вертикальный список шести услуг по
-                нажатию; каждый пункт — активная ссылка на страницу услуги
-                с полным перечнем услуг внутри неё */}
+            {/* «Услуги»: первый уровень — направления по нажатию; при
+                открытии подпункты не показываются. Второй уровень (услуги
+                направления) раскрывается нажатием по направлению —
+                отдельным блоком под ним */}
             <div className="flex flex-col">
               <button
                 type="button"
-                onClick={() => {
-                  setServicesOpen((v) => !v)
-                  setRealtyOpen(false)
-                }}
+                onClick={() => toggleServices()}
                 aria-expanded={servicesOpen}
                 className="flex items-center justify-between w-full text-sm tracking-wider uppercase text-[var(--n15-silver)] py-2 cursor-pointer"
                 style={{ background: 'none', border: 0, cursor: 'pointer' }}
@@ -326,20 +506,49 @@ export const Header: FC = () => {
                 </span>
               </button>
               {servicesOpen && (
-                <div className="flex flex-col pl-4 mt-1 border-l border-[var(--n15-gold)]/15">
-                  {serviceLinks.map((link) => (
-                    <Link
-                      key={link.href}
-                      href={link.href}
-                      className="text-sm tracking-wider uppercase text-[var(--n15-silver)] hover:text-[var(--n15-gold)] transition-colors py-2"
-                      onClick={() => {
-                        closePanels()
-                        setIsOpen(false)
-                      }}
-                    >
-                      {link.label}
-                    </Link>
-                  ))}
+                <div className="flex flex-col gap-1 pl-4 mt-1 border-l border-[var(--n15-gold)]/15">
+                  {serviceDirs.map((dir) => {
+                    const isActive = servicesDir === dir.key
+                    return (
+                      <div key={dir.key} className="flex flex-col">
+                        <button
+                          type="button"
+                          onClick={() => toggleDir(dir.key)}
+                          aria-expanded={isActive}
+                          className={`flex items-center justify-between w-full text-sm tracking-wider uppercase py-2 cursor-pointer transition-colors ${
+                            isActive
+                              ? 'text-[var(--n15-gold)]'
+                              : 'text-[var(--n15-silver)] hover:text-[var(--n15-gold)]'
+                          }`}
+                          style={{ background: 'none', border: 0, cursor: 'pointer' }}
+                        >
+                          {dir.label}
+                          <span
+                            className={`text-[9px] text-[var(--n15-gold)] transition-transform duration-300 ${isActive ? 'rotate-180' : ''}`}
+                          >
+                            ▼
+                          </span>
+                        </button>
+                        {isActive && (
+                          <div className="flex flex-col pl-4 border-l border-[var(--n15-gold)]/15">
+                            {dir.items.map((item) => (
+                              <Link
+                                key={item.href}
+                                href={item.href}
+                                className="text-sm tracking-wider uppercase text-[var(--n15-silver)] hover:text-[var(--n15-gold)] transition-colors py-2"
+                                onClick={() => {
+                                  closePanels()
+                                  setIsOpen(false)
+                                }}
+                              >
+                                {item.label}
+                              </Link>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
                   <Link
                     href={`/${lang}/services`}
                     className="py-2 mt-2 text-sm tracking-wider uppercase text-[var(--n15-silver)] hover:text-[var(--n15-gold)] transition-colors"
