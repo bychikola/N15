@@ -268,10 +268,14 @@ function CatalogContent() {
         </>
       ) : (
         <div className="text-center py-20">
-          {/* Подбор по конкретному нас. пункту пуст — сообщение понятнее
-              общего «ничего не найдено» */}
+          {/* Подбор по конкретному нас. пункту или межрегиональному городу
+              пуст — сообщение понятнее общего «ничего не найдено» */}
           <p className="text-[var(--n15-muted)] text-lg mb-4">
-            {filters.locality ? t.catalog.nothingInLocality : t.catalog.nothingFound}
+            {filters.locality
+              ? t.catalog.nothingInLocality
+              : filters.city
+                ? t.catalog.nothingInCity
+                : t.catalog.nothingFound}
           </p>
           <button onClick={() => { setFilters(emptyFilters); setQ(''); setSort('') }}
             className="text-sm text-[var(--n15-gold)] underline">

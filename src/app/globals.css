@@ -544,6 +544,56 @@ html[data-theme='dark'] .lp-featured .object-card { border: 0; }
   margin: 18px 44px 0 48px; color: #c5a46d; font-size: 10px;
   text-transform: uppercase; letter-spacing: .16em;
 }
+/* Города в строке региона — строки-аккордеон: название, счётчик объектов
+   и «+», строка раскрывается в предложения города (объекты Н15 и ссылка
+   на каталог города). Город без объектов остаётся в справочнике с мелкой
+   подписью «Объектов Н15 пока нет» — ссылки-предложения не выдумываем */
+.lp-city-list { list-style: none; margin: 0; padding: 0 44px 14px 48px; }
+.lp-city { border-top: 1px solid rgba(255,255,255,.1); }
+.lp-city:first-child { border-top: 0; }
+.lp-city > summary {
+  cursor: pointer; list-style: none; display: flex; align-items: center;
+  gap: 12px; min-height: 46px; padding: 4px 0;
+}
+.lp-city > summary::-webkit-details-marker { display: none; }
+.lp-city-name {
+  color: #fff; font-family: 'New Standard', Georgia, serif; font-weight: 400;
+  font-size: 16px; letter-spacing: .04em; transition: color .2s;
+}
+.lp-city:hover .lp-city-name, .lp-city[open] .lp-city-name { color: #c5a46d; }
+/* Счётчик объектов в городе — золотой кружок справа; пустой город вместо
+   него помечен подписью (она же видна в раскрытой строке) */
+.lp-city-count {
+  margin-left: auto; color: #c5a46d; font: 300 12px/1 Arial, sans-serif;
+  border: 1px solid rgba(197,164,109,.45); border-radius: 999px;
+  min-width: 24px; height: 24px; display: inline-flex;
+  align-items: center; justify-content: center; padding: 0 6px;
+  box-sizing: border-box;
+}
+.lp-city-none { margin-left: auto; color: rgba(255,255,255,.35); font-size: 11px; line-height: 1.4; text-align: right; }
+.lp-city > summary i { color: #c5a46d; font: 300 20px Arial, sans-serif; transition: transform .2s; }
+.lp-city[open] > summary i { transform: rotate(45deg); }
+/* Раскрытый город: список предложений (ссылки на карточки объектов)
+   и ссылка «все объекты города» на каталог с фильтром ?city= */
+.lp-city-body { padding: 2px 0 14px; }
+.lp-city-objects { list-style: none; margin: 0 0 8px; padding: 0; }
+.lp-city-object {
+  display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 12px;
+  row-gap: 2px; padding: 5px 0; text-decoration: none;
+}
+.lp-city-object-title { color: #fff; font-size: 13px; }
+.lp-city-object:hover .lp-city-object-title { color: #c5a46d; }
+.lp-city-object-addr { color: rgba(255,255,255,.45); font-size: 12px; }
+.lp-city-object-price { margin-left: auto; color: #c5a46d; font-size: 13px; white-space: nowrap; }
+.lp-city-link-all {
+  display: inline-block; margin-top: 2px; color: #c5a46d; font-size: 10px;
+  text-transform: uppercase; letter-spacing: .16em; text-decoration: none;
+  border-bottom: 1px solid rgba(197,164,109,.35); padding-bottom: 2px;
+}
+.lp-city-link-all:hover { color: #fff; border-color: rgba(255,255,255,.5); }
+.lp-city-empty { color: rgba(255,255,255,.45); font-size: 12px; line-height: 1.9; margin: 0; padding: 2px 0 14px; }
+.lp-city-cta { color: #c5a46d; }
+.lp-city-cta:hover { color: #fff; }
 /* Садоводческие товарищества Владикавказа — подраздел внутри «Владикавказского
    городского округа» после официальных нас. пунктов: товарищества (СНТ/СНО/ДНТ)
    не относятся к районам республики. Категории раскрываются, как «Ближний
@@ -714,6 +764,11 @@ html[data-theme='dark'] .lp-featured .object-card { border: 0; }
   .lp-fatima-card-title { font-size: 18px; }
   .lp-contact { grid-template-columns: 1fr; gap: 26px; padding: 68px 22px; }
   .lp-footer { flex-wrap: wrap; gap: 16px; padding: 36px 22px; }
+  /* Города «Межрегиональной недвижимости» на телефоне: боковые поля меньше,
+     подпись пустого города умещается в одну строку */
+  .lp-city-list { padding: 0 0 12px; }
+  .lp-city-none { font-size: 10px; max-width: 44%; }
+  .lp-city-object-price { margin-left: 0; }
 }
 
 @media (max-width: 480px) {

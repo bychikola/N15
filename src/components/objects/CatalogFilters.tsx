@@ -50,12 +50,17 @@ export const emptyFilters: FiltersState = {
 const numOf = (v: string): number | null => parseAreaNumber(v)
 
 // Группы фильтра «Город»: города справочника по регионам. Подгруппа
-// с label (Ленинградская область внутри «Санкт-Петербурга») становится
+// с label (Московская область, Ленинградская область…) становится
 // отдельной группой, чтобы города разных регионов не смешивались.
+// В списке и ключевые города, и «прочие» (extra): фильтр работает по
+// любому городу справочника, не только по строкам на главной.
 const CITY_GROUPS = INTERREGIONAL_REGIONS.flatMap((region) =>
   region.groups.map((group) => ({
     label: group.label ?? region.title,
-    options: group.cities.map((city) => ({ value: city, label: city })),
+    options: [...group.cities, ...(group.extra ?? [])].map((city) => ({
+      value: city,
+      label: city,
+    })),
   })),
 )
 

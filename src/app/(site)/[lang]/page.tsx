@@ -19,8 +19,9 @@ import ContactSection from '@/components/home/ContactSection'
 // серверной ошибкой («This page couldn't load»)
 import { DISTRICT_OPTIONS, CITY_DISTRICT_OPTIONS } from '@/lib/districts'
 import { SNT_AREAS } from '@/components/home/landing-data'
-// Города блоков «Межрегиональной недвижимости» (регионы, где есть объекты Н15)
-import { INTERREGIONAL_CITIES } from '@/lib/interregional'
+// Справочник и объекты «Межрегиональной недвижимости»: блок на главной
+// показывает города регионов и их актуальные предложения (данные из базы)
+import { INTERREGIONAL_CITIES, type InterregionalObject } from '@/lib/interregional'
 
 export const dynamic = 'force-dynamic'
 
@@ -69,9 +70,10 @@ export default async function HomePage({ params, searchParams }: PageProps) {
 
   const payload = await getPayload({ config })
 
-  // Города «Межрегиональной недвижимости»: только опубликованные объекты
-  // в городах справочника регионов (address.city). Показываем город в блоке,
-  // только если в нём реально есть объекты.
+  // Предложения «Межрегиональной недвижимости»: опубликованные объекты
+  // в городах справочника регионов (address.city), свежие первыми. Блок на
+  // главной группирует их по городам: у города без объектов — пометка
+  // «Объектов Н15 пока нет», с объектами — раскрывающийся список.
   const { docs: interregionalDocs } = await payload.find({
     collection: 'objects',
     where: {
@@ -80,13 +82,34 @@ export default async function HomePage({ params, searchParams }: PageProps) {
         { 'address.city': { in: [...INTERREGIONAL_CITIES] } },
       ],
     },
-    limit: 500,
+    sort: '-createdAt',
+    limit: 1000,
     depth: 0,
   })
-  const interregionalCities = new Set<string>()
+  const interregionalByCity = new Map<string, InterregionalObject[]>()
   for (const d of interregionalDocs) {
-    const addr = (d as unknown as { address?: { city?: string } }).address
-    if (addr?.city) interregionalCities.add(addr.city)
+    const o = d as unknown as {
+      address?: { city?: string; street?: string | null; house?: string | null }
+      title?: string | null
+      price?: number | null
+      type?: string | null
+      slug?: string | null
+    }
+    const addr = o.address
+    const city = addr?.city
+    if (!city) continue
+    const list = interregionalByCity.get(city)
+    const item: InterregionalObject = {
+      id: d.id as number,
+      slug: o.slug ?? null,
+      title: o.title ?? '',
+      price: typeof o.price === 'number' ? o.price : null,
+      type: o.type === 'rent' ? 'rent' : 'sale',
+      street: addr.street ?? null,
+      house: addr.house ?? null,
+    }
+    if (list) list.push(item)
+    else interregionalByCity.set(city, [item])
   }
 
   // Блок «Актуальные объекты»: только опубликованные (черновики скрыты).
@@ -185,7 +208,7 @@ export default async function HomePage({ params, searchParams }: PageProps) {
           emptyNote={filterEmptyNote}
         />
         <MortgageCalculator t={t} />
-        <InterregionalGuide t={t} lang={lang} cities={interregionalCities} />
+        <InterregionalGuide t={t} lang={lang} objectsByCity={interregionalByCity} />
         <ServicesSection t={t} />
         <LegalSection t={t} />
         <AboutSection t={t} />
