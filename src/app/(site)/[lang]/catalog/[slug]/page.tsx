@@ -9,12 +9,12 @@ export const dynamic = 'force-dynamic'
 import { SectionWrapper } from '@/components/ui/SectionWrapper'
 import { OrnamentDivider } from '@/components/ui/OrnamentDivider'
 import { OrnamentBorder } from '@/components/ui/OrnamentBorder'
-import { Button } from '@/components/ui/Button'
 import { PhotoGrid } from '@/components/ui/PhotoGrid'
 import { ObjectMap } from '@/components/ui/ObjectMap'
 import ObjectCard, { focalPosition, type ObjectListItem } from '@/components/objects/ObjectCard'
 import { ObjectActions } from '@/components/objects/ObjectActions'
 import { ViewRequestForm } from '@/components/objects/ViewRequestForm'
+import { AgentContactButtons } from '@/components/ui/AgentContactButtons'
 import { getDictionary, type Dict } from '@/i18n/dictionaries'
 import { areaHuman, type AreaUnit } from '@/lib/area-format'
 
@@ -62,13 +62,13 @@ export default async function ObjectPage({ params }: PageProps) {
     description?: { root?: { children?: unknown[] } }
     features?: { feature?: string }[]
     isPremium?: boolean; isExclusive?: boolean
+    // Поля phone/whatsapp/telegram намеренно не используются: номера агентов
+    // скрыты от посетителей полевой access-проверкой коллекции agents,
+    // контакты работают кнопками «Позвонить»/«WhatsApp» (AgentContactButtons)
     agent?: {
       id: number
       name?: string
       position?: string
-      phone?: string
-      telegram?: string
-      whatsapp?: string
       photo?: { url?: string; focalPoint?: { x?: number; y?: number } }
     }
     primaryImage?: { id: number; url?: string; alt?: string; filename?: string; sizes?: { thumbnail?: { url?: string }; card?: { url?: string } } }
@@ -118,11 +118,6 @@ export default async function ObjectPage({ params }: PageProps) {
     limit: 3,
     depth: 1,
   })
-  // WhatsApp: номер из поля whatsapp, при пустом/битом — из phone агента (защита от «https://wa.me/» без номера)
-  const agentWaNumber = (obj.agent?.whatsapp || '').replace(/\D/g, '') || (obj.agent?.phone || '').replace(/\D/g, '')
-  // Telegram: юзернейм после t.me/ (защита от пустой ссылки «https://t.me/»)
-  const agentTgHandle = (obj.agent?.telegram || '').replace(/^https?:\/\/(www\.)?t\.me\//, '').replace(/^@/, '')
-
   const similar: ObjectListItem[] = (similarDocs || []).map((d) => ({
     id: d.id as number,
     slug: (d as Record<string, unknown>).slug as string | undefined,
@@ -268,12 +263,15 @@ export default async function ObjectPage({ params }: PageProps) {
                 {/* В избранное / Поделиться — как на alaniadom */}
                 <ObjectActions objectId={obj.id} shareUrl={`/${lang}/catalog/${obj.id}`} />
 
-                {/* ПОЗВОНИТЬ — прямой телефон менеджера */}
-                {obj.agent?.phone && (
-                  <Button variant="primary" size="sm" className="w-full mb-4" href={`tel:${obj.agent.phone.replace(/\s+/g, '')}`}
-                    style={{ color: 'var(--card-price-fg)' }}>
-                    {t.object.phone.toUpperCase()}: {obj.agent.phone}
-                  </Button>
+                {/* ПОЗВОНИТЬ — контакты менеджера кнопками, номер на странице
+                    не публикуется (см. AgentContactButtons) */}
+                {obj.agent?.id && (
+                  <AgentContactButtons
+                    agentId={obj.agent.id}
+                    callLabel={t.object.phone}
+                    primary
+                    className="grid grid-cols-2 gap-2 mb-4"
+                  />
                 )}
 
                 {/* ВАШ МЕНЕДЖЕР */}
@@ -296,23 +294,12 @@ export default async function ObjectPage({ params }: PageProps) {
                           <div className="text-xs text-[var(--n15-muted)]">{obj.agent.position || t.object.leadingExpert}</div>
                         </div>
                       </div>
-                      <div className="flex flex-col gap-2">
-                        {obj.agent.phone && (
-                          <Button variant="outline" size="sm" className="w-full" href={`tel:${obj.agent.phone.replace(/\s+/g, '')}`}>
-                            {obj.agent.phone}
-                          </Button>
-                        )}
-                        {agentTgHandle && (
-                          <Button variant="outline" size="sm" className="w-full" href={`https://t.me/${agentTgHandle}`}>
-                            {t.object.telegram}
-                          </Button>
-                        )}
-                        {agentWaNumber && (
-                          <Button variant="outline" size="sm" className="w-full" href={`https://wa.me/${agentWaNumber}`}>
-                            {t.object.whatsapp}
-                          </Button>
-                        )}
-                      </div>
+                      {/* Контакты агента: только «Позвонить» и «WhatsApp» */}
+                      <AgentContactButtons
+                        agentId={obj.agent.id}
+                        callLabel={t.object.phone}
+                        className="flex flex-col gap-2"
+                      />
                     </div>
                   </OrnamentBorder>
                 )}

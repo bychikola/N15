@@ -36,6 +36,14 @@ export const Agents: CollectionConfig = {
       name: 'phone',
       type: 'text',
       label: 'Телефон',
+      // Номер агента — персональные данные: посетителям и клиентам сайта он
+      // не показывается (поле исчезает из выдачи — и из SSR-разметки страниц,
+      // и из REST-ответов каталога). Кнопки «Позвонить»/«WhatsApp» получают
+      // номер по отдельному запросу в момент нажатия (см. /api/agents/contact).
+      // Команда (role=agent) и администратор видят номера в CRM и админке.
+      access: {
+        read: ({ req: { user } }) => user?.role === 'agent' || user?.role === 'admin',
+      },
     },
     {
       name: 'email',
@@ -54,6 +62,11 @@ export const Agents: CollectionConfig = {
       name: 'whatsapp',
       type: 'text',
       label: 'WhatsApp',
+      // Номер WhatsApp — тоже телефон: скрыт от посетителей и клиентов,
+      // виден команде (role=agent) и администратору (см. поле phone)
+      access: {
+        read: ({ req: { user } }) => user?.role === 'agent' || user?.role === 'admin',
+      },
       admin: {
         description: 'Номер или ссылка: https://wa.me/79281112233. Если пусто — возьмётся номер из «Телефон».',
       },

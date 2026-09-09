@@ -3,7 +3,7 @@ import config from '@payload-config'
 import { Header } from '@/components/layout/Header'
 import { Footer } from '@/components/layout/Footer'
 import { SectionWrapper } from '@/components/ui/SectionWrapper'
-import { Button } from '@/components/ui/Button'
+import { AgentContactButtons } from '@/components/ui/AgentContactButtons'
 import { getDictionary } from '@/i18n/dictionaries'
 import { sortAgents } from '@/lib/agents-sort'
 
@@ -26,16 +26,12 @@ export default async function AgentsPage({ params }: PageProps) {
 
   // Агенты в алфавитном порядке по фамилии (все разделы сайта и CRM — один порядок)
   const agentsList = sortAgents((agents as unknown as {
-    id: number; name: string; position?: string; phone?: string
-    email?: string; telegram?: string; whatsapp?: string
+    id: number; name: string; position?: string
     objectsSold?: number; experience?: number
     photo?: { url?: string; alt?: string }
   }[]).map((a) => ({
     ...a,
     initials: a.name.split(' ').map((n) => n[0]).join('').slice(0, 2),
-    // WhatsApp-номер: цифры из поля whatsapp, при пустом/битом — из phone
-    // агента (защита от ссылки «https://wa.me/» без номера, как на объекте)
-    waNumber: (a.whatsapp || '').replace(/\D/g, '') || (a.phone || '').replace(/\D/g, ''),
   })))
 
   return (
@@ -66,23 +62,13 @@ export default async function AgentsPage({ params }: PageProps) {
                   {agent.objectsSold != null && <span>{agent.objectsSold} {t.agents.deals}</span>}
                   {agent.experience != null && <span>{agent.experience} {t.agents.years}</span>}
                 </div>
-                <div className="flex flex-col gap-2">
-                  {agent.phone && (
-                    <a href={`tel:${agent.phone.replace(/\D/g, '')}`} className="block text-center">
-                      <Button variant="outline" size="sm" className="w-full text-xs">{agent.phone}</Button>
-                    </a>
-                  )}
-                  {agent.waNumber && (
-                    <a href={`https://wa.me/${agent.waNumber}`} target="_blank" rel="noreferrer" className="block text-center">
-                      <Button variant="ghost" size="sm" className="w-full text-xs">WhatsApp</Button>
-                    </a>
-                  )}
-                  {agent.telegram && (
-                    <a href={`https://t.me/${agent.telegram.replace('@', '')}`} target="_blank" rel="noreferrer" className="block text-center">
-                      <Button variant="ghost" size="sm" className="w-full text-xs">Telegram</Button>
-                    </a>
-                  )}
-                </div>
+                {/* Контакты агента: только «Позвонить» и «WhatsApp» — номера
+                    телефонов клиентам не показываются (см. AgentContactButtons) */}
+                <AgentContactButtons
+                  agentId={agent.id}
+                  callLabel={t.agents.call}
+                  className="flex flex-col gap-2"
+                />
               </div>
             ))}
           </div>

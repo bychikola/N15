@@ -319,6 +319,7 @@ export const ru = {
   agents: {
     title: 'Наши агенты',
     subtitle: 'Профессионалы с глубоким знанием рынка и персональным подходом',
+    call: 'Позвонить',
     deals: 'сделок',
     years: 'лет',
     whatsapp: 'WhatsApp',
@@ -1222,6 +1223,7 @@ const os: Dict = {
   agents: {
     title: 'Нæ агенттæ',
     subtitle: 'Профессионалтæ, кæцытæ базар тынг зонынц æмæ хиуарт ахаст кæнынц',
+    call: 'Фæндыгон кæнын',
     deals: 'сделкæйы',
     years: 'азы',
     whatsapp: 'WhatsApp',
