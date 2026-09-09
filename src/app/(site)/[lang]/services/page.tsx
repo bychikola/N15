@@ -13,11 +13,15 @@ export default async function ServicesPage({ params }: PageProps) {
   const { lang } = await params
   const t = getDictionary(lang)
 
+  // «Ипотечный брокер» и «Оценка недвижимости» перенесены из юридического
+  // блока на главной в общий раздел услуг (см. их страницы broker/valuation)
   const services = [
     { title: t.services.buyTitle, desc: t.services.buyDesc, href: `/${lang}/services/buy`, accent: 'gold' },
     { title: t.services.sellTitle, desc: t.services.sellDesc, href: `/${lang}/services/sell`, accent: 'gold' },
     { title: t.services.rentTitle, desc: t.services.rentDesc, href: `/${lang}/services/rent`, accent: 'gold' },
     { title: t.services.mortgageTitle, desc: t.services.mortgageDesc, href: `/${lang}/services/mortgage`, accent: 'burgundy' },
+    { title: t.services.brokerTitle, desc: t.services.brokerDesc, href: `/${lang}/services/broker`, accent: 'burgundy' },
+    { title: t.services.valuationTitle, desc: t.services.valuationDesc, href: `/${lang}/services/valuation`, accent: 'gold' },
   ]
 
   return (
@@ -34,7 +38,8 @@ export default async function ServicesPage({ params }: PageProps) {
         </SectionWrapper>
 
         <SectionWrapper variant="charcoal">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Шесть услуг: 1 колонка на телефоне, 2 на планшете, 3 на десктопе */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {services.map((s) => (
               <OrnamentBorder key={s.title} cornerOrnament>
                 <div className="p-8 group">

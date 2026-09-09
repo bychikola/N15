@@ -1,12 +1,13 @@
 import type { Dict } from '@/i18n/dictionaries'
 
+// Только юридические направления: «Ипотечный брокер» и «Независимый
+// оценщик» переехали в общий раздел «Услуги» (страницы /services/broker,
+// /services/valuation)
 const ITEMS = [
   { key: 'legal1', title: 'legal1Title', text: 'legal1Text' },
   { key: 'legal2', title: 'legal2Title', text: 'legal2Text' },
   { key: 'legal3', title: 'legal3Title', text: 'legal3Text' },
   { key: 'legal4', title: 'legal4Title', text: 'legal4Text' },
-  { key: 'legal5', title: 'legal5Title', text: 'legal5Text' },
-  { key: 'legal6', title: 'legal6Title', text: 'legal6Text' },
 ] as const
 
 export default function LegalSection({ t }: { t: Dict }) {

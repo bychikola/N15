@@ -572,7 +572,9 @@ html[data-theme='dark'] .lp-featured .object-card { border: 0; }
 .lp-legal-heading { width: min(100%, 1280px); margin: 0 auto 39px; display: grid; grid-template-columns: 1fr 1fr; gap: 20px 52px; align-items: end; }
 .lp-legal-heading .lp-eyebrow-light { grid-column: 1/-1; margin-bottom: 0; }
 .lp-legal-heading > p:last-child { margin: 0 0 7px; color: rgba(255,255,255,.55); line-height: 1.8; max-width: 420px; }
-.lp-legal-grid { width: min(100%, 1280px); margin: 0 auto; display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid rgba(255,255,255,.17); border-left: 1px solid rgba(255,255,255,.17); }
+/* 4 направления: «Ипотечный брокер» и «Независимый оценщик» переехали
+   в общий раздел «Услуги», поэтому сетка из 3 колонок становится 4 */
+.lp-legal-grid { width: min(100%, 1280px); margin: 0 auto; display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid rgba(255,255,255,.17); border-left: 1px solid rgba(255,255,255,.17); }
 .lp-legal-grid article { min-height: 194px; padding: 22px; border-right: 1px solid rgba(255,255,255,.17); border-bottom: 1px solid rgba(255,255,255,.17); }
 .lp-legal-grid span { color: #d7ba8b; font-size: 9px; letter-spacing: .15em; }
 .lp-legal-grid h3 { margin: 37px 0 10px; font-family: 'New Standard', Georgia, serif; font-weight: 400; font-size: 19px; color: inherit; }
@@ -656,6 +658,11 @@ html[data-theme='dark'] .lp-featured .object-card { border: 0; }
 .lp-footer .lp-brand-caption { text-transform: uppercase; letter-spacing: .32em; margin-top: 6px; font-size: 8px; color: #fff; }
 .lp-footer .lp-footer-phone { color: #d7ba8b; white-space: nowrap; font-family: 'New Standard', Georgia, serif; font-weight: 400; font-size: 15px; letter-spacing: .035em; }
 .lp-footer .lp-team-login { color: rgba(255,255,255,.42); text-transform: uppercase; letter-spacing: .12em; border-bottom: 1px solid rgba(255,255,255,.2); padding-bottom: 4px; font-size: 9px; }
+
+/* Средние экраны: 4 направления юр-блока в 2×2, пока в один ряд тесно */
+@media (min-width: 821px) and (max-width: 1100px) {
+  .lp-legal-grid { grid-template-columns: repeat(2, 1fr); }
+}
 
 /* Мобильная адаптация */
 @media (max-width: 820px) {
