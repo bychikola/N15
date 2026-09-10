@@ -21,6 +21,7 @@ export function CrmShell({ user, t, active, children }: Props) {
     { id: 'tasks', href: '/crm/tasks', label: t.crm.navTasks },
     { id: 'customers', href: '/crm/customers', label: t.crm.navCustomers },
     { id: 'objects', href: '/crm/objects', label: t.crm.navObjects },
+    { id: 'market', href: '/crm/market', label: t.crm.navMarket },
     { id: 'stats', href: '/crm/stats', label: t.crm.navStats },
     { id: 'mail', href: '/crm/mail', label: t.crm.navMail },
     ...(user.agentAccess ? [{ id: 'agent', href: '/crm/agent', label: t.crm.navAgent }] : []),

@@ -10,6 +10,7 @@ import { geocodeAddress } from '@/lib/geocode'
 import { sortAgents } from '@/lib/agents-sort'
 // Площадь участков: сотки ↔ м² (1 сотка = 100 м²), чтение «11,5» с запятой
 import { areToSqm, areaNumberText, parseAreaNumber, sqmToAre } from '@/lib/area-format'
+import { LegalCheckBlock } from '@/components/crm/LegalCheckBlock'
 
 interface ObjectRow {
   id: number
@@ -452,6 +453,8 @@ export const CrmObjects: FC<{
   const [plLinks, setPlLinks] = useState<PlacementLink[]>([])
   const [plBusy, setPlBusy] = useState(false)
   const [plErr, setPlErr] = useState('')
+  // «Юридическая проверка объекта»: открытый блок документов и проверки
+  const [legalId, setLegalId] = useState<number | null>(null)
 
   const load = useCallback(async () => {
     const [objectsRes, agentsRes] = await Promise.all([
@@ -1363,6 +1366,18 @@ export const CrmObjects: FC<{
         </div>
       )}
 
+      {/* Блок «Юридическая проверка объекта» (документы и отчёт). Слоем над
+          списком; содержимое зависит от прав сотрудника — см. LegalCheckBlock */}
+      {legalId != null && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 110, background: 'rgba(32,33,30,.55)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '36px 16px', overflowY: 'auto' }}
+          onClick={() => setLegalId(null)}>
+          <div style={{ background: '#faf8f4', border: '1px solid #ded5c7', borderRadius: 12, width: 'min(100%, 780px)', padding: 22 }}
+            onClick={(e) => e.stopPropagation()}>
+            <LegalCheckBlock objectId={legalId} onClose={() => setLegalId(null)} />
+          </div>
+        </div>
+      )}
+
       {loading ? (
         <p style={{ color: '#817b70', fontSize: 12 }}>…</p>
       ) : rows.length && !visibleRows.length ? (
@@ -1415,6 +1430,13 @@ export const CrmObjects: FC<{
                   </button>
                 )}
               </div>
+              {/* «Провести юридическую проверку» — кнопка в карточке каждого
+                  объекта (модуль юр. проверки, см. LegalCheckBlock). Доступна
+                  всем сотрудникам; что увидит сотрудник, определяет сервер. */}
+              <button type="button" onClick={() => setLegalId(o.id)}
+                style={{ marginTop: 6, width: '100%', border: '1px solid #dccdb6', borderRadius: 6, background: '#f6efe4', color: '#8d6b40', padding: '7px 10px', fontSize: 9.5, cursor: 'pointer' }}>
+                Провести юридическую проверку
+              </button>
             </div>
           ))}
         </div>

@@ -62,11 +62,9 @@ async function getAboutData(): Promise<AboutData & { agents: { name: string; pos
       { title: 'Полное сопровождение', description: 'От поиска до подписания договора. Юридическая проверка, оценка, переговоры.' },
       { title: 'Премиум-сервис', description: 'Индивидуальный подход к каждому клиенту. Конфиденциальность и безупречный сервис.' },
     ],
+    // Блок статистики — единственный показатель: срок работы на рынке
     stats: (about?.stats as { value: string; label: string; id?: string }[]) || [
-      { value: '12', label: 'Лет на рынке' },
-      { value: '850+', label: 'Сделок' },
-      { value: '15', label: 'Экспертов' },
-      { value: '98%', label: 'Довольных клиентов' },
+      { value: 'Более 10', label: 'Лет на рынке' },
     ],
     teamTitle: (about?.teamTitle as string) || 'Наша команда',
     teamDescription: (about?.teamDescription as string) || 'Эксперты с глубоким знанием рынка и индивидуальным подходом',
@@ -92,10 +90,7 @@ export default async function AboutPage({ params }: PageProps) {
         { title: 'Премиум-сервис', description: 'Индивидуальный подход к каждому клиенту.' },
       ],
       stats: [
-        { value: '12', label: 'Лет на рынке' },
-        { value: '850+', label: 'Сделок' },
-        { value: '15', label: 'Экспертов' },
-        { value: '98%', label: 'Довольных клиентов' },
+        { value: 'Более 10', label: 'Лет на рынке' },
       ],
       teamTitle: 'Наша команда',
       teamDescription: 'Эксперты с глубоким знанием рынка и индивидуальным подходом',
@@ -137,7 +132,8 @@ export default async function AboutPage({ params }: PageProps) {
 
             <OrnamentBorder cornerOrnament>
               <div className="p-8 flex items-center justify-center">
-                <div className="grid grid-cols-2 gap-8 place-items-center">
+                {/* Единственный показатель — по центру карточки */}
+                <div className="grid grid-cols-1 gap-8 place-items-center">
                   {data.stats.filter((s) => s.value && s.label).map((s) => (
                     <div key={s.id || s.label} className="text-center py-4">
                       <div className="text-3xl font-[family-name:var(--font-display)] text-[var(--n15-gold)]">{s.value}</div>

@@ -109,12 +109,8 @@ export const SiteSettings: GlobalConfig = {
             { name: 'value', type: 'text', label: 'Значение' },
             { name: 'label', type: 'text', label: 'Подпись' },
           ],
-          defaultValue: [
-            { value: '12', label: 'Лет на рынке' },
-            { value: '850+', label: 'Сделок' },
-            { value: '15', label: 'Экспертов' },
-            { value: '98%', label: 'Довольных клиентов' },
-          ],
+          // Блок статистики — единственный показатель: срок работы на рынке
+          defaultValue: [{ value: 'Более 10', label: 'Лет на рынке' }],
         },
         {
           name: 'teamTitle',

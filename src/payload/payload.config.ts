@@ -18,6 +18,11 @@ import { Blog } from './collections/Blog'
 import { Pages } from './collections/Pages'
 import { Users } from './collections/Users'
 import { Media } from './collections/Media'
+import { MarketListings } from './collections/MarketListings'
+// «Юридическая проверка объекта»: закрытые хранилища документов и отчётов —
+// доступ только через маршруты /api/objects/legal/* (см. src/lib/legal-service.ts)
+import { LegalDocuments } from './collections/LegalDocuments'
+import { LegalReports } from './collections/LegalReports'
 import { SiteSettings } from './globals/SiteSettings'
 import { MailSettings } from './globals/MailSettings'
 import { AgentSettings } from './globals/AgentSettings'
@@ -42,7 +47,7 @@ export default buildConfig({
   routes: {
     admin: process.env.ADMIN_ROUTE || '/admin',
   },
-  collections: [Users, Media, Objects, Agents, Applications, Tasks, Messages, Blog, Pages, Customers, Emails, MailAttachments, AgentTasks],
+  collections: [Users, Media, Objects, Agents, Applications, Tasks, Messages, Blog, Pages, Customers, Emails, MailAttachments, AgentTasks, MarketListings, LegalDocuments, LegalReports],
   globals: [SiteSettings, MailSettings, AgentSettings],
   editor: lexicalEditor(),
   i18n: {

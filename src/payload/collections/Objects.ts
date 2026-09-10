@@ -4,6 +4,10 @@ import { DISTRICT_OPTIONS, CITY_DISTRICT_OPTIONS } from '@/lib/districts'
 // на главной, в каталоге и форме CRM (landing-data.ts)
 import { SNT_AREAS } from '@/components/home/landing-data'
 import { evaluateValuation, paramsFromDoc, type ValuationDocLike } from '@/lib/valuation'
+// Автоматическая синхронизация публикаций на площадки: при изменении объекта
+// обновляем опубликованные посты, при снятии с продажи (archived) — снимаем
+// объявления (см. src/lib/publish-service.ts)
+import { objectsAfterChange, objectsAfterDelete } from '@/lib/publish-service'
 
 const normPhone = (v?: string) => (v || '').replace(/[^\d+]/g, '')
 const normCadastral = (v?: string) => (v || '').toLowerCase().replace(/\s+/g, '')
@@ -394,6 +398,14 @@ export const Objects: CollectionConfig = {
       // (дубль), лишних вычислений не делаем.
       recalcValuationHook,
     ],
+    // Синхронизация публикаций на площадки (модуль «Публикация», см.
+    // src/lib/publish-service.ts): при изменении объекта автоматически
+    // обновляем опубликованные объявления VK/Telegram, при снятии с продажи
+    // (status=archived) — снимаем их; при удалении — снимаем объявления.
+    // Сами хуки тяжёлых сетевых вызовов не ждут: синхронизация уходит
+    // в фоновые задачи (статусы площадок обновятся следом).
+    afterChange: [objectsAfterChange],
+    afterDelete: [objectsAfterDelete],
   },
   fields: [
     {
@@ -942,6 +954,95 @@ export const Objects: CollectionConfig = {
             { name: 'firstSeenAt', type: 'date', label: 'Когда обнаружено' },
             { name: 'lastCheckedAt', type: 'date', label: 'Последняя реальная проверка' },
             { name: 'note', type: 'text', label: 'Пометка' },
+          ],
+        },
+      ],
+    },
+    {
+      // «Публикация на площадках» — выгрузка объектов CRM наружу (сайт N15,
+      // VK, Telegram; Авито/ЦИАН/Яндекс/Домклик — по мере подключения
+      // официальных API/фидов). CRM — единственный источник данных: тексты
+      // объявлений собираются из документа при каждой выгрузке. Группу ведёт
+      // сервер (см. src/lib/publish-service.ts и publish-adapters.ts),
+      // работа ведётся в интерфейсе CRM (блок «Публикация» карточки);
+      // в админ-панели группа скрыта, как valuation и placements.
+      name: 'publishing',
+      type: 'group',
+      label: 'Публикация на площадках (внутреннее)',
+      admin: {
+        hidden: true,
+        description: 'Статусы выгрузки объекта на площадки. Управляется в карточке CRM (кнопки «Опубликовать»/«Снять с публикации»)',
+      },
+      fields: [
+        {
+          name: 'items',
+          type: 'array',
+          label: 'Площадки публикации',
+          labels: { singular: 'Площадка публикации', plural: 'Площадки публикации' },
+          fields: [
+            {
+              name: 'platform',
+              type: 'text',
+              label: 'Площадка',
+              required: true,
+              admin: { description: 'Код площадки: site, vk, telegram, avito, cian, yandex, domclick, instagram' },
+            },
+            {
+              name: 'status',
+              type: 'select',
+              label: 'Статус',
+              options: [
+                { label: 'Не опубликован', value: 'off' },
+                { label: 'Опубликован', value: 'published' },
+                { label: 'Ошибка', value: 'error' },
+                { label: 'Снят', value: 'removed' },
+              ],
+              defaultValue: 'off',
+              required: true,
+            },
+            {
+              name: 'remoteId',
+              type: 'text',
+              label: 'id объявления на площадке',
+              admin: { description: 'Служебное: для обновления и снятия объявления (пост VK, message_id Telegram)' },
+            },
+            { name: 'externalUrl', type: 'text', label: 'Ссылка на объявление' },
+            { name: 'publishedAt', type: 'date', label: 'Когда впервые опубликовано' },
+            { name: 'lastExportAt', type: 'date', label: 'Дата и время последней выгрузки' },
+            { name: 'lastError', type: 'textarea', label: 'Сообщение об ошибке' },
+            {
+              name: 'lastFingerprint',
+              type: 'text',
+              label: 'Отпечаток последней выгрузки',
+              admin: { description: 'Служебное: чтобы обновлять объявления только при реальных изменениях объекта' },
+            },
+          ],
+        },
+        {
+          name: 'log',
+          type: 'array',
+          label: 'Журнал изменений публикаций',
+          labels: { singular: 'Запись журнала', plural: 'Записи журнала' },
+          fields: [
+            { name: 'at', type: 'date', label: 'Когда', required: true },
+            {
+              name: 'event',
+              type: 'select',
+              label: 'Событие',
+              required: true,
+              options: [
+                { label: 'Публикация', value: 'publish' },
+                { label: 'Обновление', value: 'update' },
+                { label: 'Снятие с публикации', value: 'unpublish' },
+                { label: 'Снятие с продажи', value: 'withdraw' },
+                { label: 'Ошибка', value: 'error' },
+                { label: 'Проверка полей', value: 'validate' },
+                { label: 'Пометка', value: 'note' },
+              ],
+            },
+            { name: 'platform', type: 'text', label: 'Площадка' },
+            { name: 'message', type: 'textarea', label: 'Сообщение' },
+            { name: 'by', type: 'text', label: 'Кто выполнил' },
           ],
         },
       ],
