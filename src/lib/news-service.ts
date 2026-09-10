@@ -30,6 +30,7 @@ import {
   officialSourceByUrl,
   parseFeed,
   shortSummary,
+  stripHtml,
   type FeedItem,
   type NewsLike,
   type NewsSource,
@@ -37,6 +38,10 @@ import {
 
 const DAY_MS = 86_400_000
 const FETCH_TIMEOUT_MS = 15_000
+// Сколько страниц за один канал добираем за лидом (см. fetchOfficialPageLead):
+// запросы идут только к тем новостям, где канал не дал описания, и не чаще
+// одного прохода в 6 часов — на один канал ЦБ их приходится единицы
+const MAX_LEAD_PAGES_PER_FEED = 5
 // Представляемся честно: официальные каналы отдают RSS для распространения,
 // но вести себя надо скромно — один запрос на канал за проход, пауза между ними.
 // Только латиница: fetch отвергает заголовки с кириллицей (ByteString).
@@ -118,6 +123,38 @@ export async function fetchOfficialPageMeta(url: string): Promise<PageMeta | nul
     description,
     publishedAt: date && !Number.isNaN(date.getTime()) ? date.toISOString() : null,
   }
+}
+
+/**
+ * Служебные абзацы, которые на страницах ведомств стоят раньше текста новости
+ * («Это архивная публикация…», «Поделиться…»). Сверяем с началом абзаца:
+ * по вхождению подстроки ловятся обычные слова — «включительно» внутри
+ * «включите», и живой лид решения ЦБ пропадал.
+ */
+const LEAD_NOISE =
+  /^(это архивная публикация|архивная публикация|поделиться|мы используем|для корректной работы|включите|версия для слабовидящих)/i
+
+/** Длина осмысленного абзаца-лида: короткие строки — подписи и навигация */
+const LEAD_MIN_LENGTH = 80
+
+/**
+ * Первый содержательный абзац страницы официального источника. Нужен там, где
+ * канал отдаёт в описании только картинку (так делает ФНС по РСО-Алания) —
+ * без него новость приходила бы в очередь без краткого содержания, и её нельзя
+ * было бы опубликовать. Полный текст страницы не сохраняем: берём один абзац
+ * и обрезаем его до резюме, как и лиды из каналов.
+ */
+export async function fetchOfficialPageLead(url: string): Promise<string> {
+  if (!isHttpUrl(url) || !officialSourceByUrl(url)) return ''
+  const { ok, body } = await fetchText(url)
+  if (!ok) return ''
+  const paragraphs = [...body.matchAll(/<p\b[^>]*>([\s\S]*?)<\/p>/gi)]
+    .map((m) => stripHtml(m[1]))
+    .filter((text) => text.length >= LEAD_MIN_LENGTH && !LEAD_NOISE.test(text))
+  if (paragraphs[0]) return paragraphs[0]
+  // Запасной вариант — описание страницы (og:description), если оно содержательнее
+  const meta = stripHtml(metaContent(body, 'og:description') || metaContent(body, 'description'))
+  return meta.length >= LEAD_MIN_LENGTH ? meta : ''
 }
 
 // --- Сбор ------------------------------------------------------------------------------
@@ -209,22 +246,24 @@ async function collectFromFeeds(
         report.push(`${source.name}: канал недоступен (${status || body.slice(0, 80)})`)
         continue
       }
-      const items = parseFeed(body).slice(0, NEWS_ITEMS_PER_FEED)
+      // Сначала отсев по дате, потом предел длины: старые записи не должны
+      // съедать место свежих (в канале ЦБ до 100 сообщений, см. NEWS_ITEMS_PER_FEED)
+      const all = parseFeed(body)
+      const when = (item: FeedItem) => (item.publishedAt ? new Date(item.publishedAt).getTime() : Date.now())
+      const fresh = all.filter((item) => when(item) >= maxAge)
+      const items = fresh.slice(0, NEWS_ITEMS_PER_FEED)
+      const old = all.length - fresh.length
+      const beyond = fresh.length - items.length
       let feedAdded = 0
-      let old = 0
       let dupes = 0
       let offTopic = 0
       let foreign = 0
+      let leads = 0
       for (const item of items) {
         // Ссылка обязана вести на домен этого же официального источника:
         // чужой или неофициальный адрес в очередь не берём (пункт 10 брифа)
         if (officialSourceByUrl(item.link)?.slug !== source.slug) {
           foreign += 1
-          continue
-        }
-        const when = item.publishedAt ? new Date(item.publishedAt).getTime() : Date.now()
-        if (when < maxAge) {
-          old += 1
           continue
         }
         const urlKey = newsUrlKey(item.link)
@@ -238,16 +277,25 @@ async function collectFromFeeds(
           offTopic += 1
           continue
         }
+        // Канал отдал только картинку в описании (так делает ФНС) — лид
+        // добираем со страницы новости, иначе публиковать будет нечего
+        if (!str(doc.summary) && leads < MAX_LEAD_PAGES_PER_FEED) {
+          leads += 1
+          const lead = await fetchOfficialPageLead(str(doc.url))
+          if (lead) doc.summary = shortSummary(lead)
+          await sleep(400)
+        }
         await payload.create({ collection: 'news', data: doc, overrideAccess: true })
         keys.urls.add(urlKey)
         keys.titles.add(titleKey)
         feedAdded += 1
       }
       added += feedAdded
-      skipped += old + dupes + offTopic + foreign
+      skipped += old + dupes + offTopic + foreign + beyond
       report.push(
-        `${source.name}: найдено ${items.length}, добавлено ${feedAdded}, пропущено ${old + dupes + offTopic + foreign}` +
-          ` (старых ${old}, дублей ${dupes}, не по темам ${offTopic}, чужие ссылки ${foreign})`,
+        `${source.name}: найдено ${all.length}, добавлено ${feedAdded}, пропущено ${old + dupes + offTopic + foreign + beyond}` +
+          ` (старых ${old}, дублей ${dupes}, не по темам ${offTopic}, чужие ссылки ${foreign}` +
+          `${beyond ? `, сверх предела ${beyond}` : ''}${leads ? `, лид со страницы ${leads}` : ''})`,
       )
       await sleep(400) // пауза между каналами — не долбим сайты ведомств
     }
