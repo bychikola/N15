@@ -11,6 +11,7 @@ import { sortAgents } from '@/lib/agents-sort'
 // Площадь участков: сотки ↔ м² (1 сотка = 100 м²), чтение «11,5» с запятой
 import { areToSqm, areaNumberText, parseAreaNumber, sqmToAre } from '@/lib/area-format'
 import { LegalCheckBlock } from '@/components/crm/LegalCheckBlock'
+import { PlacementCheckBlock } from '@/components/crm/PlacementCheckBlock'
 
 interface ObjectRow {
   id: number
@@ -455,6 +456,8 @@ export const CrmObjects: FC<{
   const [plErr, setPlErr] = useState('')
   // «Юридическая экспертиза объекта»: открытый блок документов и проверки
   const [legalId, setLegalId] = useState<number | null>(null)
+  // «Проверить размещение»: открытый блок поиска объекта на площадках
+  const [placeId, setPlaceId] = useState<number | null>(null)
 
   const load = useCallback(async () => {
     const [objectsRes, agentsRes] = await Promise.all([
@@ -998,6 +1001,7 @@ export const CrmObjects: FC<{
                 err={plErr}
                 onRun={runPlacementCheck}
                 onChanged={applyPlacements}
+                onOpenSearch={() => setPlaceId(editId)}
               />
             )}
             <div className="crm-property-form">
@@ -1366,6 +1370,18 @@ export const CrmObjects: FC<{
         </div>
       )}
 
+      {/* Блок «Проверить размещение»: поиск этого же объекта на площадках по
+          данным карточки (без ручного ввода ссылок) — см. PlacementCheckBlock */}
+      {placeId != null && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 110, background: 'rgba(32,33,30,.55)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '36px 16px', overflowY: 'auto' }}
+          onClick={() => setPlaceId(null)}>
+          <div style={{ background: '#faf8f4', border: '1px solid #ded5c7', borderRadius: 12, width: 'min(100%, 860px)', padding: 22 }}
+            onClick={(e) => e.stopPropagation()}>
+            <PlacementCheckBlock objectId={placeId} onClose={() => setPlaceId(null)} />
+          </div>
+        </div>
+      )}
+
       {/* Блок «Юридическая экспертиза объекта» (документы и отчёт). Слоем над
           списком; содержимое зависит от прав сотрудника — см. LegalCheckBlock */}
       {legalId != null && (
@@ -1430,6 +1446,13 @@ export const CrmObjects: FC<{
                   </button>
                 )}
               </div>
+              {/* «Проверить размещение» — основная кнопка карточки: система
+                  сама берёт данные объекта и ищет его на площадках
+                  (см. PlacementCheckBlock). Ссылки вручную не нужны. */}
+              <button type="button" onClick={() => setPlaceId(o.id)}
+                style={{ marginTop: 6, width: '100%', border: 0, borderRadius: 6, background: '#a7814e', color: '#fff', padding: '9px 10px', fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '.07em', cursor: 'pointer' }}>
+                Проверить размещение
+              </button>
               {/* «Провести юридическую экспертизу» — кнопка в карточке каждого
                   объекта (модуль экспертизы, см. LegalCheckBlock). Доступна
                   всем сотрудникам; что увидит сотрудник, определяет сервер. */}
@@ -1472,6 +1495,8 @@ interface PlacementBlockProps {
   err: string
   onRun: () => Promise<void>
   onChanged: (placements: PlacementsUi) => Promise<void>
+  /** Открыть блок «Проверить размещение» (поиск объекта на площадках) */
+  onOpenSearch: () => void
 }
 
 /** Одна строка блока: объявление площадки, привязанное к объекту */
@@ -1595,7 +1620,7 @@ function PlacementRow({
   )
 }
 
-function PlacementBlock({ t, objectId, value, links, busy, err, onRun, onChanged }: PlacementBlockProps) {
+function PlacementBlock({ t, objectId, value, links, busy, err, onRun, onChanged, onOpenSearch }: PlacementBlockProps) {
   const items = value?.items || []
   const checked = !!value?.lastCheckedAt
   const activePlatforms = new Set(items.filter((it) => it.status === 'active').map((it) => it.platform)).size
@@ -1694,11 +1719,20 @@ function PlacementBlock({ t, objectId, value, links, busy, err, onRun, onChanged
           </h3>
           <p style={{ margin: '3px 0 0', fontSize: 10, color: '#8a857b' }}>{t.crm.plSubtitle}</p>
         </div>
+        {/* Основная кнопка карточки — поиск этого же объекта на площадках
+            (данные берутся из карточки, ссылки вручную не нужны) */}
+        <button
+          type="button"
+          onClick={onOpenSearch}
+          style={{ ...smallBtn, marginLeft: 'auto' }}
+        >
+          Проверить размещение
+        </button>
         <button
           type="button"
           onClick={() => void onRun()}
           disabled={busy || busyRow}
-          style={{ ...smallBtn, marginLeft: 'auto', opacity: busy ? 0.7 : 1 }}
+          style={{ ...ghostBtn, opacity: busy ? 0.7 : 1 }}
         >
           {busy ? t.crm.plChecking : t.crm.plCheckNow}
         </button>

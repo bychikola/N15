@@ -61,6 +61,9 @@ export interface PlacementsGroup {
   nextCheckAt?: string | null
   /** Почему автоматическая сверка не выполнялась (для подсказки в UI) */
   note?: string | null
+  /** Снимок кнопки «Проверить размещение» (см. placement-search-service.ts) */
+  search?: unknown[] | null
+  searchAt?: string | null
   items?: PlacementItem[] | null
 }
 
@@ -191,9 +194,14 @@ export async function checkObjectPlacements(
     }
   }
 
+  const prevGroup = asGroup(doc.placements)
   const group: PlacementsGroup = {
     lastCheckedAt: iso(now),
     nextCheckAt: nextCheckAfter(now, CHECK_INTERVAL_HOURS),
+    // Снимок кнопки «Проверить размещение» группа не ведёт — переносим его,
+    // чтобы фоновый проход не стирал последнюю проверку агента
+    search: prevGroup.search ?? null,
+    searchAt: prevGroup.searchAt ?? null,
     items,
   }
   // Каналов нет — помечаем, почему блок «не находит» объявления сам
