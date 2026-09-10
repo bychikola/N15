@@ -19,6 +19,8 @@ export const Footer: FC = () => {
     { href: `/${lang}/about/agents`, label: t.footer.agents },
     { href: `/${lang}/blog`, label: t.footer.blog },
     { href: `/${lang}/contacts`, label: t.footer.contacts },
+    // Страница рекламы: тот же адрес, что у блока «ВАША РЕКЛАМА» на главной
+    { href: `/${lang}/advertising`, label: t.footer.advertising },
   ]
 
   return (

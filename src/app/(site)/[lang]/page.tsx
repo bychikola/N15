@@ -11,6 +11,9 @@ import type { ObjectListItem } from '@/components/objects/ObjectCard'
 import InterregionalGuide from '@/components/home/InterregionalGuide'
 import ServicesSection from '@/components/home/ServicesSection'
 import LegalSection from '@/components/home/LegalSection'
+import AdvertisingSection from '@/components/home/AdvertisingSection'
+// Блок «ВАША РЕКЛАМА»: материалы, размещённые сейчас (с маркировкой «Реклама»)
+import { visibleAdvertisements, type SiteAdCard } from '@/lib/advertising-service'
 import AboutSection from '@/components/home/AboutSection'
 import ContactSection from '@/components/home/ContactSection'
 // Справочники допустимых значений фильтров: where-запрос по select-полю
@@ -164,6 +167,15 @@ export default async function HomePage({ params, searchParams }: PageProps) {
     }
   })
 
+  // Рекламные материалы для блока «ВАША РЕКЛАМА»: опубликованные, в сроке
+  // и с собранной маркировкой (помощник отсеивает остальные)
+  let ads: SiteAdCard[] = []
+  try {
+    ads = await visibleAdvertisements(payload, 4)
+  } catch {
+    // Реклама — не обязательный блок: без неё главная открывается как обычно
+  }
+
   // Телефон из глобала (fallback — из прототипа)
   const site = await payload.findGlobal({ slug: 'site-settings', depth: 0 })
   const sitePhones = ((site as Record<string, unknown>).phones as { phone?: string }[] | undefined) || []
@@ -209,6 +221,7 @@ export default async function HomePage({ params, searchParams }: PageProps) {
         <InterregionalGuide t={t} lang={lang} objectsByCity={interregionalByCity} />
         <ServicesSection t={t} />
         <LegalSection t={t} />
+        <AdvertisingSection t={t} lang={lang} ads={ads} />
         <AboutSection t={t} />
         <ContactSection t={t} phone={phone} />
         <footer className="lp-footer">

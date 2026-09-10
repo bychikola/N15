@@ -760,6 +760,29 @@ html[data-theme='dark'] .lp-featured .object-card { border: 0; }
 .lp-contact-copy small { color: rgba(255,255,255,.45); text-transform: uppercase; letter-spacing: .15em; margin-top: 33px; display: block; }
 .lp-contact .lp-eyebrow { color: #d7ba8b; }
 
+/* Блок «ВАША РЕКЛАМА» — светлая полоса между юридическими услугами и
+   «О компании». Материалы показываются только с маркировкой «Реклама»
+   (пометка, сведения о рекламодателе, erid) — см. src/lib/advertising.ts */
+.lp-advertising { width: min(90%, 1280px); margin: 96px auto; }
+.lp-advertising-heading { display: grid; grid-template-columns: 1.2fr .8fr; gap: 20px 52px; align-items: end; margin-bottom: 32px; }
+.lp-advertising-heading .lp-eyebrow { grid-column: 1/-1; margin-bottom: 0; }
+/* Заголовок блока — как в обращении владельца: «ВАША РЕКЛАМА» */
+.lp-advertising-heading .lp-h2 { text-transform: uppercase; letter-spacing: -.01em; }
+.lp-advertising-copy { display: flex; flex-direction: column; gap: 9px; margin: 0 0 7px; max-width: 440px; }
+.lp-advertising-copy p { margin: 0; color: #777267; font-size: 13px; line-height: 1.8; }
+.lp-ad-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 18px; margin-bottom: 26px; }
+.lp-ad-card { display: flex; flex-direction: column; background: #fff; border: 1px solid #e2d9c9; }
+.lp-ad-card-img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; }
+.lp-ad-card-body { flex: 1; display: flex; flex-direction: column; gap: 10px; padding: 18px; }
+.lp-ad-label { align-self: flex-start; padding: 4px 8px; background: #f1e7d6; color: #8b683f; text-transform: uppercase; letter-spacing: .16em; font-size: 9px; }
+.lp-ad-card-title { margin: 0; font-family: 'New Standard', Georgia, serif; font-weight: 400; font-size: 19px; line-height: 1.25; color: #24231f; }
+.lp-ad-card-text { margin: 0; color: #777267; font-size: 12px; line-height: 1.7; }
+.lp-ad-card-link { margin-top: auto; color: #a87c3f; text-transform: uppercase; letter-spacing: .12em; font-size: 10px; }
+.lp-ad-card-link:hover { color: #8f672f; }
+/* Маркировка: сведения о рекламодателе и данные интернет-рекламы (erid) */
+.lp-ad-marking { margin: 0; padding-top: 10px; border-top: 1px solid #e8e0d2; color: #8a8377; font-size: 10px; line-height: 1.6; }
+.lp-advertising-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 18px; }
+
 /* Футер лендинга — тёмный (как на живом прототипе) */
 .lp-footer { color: rgba(255,255,255,.5); text-transform: uppercase; letter-spacing: .14em; background: #1e1f1c; justify-content: space-between; align-items: center; padding: 36px 5vw; font-size: 9px; display: flex; }
 .lp-footer p { margin: 0; line-height: 1.7; }
@@ -772,6 +795,8 @@ html[data-theme='dark'] .lp-featured .object-card { border: 0; }
 /* Средние экраны: 4 направления юр-блока в 2×2, пока в один ряд тесно */
 @media (min-width: 821px) and (max-width: 1100px) {
   .lp-legal-grid { grid-template-columns: repeat(2, 1fr); }
+  /* Рекламные материалы — по два в ряд */
+  .lp-ad-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
 /* Мобильная адаптация */
@@ -817,6 +842,9 @@ html[data-theme='dark'] .lp-featured .object-card { border: 0; }
   .lp-about-copy { padding: 54px 22px; }
   .lp-fatima-card { left: 14px; right: 14px; bottom: 14px; width: auto; max-width: 342px; font-size: 13px; }
   .lp-fatima-card-title { font-size: 18px; }
+  .lp-advertising { width: auto; margin: 72px 22px; }
+  .lp-advertising-heading { grid-template-columns: 1fr; gap: 18px; }
+  .lp-ad-grid { grid-template-columns: 1fr; }
   .lp-contact { grid-template-columns: 1fr; gap: 26px; padding: 68px 22px; }
   .lp-footer { flex-wrap: wrap; gap: 16px; padding: 36px 22px; }
   /* Города «Межрегиональной недвижимости» на телефоне: боковые поля меньше,

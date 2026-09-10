@@ -19,6 +19,11 @@ import { Pages } from './collections/Pages'
 import { Users } from './collections/Users'
 import { Media } from './collections/Media'
 import { MarketListings } from './collections/MarketListings'
+// «Реклама на сайте»: рекламодатели, рекламные материалы (с маркировкой
+// «Реклама») и заявки с формы страницы /advertising (см. src/lib/advertising.ts)
+import { Advertisers } from './collections/Advertisers'
+import { Advertisements } from './collections/Advertisements'
+import { AdvertisingRequests } from './collections/AdvertisingRequests'
 // «Юридическая экспертиза объекта»: закрытые хранилища документов и отчётов —
 // доступ только через маршруты /api/objects/legal/* (см. src/lib/legal-service.ts)
 import { LegalDocuments } from './collections/LegalDocuments'
@@ -47,7 +52,7 @@ export default buildConfig({
   routes: {
     admin: process.env.ADMIN_ROUTE || '/admin',
   },
-  collections: [Users, Media, Objects, Agents, Applications, Tasks, Messages, Blog, Pages, Customers, Emails, MailAttachments, AgentTasks, MarketListings, LegalDocuments, LegalReports],
+  collections: [Users, Media, Objects, Agents, Applications, Tasks, Messages, Blog, Pages, Customers, Emails, MailAttachments, AgentTasks, MarketListings, LegalDocuments, LegalReports, Advertisers, Advertisements, AdvertisingRequests],
   globals: [SiteSettings, MailSettings, AgentSettings],
   editor: lexicalEditor(),
   i18n: {

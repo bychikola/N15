@@ -24,6 +24,8 @@ export function CrmShell({ user, t, active, children }: Props) {
     { id: 'market', href: '/crm/market', label: t.crm.navMarket },
     { id: 'stats', href: '/crm/stats', label: t.crm.navStats },
     { id: 'mail', href: '/crm/mail', label: t.crm.navMail },
+    // Рекламой управляет администратор — агентам раздел не показываем
+    ...(isAdmin ? [{ id: 'advertising', href: '/crm/advertising', label: t.crm.navAdvertising }] : []),
     ...(user.agentAccess ? [{ id: 'agent', href: '/crm/agent', label: t.crm.navAgent }] : []),
   ]
 
