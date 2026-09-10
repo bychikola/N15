@@ -72,7 +72,7 @@ export function normalizeListingUrl(url: string): string {
     if (host.startsWith('www.')) host = host.slice(4)
     if (host.startsWith('m.')) host = host.slice(2)
     u.hostname = host
-    let out = u.toString().replace(/\/+$/, '')
+    const out = u.toString().replace(/\/+$/, '')
     return out
   } catch {
     return url.trim()

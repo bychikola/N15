@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, type FC } from 'react'
+import Link from 'next/link'
 import type { Dict } from '@/i18n/dictionaries'
 
 /**
@@ -163,7 +164,10 @@ export const MarketParser: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) 
     }
   }
   useEffect(() => {
-    void load()
+    // Первичная загрузка — через микротаск: иначе setState из catch внутри
+    // load() формально достижим синхронно из тела эффекта
+    // (правило react-hooks/set-state-in-effect).
+    void Promise.resolve().then(() => load())
   }, [])
 
   const setFormField = (key: keyof typeof form, value: string) => setForm((f) => ({ ...f, [key]: value }))
@@ -586,13 +590,13 @@ export const MarketParser: FC<{ t: Dict; isAdmin: boolean }> = ({ t, isAdmin }) 
                           <b style={{ color: r.match >= 75 ? '#3f6b34' : r.match >= 45 ? '#a1661f' : '#817b70', whiteSpace: 'nowrap' }}>
                             {r.match}%
                           </b>
-                          <a
+                          <Link
                             href="/crm/objects"
                             style={{ color: '#8d6b40', textDecoration: 'none' }}
                             title={t.crm.marketObjMatch.replace('%s', r.headline)}
                           >
                             {r.headline}
-                          </a>
+                          </Link>
                           <span style={{ color: '#8a857b' }}>
                             {labels}
                             {labels && verdictText ? ` · ${verdictText}` : verdictText}
