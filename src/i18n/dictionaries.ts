@@ -203,6 +203,12 @@ export const ru = {
     breadcrumbCatalog: 'Объекты',
     similarTitle: 'Ещё объекты',
     allCatalog: 'Все объекты',
+    // Характеристики дома из официального реестра МКД: на странице объекта
+    // показываются только подтверждённые агентом значения (см. Objects.housePublic)
+    houseTitle: 'Характеристики дома',
+    houseNote: 'По данным официального реестра многоквартирных домов',
+    houseSource: 'Источник',
+    houseChecked: 'Проверено',
     balcony: 'Балкон',
     balconyOptions: {
       none: 'Нет',
@@ -1543,6 +1549,11 @@ const os: Dict = {
     breadcrumbCatalog: 'Объекттæ',
     similarTitle: 'Маддæр объекттæ',
     allCatalog: 'Æппæт объекттæ',
+    // Характеристики дома из официального реестра МКД (подтверждённые агентом)
+    houseTitle: 'Хæдзары характеристиктæ',
+    houseNote: 'Официалон реестры бæрæггæнæнтæм гæсгæ',
+    houseSource: 'Равзæрд',
+    houseChecked: 'Сбæрæг æрцыд',
     balcony: 'Балкон',
     balconyOptions: {
       none: 'Нæй',

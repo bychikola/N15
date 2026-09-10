@@ -12,6 +12,7 @@ import { sortAgents } from '@/lib/agents-sort'
 import { areToSqm, areaNumberText, parseAreaNumber, sqmToAre } from '@/lib/area-format'
 import { LegalCheckBlock } from '@/components/crm/LegalCheckBlock'
 import { PlacementCheckBlock } from '@/components/crm/PlacementCheckBlock'
+import { HouseDataBlock } from '@/components/crm/HouseDataBlock'
 
 interface ObjectRow {
   id: number
@@ -458,6 +459,8 @@ export const CrmObjects: FC<{
   const [legalId, setLegalId] = useState<number | null>(null)
   // «Проверить размещение»: открытый блок поиска объекта на площадках
   const [placeId, setPlaceId] = useState<number | null>(null)
+  // «Данные о доме»: открытый блок характеристик дома из официального реестра
+  const [houseDataId, setHouseDataId] = useState<number | null>(null)
 
   const load = useCallback(async () => {
     const [objectsRes, agentsRes] = await Promise.all([
@@ -1382,6 +1385,19 @@ export const CrmObjects: FC<{
         </div>
       )}
 
+      {/* Блок «Данные о доме»: характеристики МКД из открытого реестра
+          АИС ППК «ФРТ» по адресу объекта; клиенту уходят только значения,
+          подтверждённые агентом — см. HouseDataBlock */}
+      {houseDataId != null && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 110, background: 'rgba(32,33,30,.55)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '36px 16px', overflowY: 'auto' }}
+          onClick={() => setHouseDataId(null)}>
+          <div style={{ background: '#faf8f4', border: '1px solid #ded5c7', borderRadius: 12, width: 'min(100%, 860px)', padding: 22 }}
+            onClick={(e) => e.stopPropagation()}>
+            <HouseDataBlock objectId={houseDataId} onClose={() => setHouseDataId(null)} onChanged={() => void load()} />
+          </div>
+        </div>
+      )}
+
       {/* Блок «Юридическая экспертиза объекта» (документы и отчёт). Слоем над
           списком; содержимое зависит от прав сотрудника — см. LegalCheckBlock */}
       {legalId != null && (
@@ -1459,6 +1475,14 @@ export const CrmObjects: FC<{
               <button type="button" onClick={() => setLegalId(o.id)}
                 style={{ marginTop: 6, width: '100%', border: '1px solid #dccdb6', borderRadius: 6, background: '#f6efe4', color: '#8d6b40', padding: '7px 10px', fontSize: 9.5, cursor: 'pointer' }}>
                 Провести юридическую экспертизу
+              </button>
+              {/* «Получить данные о доме» — характеристики МКД из открытого
+                  реестра по адресу объекта; в карточку и в описание значения
+                  попадают только после подтверждения агентом (см.
+                  HouseDataBlock) */}
+              <button type="button" onClick={() => setHouseDataId(o.id)}
+                style={{ marginTop: 6, width: '100%', border: '1px solid #dccdb6', borderRadius: 6, background: '#f6efe4', color: '#8d6b40', padding: '7px 10px', fontSize: 9.5, cursor: 'pointer' }}>
+                Получить данные о доме
               </button>
             </div>
           ))}

@@ -1062,5 +1062,122 @@ export const Objects: CollectionConfig = {
         },
       ],
     },
+    {
+      // «Данные о доме» — характеристики многоквартирного дома из открытого
+      // реестра АИС ППК «ФРТ» (см. src/lib/house-info.ts). Кнопка «Получить
+      // данные о доме» в карточке CRM запускает проверку, снимок пишет сервер
+      // (см. src/lib/house-info-service.ts). Здесь же живёт подтверждение
+      // агентом: до него значения клиенту не показываются. У каждой
+      // характеристики — источник, поставщик данных и дата проверки;
+      // расхождения поставщиков помечаются «Требует проверки», отсутствие
+      // сведений — «Не найдено». Группа закрыта для посетителей и клиентов:
+      // её читают только сотрудники (агент и администратор).
+      name: 'houseInfo',
+      type: 'group',
+      label: 'Данные о доме (внутреннее)',
+      admin: {
+        hidden: true,
+        description: 'Характеристики дома из официального реестра, подтверждение агентом',
+      },
+      access: {
+        read: ({ req: { user } }) => {
+          const staff = user as { role?: string } | null | undefined
+          return staff?.role === 'agent' || staff?.role === 'admin'
+        },
+      },
+      fields: [
+        {
+          name: 'status',
+          type: 'select',
+          label: 'Итог проверки',
+          options: [
+            { label: 'Дом найден', value: 'found' },
+            { label: 'Дом не найден', value: 'notFound' },
+            { label: 'Найдено несколько домов', value: 'ambiguous' },
+            { label: 'Проверка недоступна', value: 'unavailable' },
+            { label: 'Не указан адрес', value: 'noAddress' },
+          ],
+        },
+        { name: 'checkedAt', type: 'date', label: 'Дата проверки' },
+        { name: 'registry', type: 'text', label: 'Источник (реестр)' },
+        { name: 'registryUrl', type: 'text', label: 'Ссылка на карточку дома в реестре' },
+        { name: 'houseId', type: 'text', label: 'Номер дома в реестре' },
+        { name: 'houseAddress', type: 'text', label: 'Адрес дома в реестре' },
+        { name: 'registryUpdatedAt', type: 'date', label: 'Актуализировано в реестре' },
+        { name: 'plotCadastral', type: 'text', label: 'Кадастровый номер участка по реестру' },
+        { name: 'query', type: 'text', label: 'Поисковый запрос' },
+        {
+          name: 'matchedBy',
+          type: 'select',
+          label: 'Чем подтверждён дом',
+          options: [
+            { label: 'Адресом', value: 'address' },
+            { label: 'Кадастровым номером', value: 'cadastral' },
+          ],
+        },
+        {
+          // Снимок характеристик: HouseInfoField[] из src/lib/house-info.ts —
+          // значение, статус (подтверждено / требует проверки / не найдено),
+          // источник, поставщик данных и дата проверки. Хранится снимком,
+          // чтобы карточка показывала последнюю проверку до повторного нажатия
+          name: 'fields',
+          type: 'json',
+          label: 'Характеристики дома (снимок)',
+        },
+        { name: 'note', type: 'textarea', label: 'Пояснение к проверке' },
+        {
+          // Подтверждение агентом: { [ключ характеристики]: true }. Только
+          // подтверждённое уходит клиенту (группа housePublic)
+          name: 'approved',
+          type: 'json',
+          label: 'Подтверждено агентом',
+        },
+        { name: 'approvedAt', type: 'date', label: 'Когда подтверждено' },
+        { name: 'approvedBy', type: 'text', label: 'Кто подтвердил' },
+        {
+          name: 'log',
+          type: 'array',
+          label: 'Журнал проверок и подтверждений',
+          labels: { singular: 'Запись журнала', plural: 'Записи журнала' },
+          fields: [
+            { name: 'at', type: 'date', label: 'Когда', required: true },
+            {
+              name: 'event',
+              type: 'select',
+              label: 'Событие',
+              options: [
+                { label: 'Проверка реестра', value: 'check' },
+                { label: 'Подтверждение', value: 'approve' },
+              ],
+            },
+            { name: 'message', type: 'textarea', label: 'Сообщение' },
+            { name: 'by', type: 'text', label: 'Кто выполнил' },
+          ],
+        },
+      ],
+    },
+    {
+      // Публичная часть «Данных о доме»: только те характеристики, которые
+      // агент подтвердил (см. approveHouseInfo). Это единственное, что
+      // показывается клиенту на странице объекта — вместе с источником
+      // (АИС ППК «ФРТ», ГИС ЖКХ) и датой проверки. Пишет группу сервер.
+      name: 'housePublic',
+      type: 'group',
+      label: 'Характеристики дома (подтверждённые)',
+      admin: {
+        hidden: true,
+        description: 'Подтверждённые агентом характеристики дома — показываются клиенту на странице объекта',
+      },
+      fields: [
+        {
+          // HousePublicItem[] из src/lib/house-info.ts: подпись, значение,
+          // источник и дата проверки
+          name: 'items',
+          type: 'json',
+          label: 'Подтверждённые характеристики',
+        },
+        { name: 'confirmedAt', type: 'date', label: 'Когда подтверждено' },
+      ],
+    },
   ],
 }

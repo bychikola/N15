@@ -33,6 +33,13 @@ function conditionLabel(t: Dict, key: string | undefined): string | null {
   return t.object.conditions[key as keyof typeof t.object.conditions] ?? key
 }
 
+/** Дата проверки сведений реестра — «11.09.2026» */
+function checkedDate(iso: string): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })
+}
+
 export default async function ObjectPage({ params }: PageProps) {
   const { lang, slug } = await params
   const t = getDictionary(lang)
@@ -61,6 +68,11 @@ export default async function ObjectPage({ params }: PageProps) {
     coordinates?: { lat?: number; lng?: number }
     description?: { root?: { children?: unknown[] } }
     features?: { feature?: string }[]
+    // Подтверждённые агентом характеристики дома (год постройки, материал
+    // стен, этажность, серия, капремонт, УК, площадь) — заполняются в CRM
+    // кнопкой «Получить данные о доме». Неподтверждённые значения и статусы
+    // «Не найдено»/«Требует проверки» клиенту не показываются.
+    housePublic?: { items?: { key?: string; label?: string; value?: string; source?: string; checkedAt?: string }[]; confirmedAt?: string }
     isPremium?: boolean; isExclusive?: boolean
     // Поля phone/whatsapp/telegram намеренно не используются: номера агентов
     // скрыты от посетителей полевой access-проверкой коллекции agents,
@@ -84,6 +96,19 @@ export default async function ObjectPage({ params }: PageProps) {
     img?.sizes?.card?.url || img?.sizes?.thumbnail?.url || img?.url || ''
 
   const features = obj.features?.map((f: { feature?: string }) => f.feature).filter(Boolean) || []
+  // Характеристики дома из реестра: показываем только подтверждённые агентом
+  // (пустые и «не найдено» в housePublic не попадают) — с источником и датой
+  const houseItems = (obj.housePublic?.items || [])
+    .filter((i) => i.value && i.label)
+    .map((i) => ({
+      key: i.key || i.label!,
+      label: i.label!,
+      value: i.value!,
+      source: i.source || '',
+      checkedAt: i.checkedAt || '',
+    }))
+  const houseSources = Array.from(new Set(houseItems.map((i) => i.source).filter(Boolean)))
+  const houseCheckedAt = houseItems.map((i) => i.checkedAt).filter(Boolean).sort().pop() || ''
   const pricePerMeter = obj.area ? Math.round(obj.price / obj.area) : null
   // Площадь участка, введённая в сотках, показывается «6 соток» (как ввёл агент)
   const areaFmt = (n: number) => n.toLocaleString(t.locale, { maximumFractionDigits: 3 })
@@ -246,6 +271,31 @@ export default async function ObjectPage({ params }: PageProps) {
                   </div>
                 </div>
               ) : null}
+
+              {/* Характеристики дома из официального реестра — только то, что
+                  агент подтвердил в CRM (см. HouseDataBlock). Источник и дата
+                  проверки указываются рядом, предположительных данных нет. */}
+              {houseItems.length > 0 && (
+                <div className="mt-10">
+                  <h2 className="text-xl font-[family-name:var(--font-display)] text-[var(--n15-white)] mb-4">{t.object.houseTitle}</h2>
+                  <dl className="grid grid-cols-1 md:grid-cols-2 border-t border-[var(--n15-gold)]/15">
+                    {houseItems.map((f, i) => (
+                      <div key={f.key}
+                        className={`flex justify-between items-baseline gap-4 py-4 border-b border-[var(--n15-gold)]/15 ${
+                          i % 2 === 0 ? 'md:pr-5 md:border-r md:border-[var(--n15-gold)]/15' : 'md:pl-5'
+                        }`}>
+                        <dt className="text-xs uppercase tracking-[0.16em] text-[var(--n15-muted)] font-semibold">{f.label}</dt>
+                        <dd className="font-[family-name:var(--font-display)] font-semibold text-[var(--n15-white)] text-base text-right">{f.value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                  <p className="mt-4 text-xs text-[var(--n15-muted)]">
+                    {t.object.houseNote}.
+                    {houseSources.length > 0 && <> {t.object.houseSource}: {houseSources.join('; ')}.</>}
+                    {houseCheckedAt && <> {t.object.houseChecked}: {checkedDate(houseCheckedAt)}.</>}
+                  </p>
+                </div>
+              )}
 
               <OrnamentDivider variant="simple" />
 
