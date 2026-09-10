@@ -4,7 +4,12 @@ import { useEffect, useState } from 'react'
 
 const POLL_MS = 30_000
 
-/** Золотой бейдж непрочитанных сообщений на ссылке «Личный кабинет» в шапке. */
+/**
+ * Золотой бейдж непрочитанных сообщений на ссылке «Личный кабинет» в шапке.
+ * В шапке кнопка компактная (одна иконка), поэтому бейдж позиционируется
+ * абсолютно в её правом верхнем углу и не меняет ширину кнопки: родитель
+ * ссылки должен быть `relative`.
+ */
 export default function CabinetBadge() {
   const [unread, setUnread] = useState(0)
 
@@ -50,7 +55,7 @@ export default function CabinetBadge() {
   if (unread === 0) return null
 
   return (
-    <span className="ml-1.5 min-w-4 h-4 px-1 rounded-full bg-[var(--n15-gold)] text-[var(--on-accent)] text-[10px] font-semibold inline-flex items-center justify-center">
+    <span className="absolute -top-1.5 -right-1.5 min-w-4 h-4 px-1 rounded-full bg-[var(--n15-gold)] text-[var(--on-accent)] text-[10px] font-semibold flex items-center justify-center">
       {unread}
     </span>
   )

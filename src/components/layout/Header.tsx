@@ -54,6 +54,28 @@ const calculatorIcon = (
   </svg>
 )
 
+// Иконка личного кабинета (силуэт человека) — контурная, цвет берёт из
+// currentColor (золотой акцент), как у иконок телефона и калькулятора:
+// в шапке кнопка «Личный кабинет» компактная, без подписи, поэтому
+// значение имеет только значок. Подпись доступна как подсказка (title)
+// и для скринридеров (aria-label).
+const cabinetIcon = (
+  <svg
+    width="15"
+    height="15"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.8"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+    <circle cx="12" cy="7" r="4" />
+  </svg>
+)
+
 // Общий номер агентства для tel:-ссылки (текстом рядом с кнопкой не показывается)
 const SITE_PHONE_TEL = 'tel:+79581161515'
 
@@ -445,11 +467,19 @@ export const Header: FC = () => {
               {calculatorIcon}
               <span className="hidden 2xl:inline">{t.nav.calc}</span>
             </button>
+            {/* «Личный кабинет» — компактная иконка (как «Позвонить нам»
+                и «Ипотечный калькулятор» на нешироких экранах): подписи
+                в шапке нет, поэтому кнопка не теснит меню. Переход тот же
+                — /{lang}/lk; назначение кнопки остаётся и текстом подсказки
+                (title), и для скринридеров (aria-label). Родитель relative:
+                бейдж непрочитанных сообщений выносится в угол кнопки */}
             <Link
               href={`/${lang}/lk`}
-              className="px-5 py-2 text-sm tracking-wider uppercase border border-[var(--n15-gold)]/30 text-[var(--n15-gold)] hover:bg-[var(--n15-gold)]/8 transition-all duration-300 inline-flex items-center"
+              aria-label={t.nav.cabinet}
+              title={t.nav.cabinet}
+              className="relative inline-flex items-center px-2.5 py-2.5 border border-[var(--n15-gold)]/30 text-[var(--n15-gold)] hover:bg-[var(--n15-gold)]/8 transition-all duration-300"
             >
-              {t.nav.cabinet}
+              {cabinetIcon}
               <CabinetBadge />
             </Link>
           </div>
@@ -642,11 +672,16 @@ export const Header: FC = () => {
               {calculatorIcon}
               {t.nav.calc}
             </button>
+            {/* «Личный кабинет» на телефоне — крупная кнопка во всю ширину
+                (как «Позвонить нам» и «Ипотечный калькулятор»): подпись
+                остаётся, по ней удобно попадать пальцем */}
             <Link
               href={`/${lang}/lk`}
-              className="mt-2 px-5 py-3 text-sm tracking-wider uppercase border border-[var(--n15-gold)]/30 text-[var(--n15-gold)] text-center"
+              aria-label={t.nav.cabinet}
+              className="mt-2 flex items-center justify-center gap-2 px-5 py-3 text-sm tracking-wider uppercase border border-[var(--n15-gold)]/30 text-[var(--n15-gold)] hover:bg-[var(--n15-gold)]/8 transition-colors"
               onClick={() => setIsOpen(false)}
             >
+              {cabinetIcon}
               {t.nav.cabinet}
             </Link>
             <div className="flex justify-center items-center gap-3 pt-1">
