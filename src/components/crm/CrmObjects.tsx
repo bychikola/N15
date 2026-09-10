@@ -453,7 +453,7 @@ export const CrmObjects: FC<{
   const [plLinks, setPlLinks] = useState<PlacementLink[]>([])
   const [plBusy, setPlBusy] = useState(false)
   const [plErr, setPlErr] = useState('')
-  // «Юридическая проверка объекта»: открытый блок документов и проверки
+  // «Юридическая экспертиза объекта»: открытый блок документов и проверки
   const [legalId, setLegalId] = useState<number | null>(null)
 
   const load = useCallback(async () => {
@@ -1366,7 +1366,7 @@ export const CrmObjects: FC<{
         </div>
       )}
 
-      {/* Блок «Юридическая проверка объекта» (документы и отчёт). Слоем над
+      {/* Блок «Юридическая экспертиза объекта» (документы и отчёт). Слоем над
           списком; содержимое зависит от прав сотрудника — см. LegalCheckBlock */}
       {legalId != null && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 110, background: 'rgba(32,33,30,.55)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '36px 16px', overflowY: 'auto' }}
@@ -1430,12 +1430,12 @@ export const CrmObjects: FC<{
                   </button>
                 )}
               </div>
-              {/* «Провести юридическую проверку» — кнопка в карточке каждого
-                  объекта (модуль юр. проверки, см. LegalCheckBlock). Доступна
+              {/* «Провести юридическую экспертизу» — кнопка в карточке каждого
+                  объекта (модуль экспертизы, см. LegalCheckBlock). Доступна
                   всем сотрудникам; что увидит сотрудник, определяет сервер. */}
               <button type="button" onClick={() => setLegalId(o.id)}
                 style={{ marginTop: 6, width: '100%', border: '1px solid #dccdb6', borderRadius: 6, background: '#f6efe4', color: '#8d6b40', padding: '7px 10px', fontSize: 9.5, cursor: 'pointer' }}>
-                Провести юридическую проверку
+                Провести юридическую экспертизу
               </button>
             </div>
           ))}

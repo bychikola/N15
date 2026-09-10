@@ -5,25 +5,29 @@ import { canAccessCrm, getCrmUser } from '@/app/crm/auth'
 import {
   buildAndStoreReport,
   canManageObjectLegal,
-  isLegalOfficer,
+  canReadLegalReport,
 } from '@/lib/legal-service'
-import type { LegalFacts } from '@/lib/legal-check'
+import type { LegalManualMarks } from '@/lib/legal-check'
 
-// «Провести юридическую проверку»: кнопка в карточке объекта. Маршрут
-// прогоняет движок (см. src/lib/legal-check.ts) по загруженным документам и
-// внесённым сведениям и сохраняет отчёт в закрытую коллекцию legal-reports.
+// «Провести юридическую экспертизу»: кнопка в карточке объекта. Маршрут
+// прогоняет движок (см. src/lib/legal-check.ts) по карточке объекта,
+// загруженной выписке ЕГРН и отметкам юриста о ручных проверках и сохраняет
+// отчёт в закрытую коллекцию legal-reports.
 //
-// Полный текст отчёта в ответе получает только аккаунт Ланы Козыревой
-// (isLegalOfficer). Остальным сотрудникам (агент, ведущий объект, или
-// администратор) возвращается лишь подтверждение, что проверка проведена, —
-// сам отчёт им недоступен ни в этом ответе, ни через другие маршруты.
+// Полный текст отчёта получают только те, кому он открыт (Лана и
+// администраторы, canReadLegalReport). Агент, ведущий объект, может запустить
+// экспертизу, но получает лишь подтверждение — сам отчёт ему недоступен ни в
+// этом ответе, ни через другие маршруты. Отметки юриста агент не заполняет:
+// при таком запуске сохраняются ранее сделанные отметки (keepManual).
 export async function POST(req: NextRequest) {
   try {
     const user = await getCrmUser()
     if (!user || !canAccessCrm(user)) {
       return NextResponse.json({ error: 'Доступ только для команды Н15' }, { status: 403 })
     }
-    const body = (await req.json().catch(() => null)) as { objectId?: number | string; facts?: unknown } | null
+    const body = (await req.json().catch(() => null)) as
+      | { objectId?: number | string; cadastralNumber?: unknown; manual?: unknown }
+      | null
     const objectId = Number(body?.objectId)
     if (!Number.isFinite(objectId) || objectId <= 0) {
       return NextResponse.json({ error: 'Не указан объект' }, { status: 400 })
@@ -35,15 +39,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Нет доступа к документам объекта' }, { status: 403 })
     }
 
-    const data = await buildAndStoreReport(payload, objectId, (body?.facts || {}) as LegalFacts, actor.name)
+    const canRead = canReadLegalReport(actor)
+    const data = await buildAndStoreReport(
+      payload,
+      objectId,
+      {
+        cadastralNumber: typeof body?.cadastralNumber === 'string' ? body.cadastralNumber : undefined,
+        manual: (body?.manual || {}) as LegalManualMarks,
+        keepManual: !canRead,
+      },
+      actor.name,
+    )
 
-    if (isLegalOfficer(actor)) {
+    if (canRead) {
       return NextResponse.json({ formed: true, report: data })
     }
-    // Полный отчёт — только Лане; коллегам факт проведения проверки
+    // Полный отчёт — только Лане и администраторам; коллегам факт проведения
     return NextResponse.json({
       formed: true,
-      note: 'Проверка проведена. Подробный отчёт доступен сотруднику, ответственному за юридические проверки',
+      note: 'Экспертиза проведена. Отчёт доступен юристу и администратору',
       checkedAt: data.checkedAt,
     })
   } catch (error) {

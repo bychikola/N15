@@ -4,16 +4,17 @@ import config from '@payload-config'
 import { canAccessCrm, getCrmUser } from '@/app/crm/auth'
 import {
   canManageObjectLegal,
+  canReadLegalReport,
   getObjectDocs,
   getReportByObject,
-  isLegalOfficer,
 } from '@/lib/legal-service'
 import { LEGAL_STATUS_LABELS } from '@/lib/legal-check'
 
-// Статус юр. проверки объекта для карточки CRM: что доступно текущему
-// сотруднику (управление документами/проверкой), загружены ли документы,
-// сформирован ли отчёт. Детали отчёта этим маршрутом не отдаются — их
-// читает только ответственная за проверки (см. report/route.ts).
+// Статус юридической экспертизы объекта для карточки CRM: что доступно
+// текущему сотруднику (документы и запуск проверки), загружены ли документы,
+// сформирован ли отчёт. Детали отчёта этим маршрутом не отдаются — их читают
+// только Лана и администраторы (см. report/route.ts), агент видит лишь факт
+// проведения проверки.
 export async function GET(req: NextRequest) {
   try {
     const user = await getCrmUser()
@@ -27,11 +28,11 @@ export async function GET(req: NextRequest) {
 
     const payload = await getPayload({ config })
     const actor = { id: user.id, name: user.name, email: user.email, role: user.role }
-    const officer = isLegalOfficer(actor)
-    const canManage = officer || (await canManageObjectLegal(payload, actor, objectId))
+    const canReadReport = canReadLegalReport(actor)
+    const canManage = canReadReport || (await canManageObjectLegal(payload, actor, objectId))
     if (!canManage) {
       // Другой агент/клиент: существование проверки не раскрываем
-      return NextResponse.json({ canManage: false, officer: false })
+      return NextResponse.json({ canManage: false, canReadReport: false })
     }
 
     const [docs, report] = await Promise.all([
@@ -40,7 +41,7 @@ export async function GET(req: NextRequest) {
     ])
     return NextResponse.json({
       canManage: true,
-      officer,
+      canReadReport,
       docsCount: docs.length,
       report: report
         ? {

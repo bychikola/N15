@@ -2,15 +2,15 @@ import type { CollectionConfig } from 'payload'
 import { LEGAL_OFFICER_EMAIL, LEGAL_STATUS_LABELS, type LegalCheckStatus } from '@/lib/legal-check'
 
 // ---------------------------------------------------------------------------
-// Отчёты «Юридической проверки объекта» (модуль CRM). Отчёт — закрытый
-// документ: читать его может только аккаунт Ланы Козыревой (LEGAL_OFFICER_EMAIL);
-// клиентам, другим агентам, сайту и админ-панели коллекция недоступна
-// (read по email-правилу, панель скрыта, изменения — только серверными
-// маршрутами /api/objects/legal/*, см. src/lib/legal-service.ts).
+// Отчёты «Юридической экспертизы объекта» (модуль CRM). Отчёт — закрытый
+// документ: читают его только аккаунт Ланы Козыревой (LEGAL_OFFICER_EMAIL) и
+// администраторы; клиентам, агентам, сайту и админ-панели коллекция
+// недоступна (read по правилу доступа, панель скрыта, изменения — только
+// серверными маршрутами /api/objects/legal/*, см. src/lib/legal-service.ts).
 //
 // В отчёте нет паспортных данных, подписей, личных контактов и полного
-// текста закрытых документов — только результаты сверки по пунктам 1–12,
-// найденные несоответствия, отсутствующие документы и рекомендации.
+// текста закрытых документов — только результаты шести проверок, найденные
+// риски и замечания, источники, отсутствующие документы и рекомендации.
 // ---------------------------------------------------------------------------
 
 const STATUS_OPTIONS = (Object.keys(LEGAL_STATUS_LABELS) as LegalCheckStatus[]).map((s) => ({
@@ -20,14 +20,14 @@ const STATUS_OPTIONS = (Object.keys(LEGAL_STATUS_LABELS) as LegalCheckStatus[]).
 
 export const LegalReports: CollectionConfig = {
   slug: 'legal-reports',
-  labels: { singular: 'Отчёт юр. проверки', plural: 'Отчёты юр. проверки' },
+  labels: { singular: 'Отчёт юр. экспертизы', plural: 'Отчёты юр. экспертизы' },
   admin: {
     hidden: true,
-    description: 'Закрытые отчёты: читает только ответственная за проверки, правки — только серверные маршруты',
+    description: 'Закрытые отчёты: читают юрист и администраторы, правки — только серверные маршруты',
   },
   access: {
-    // Отчёт доступен только аккаунту Ланы Козыревой — даже администраторам
-    read: ({ req: { user } }) => !!user && user.email === LEGAL_OFFICER_EMAIL,
+    // Отчёт доступен Лане Козыревой (по email) и администраторам
+    read: ({ req: { user } }) => !!user && (user.email === LEGAL_OFFICER_EMAIL || user.role === 'admin'),
     create: () => false,
     update: () => false,
     delete: () => false,
@@ -79,11 +79,11 @@ export const LegalReports: CollectionConfig = {
     {
       name: 'items',
       type: 'array',
-      label: 'Пункты проверки',
+      label: 'Проверки (1–6)',
       admin: { readOnly: true },
       fields: [
-        { name: 'key', type: 'text', label: 'Номер пункта', admin: { readOnly: true } },
-        { name: 'title', type: 'text', label: 'Пункт', admin: { readOnly: true } },
+        { name: 'key', type: 'text', label: 'Номер проверки', admin: { readOnly: true } },
+        { name: 'title', type: 'text', label: 'Проверка', admin: { readOnly: true } },
         {
           name: 'status',
           type: 'select',
@@ -156,8 +156,11 @@ export const LegalReports: CollectionConfig = {
     {
       name: 'facts',
       type: 'json',
-      label: 'Сведения, на основе которых сформирован отчёт',
-      admin: { readOnly: true, description: 'Предзаполняют форму при повторной проверке' },
+      label: 'Сведения об объекте, собственнике и разбор выписки',
+      admin: {
+        readOnly: true,
+        description: 'JSON: кадастровый номер, собственник, распознанные из выписки ЕГРН данные, отметки юриста о ручных проверках',
+      },
     },
     // Снимок карточки объекта на момент проверки — отчёт самодостаточен и не
     // меняется, если карточку позже отредактируют (поля служебные, скрыты)

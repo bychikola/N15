@@ -2,13 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { canAccessCrm, getCrmUser } from '@/app/crm/auth'
-import { getReportByObject, isLegalOfficer, reportRecordToData } from '@/lib/legal-service'
+import { canReadLegalReport, getReportByObject, reportRecordToData } from '@/lib/legal-service'
 import { renderLegalReportPdf } from '@/lib/legal-report-pdf'
 import { checkPdfStructure } from '@/lib/pdf'
 
-// Скачивание отчёта юр. проверки в PDF. Отчёт — закрытый документ: PDF
-// получает только аккаунт Ланы Козыревой (та же проверка, что в коллекции
-// legal-reports). Клиентам и другим сотрудникам файл не формируется.
+// Скачивание отчёта юридической экспертизы в PDF. Отчёт — закрытый документ:
+// PDF получают только Лана Козырева и администраторы (та же проверка, что в
+// коллекции legal-reports). Клиентам и другим сотрудникам файл не
+// формируется.
 //
 // PDF строится на сервере без внешних библиотек (см. src/lib/pdf.ts):
 // кириллический шрифт встраивается в файл, поэтому скачанный отчёт
@@ -20,8 +21,8 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Доступ только для команды Н15' }, { status: 403 })
     }
     const actor = { id: user.id, name: user.name, email: user.email, role: user.role }
-    if (!isLegalOfficer(actor)) {
-      return NextResponse.json({ error: 'PDF доступен только сотруднику, ответственному за проверки' }, { status: 403 })
+    if (!canReadLegalReport(actor)) {
+      return NextResponse.json({ error: 'PDF доступен юристу и администратору' }, { status: 403 })
     }
     const objectId = Number(req.nextUrl.searchParams.get('objectId') || 0)
     if (!Number.isFinite(objectId) || objectId <= 0) {
@@ -40,7 +41,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Не удалось собрать файл отчёта' }, { status: 500 })
     }
 
-    const filename = encodeURIComponent(`yur-proverka-obekta-${objectId}.pdf`)
+    const filename = encodeURIComponent(`yur-ekspertiza-obekta-${objectId}.pdf`)
     return new Response(new Uint8Array(buf), {
       headers: {
         'Content-Type': 'application/pdf',

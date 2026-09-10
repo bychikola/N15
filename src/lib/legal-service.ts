@@ -1,23 +1,27 @@
 // ---------------------------------------------------------------------------
-// «Юридическая проверка объекта» — серверный слой хранения и доступов.
+// «Юридическая экспертиза объекта» — серверный слой хранения и доступов.
 //
 // Коллекции legal-documents (закрытое хранилище исходных файлов) и
 // legal-reports (отчёты) имеют полностью закрытые access-правила — все
 // операции идут через маршруты /api/objects/legal/* (см. app/api/objects/legal),
-// которые проверяют права здесь. Отчёт читает только аккаунт Ланы Козыревой
-// (см. LEGAL_OFFICER_EMAIL в legal-check.ts); документы — сотрудники, которые
-// ведут объект, администраторы и Лана; клиентам и сайту — ничего.
+// которые проверяют права здесь. Отчёт и PDF читают ответственная за проверки
+// (Лана Козырева, см. LEGAL_OFFICER_EMAIL в legal-check.ts) и администраторы;
+// документы — сотрудники, которые ведут объект, администраторы и Лана;
+// клиентам и сайту — ничего. Паспорт и отчёт клиенту не показываются.
 // ---------------------------------------------------------------------------
 
 import type { Payload } from 'payload'
 import {
+  LEGAL_ENGINE_VERSION,
   LEGAL_OFFICER_EMAIL,
-  runLegalCheck,
-  sanitizeFacts,
+  runLegalExpertise,
+  sanitizeManualMarks,
   type LegalDocMeta,
-  type LegalFacts,
+  type LegalManualMarks,
   type LegalReportData,
+  type LegalReportExtras,
 } from './legal-check'
+import { parseEgrnExtract, type EgrnExtract } from './legal-egrn'
 
 export interface LegalActor {
   id: number
@@ -26,8 +30,14 @@ export interface LegalActor {
   role: string
 }
 
+/** Ответственная за юридические проверки (Лана Козырева) */
 export function isLegalOfficer(actor: Pick<LegalActor, 'email'> | null | undefined): boolean {
   return !!actor && actor.email === LEGAL_OFFICER_EMAIL
+}
+
+/** Кому открыт отчёт и PDF экспертизы: Лана и администраторы */
+export function canReadLegalReport(actor: Pick<LegalActor, 'email' | 'role'> | null | undefined): boolean {
+  return !!actor && (isLegalOfficer(actor) || actor.role === 'admin')
 }
 
 /** ids профилей агентов (коллекция agents), привязанных к пользователю */
@@ -73,8 +83,8 @@ export async function myObjectIds(payload: Payload, userId: number): Promise<Set
 }
 
 /**
- * Может ли сотрудник работать с документами и проверкой объекта:
- * администратор — с любым, Лана (юр. проверки) — с любым, агент — только
+ * Может ли сотрудник работать с документами и экспертизой объекта:
+ * администратор — с любым, Лана (юр. экспертизы) — с любым, агент — только
  * с объектами своего профиля (как update-доступ коллекции Objects).
  */
 export async function canManageObjectLegal(payload: Payload, actor: LegalActor, objectId: number): Promise<boolean> {
@@ -139,6 +149,50 @@ export async function getLegalDocFile(payload: Payload, docId: number) {
   } | null
 }
 
+/** Содержимое последнего документа нужного типа (только внутри сервера) */
+async function getLatestDocData(
+  payload: Payload,
+  objectId: number,
+  docType: string,
+): Promise<{ data: Buffer; mimeType: string | null; fileName: string | null } | null> {
+  const { docs } = await payload
+    .find({
+      collection: 'legal-documents',
+      where: { object: { equals: objectId }, docType: { equals: docType } },
+      sort: '-createdAt',
+      limit: 1,
+      depth: 0,
+      overrideAccess: true,
+    })
+    .catch(() => ({ docs: [] as unknown[] }))
+  const doc = docs[0] as unknown as { data?: string; mimeType?: string; filename?: string } | undefined
+  if (!doc?.data) return null
+  return { data: Buffer.from(String(doc.data), 'base64'), mimeType: doc.mimeType || null, fileName: doc.filename || null }
+}
+
+/**
+ * Разбор загруженной выписки ЕГРН. XML Росреестра читается автоматически
+ * (см. legal-egrn.ts), PDF и сканы система не распознаёт и сообщает об этом
+ * в отчёте — результат не имитируется.
+ */
+export async function loadEgrnExtract(payload: Payload, objectId: number): Promise<EgrnExtract | null> {
+  const file = await getLatestDocData(payload, objectId, 'egrn')
+  if (!file) return null
+  try {
+    return parseEgrnExtract(file)
+  } catch {
+    return {
+      recognized: false,
+      format: 'unknown',
+      reason: 'файл выписки не удалось прочитать — данные сверяет юрист по документу',
+      owners: [],
+      encumbrances: [],
+      encumbrancesAbsent: false,
+      notes: [],
+    }
+  }
+}
+
 /** Отчёт по объекту (последний сформированный) */
 export async function getReportByObject(payload: Payload, objectId: number) {
   const { docs } = await payload.find({
@@ -152,15 +206,26 @@ export async function getReportByObject(payload: Payload, objectId: number) {
   return docs[0] as Record<string, unknown> | undefined
 }
 
+/** Отметки юриста из сохранённого отчёта (перезапуск проверки их не стирает) */
+function readStoredManual(rec: Record<string, unknown> | undefined): LegalManualMarks {
+  const facts = rec?.facts
+  if (!facts || typeof facts !== 'object') return {}
+  return sanitizeManualMarks((facts as Record<string, unknown>).manual)
+}
+
 /**
- * Формирование и сохранение отчёта: движок (legal-check.ts) считает статусы
- * по документам объекта и внесённым сведениям; результат хранится в закрытой
- * коллекции legal-reports (один отчёт на объект, перезапуск обновляет его).
+ * Формирование и сохранение отчёта экспертизы: движок (legal-check.ts)
+ * проверяет объект по карточке, загруженной выписке ЕГРН и отметкам юриста;
+ * результат хранится в закрытой коллекции legal-reports (один отчёт на
+ * объект, перезапуск обновляет его).
+ *
+ * keepManual — для запуска проверки агентом: отметки юриста, сделанные
+ * раньше, сохраняются, потому что агент их не заполняет.
  */
 export async function buildAndStoreReport(
   payload: Payload,
   objectId: number,
-  facts: LegalFacts,
+  input: { cadastralNumber?: string; manual?: LegalManualMarks; keepManual?: boolean },
   checkedBy: string,
   now?: Date,
 ): Promise<LegalReportData> {
@@ -178,8 +243,13 @@ export async function buildAndStoreReport(
   } | null
   if (!objectDoc) throw new Error('Объект не найден')
 
-  const docs = await getObjectDocs(payload, objectId)
-  const data = runLegalCheck({
+  const [docs, egrn, existing] = await Promise.all([
+    getObjectDocs(payload, objectId),
+    loadEgrnExtract(payload, objectId),
+    getReportByObject(payload, objectId),
+  ])
+
+  const data = runLegalExpertise({
     object: {
       id: objectDoc.id,
       title: objectDoc.title || '',
@@ -191,21 +261,12 @@ export async function buildAndStoreReport(
       ownerName: objectDoc.ownerName,
     },
     docs,
-    facts: sanitizeFacts(facts),
+    egrn,
+    cadastralNumber: input.cadastralNumber,
+    manual: input.keepManual ? readStoredManual(existing) : input.manual,
     now,
   })
   data.checkedBy = checkedBy
-
-  const existing = await payload
-    .find({
-      collection: 'legal-reports',
-      where: { object: { equals: objectId } },
-      limit: 1,
-      depth: 0,
-      overrideAccess: true,
-    })
-    .then((r) => r.docs[0])
-    .catch(() => undefined)
 
   const store = {
     object: objectId,
@@ -226,10 +287,12 @@ export async function buildAndStoreReport(
       fileName: d.fileName,
       size: d.size,
     })),
-    facts: data.facts,
+    // Сведения об объекте, собственнике, разборе выписки и отметках юриста —
+    // в JSON-поле facts (схема коллекции не меняется)
+    facts: data.extras,
     engineVersion: data.engineVersion,
-    // Снимок карточки на момент проверки — для шапки отчёта (см. поля
-    // коллекции legal-reports; печатается в PDF даже после правок карточки)
+    // Снимок карточки на момент проверки — для шапки отчёта (печатается в PDF
+    // даже после правок карточки)
     objectTitle: data.objectTitle,
     objectAddress: data.objectAddress,
     category: data.category,
@@ -251,6 +314,39 @@ export async function buildAndStoreReport(
     })
   }
   return data
+}
+
+/** Дополнительные сведения отчёта из JSON-поля facts (устойчиво к старым записям) */
+function readExtras(value: unknown): LegalReportExtras {
+  const src = value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
+  const str = (v: unknown): string => (v == null ? '' : String(v))
+  const arr = (v: unknown): unknown[] => (Array.isArray(v) ? v : [])
+  const egrnSrc = src.egrn && typeof src.egrn === 'object' ? (src.egrn as Record<string, unknown>) : {}
+  const egrnStatus = str(egrnSrc.status)
+  const cadastralSource = str(src.cadastralSource)
+  return {
+    cadastralNumber: str(src.cadastralNumber),
+    cadastralSource: cadastralSource === 'card' || cadastralSource === 'input' || cadastralSource === 'egrn' ? cadastralSource : 'none',
+    ownerCard: str(src.ownerCard),
+    ownersEgrn: arr(src.ownersEgrn).map(str),
+    rightType: str(src.rightType),
+    basis: str(src.basis),
+    addressEgrn: str(src.addressEgrn),
+    areaEgrn: str(src.areaEgrn),
+    areaCard: typeof src.areaCard === 'number' ? src.areaCard : null,
+    encumbrances: arr(src.encumbrances).map(str),
+    egrn: {
+      status: egrnStatus === 'parsed' || egrnStatus === 'unrecognized' ? egrnStatus : 'missing',
+      fileName: str(egrnSrc.fileName),
+      format: str(egrnSrc.format),
+      reason: str(egrnSrc.reason),
+      docDate: egrnSrc.docDate ? str(egrnSrc.docDate) : null,
+      notes: arr(egrnSrc.notes).map(str),
+    },
+    manual: sanitizeManualMarks(src.manual),
+    autoChecks: arr(src.autoChecks).map(str),
+    autoUnavailable: arr(src.autoUnavailable).map(str),
+  }
 }
 
 /** Запись из коллекции legal-reports → данные отчёта (для PDF и превью) */
@@ -289,7 +385,7 @@ export function reportRecordToData(rec: Record<string, unknown>): LegalReportDat
     recommendations: asArr(rec.recommendations).map(asStr),
     sources: asArr(rec.sources).map((s) => {
       const r = s as Record<string, unknown>
-      return { name: asStr(r.name), url: asStr(r.url), items: asArr(r.items).map(asStr) }
+      return { name: asStr(r.name), url: asStr(r.url) }
     }),
     docs: asArr(rec.docs).map((d) => {
       const r = d as Record<string, unknown>
@@ -302,7 +398,7 @@ export function reportRecordToData(rec: Record<string, unknown>): LegalReportDat
         size: Number(r.size) || 0,
       }
     }),
-    facts: (rec.facts && typeof rec.facts === 'object' ? rec.facts : {}) as LegalFacts,
-    engineVersion: Number(rec.engineVersion) || 1,
+    extras: readExtras(rec.facts),
+    engineVersion: Number(rec.engineVersion) || LEGAL_ENGINE_VERSION,
   }
 }

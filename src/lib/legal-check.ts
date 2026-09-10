@@ -1,37 +1,64 @@
 // ---------------------------------------------------------------------------
-// «Юридическая проверка объекта» — серверный движок предварительного анализа.
+// «Юридическая экспертиза объекта» — движок закрытого отчёта (модуль CRM Н15).
 //
-// Модуль CRM Н15: по документам, загруженным в карточку объекта (закрытое
-// хранилище, см. коллекцию legal-documents), и структурированным сведениям,
-// которые юрист вносит из этих документов (facts), движок формирует отчёт
-// по 12 пунктам проверки. Отчёт предварительный: он НЕ заменяет заключение
-// юриста и официальные документы (эта оговорка выводится в шапке отчёта —
-// и в CRM, и в PDF), а «юридически чисто» движок не ставит никогда: даже при
-// всех зелёных пунктах итог — «Проверено», а не «чисто».
+// Экспертиза отвечает на шесть вопросов: кому принадлежит объект; совпадает
+// ли собственник с паспортом; каковы вид права и основание приобретения;
+// какие обременения зарегистрированы; есть ли процедура банкротства
+// собственника; есть ли судебные и исполнительные риски.
 //
-// Внешние официальные реестры (ФССП, суды, ЕФРСБ, ЕГРОКН и т.п.) движок
-// автоматически не опрашивает — они не имеют публичного API без ключей.
-// По пунктам, где нужны такие данные, отчёт указывает «Нужна ручная проверка
-// юристом» и даёт ссылки на официальные источники (см. LEGAL_SOURCES).
+// Источники данных строго разделены:
+//   • сведения об объекте и собственнике — карточка объекта в CRM;
+//   • сведения о правах и обременениях — загруженная в карточку выписка ЕГРН
+//     (XML Росреестра разбирается автоматически, см. legal-egrn.ts; PDF и
+//     сканы система не распознаёт и прямо об этом сообщает);
+//   • результаты ручных проверок и сверки с паспортом — отметки юриста
+//     (LegalManualMarks), потому что паспорта и официальные реестры системе
+//     недоступны.
 //
-// Движок — чистая функция без ввода-вывода (runLegalCheck), поэтому его
-// легко тестировать; хранение и доступы — в legal-service.ts.
+// Чего движок НЕ делает: не опрашивает официальные реестры (у ЕГРН, ФССП,
+// КАД, ГАС «Правосудие», ЕФРСБ нет открытого API, доступного CRM) и не
+// имитирует их ответы. По таким пунктам отчёт прямо пишет, что проверка
+// автоматически недоступна и выполняется юристом вручную со ссылками на
+// источники. «Юридически чистым» объект не называется никогда: итог —
+// «Риски не выявлены по проверенным данным» либо «Обнаружены риски».
+//
+// Движок — чистая функция без ввода-вывода (runLegalExpertise); хранение и
+// доступы — в legal-service.ts.
 // ---------------------------------------------------------------------------
 
-// Единственный аккаунт, которому открыт отчёт: Лана Козырева (см. память
-// agent-accounts: users.id=2, svetkozyr@gmail.com). Совпадение по email —
+import type { EgrnExtract } from './legal-egrn'
+
+// Единственный аккаунт юриста, которому открыт отчёт: Лана Козырева (см.
+// память agent-accounts: users.id=2, svetkozyr@gmail.com). Совпадение по email —
 // чтобы доступ не сломался при пересоздании пользователя в другой БД.
 export const LEGAL_OFFICER_EMAIL = 'svetkozyr@gmail.com'
 
-/** Статусы пунктов проверки и итога отчёта (единый словарь для всего модуля) */
+/** Версия движка: 2 — экспертиза по шести проверкам вместо анкеты из 12 пунктов */
+export const LEGAL_ENGINE_VERSION = 2
+
+/** Статусы проверок и итога отчёта (единый словарь для всего модуля) */
 export type LegalCheckStatus = 'ok' | 'issues' | 'risk' | 'manual'
 
+/** Итоговые формулировки отчёта. «Юридически чистый» не используется никогда */
 export const LEGAL_STATUS_LABELS: Record<LegalCheckStatus, string> = {
-  ok: 'Проверено',
-  issues: 'Есть вопросы',
-  risk: 'Высокий риск',
-  manual: 'Нужна ручная проверка юристом',
+  ok: 'Риски не выявлены по проверенным данным',
+  issues: 'Есть замечания — нужно решение юриста',
+  risk: 'Обнаружены риски',
+  manual: 'Часть проверок автоматически недоступна — нужна ручная проверка юриста',
 }
+
+/** Короткие формулировки для строки отдельной проверки */
+export const LEGAL_ITEM_STATUS_LABELS: Record<LegalCheckStatus, string> = {
+  ok: 'Рисков не выявлено',
+  issues: 'Есть замечания',
+  risk: 'Обнаружены риски',
+  manual: 'Нужна ручная проверка',
+}
+
+/** Обязательная оговорка отчёта (выводится в шапке блока и в каждом PDF) */
+export const LEGAL_REPORT_DISCLAIMER =
+  'Предварительная юридическая экспертиза. Не заменяет заключение юриста и официальные документы. ' +
+  'Официальные реестры (ЕГРН, ФССП, КАД, ЕФРСБ) автоматически не опрашиваются — эти сведения проверяет юрист вручную'
 
 /** Приоритет статусов: чем больше число, тем «хуже» — итог берёт максимум */
 const STATUS_WEIGHT: Record<LegalCheckStatus, number> = { ok: 0, issues: 1, manual: 2, risk: 3 }
@@ -39,21 +66,18 @@ const STATUS_WEIGHT: Record<LegalCheckStatus, number> = { ok: 0, issues: 1, manu
 const worst = (list: LegalCheckStatus[]): LegalCheckStatus =>
   list.reduce<LegalCheckStatus>((acc, s) => (STATUS_WEIGHT[s] > STATUS_WEIGHT[acc] ? s : acc), 'ok')
 
-/** Заголовок отчёта — обязательная оговорка (выводится крупно, см. отчёт и PDF) */
-export const LEGAL_REPORT_DISCLAIMER =
-  'Предварительная проверка. Не заменяет заключение юриста и официальные документы'
-
 // --- Типы загружаемых документов ------------------------------------------
 
 export const LEGAL_DOC_TYPES = [
-  { value: 'egrn', label: 'Выписка из ЕГРН (характеристики и права)' },
+  { value: 'egrn', label: 'Выписка из ЕГРН (XML Росреестра, PDF или скан)' },
   { value: 'title', label: 'Правоустанавливающий документ (ДКП, дарение и др.)' },
   { value: 'inheritance', label: 'Свидетельство о праве на наследство' },
   { value: 'privatization', label: 'Документы приватизации' },
   { value: 'tech', label: 'Технический паспорт / техплан' },
   // Паспорт загружается только для сверки личности при сделке. Серия, номер
-  // и другие паспортные данные в системе не вводятся и в отчёт не попадают.
-  { value: 'passport', label: 'Паспорт собственника (для сверки)' },
+  // и другие паспортные данные в систему не вводятся, не сохраняются и в
+  // отчёт не попадают; сверку с паспортом юрист выполняет визуально.
+  { value: 'passport', label: 'Паспорт собственника (только для сверки личности)' },
   { value: 'spouse', label: 'Согласие супруга / брачный договор' },
   { value: 'guardianship', label: 'Разрешение органов опеки и попечительства' },
   { value: 'court', label: 'Справки о судах и исполнительных производствах' },
@@ -68,210 +92,128 @@ export type LegalDocType = (typeof LEGAL_DOC_TYPES)[number]['value']
 
 const DOC_LABEL: Record<string, string> = Object.fromEntries(LEGAL_DOC_TYPES.map((d) => [d.value, d.label]))
 
-// --- Сведения, которые юрист вносит из документов (facts) ------------------
+// --- Отметки юриста по результатам ручной проверки -------------------------
 
-/** Варианты ответов «да/нет/не указано» для пунктов 5–11 */
-export const FACTS_TRIPLE: { value: string; label: string }[] = [
-  { value: 'none', label: 'Нет' },
-  { value: 'yes', label: 'Да' },
-]
-
-/** Описание формы сведений — по нему строится интерфейс ввода (LegalCheckBlock) */
-export const FACTS_FIELDS: {
-  name: keyof LegalFacts
-  label: string
-  kind: 'text' | 'date' | 'area' | 'multiline' | 'select'
-  options?: { value: string; label: string }[]
-  /** Подпись-подсказка под полем */
-  hint?: string
-  /** Поле видно только при таком значении другого поля (для согласий и т.п.) */
-  showWhen?: { field: keyof LegalFacts; value: string }
-}[] = [
-  // --- Выписка из ЕГРН ---
-  {
-    name: 'egrnDate', kind: 'date', label: 'Дата выписки из ЕГРН',
-    hint: 'Свежая выписка (не старше 30 дней) — обязательна перед сделкой',
-  },
-  {
-    name: 'egrnCadastral', kind: 'text', label: 'Кадастровый номер по выписке',
-    hint: 'Например: 15:07:0030021:123',
-  },
-  { name: 'egrnAddress', kind: 'text', label: 'Адрес по выписке ЕГРН' },
-  {
-    name: 'egrnArea', kind: 'area', label: 'Площадь по выписке ЕГРН, м²',
-    hint: 'Число с запятой: 67,5',
-  },
-  {
-    name: 'egrnOwners', kind: 'text', label: 'Собственники по выписке (ФИО через запятую)',
-    hint: 'Все правообладатели, включая доли',
-  },
-  { name: 'egrnRight', kind: 'text', label: 'Вид права', hint: 'Например: собственность (долевая, совместная), аренда…' },
-  { name: 'egrnBasis', kind: 'text', label: 'Основание приобретения', hint: 'Например: договор купли-продажи от 01.02.2020, свидетельство о наследстве…' },
-  {
-    name: 'egrnRestrictions', kind: 'multiline', label: 'Ограничения и обременения по выписке',
-    hint: 'Если в выписке их нет — напишите «нет». Укажите всё, что перечислено: залог, ипотека, арест, запрет, аренда, сервитут…',
-  },
-  // --- Внешние проверки (по справкам и открытым официальным реестрам) ---
-  {
-    name: 'courtStatus', kind: 'select', label: 'Судебные споры / исполнительные производства',
-    options: [
-      { value: '', label: 'Не указано' },
-      { value: 'none', label: 'Не выявлено (по справке)' },
-      { value: 'found', label: 'Есть споры или взыскания' },
-    ],
-    hint: 'По справке суда/пристава или проверке юриста (ФССП, КАД, ГАС «Правосудие»)',
-  },
-  {
-    name: 'bankruptcyStatus', kind: 'select', label: 'Банкротство собственника',
-    options: [
-      { value: '', label: 'Не указано' },
-      { value: 'none', label: 'Не выявлено (по справке)' },
-      { value: 'found', label: 'Открыта процедура банкротства' },
-    ],
-    hint: 'По справке или проверке реестра ЕФРСБ / ФССП',
-  },
-  {
-    name: 'kapremontStatus', kind: 'select', label: 'Взносы на капитальный ремонт',
-    options: [
-      { value: '', label: 'Не указано' },
-      { value: 'noDebt', label: 'Задолженности нет (по справке)' },
-      { value: 'debt', label: 'Есть задолженность' },
-      { value: 'na', label: 'Не применимо (не МКД / дом не платит)' },
-    ],
-    hint: 'Для квартир в многоквартирных домах; подтверждается справкой фонда или квитанциями',
-  },
-  // --- Семья и согласия ---
-  {
-    name: 'spouseOwner', kind: 'select', label: 'Собственник состоит в браке (общее имущество супругов)',
-    options: [
-      { value: '', label: 'Не указано' },
-      { value: 'none', label: 'Нет' },
-      { value: 'yes', label: 'Да' },
-    ],
-  },
-  {
-    name: 'spouseConsent', kind: 'select', label: 'Нотариальное согласие супруга приложено',
-    showWhen: { field: 'spouseOwner', value: 'yes' },
-    options: [
-      { value: '', label: 'Не приложено' },
-      { value: 'provided', label: 'Приложено' },
-    ],
-  },
-  {
-    name: 'minorOwners', kind: 'select', label: 'Среди собственников есть несовершеннолетние',
-    options: [
-      { value: '', label: 'Не указано' },
-      { value: 'none', label: 'Нет' },
-      { value: 'yes', label: 'Да' },
-    ],
-  },
-  {
-    name: 'guardianPermit', kind: 'select', label: 'Разрешение органов опеки приложено',
-    showWhen: { field: 'minorOwners', value: 'yes' },
-    options: [
-      { value: '', label: 'Не приложено' },
-      { value: 'provided', label: 'Приложено' },
-    ],
-  },
-  // --- Техническое состояние ---
-  {
-    name: 'replan', kind: 'select', label: 'Перепланировка',
-    options: [
-      { value: '', label: 'Не указано' },
-      { value: 'none', label: 'Нет перепланировок' },
-      { value: 'legalized', label: 'Есть, узаконена' },
-      { value: 'illegal', label: 'Есть, не узаконена' },
-    ],
-  },
-  {
-    name: 'privatized', kind: 'select', label: 'Объект приватизирован',
-    options: [
-      { value: '', label: 'Не указано' },
-      { value: 'no', label: 'Нет' },
-      { value: 'yes', label: 'Да' },
-    ],
-    hint: 'Для квартир и домов, ранее находившихся в государственной/муниципальной собственности',
-  },
-  {
-    name: 'heritage', kind: 'select', label: 'Объект культурного наследия / охранная зона',
-    options: [
-      { value: '', label: 'Не указано' },
-      { value: 'no', label: 'Не является (по справке)' },
-      { value: 'yes', label: 'Является / в охранной зоне' },
-    ],
-  },
-  // --- Прочее ---
-  {
-    name: 'notes', kind: 'multiline', label: 'Дополнительные сведения и риски',
-    hint: 'Всё, что заметили по документам и что должно быть учтено юристом',
-  },
-]
-
-export interface LegalFacts {
-  egrnDate?: string
-  egrnCadastral?: string
-  egrnAddress?: string
-  egrnArea?: string
-  egrnOwners?: string
-  egrnRight?: string
-  egrnBasis?: string
-  egrnRestrictions?: string
-  courtStatus?: '' | 'none' | 'found'
-  bankruptcyStatus?: '' | 'none' | 'found'
-  kapremontStatus?: '' | 'noDebt' | 'debt' | 'na'
-  spouseOwner?: '' | 'none' | 'yes'
-  spouseConsent?: '' | 'provided'
-  minorOwners?: '' | 'none' | 'yes'
-  guardianPermit?: '' | 'provided'
-  replan?: '' | 'none' | 'legalized' | 'illegal'
-  privatized?: '' | 'no' | 'yes'
-  heritage?: '' | 'no' | 'yes'
-  notes?: string
+/**
+ * Результаты проверок, которые система выполнить не может: сверка с
+ * паспортом (только визуально по оригиналу), сверка выписки, когда файл не
+ * распознан автоматически, и официальные реестры (ФССП/КАД/ГАС, ЕФРСБ).
+ * Это не анкета по документу: данные выписки система разбирает сама, здесь
+ * фиксируются только выводы ручной проверки.
+ */
+export interface LegalManualMarks {
+  passportCheck?: '' | 'match' | 'mismatch'
+  egrnCheck?: '' | 'clear' | 'encumbrance' | 'mismatch'
+  courtCheck?: '' | 'clear' | 'found'
+  bankruptcyCheck?: '' | 'clear' | 'found'
+  /** Комментарий юриста к результатам ручных проверок */
+  comment?: string
 }
 
-/** Поля facts, которые реально понимает движок (лишнее из запроса отбрасываем) */
-const FACT_KEYS = new Set<string>([
-  'egrnDate', 'egrnCadastral', 'egrnAddress', 'egrnArea', 'egrnOwners', 'egrnRight',
-  'egrnBasis', 'egrnRestrictions', 'courtStatus', 'bankruptcyStatus', 'kapremontStatus',
-  'spouseOwner', 'spouseConsent', 'minorOwners', 'guardianPermit', 'replan',
-  'privatized', 'heritage', 'notes',
-])
+/** Описание отметок — по нему строится интерфейс (LegalCheckBlock) */
+export const LEGAL_MANUAL_FIELDS: {
+  name: keyof Omit<LegalManualMarks, 'comment'>
+  label: string
+  hint?: string
+  options: { value: string; label: string }[]
+}[] = [
+  {
+    name: 'passportCheck',
+    label: 'Собственник сверен с паспортом',
+    hint: 'Сверку по оригиналу паспорта выполняет юрист визуально: система не распознаёт паспорта и не хранит их данные',
+    options: [
+      { value: '', label: 'Не проверялось' },
+      { value: 'match', label: 'Сверено — совпадает' },
+      { value: 'mismatch', label: 'Есть расхождения' },
+    ],
+  },
+  {
+    name: 'egrnCheck',
+    label: 'Выписка ЕГРН сверена юристом',
+    hint: 'Нужна, когда файл выписки не XML и данные не распознаны автоматически',
+    options: [
+      { value: '', label: 'Не проверялось' },
+      { value: 'clear', label: 'Сверено — обременений и расхождений нет' },
+      { value: 'encumbrance', label: 'Выявлены обременения' },
+      { value: 'mismatch', label: 'Выявлены расхождения в данных' },
+    ],
+  },
+  {
+    name: 'courtCheck',
+    label: 'Суды и исполнительные производства (ФССП, КАД, ГАС «Правосудие»)',
+    hint: 'Автоматический запрос недоступен — проверяется юристом вручную по ссылкам в отчёте',
+    options: [
+      { value: '', label: 'Не проверялось' },
+      { value: 'clear', label: 'Проверено — сведений не найдено' },
+      { value: 'found', label: 'Обнаружены сведения' },
+    ],
+  },
+  {
+    name: 'bankruptcyCheck',
+    label: 'Банкротство собственника (ЕФРСБ)',
+    hint: 'Автоматический запрос недоступен — проверяется юристом вручную',
+    options: [
+      { value: '', label: 'Не проверялось' },
+      { value: 'clear', label: 'Проверено — сведений не найдено' },
+      { value: 'found', label: 'Обнаружена процедура' },
+    ],
+  },
+]
 
-/** Санитизация сведений, пришедших с клиента: только известные ключи и строки */
-export function sanitizeFacts(input: unknown): LegalFacts {
+const MANUAL_VALUES: Record<string, string[]> = {
+  passportCheck: ['', 'match', 'mismatch'],
+  egrnCheck: ['', 'clear', 'encumbrance', 'mismatch'],
+  courtCheck: ['', 'clear', 'found'],
+  bankruptcyCheck: ['', 'clear', 'found'],
+}
+
+/** Санитизация отметок юриста: только известные ключи и значения */
+export function sanitizeManualMarks(input: unknown): LegalManualMarks {
   const src = input && typeof input === 'object' ? (input as Record<string, unknown>) : {}
-  const out: LegalFacts = {}
-  for (const key of FACT_KEYS) {
-    const v = src[key]
-    if (typeof v === 'string') {
-      const s = v.trim().slice(0, 2000)
-      if (s) (out as Record<string, unknown>)[key] = s
-    }
+  const out: LegalManualMarks = {}
+  for (const [key, allowed] of Object.entries(MANUAL_VALUES)) {
+    const value = typeof src[key] === 'string' ? (src[key] as string).trim() : ''
+    if (allowed.includes(value)) (out as Record<string, string>)[key] = value
   }
+  const comment = typeof src.comment === 'string' ? src.comment.trim().slice(0, 2000) : ''
+  if (comment) out.comment = comment
   return out
 }
 
-// --- Источники (официальные открытые данные) -------------------------------
+/** Кадастровый номер из ручного ввода: только цифры, двоеточия и пробелы */
+export function sanitizeCadastral(input: unknown): string {
+  if (typeof input !== 'string') return ''
+  const s = input.trim().replace(/[^\d:]/g, '').slice(0, 40)
+  return /^\d{2}:\d{2}:\d{6,7}:\d{1,10}$/.test(s) ? s : ''
+}
 
-export interface LegalSource { name: string; url: string; items: string[] }
+const CADASTRAL_FORMAT = /^\d{2}:\d{2}:\d{6,7}:\d{1,10}$/
 
-/** Постоянные официальные источники. Ссылки отдаются в отчёте для ручной
- *  проверки юристом — у реестров нет публичного API, доступного из CRM. */
+// --- Официальные источники --------------------------------------------------
+
+export interface LegalSource {
+  name: string
+  url: string
+}
+
+/**
+ * Источники отчёта. Автоматический опрос реестров из CRM невозможен —
+ * у них нет открытого API, доступного серверу сайта, поэтому в названии
+ * источника прямо указано, что проверка ручная.
+ */
 export const LEGAL_SOURCES: LegalSource[] = [
-  { name: 'Публичная кадастровая карта (Росреестр)', url: 'https://pkk.rosreestr.ru/', items: ['1', '2', '3', '4'] },
-  { name: 'Личный кабинет Росреестра — заказ выписок из ЕГРН', url: 'https://lk.rosreestr.ru/', items: ['1', '2', '3', '4', '12'] },
-  { name: 'Банк данных исполнительных производств (ФССП)', url: 'https://fssp.gov.ru/iss/ip', items: ['5', '6'] },
-  { name: 'Картотека арбитражных дел (КАД)', url: 'https://kad.arbitr.ru/', items: ['5', '6'] },
-  { name: 'ГАС «Правосудие» — суды общей юрисдикции', url: 'https://sudrf.ru/', items: ['5'] },
-  { name: 'Единый федеральный реестр сведений о банкротстве (ЕФРСБ)', url: 'https://bankrot.fedresurs.ru/', items: ['6'] },
-  { name: 'ГИС ЖКХ', url: 'https://dom.gosuslugi.ru/', items: ['11'] },
-  { name: 'ЕГРОКН — открытые данные об объектах культурного наследия', url: 'https://opendata.mkrf.ru/opendata/7705851331-egrkn', items: ['10'] },
+  { name: 'Загруженная в карточку выписка ЕГРН — источник сведений о правах и обременениях', url: 'https://lk.rosreestr.ru/' },
+  { name: 'Росреестр / НСПД, публичная кадастровая карта — проверяется вручную, автоматический запрос из CRM недоступен', url: 'https://pkk.rosreestr.ru/' },
+  { name: 'Банк данных исполнительных производств (ФССП) — проверяется юристом вручную', url: 'https://fssp.gov.ru/iss/ip' },
+  { name: 'Картотека арбитражных дел (КАД) — проверяется юристом вручную', url: 'https://kad.arbitr.ru/' },
+  { name: 'ГАС «Правосудие», суды общей юрисдикции — проверяется юристом вручную', url: 'https://sudrf.ru/' },
+  { name: 'ЕФРСБ, реестр сведений о банкротстве — проверяется юристом вручную', url: 'https://bankrot.fedresurs.ru/' },
 ]
 
 // --- Формы отчёта -----------------------------------------------------------
 
 export interface LegalCheckItem {
-  /** Номер пункта: '1'…'12' — совпадает со списком проверок */
+  /** Номер проверки: '1'…'6' — совпадает со списком вопросов экспертизы */
   key: string
   title: string
   status: LegalCheckStatus
@@ -293,15 +235,49 @@ export interface LegalDocInReport {
   size: number
 }
 
+/** Дополнительные сведения отчёта (хранятся в JSON-поле legal-reports.facts) */
+export interface LegalReportExtras {
+  /** Кадастровый номер, по которому шла проверка */
+  cadastralNumber: string
+  /** Откуда он взялся: карточка объекта, ручной ввод, распознанная выписка */
+  cadastralSource: 'card' | 'input' | 'egrn' | 'none'
+  /** Собственник по карточке объекта */
+  ownerCard: string
+  /** Правообладатели, распознанные из выписки ЕГРН */
+  ownersEgrn: string[]
+  rightType: string
+  basis: string
+  addressEgrn: string
+  areaEgrn: string
+  areaCard: number | null
+  /** Зарегистрированные обременения строками («ипотека — …») */
+  encumbrances: string[]
+  /** Что показал разбор файла выписки */
+  egrn: {
+    status: 'parsed' | 'unrecognized' | 'missing'
+    fileName: string
+    format: string
+    reason: string
+    docDate: string | null
+    notes: string[]
+  }
+  /** Отметки юриста о ручных проверках */
+  manual: LegalManualMarks
+  /** Что система проверила сама */
+  autoChecks: string[]
+  /** Что автоматически проверить нельзя и почему */
+  autoUnavailable: string[]
+}
+
 export interface LegalReportData {
   objectId: number
   objectTitle: string
   objectAddress: string
   category: string
   dealType: 'sale' | 'rent'
-  /** Итоговый статус отчёта (один из четырёх) */
+  /** Итог экспертизы (один из четырёх) */
   status: LegalCheckStatus
-  /** Даты проверки и актуальности документов (ISO) */
+  /** Дата проверки (ISO) */
   checkedAt: string
   docsActualAt: string | null
   checkedBy: string
@@ -311,12 +287,11 @@ export interface LegalReportData {
   recommendations: string[]
   sources: LegalSource[]
   docs: LegalDocInReport[]
-  /** Сведения, на основе которых считался отчёт (для предзаполнения формы) */
-  facts: LegalFacts
+  extras: LegalReportExtras
   engineVersion: number
 }
 
-/** Документ объекта для движка (только метаданные — содержимое движку не нужно) */
+/** Документ объекта для движка (только метаданные — содержимое разбирается отдельно) */
 export interface LegalDocMeta {
   id: number
   docType: string
@@ -326,7 +301,7 @@ export interface LegalDocMeta {
   size?: number
 }
 
-/** Карточка объекта для движка (что реально участвует в сверке) */
+/** Карточка объекта для движка */
 export interface LegalObjectLike {
   id: number
   title: string
@@ -345,10 +320,11 @@ const normStr = (v?: string | null): string =>
 
 const normCadastral = (v?: string | null): string => (v || '').toLowerCase().replace(/\s+/g, '')
 
-const numOf = (v?: string | null): number | null => {
-  if (v == null) return null
-  const n = Number(String(v).trim().replace(',', '.'))
-  return Number.isFinite(n) ? n : null
+/** Совпадают ли ФИО: сравнение по нормализованным строкам и вхождению */
+const nameMatches = (a?: string | null, b?: string | null): boolean => {
+  const x = normStr(a)
+  const y = normStr(b)
+  return !!x && !!y && (x === y || x.includes(y) || y.includes(x))
 }
 
 /** Читаемый адрес объекта одной строкой */
@@ -381,33 +357,42 @@ export const fmtDate = (iso?: string | null): string => {
 
 const hasDocType = (docs: LegalDocMeta[], type: string) => docs.some((d) => d.docType === type)
 
+/** Обременения, из-за которых сделка невозможна или рискованна */
+const SERIOUS_ENCUMBRANCE = /арест|запрет|залог|ипотек/i
+
 // --- Движок ----------------------------------------------------------------
 
 const ITEM_TITLES: Record<string, string> = {
-  '1': 'Адрес и площадь по данным ЕГРН',
-  '2': 'Собственники и правообладатели',
+  '1': 'Правообладатель объекта (кому принадлежит)',
+  '2': 'Совпадение собственника с паспортом',
   '3': 'Вид права и основание приобретения',
-  '4': 'Залоги, аресты, запреты и обременения',
-  '5': 'Судебные споры и исполнительные риски',
+  '4': 'Ипотека, залог, аресты, запреты, сервитуты и иные обременения',
+  '5': 'Судебные споры и исполнительные производства',
   '6': 'Банкротство собственника',
-  '7': 'Несовершеннолетние, супруги и необходимые согласия',
-  '8': 'Перепланировки и соответствие техническим документам',
-  '9': 'Приватизация и риски перехода права',
-  '10': 'Статус объекта культурного наследия',
-  '11': 'Капитальный ремонт',
-  '12': 'Полнота загруженных документов',
 }
 
-export function runLegalCheck(opts: {
+/**
+ * Юридическая экспертиза объекта. opts.egrn — результат разбора файла выписки
+ * (legal-egrn.ts), null если файла нет; opts.manual — отметки юриста о ручных
+ * проверках.
+ */
+export function runLegalExpertise(opts: {
   object: LegalObjectLike
   docs: LegalDocMeta[]
-  facts: Partial<LegalFacts>
+  egrn: EgrnExtract | null
+  cadastralNumber?: string
+  manual?: LegalManualMarks
   now?: Date
 }): LegalReportData {
   const now = opts.now || new Date()
   const o = opts.object
   const docs = opts.docs
-  const f = sanitizeFacts(opts.facts)
+  const manual = sanitizeManualMarks(opts.manual)
+  const parsed = opts.egrn && opts.egrn.recognized ? opts.egrn : null
+  const egrnDoc = docs.find((d) => d.docType === 'egrn')
+  const passportDoc = docs.find((d) => d.docType === 'passport')
+  const isSale = o.type === 'sale'
+
   const findings: LegalFinding[] = []
   const missingDocs = new Set<string>()
   const recommendations: string[] = []
@@ -419,26 +404,7 @@ export function runLegalCheck(opts: {
   const addRec = (text: string) => {
     if (!recommendations.includes(text)) recommendations.push(text)
   }
-
-  const category = o.category || ''
-  const isApartment = category === 'apartment'
-  const isHouse = category === 'house'
-  const isTownhouse = category === 'townhouse'
-  // Пункты 8–11 технически применимы к зданиям и помещениям, но не к участкам
-  const isBuilding = isApartment || isHouse || isTownhouse || category === 'commercial'
-  const isSale = o.type === 'sale'
-
-  // --- Общие заметки по документам ---
-  const egrnDoc = docs.find((d) => d.docType === 'egrn')
-  const egrnDateEntered = !!f.egrnDate
-  const egrnDays = f.egrnDate ? isoDaysAgo(f.egrnDate, now) : Number.NaN
-  if (egrnDoc && !egrnDateEntered) {
-    addRec('Укажите дату выписки из ЕГРН — от неё считается актуальность документа')
-  } else if (Number.isFinite(egrnDays) && egrnDays > 30) {
-    addFinding('info', '1', 'Выписка из ЕГРН датируется ' + fmtDate(f.egrnDate) + ' — для сделки она актуальна не более 30 дней, закажите свежую выписку')
-    addRec('Перед сделкой получите свежую выписку из ЕГРН (не старше 30 дней)')
-  }
-
+  const items: LegalCheckItem[] = []
   const item = (key: string, status: LegalCheckStatus, note?: string): LegalCheckItem => ({
     key,
     title: ITEM_TITLES[key],
@@ -446,416 +412,221 @@ export function runLegalCheck(opts: {
     note,
   })
 
-  const items: LegalCheckItem[] = []
+  // Кадастровый номер: карточка объекта либо введённый вручную
+  const cadastralCard = (o.cadastralNumber || '').trim()
+  const cadastralInput = sanitizeCadastral(opts.cadastralNumber)
+  const cadastralEgrn = parsed?.cadastralNumber || ''
+  const cadastral = cadastralCard || cadastralInput || cadastralEgrn
+  const cadastralSource: LegalReportExtras['cadastralSource'] = cadastralCard ? 'card' : cadastralInput ? 'input' : cadastralEgrn ? 'egrn' : 'none'
 
-  // 1. Адрес и площадь по данным ЕГРН --------------------------------------
-  {
-    const hasEgrnInfo = !!f.egrnAddress || !!f.egrnArea || !!f.egrnCadastral
-    if (!hasEgrnInfo && !egrnDoc) {
-      items.push(item('1', 'manual', 'Выписка из ЕГРН не загружена и сведения по ней не внесены — сверку адреса и площади выполнит юрист по выписке'))
-      addMissing('Выписка из ЕГРН об основных характеристиках и правах')
-      addRec('Закажите выписку из ЕГРН (характеристики + права) и внесите сведения из неё')
-    } else if (!hasEgrnInfo) {
-      items.push(item('1', 'manual', 'Выписка загружена, но сведения из неё (адрес, площадь, кадастровый номер) не внесены'))
-    } else {
-      const notes: string[] = []
-      const problems: string[] = []
-      // Кадастровый номер
-      const objCad = normCadastral(o.cadastralNumber)
-      const docCad = normCadastral(f.egrnCadastral)
-      if (objCad && docCad && objCad !== docCad) {
-        addFinding('risk', '1', 'Кадастровый номер в карточке объекта (' + o.cadastralNumber + ') не совпадает с выпиской ЕГРН (' + f.egrnCadastral + ') — возможно, это разные объекты')
-        problems.push('кадастровый номер не совпадает')
-      } else if (objCad && !docCad) {
-        notes.push('кадастровый номер в выписке не внесён — сверку выполнит юрист')
-      } else if (!objCad && docCad) {
-        addFinding('warn', '1', 'В карточке объекта не заполнен кадастровый номер — внесите ' + f.egrnCadastral)
-        problems.push('в карточке нет кадастрового номера')
-      }
-      // Адрес
-      if (f.egrnAddress && (o.address?.street || o.address?.house)) {
-        const objTokens = [o.address?.street || '', o.address?.house || '', o.address?.apartment || '']
-          .map((t) => normStr(t))
-          .filter((t) => t.length >= 3)
-        const docAddrNorm = normStr(f.egrnAddress)
-        const mism = objTokens.filter((t) => !docAddrNorm.includes(t))
-        if (mism.length) {
-          addFinding('warn', '1', 'Адрес по выписке («' + f.egrnAddress + '») не сходится с карточкой объекта (' + objectAddressLine(o) + ')')
-          problems.push('адрес не совпадает')
-        }
-      } else if (f.egrnAddress) {
-        notes.push('в карточке объекта неполный адрес — полноту сверки подтвердите по документам')
-      }
-      // Площадь
-      const docArea = numOf(f.egrnArea)
-      const objArea = o.area && o.area > 0 ? o.area : null
-      if (docArea != null && objArea != null) {
-        // У участков карточка хранит м² (1 сотка = 100 м²) — допуск 1%
-        const tolerance = category === 'land' ? Math.max(1, objArea * 0.01) : 0.5
-        if (Math.abs(docArea - objArea) > tolerance) {
-          addFinding('warn', '1', 'Площадь по выписке (' + String(docArea).replace('.', ',') + ' м²) не совпадает с карточкой объекта (' + String(objArea).replace('.', ',') + ' м²)')
-          problems.push('площадь не совпадает')
-        }
-      } else if (docArea == null) {
-        notes.push('площадь по выписке не внесена')
-      } else {
-        addFinding('warn', '1', 'В карточке объекта не указана площадь — сравнение с выпиской ЕГРН невозможно')
-        problems.push('в карточке нет площади')
-      }
-      items.push(
-        item('1', problems.length ? 'issues' : 'ok', problems.length ? 'Найдены расхождения — см. список несоответствий' : (notes.length ? 'Сведения совпадают с карточкой объекта' + (notes.length ? '. ' + notes.join('. ') : '') : 'Сведения совпадают с карточкой объекта')),
-      )
+  // Пояснение о том, почему файл выписки не разобран (для пунктов 1, 3, 4)
+  const egrnFileNote = (): string => {
+    if (!egrnDoc) return 'выписка из ЕГРН не загружена'
+    if (opts.egrn?.reason) return `файл выписки «${egrnDoc.fileName || 'без имени'}»: ${opts.egrn.reason}`
+    return `файл выписки «${egrnDoc.fileName || 'без имени'}» автоматически не разобран`
+  }
+  /** Пункт, который система проверить не смогла: его закрывает отметка юриста */
+  const manualEgrnItem = (key: string, what: string): LegalCheckItem => {
+    if (manual.egrnCheck === 'clear' || manual.egrnCheck === 'encumbrance') {
+      return item(key, 'ok', `${what} — юрист сверил выписку ЕГРН по документу, расхождений не заявлено`)
     }
+    if (manual.egrnCheck === 'mismatch') {
+      return item(key, 'issues', `${what} — юрист отметил расхождения в данных выписки (см. комментарий к проверке)`)
+    }
+    return item(
+      key,
+      'manual',
+      `${what}: ${egrnFileNote()}. Автоматически система данные не выдумывает — их сверяет юрист по документу, отметки о сверке нет`,
+    )
   }
 
-  // 2. Собственники и правообладатели ---------------------------------------
+  // --- 1. Правообладатель объекта ------------------------------------------
   {
-    const ownersRaw = (f.egrnOwners || '').trim()
-    if (!ownersRaw) {
-      items.push(item('2', 'manual', 'Список собственников не внесён — проверьте состав правообладателей по выписке'))
-      if (!egrnDoc) addMissing('Выписка из ЕГРН с составом правообладателей')
-    } else {
-      const owners = ownersRaw.split(/[,;]/).map((s) => s.trim()).filter(Boolean)
-      const many = owners.length > 1
-      const cardOwner = (o.ownerName || '').trim()
-      const ownerMatches = owners.some((ow) => {
-        const a = normStr(ow)
-        const b = normStr(cardOwner)
-        return !!a && !!b && (a.includes(b) || b.includes(a))
-      })
-      const notes: string[] = []
-      const problems: string[] = []
-      if (cardOwner && !ownerMatches) {
-        addFinding('warn', '2', 'Собственник из карточки объекта («' + cardOwner + '») не найден среди правообладателей по выписке (' + owners.join(', ') + ')')
-        problems.push('состав собственников не совпадает с карточкой')
-      } else if (!cardOwner) {
-        notes.push('в карточке объекта собственник не указан')
-      }
-      if (many) {
-        notes.push('в ЕГРН несколько правообладателей — при сделке потребуется участие или согласие всех')
-        addRec('Получите согласие/участие всех сособственников, указанных в выписке ЕГРН')
-      }
-      if (isSale && many) {
-        addFinding('info', '2', 'Правообладателей несколько (' + owners.join(', ') + ') — проверьте полномочия каждого')
-      }
-      items.push(item('2', problems.length ? 'issues' : 'ok', problems.length ? 'Расхождения — см. список несоответствий' : ('По выписке: ' + owners.join(', ') + (notes.length ? '. ' + notes.join('. ') : ''))))
-    }
-  }
-
-  // 3. Вид права и основание приобретения -----------------------------------
-  {
-    const right = (f.egrnRight || '').trim()
-    const basis = (f.egrnBasis || '').trim()
     const notes: string[] = []
     const problems: string[] = []
-    const hasTitleDoc = hasDocType(docs, 'title')
-    if (!right && !basis) {
-      items.push(item('3', 'manual', 'Вид права и основание не внесены — без этого сделку не подготовить'))
-      addRec('Внесите вид права и основание приобретения из выписки ЕГРН / правоустанавливающего документа')
+    if (cadastral && !CADASTRAL_FORMAT.test(cadastral)) {
+      addFinding('warn', '1', `Кадастровый номер «${cadastral}» не похож на формат ЕГРН — проверьте запись`)
+      problems.push('кадастровый номер записан с ошибкой')
+    }
+    if (cadastralCard && cadastralEgrn && normCadastral(cadastralCard) !== normCadastral(cadastralEgrn)) {
+      addFinding('risk', '1', `Кадастровый номер в карточке объекта (${cadastralCard}) не совпадает с распознанным из выписки (${cadastralEgrn}) — возможно, проверяется не тот объект`)
+      problems.push('кадастровый номер не совпадает с выпиской')
+    }
+    if (cadastralInput && cadastralCard && normCadastral(cadastralInput) !== normCadastral(cadastralCard)) {
+      addFinding('warn', '1', `Введённый для проверки кадастровый номер (${cadastralInput}) отличается от карточки объекта (${cadastralCard})`)
+      problems.push('введённый номер отличается от карточки')
+    }
+    const owners = parsed?.owners || []
+    const cardOwner = (o.ownerName || '').trim()
+    if (owners.length) {
+      notes.push(`по выписке правообладатель: ${owners.join(', ')} (распознано автоматически — сверьте с оригиналом)`)
+      if (cardOwner) {
+        if (!owners.some((owner) => nameMatches(owner, cardOwner))) {
+          addFinding('warn', '1', `Собственник в карточке объекта («${cardOwner}») не найден среди правообладателей по выписке (${owners.join(', ')})`)
+          problems.push('собственник карточки не совпадает с выпиской')
+        }
+      } else {
+        notes.push('в карточке объекта собственник не указан — сверять не с чем')
+      }
+      if (owners.length > 1) {
+        notes.push('правообладателей несколько — для сделки нужны все сособственники или их согласия')
+        addRec('Получите участие или согласие всех сособственников, указанных в выписке ЕГРН')
+      }
+      items.push(item('1', problems.length ? 'issues' : 'ok', problems.length ? 'Расхождения — см. список рисков и замечаний' : notes.join('. ')))
+    } else if (!egrnDoc) {
+      addMissing('Выписка из ЕГРН (сведения о правах и правообладателях)')
+      items.push(item('1', 'manual', 'Выписка из ЕГРН не загружена — правообладатель не проверен. Система не имеет доступа к ЕГРН в реальном времени'))
     } else {
-      const rightNorm = normStr(right)
-      if (!rightNorm) {
-        problems.push('вид права не указан')
-      } else if (isSale && !rightNorm.includes('собственн')) {
-        addFinding('risk', '3', 'Вид права — «' + right + '»: продажа возможна только при праве собственности')
+      const base = manualEgrnItem('1', 'Правообладателя по выписке система не распознала')
+      items.push({ ...base, note: cardOwner ? `${base.note}. В карточке объекта собственник: ${cardOwner}` : base.note })
+    }
+  }
+
+  // --- 2. Сверка собственника с паспортом ----------------------------------
+  {
+    if (!passportDoc) {
+      addMissing('Паспорт собственника (для сверки личности)')
+      items.push(item('2', 'issues', 'Паспорт собственника не загружен — сверить личность и ФИО собственника не с чем'))
+    } else if (manual.passportCheck === 'match') {
+      items.push(item('2', 'ok', 'Сверено юристом с паспортом по оригиналу — расхождений нет'))
+    } else if (manual.passportCheck === 'mismatch') {
+      addFinding('risk', '2', 'ФИО собственника по документам не совпадает с паспортом — до выяснения обстоятельств сделку не проводить')
+      items.push(item('2', 'risk', 'Есть расхождения между документами и паспортом — см. список рисков'))
+    } else {
+      items.push(item('2', 'manual', 'Паспорт загружен для сверки. Система не распознаёт паспорта и не хранит их данные: сверку собственника с паспортом выполняет юрист визуально по оригиналу, отметки о сверке нет'))
+    }
+  }
+
+  // --- 3. Вид права и основание приобретения -------------------------------
+  {
+    const notes: string[] = []
+    const problems: string[] = []
+    const right = parsed?.rightType || ''
+    const basis = parsed?.basis || ''
+    if (right) {
+      notes.push(`вид права по выписке: ${right}`)
+      if (isSale && !/собственн/i.test(right)) {
+        addFinding('risk', '3', `Вид права «${right}»: продажа возможна только при праве собственности`)
         problems.push('право не является собственностью')
-      } else if (rightNorm.includes('долев')) {
-        notes.push('долевая собственность — при сделке нужно согласие всех участников')
-      } else if (rightNorm.includes('совместн')) {
-        notes.push('совместная собственность супругов — потребуется нотариальное согласие супруга (см. пункт 7)')
+      } else if (/долев/i.test(right)) {
+        notes.push('долевая собственность — при сделке нужны все участники долевой собственности')
       }
-      const basisNorm = normStr(basis)
-      if (basisNorm) {
-        if (basisNorm.includes('наслед')) {
-          if (hasDocType(docs, 'inheritance')) {
-            notes.push('право по наследству — свидетельство приложено; проверьте полноту круга наследников')
-            addRec('Убедитесь, что все наследники вступили в права, а сроки оспаривания прошли')
-          } else {
-            problems.push('основание — наследство, но свидетельство о праве на наследство не приложено')
-            addMissing('Свидетельство о праве на наследство')
-          }
-        } else if (basisNorm.includes('купли') || basisNorm.includes('дарен') || basisNorm.includes('мен') || basisNorm.includes('рент')) {
-          if (!hasTitleDoc) {
-            problems.push('основание — ' + basis + ', но сам правоустанавливающий документ не загружен')
-            addMissing('Правоустанавливающий документ (' + basis + ')')
-          }
-        } else if (basisNorm.includes('приватиз')) {
-          if (!hasDocType(docs, 'privatization')) {
-            problems.push('основание — приватизация, документы приватизации не приложены')
-            addMissing('Договор/документы приватизации')
-          }
-        } else if (basisNorm.includes('суд')) {
-          addFinding('info', '3', 'Основание — ' + basis + ': проверьте, что решение вступило в законную силу')
-          notes.push('право по судебному акту — подтвердите вступление в силу')
-        } else {
-          notes.push('основание: ' + basis)
-        }
-      } else {
-        problems.push('основание приобретения не указано')
-      }
-      items.push(item('3', problems.length ? 'issues' : 'ok', problems.length ? 'Есть замечания — см. список' : (notes.length ? notes.join('. ') : 'Вид права и основание соответствуют сделке')))
     }
-  }
-
-  // 4. Залоги, аресты, запреты и обременения --------------------------------
-  {
-    const raw = (f.egrnRestrictions || '').trim()
-    const recText = (r: string) => 'Обременение «' + r + '» снимается только после погашения и внесения записи в ЕГРН — до этого сделка невозможна или рискованна'
-    if (!raw) {
-      items.push(item('4', 'manual', 'Сведения об обременениях не внесены. Если в выписке их нет — напишите «нет»: только так пункт подтверждается'))
-      if (!egrnDoc) addMissing('Выписка из ЕГРН (проверка обременений)')
-      addRec('Проверьте по свежей выписке ЕГРН отсутствие залогов, арестов, запретов и иных обременений')
+    if (basis) {
+      notes.push(`основание: ${basis}`)
+      if (/наслед/i.test(basis)) {
+        if (!hasDocType(docs, 'inheritance')) {
+          problems.push('основание — наследство, свидетельство о праве на наследство не загружено')
+          addMissing('Свидетельство о праве на наследство')
+        }
+        addRec('Проверьте полноту круга наследников и истечение сроков оспаривания наследства')
+      } else if (/приватизац/i.test(basis)) {
+        if (!hasDocType(docs, 'privatization')) {
+          problems.push('основание — приватизация, документы приватизации не загружены')
+          addMissing('Договор (документы) приватизации')
+        }
+      } else if (/договор|купли|дарени|мены|ренты/i.test(basis)) {
+        if (isSale && !hasDocType(docs, 'title')) {
+          problems.push('основание — договор, но сам правоустанавливающий документ не загружен')
+          addMissing('Правоустанавливающий документ (ДКП, дарение, мена и др.)')
+        }
+      } else if (/суд|решени/i.test(basis)) {
+        notes.push('право по судебному акту — подтвердите вступление решения в законную силу')
+      }
+    }
+    if (right || basis) {
+      items.push(item('3', problems.length ? 'issues' : 'ok', problems.length ? 'Замечания по документам-основаниям — см. список' : notes.join('. ')))
     } else {
-      const norm = normStr(raw)
-      const hasNegation = norm.includes('нет') || norm.includes('незарегистр') || norm.includes('отсутств')
-      const has = (w: string) => norm.includes(w)
-      const serious: string[] = []
-      const light: string[] = []
-      if (has('арест') && !hasNegation) serious.push('арест')
-      if (has('запрет') && !hasNegation) serious.push('запрет на регистрационные действия')
-      if ((has('залог') || has('ипотек')) && !hasNegation) serious.push('залог/ипотека')
-      if ((has('аренд') || has('сервит') || has('рент')) && !hasNegation) light.push('аренда/сервитут/рента')
-      if (hasNegation && !serious.length && !light.length) {
-        items.push(item('4', 'ok', 'По выписке ЕГРН зарегистрированных обременений нет'))
-      } else if (serious.length || light.length) {
-        for (const r of serious) {
-          addFinding('risk', '4', 'В ЕГРН зарегистрировано обременение: ' + r + '. ' + recText(r))
-        }
-        for (const r of light) {
-          addFinding('warn', '4', 'В ЕГРН указано: ' + r + ' — сделка возможна, но юрист должен учесть это условие')
-          addRec('Учтите при подготовке сделки: ' + r)
-        }
-        items.push(item('4', serious.length ? 'risk' : 'issues', serious.length ? 'Зарегистрированы обременения, препятствующие сделке' : 'Есть обременения, требующие учёта в сделке'))
-      } else {
-        items.push(item('4', 'issues', 'Не удалось однозначно распознать сведения об обременениях («' + raw + '») — уточните формулировку или передайте юристу'))
-      }
+      items.push(manualEgrnItem('3', 'Вид права и основание приобретения автоматически не распознаны'))
+    }
+    if (isSale && !hasDocType(docs, 'title') && !missingDocs.has('Правоустанавливающий документ (ДКП, дарение, мена и др.)')) {
+      addMissing('Правоустанавливающий документ (ДКП, дарение, мена и др.)')
     }
   }
 
-  // 5. Судебные споры и исполнительные риски --------------------------------
+  // --- 4. Обременения -------------------------------------------------------
   {
-    const st = f.courtStatus
-    if (st === 'found') {
+    const encumbrances = parsed?.encumbrances || []
+    const serious = encumbrances.filter((e) => SERIOUS_ENCUMBRANCE.test(e.kind))
+    const light = encumbrances.filter((e) => !SERIOUS_ENCUMBRANCE.test(e.kind))
+    for (const e of serious) {
+      addFinding('risk', '4', `В ЕГРН зарегистрировано обременение: ${e.kind}${e.text && e.text !== e.kind ? ` (${e.text})` : ''}. Снимается только после погашения и внесения записи в ЕГРН — до этого сделка невозможна или рискованна`)
+    }
+    for (const e of light) {
+      addFinding('warn', '4', `В ЕГРН указано: ${e.kind}${e.text && e.text !== e.kind ? ` (${e.text})` : ''} — сделка возможна, но условие нужно учесть в договоре`)
+      addRec(`Учтите при подготовке сделки: ${e.kind}`)
+    }
+    if (serious.length) {
+      items.push(item('4', 'risk', 'Зарегистрированы обременения, препятствующие сделке — см. список рисков'))
+    } else if (light.length) {
+      items.push(item('4', 'issues', 'Есть обременения, требующие учёта в сделке'))
+    } else if (parsed?.encumbrancesAbsent) {
+      items.push(item('4', 'ok', 'По распознанному тексту выписки обременения не зарегистрированы (сверьте с оригиналом документа)'))
+    } else if (manual.egrnCheck === 'clear') {
+      items.push(item('4', 'ok', 'Юрист сверил выписку ЕГРН по документу — зарегистрированных обременений не выявлено'))
+    } else if (manual.egrnCheck === 'encumbrance') {
+      addFinding('risk', '4', 'Юрист выявил в выписке ЕГРН обременения (см. комментарий к проверке) — сделку готовить после их снятия')
+      items.push(item('4', 'risk', 'Выявлены обременения — см. список рисков'))
+    } else if (manual.egrnCheck === 'mismatch') {
+      items.push(item('4', 'issues', 'Юрист отметил расхождения в данных выписки (см. комментарий к проверке)'))
+    } else if (!egrnDoc) {
+      addMissing('Выписка из ЕГРН (проверка обременений)')
+      items.push(item('4', 'manual', 'Выписка из ЕГРН не загружена — обременения не проверены. Система не имеет доступа к ЕГРН в реальном времени и не имитирует его'))
+    } else {
+      items.push(item('4', 'manual', `Обременения по файлу не подтверждены: ${egrnFileNote()}. Их отсутствие подтверждает только текст выписки — проверяет юрист`))
+    }
+  }
+
+  // --- 5. Судебные и исполнительные риски ----------------------------------
+  {
+    if (manual.courtCheck === 'found') {
       addFinding('risk', '5', 'Есть сведения о судебных спорах или исполнительных производствах — сделка под риском')
-      items.push(item('5', 'risk', 'Зафиксированы судебные споры / исполнительные производства — до их урегулирования сделку не проводить'))
-      addRec('Выясните предмет и стадию спора/взыскания до любых действий по сделке')
-    } else if (st === 'none') {
-      if (hasDocType(docs, 'court')) {
-        items.push(item('5', 'ok', 'По представленной справке судебных споров и исполнительных производств не выявлено'))
-      } else {
-        items.push(item('5', 'manual', 'Указано, что споров нет, но подтверждающая справка не загружена — приложите её или подтвердите проверкой юриста'))
-      }
+      items.push(item('5', 'risk', 'Зафиксированы судебные споры или взыскания — до урегулирования сделку не проводить'))
+      addRec('Выясните предмет и стадию спора (взыскания) до любых действий по сделке')
+    } else if (manual.courtCheck === 'clear') {
+      items.push(item('5', 'ok', 'Проверено юристом по официальным источникам (ФССП, КАД, ГАС «Правосудие») — сведений не найдено'))
     } else {
-      items.push(item('5', 'manual', 'Открытые реестры (ФССП, КАД, ГАС «Правосудие») в автоматическом режиме не опрашиваются — проверку выполняет юрист, ссылки на источники — в конце отчёта'))
+      items.push(item('5', 'manual', 'Автоматическая проверка недоступна: у ФССП, КАД и ГАС «Правосудие» нет открытого API для CRM — система не имитирует результат. Проверку выполняет юрист по ссылкам в отчёте'))
       addRec('Юристу: проверьте собственника по банку исполнительных производств ФССП, КАД и ГАС «Правосудие»')
     }
   }
 
-  // 6. Банкротство собственника ---------------------------------------------
+  // --- 6. Банкротство собственника -----------------------------------------
   {
-    const st = f.bankruptcyStatus
-    if (st === 'found') {
-      addFinding('risk', '6', 'В отношении собственника открыта процедура банкротства — реализация имущества вне конкурсной массы невозможна')
-      items.push(item('6', 'risk', 'Открыто банкротство собственника — сделка с его имуществом требует согласования с финансовым управляющим'))
-    } else if (st === 'none') {
-      if (hasDocType(docs, 'bankruptcy')) {
-        items.push(item('6', 'ok', 'По представленной справке сведений о банкротстве собственника нет'))
-      } else {
-        items.push(item('6', 'manual', 'Сведений о банкротстве нет по заявлению, но справка не загружена — подтвердите проверкой реестров'))
-      }
+    if (manual.bankruptcyCheck === 'found') {
+      addFinding('risk', '6', 'В отношении собственника открыта процедура банкротства — реализация имущества возможна только через конкурсную массу')
+      items.push(item('6', 'risk', 'Открыто банкротство собственника — сделка требует участия финансового управляющего'))
+      addRec('Согласуйте сделку с финансовым управляющим либо откажитесь от неё до завершения процедуры')
+    } else if (manual.bankruptcyCheck === 'clear') {
+      items.push(item('6', 'ok', 'Проверено юристом по реестру ЕФРСБ — сведений о банкротстве нет'))
     } else {
-      items.push(item('6', 'manual', 'Проверка реестров банкротств (ЕФРСБ, ФССП) выполняется юристом вручную — ссылки в конце отчёта'))
-      addRec('Юристу: проверьте собственника по ЕФРСБ и исполнительным производствам ФССП')
+      items.push(item('6', 'manual', 'Автоматическая проверка недоступна: у реестра ЕФРСБ нет открытого API для CRM — система не имитирует результат. Проверку выполняет юрист по ссылке в отчёте'))
+      addRec('Юристу: проверьте собственника по реестру ЕФРСБ')
     }
   }
 
-  // 7. Несовершеннолетние, супруги и согласия -------------------------------
-  {
-    const notes: string[] = []
-    const problems: string[] = []
-    const spouse = f.spouseOwner
-    const minor = f.minorOwners
-    if (spouse === 'yes') {
-      const consentOk = f.spouseConsent === 'provided' || hasDocType(docs, 'spouse')
-      if (consentOk) {
-        notes.push('согласие супруга приложено (проверьте актуальность на дату сделки)')
-      } else {
-        addFinding('risk', '7', 'Имущество — общее имущество супругов, но нотариальное согласие супруга не приложено: сделка может быть оспорена')
-        problems.push('нет согласия супруга')
-        addMissing('Нотариальное согласие супруга на продажу')
-      }
-    } else if (spouse === 'none') {
-      notes.push('сведений о супруге-сособственнике нет')
-    }
-    if (minor === 'yes') {
-      const permitOk = f.guardianPermit === 'provided' || hasDocType(docs, 'guardianship')
-      if (permitOk) {
-        notes.push('разрешение органов опеки приложено (проверьте, что сделка соответствует условиям разрешения)')
-      } else {
-        addFinding('risk', '7', 'Среди собственников несовершеннолетний, а разрешения органа опеки и попечительства нет — сделка с долей несовершеннолетнего недопустима')
-        problems.push('нет разрешения органов опеки')
-        addMissing('Разрешение органа опеки и попечительства')
-      }
-    } else if (minor === 'none') {
-      notes.push('несовершеннолетних собственников нет')
-    }
-    if (!spouse && !minor) {
-      items.push(item('7', 'manual', 'Не внесены сведения о супругах и несовершеннолетних собственниках — заполните их по документам'))
-    } else {
-      const serious = problems.length
-      items.push(item('7', serious ? 'risk' : 'ok', serious ? 'Отсутствуют обязательные согласия — см. список несоответствий' : (notes.length ? notes.join('. ') : 'Согласия в порядке')))
-    }
+  // --- Общие замечания по документам ---------------------------------------
+  const egrnDays = egrnDoc?.docDate ? isoDaysAgo(egrnDoc.docDate, now) : Number.NaN
+  if (egrnDoc && !egrnDoc.docDate) {
+    addRec('Укажите дату выписки из ЕГРН при загрузке — от неё считается актуальность документа')
+  } else if (Number.isFinite(egrnDays) && egrnDays > 30) {
+    addFinding('info', '1', `Выписка из ЕГРН датируется ${fmtDate(egrnDoc?.docDate)} — для сделки она актуальна не более 30 дней, закажите свежую`)
+    addRec('Перед сделкой получите свежую выписку из ЕГРН (не старше 30 дней)')
   }
+  if (!egrnDoc) addMissing('Выписка из ЕГРН (основной документ экспертизы)')
 
-  // 8. Перепланировки --------------------------------------------------------
-  {
-    const replan = f.replan
-    if (!isBuilding) {
-      items.push(item('8', 'ok', 'Не применимо: земельный участок'))
-    } else if (replan === 'illegal') {
-      addFinding('risk', '8', 'Есть несогласованная перепланировка — продажа возможна только после узаконивания или по решению суда')
-      items.push(item('8', 'risk', 'Перепланировка не узаконена — до сделки приведите помещение в соответствие с документами'))
-      addRec('Узаконьте перепланировку (согласование + внесение изменений в техплан) до сделки')
-    } else if (replan === 'legalized') {
-      if (hasDocType(docs, 'tech')) {
-        items.push(item('8', 'ok', 'Перепланировка узаконена, техническая документация приложена'))
-      } else {
-        items.push(item('8', 'issues', 'Перепланировка узаконена, но техплан/техпаспорт с внесёнными изменениями не загружен'))
-        addMissing('Технический паспорт / техплан с изменениями')
-      }
-    } else if (replan === 'none') {
-      if (hasDocType(docs, 'tech') || isSale === false) {
-        items.push(item('8', 'ok', 'По технической документации перепланировок нет'))
-      } else {
-        items.push(item('8', 'manual', 'Заявлено об отсутствии перепланировок, но техпаспорт/техплан не загружен — подтвердите документально'))
-        addMissing('Технический паспорт / техплан (подтверждение отсутствия перепланировок)')
-      }
-    } else {
-      items.push(item('8', 'manual', 'Сведения о перепланировках не внесены — сравнение с техническими документами выполнит юрист'))
-      addRec('Сравните фактическое состояние помещения с техпаспортом/техпланом')
-    }
-  }
-
-  // 9. Приватизация ----------------------------------------------------------
-  {
-    const st = f.privatized
-    if (!isApartment && !isHouse && !isTownhouse) {
-      items.push(item('9', 'ok', 'Не применимо: объект не был в государственной/муниципальной собственности как жильё'))
-    } else if (st === 'yes') {
-      if (hasDocType(docs, 'privatization')) {
-        items.push(item('9', 'ok', 'Объект приватизирован, документы приватизации приложены'))
-        addRec('При приватизации проверьте участие всех зарегистрированных на тот момент лиц — пропущенный участник может оспорить сделку')
-      } else {
-        items.push(item('9', 'issues', 'Объект приватизирован, но документы приватизации не приложены'))
-        addMissing('Договор (документы) приватизации')
-      }
-    } else if (st === 'no') {
-      items.push(item('9', 'ok', 'Приватизация не проводилась — право возникло по иному основанию (см. пункт 3)'))
-    } else {
-      items.push(item('9', 'manual', 'Сведения о приватизации не внесены — риски перехода права (пропущенные участники, сроки) оценит юрист'))
-    }
-  }
-
-  // 10. Объект культурного наследия ------------------------------------------
-  {
-    const st = f.heritage
-    if (!isBuilding) {
-      items.push(item('10', 'manual', 'Статус земельного участка в охранных зонах ОКН проверяется по публичной кадастровой карте и данным ЕГРОКН'))
-    } else if (st === 'yes') {
-      addFinding('warn', '10', 'Объект является памятником/находится в охранной зоне — на него распространяются ограничения по содержанию и ремонту')
-      items.push(item('10', 'issues', 'Объект культурного наследия / в охранной зоне — запросите заключение органа охраны ОКН об ограничениях'))
-      addRec('Получите в органе охраны ОКН сведения об ограничениях (запрет перепланировки, режим содержания)')
-    } else if (st === 'no') {
-      if (hasDocType(docs, 'heritage')) {
-        items.push(item('10', 'ok', 'По справке объект не является объектом культурного наследия'))
-      } else {
-        items.push(item('10', 'manual', 'Указано, что объект не является ОКН, но справка не загружена — приложите её для подтверждения'))
-      }
-    } else {
-      items.push(item('10', 'manual', 'Проверка статуса ОКН по открытым данным (ЕГРОКН) выполняется юристом — ссылка в конце отчёта'))
-      addRec('Юристу: проверьте объект по реестру ЕГРОКН и охранным зонам')
-    }
-  }
-
-  // 11. Капитальный ремонт ---------------------------------------------------
-  {
-    const st = f.kapremontStatus
-    if (!isApartment && !isTownhouse) {
-      items.push(item('11', 'ok', 'Не применимо: взносы на капремонт начисляются собственникам помещений в МКД'))
-    } else if (st === 'noDebt') {
-      if (hasDocType(docs, 'kapremont') || hasDocType(docs, 'utility')) {
-        items.push(item('11', 'ok', 'Задолженности по взносам на капремонт нет (по справке/квитанциям)'))
-      } else {
-        items.push(item('11', 'manual', 'Задолженности нет по заявлению, но подтверждающий документ не загружен'))
-      }
-    } else if (st === 'debt') {
-      addFinding('warn', '11', 'Есть задолженность по взносам на капремонт — при продаже долг остаётся на собственнике, но его лучше погасить до сделки')
-      items.push(item('11', 'issues', 'Есть задолженность по взносам на капремонт — уточните сумму и погасите до сделки'))
-      addRec('Запросите справку фонда капремонта о сумме задолженности')
-    } else if (st === 'na') {
-      items.push(item('11', 'ok', 'Взносы на капремонт по объекту не начисляются'))
-    } else {
-      items.push(item('11', 'manual', 'Сведения о взносах на капремонт не внесены (для МКД подтверждаются справкой фонда или квитанциями)'))
-    }
-  }
-
-  // 12. Полнота загруженных документов ---------------------------------------
-  {
-    const need: { docType: string; name: string; required: boolean }[] = []
-    if (isSale) {
-      need.push({ docType: 'egrn', name: 'Выписка из ЕГРН (характеристики и права)', required: true })
-      need.push({ docType: 'title', name: 'Правоустанавливающий документ', required: true })
-    } else {
-      need.push({ docType: 'egrn', name: 'Выписка из ЕГРН (подтверждение права сдавать)', required: true })
-    }
-    need.push({ docType: 'passport', name: 'Паспорт собственника (сверка личности)', required: true })
-    if (f.spouseOwner === 'yes' && f.spouseConsent !== 'provided') {
-      need.push({ docType: 'spouse', name: 'Согласие супруга', required: true })
-    }
-    if (f.minorOwners === 'yes' && f.guardianPermit !== 'provided') {
-      need.push({ docType: 'guardianship', name: 'Разрешение органов опеки', required: true })
-    }
-    if (f.replan === 'legalized') {
-      need.push({ docType: 'tech', name: 'Техплан/техпаспорт с изменениями', required: true })
-    }
-    if (f.privatized === 'yes') {
-      need.push({ docType: 'privatization', name: 'Документы приватизации', required: true })
-    }
-    if (f.heritage === 'yes') {
-      need.push({ docType: 'heritage', name: 'Заключение органа охраны ОКН', required: false })
-    }
-    // Уже собранные в пунктах 1–11 отсутствующие документы тоже учитываем
-    const missing = need.filter((n) => !hasDocType(docs, n.docType))
-    const totalMissing = new Set<string>()
-    for (const m of missing) totalMissing.add(m.name)
-    for (const m of missingDocs) totalMissing.add(m)
-
-    if (!docs.length) {
-      items.push(item('12', 'issues', 'Документы в карточку объекта не загружены'))
-    } else if (missing.some((m) => m.required)) {
-      items.push(item('12', 'issues', 'Загружены не все обязательные документы'))
-    } else if (missing.length) {
-      items.push(item('12', 'ok', 'Обязательные документы на месте' + (missing.length ? ' (рекомендуемые: ' + missing.map((m) => m.name.toLowerCase()).join(', ') + ')' : '')))
-    } else {
-      items.push(item('12', 'ok', 'Все ожидаемые документы загружены'))
-    }
-    if (totalMissing.size) {
-      for (const m of totalMissing) addMissing(m)
-    }
-  }
-
-  // --- Итог ------------------------------------------------------------------
+  // --- Итог -----------------------------------------------------------------
   const status = worst(items.map((i) => i.status))
-  if (status === 'risk') addRec('Приостановите оформление сделки до устранения или разъяснения обстоятельств, отмеченных как «Высокий риск»')
-  if (status !== 'ok') addRec('Перед сделкой получите свежую выписку из ЕГРН (не старше 30 дней)')
+  if (status === 'risk') addRec('Приостановите оформление сделки до устранения обстоятельств, отмеченных как риск')
+  if (status === 'manual') addRec('Закройте пункты, отмеченные как «нужна ручная проверка»: официальные реестры автоматически не опрашиваются')
   addRec('Оригиналы документов и подлинность подписей сверяет юрист при личной встрече с собственником')
-  addRec('Отчёт предварительный: окончательное заключение готовит юрист по оригиналам документов и официальным ответам')
+  addRec('Отчёт фиксирует результаты проверок и не заменяет заключение юриста по оригиналам документов')
 
-  // Дата актуальности документов: дата выписки ЕГРН (если внесена), иначе —
-  // самая поздняя дата среди загруженных документов
+  // Дата актуальности документов: дата выписки ЕГРН, иначе — самый поздний
+  // датированный документ карточки
   let docsActualAt: string | null = null
-  if (f.egrnDate && Number.isFinite(new Date(f.egrnDate).getTime())) {
-    docsActualAt = new Date(f.egrnDate + 'T00:00:00').toISOString()
+  if (egrnDoc?.docDate && /^\d{4}-\d{2}-\d{2}$/.test(egrnDoc.docDate)) {
+    docsActualAt = new Date(`${egrnDoc.docDate}T00:00:00`).toISOString()
   } else {
     const dates = docs
       .map((d) => (d.docDate && Number.isFinite(new Date(d.docDate).getTime()) ? new Date(d.docDate).getTime() : Number.NaN))
@@ -863,9 +634,20 @@ export function runLegalCheck(opts: {
     if (dates.length) docsActualAt = new Date(Math.max(...dates)).toISOString()
   }
 
-  // Источники, релевантные пунктам с ручной проверкой
-  const manualKeys = new Set(items.filter((i) => i.status === 'manual').map((i) => i.key))
-  const sources = LEGAL_SOURCES.filter((s) => s.items.some((k) => manualKeys.has(k)))
+  // --- Пояснения к отчёту: что проверено автоматически, а что нет ----------
+  const autoChecks: string[] = []
+  if (cadastral) autoChecks.push('Формат кадастрового номера и его совпадение с карточкой объекта')
+  autoChecks.push('Комплектность документов карточки (выписка ЕГРН, паспорт, правоустанавливающий документ)')
+  if (parsed) autoChecks.push('Разбор загруженной XML-выписки ЕГРН: правообладатели, вид права, основание, обременения')
+  if (egrnDoc?.docDate) autoChecks.push('Актуальность выписки ЕГРН (не старше 30 дней)')
+
+  const autoUnavailable: string[] = [
+    'Запрос в ЕГРН в реальном времени: у CRM нет доступа к API Росреестра, используются только документы, загруженные в карточку',
+    'ФССП, КАД, ГАС «Правосудие»: открытого API нет — проверяет юрист вручную',
+    'ЕФРСБ: открытого API нет — проверяет юрист вручную',
+  ]
+  if (egrnDoc && !parsed) autoUnavailable.push('Распознавание PDF и сканов (OCR): в CRM не выполняется — выписку сверяет юрист по документу')
+  autoUnavailable.push('Сверка с паспортом: система не распознаёт паспорта и не хранит их данные — сверку выполняет юрист по оригиналу')
 
   const sortedFindings = [...findings].sort((a, b) => Number(a.itemKey) - Number(b.itemKey))
 
@@ -873,7 +655,7 @@ export function runLegalCheck(opts: {
     objectId: o.id,
     objectTitle: o.title || '',
     objectAddress: objectAddressLine(o),
-    category,
+    category: o.category || '',
     dealType: isSale ? 'sale' : 'rent',
     status,
     checkedAt: now.toISOString(),
@@ -883,7 +665,7 @@ export function runLegalCheck(opts: {
     findings: sortedFindings,
     missingDocs: [...missingDocs],
     recommendations,
-    sources,
+    sources: LEGAL_SOURCES,
     docs: docs.map((d) => ({
       id: d.id,
       docType: d.docType,
@@ -892,7 +674,29 @@ export function runLegalCheck(opts: {
       fileName: d.fileName || '',
       size: d.size || 0,
     })),
-    facts: f,
-    engineVersion: 1,
+    extras: {
+      cadastralNumber: cadastral,
+      cadastralSource,
+      ownerCard: (o.ownerName || '').trim(),
+      ownersEgrn: parsed?.owners || [],
+      rightType: parsed?.rightType || '',
+      basis: parsed?.basis || '',
+      addressEgrn: parsed?.address || '',
+      areaEgrn: parsed?.area || '',
+      areaCard: typeof o.area === 'number' && o.area > 0 ? o.area : null,
+      encumbrances: (parsed?.encumbrances || []).map((e) => (e.text && e.text !== e.kind ? `${e.kind} — ${e.text}` : e.kind)),
+      egrn: {
+        status: opts.egrn?.recognized ? 'parsed' : opts.egrn ? 'unrecognized' : 'missing',
+        fileName: egrnDoc?.fileName || '',
+        format: opts.egrn?.format || '',
+        reason: opts.egrn?.reason || '',
+        docDate: egrnDoc?.docDate || null,
+        notes: opts.egrn?.notes || [],
+      },
+      manual,
+      autoChecks,
+      autoUnavailable,
+    },
+    engineVersion: LEGAL_ENGINE_VERSION,
   }
 }

@@ -2,11 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { canAccessCrm, getCrmUser } from '@/app/crm/auth'
-import { getReportByObject, isLegalOfficer } from '@/lib/legal-service'
+import { canReadLegalReport, getReportByObject } from '@/lib/legal-service'
 
-// Чтение сформированного отчёта. Отчёт — закрытый документ: этот маршрут
-// отвечает только аккаунту Ланы Козыревой. Клиентам, другим агентам и
-// администраторам отчёт не показывается (см. также коллекцию legal-reports).
+// Чтение сформированного отчёта экспертизы. Отчёт — закрытый документ: этот
+// маршрут отвечает только Лане Козыревой и администраторам (см. также
+// коллекцию legal-reports). Клиентам, другим агентам и сайту отчёт не
+// показывается.
 export async function GET(req: NextRequest) {
   try {
     const user = await getCrmUser()
@@ -14,8 +15,8 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Доступ только для команды Н15' }, { status: 403 })
     }
     const actor = { id: user.id, name: user.name, email: user.email, role: user.role }
-    if (!isLegalOfficer(actor)) {
-      return NextResponse.json({ error: 'Отчёт доступен только сотруднику, ответственному за проверки' }, { status: 403 })
+    if (!canReadLegalReport(actor)) {
+      return NextResponse.json({ error: 'Отчёт доступен юристу и администратору' }, { status: 403 })
     }
     const objectId = Number(req.nextUrl.searchParams.get('objectId') || 0)
     if (!Number.isFinite(objectId) || objectId <= 0) {

@@ -19,7 +19,7 @@ import { Pages } from './collections/Pages'
 import { Users } from './collections/Users'
 import { Media } from './collections/Media'
 import { MarketListings } from './collections/MarketListings'
-// «Юридическая проверка объекта»: закрытые хранилища документов и отчётов —
+// «Юридическая экспертиза объекта»: закрытые хранилища документов и отчётов —
 // доступ только через маршруты /api/objects/legal/* (см. src/lib/legal-service.ts)
 import { LegalDocuments } from './collections/LegalDocuments'
 import { LegalReports } from './collections/LegalReports'

@@ -5,14 +5,17 @@ import { canAccessCrm, getCrmUser } from '@/app/crm/auth'
 import { canManageObjectLegal, getObjectDocs } from '@/lib/legal-service'
 import { LEGAL_DOC_TYPES } from '@/lib/legal-check'
 
-// Документы юр. проверки объекта (закрытое хранилище, см. коллекцию
-// legal-documents). Файлы живут base64 в БД — в файловую систему и на сайт
-// не попадают. Доступ: агент, который ведёт объект; администратор; Лана
-// (юр. проверки). Метаданные списком — GET, загрузка файла — POST (multipart).
+// Документы юридической экспертизы объекта (закрытое хранилище, см.
+// коллекцию legal-documents). Файлы живут base64 в БД — в файловую систему и
+// на сайт не попадают. Доступ: агент, который ведёт объект; администратор;
+// Лана (юр. экспертизы). Метаданные списком — GET, загрузка файла — POST
+// (multipart).
 //
-// В примечании запрещены паспортные данные (серия/номер), файлы паспорта —
-// только для сверки личности при сделке. Сам файл хранится как есть, без
-// распознавания и копирования текста в отчёт.
+// Выписка ЕГРН принимается и XML-файлом Росреестра (его система разбирает
+// автоматически, см. legal-egrn.ts), и PDF/сканом — тогда данные сверяет
+// юрист по документу. В примечании запрещены паспортные данные
+// (серия/номер), файл паспорта хранится только для сверки личности и в
+// отчёт не переносится.
 
 /** Ограничение размера одного файла */
 const MAX_FILE_BYTES = 20 * 1024 * 1024
@@ -32,6 +35,9 @@ const ALLOWED_MIME = new Set([
   'application/vnd.ms-excel',
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   'text/plain',
+  // XML-выписка ЕГРН из личного кабинета Росреестра
+  'application/xml',
+  'text/xml',
 ])
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
@@ -109,10 +115,12 @@ export async function POST(req: NextRequest) {
     if (file.size > MAX_FILE_BYTES) {
       return NextResponse.json({ error: 'Файл больше 20 МБ — загрузите документ меньшего размера' }, { status: 400 })
     }
-    const mime = String(file.type || '').toLowerCase().split(';')[0].trim()
+    // Браузеры часто не определяют тип .xml — принимаем XML-выписку по расширению
+    const mime = String(file.type || '').toLowerCase().split(';')[0].trim() ||
+      (/\.xml$/i.test(file.name) ? 'application/xml' : '')
     if (!ALLOWED_MIME.has(mime)) {
       return NextResponse.json(
-        { error: 'Неподдерживаемый тип файла. Принимаются: PDF, изображения (сканы/фото), Word, Excel, TXT' },
+        { error: 'Неподдерживаемый тип файла. Принимаются: PDF, изображения (сканы/фото), XML-выписка ЕГРН, Word, Excel, TXT' },
         { status: 400 },
       )
     }

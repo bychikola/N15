@@ -4,7 +4,7 @@ import config from '@payload-config'
 import { canAccessCrm, getCrmUser } from '@/app/crm/auth'
 import { canManageObjectLegal, getLegalDocFile } from '@/lib/legal-service'
 
-// Файл документа юр. проверки. GET — скачивание/просмотр (картинки и PDF
+// Файл документа юр. экспертизы. GET — скачивание/просмотр (картинки и PDF
 // открываются inline с CSP sandbox, остальное скачивается; nosniff от XSS
 // через файл). DELETE — удаление документа. Доступ — как у списка документов:
 // агент, ведущий объект; администратор; Лана.
