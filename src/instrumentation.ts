@@ -34,4 +34,30 @@ export async function register() {
   // Первый проход — вскоре после старта (сервер мог быть перезапущен давно)
   setTimeout(() => void run(), 60_000)
   setInterval(() => void run(), intervalMs)
+
+  // --- «Новости на проверку» (см. src/lib/news.ts) ---------------------------
+  // Тот же принцип: таймер читает открытые RSS-каналы официальных источников
+  // и складывает новости в очередь CRM. Публикации здесь нет — в блог новость
+  // попадает только после подтверждения сотрудника.
+  const { NEWS_CHECK_INTERVAL_MINUTES } = await import('@/lib/news')
+  const newsRun = async () => {
+    try {
+      const { getPayload } = await import('payload')
+      const config = (await import('@payload-config')).default
+      const { runNewsSweep } = await import('@/lib/news-service')
+      const payload = await getPayload({ config })
+      const result = await runNewsSweep(payload)
+      if (result.ok && !result.disabled && !result.busy) {
+        console.log(
+          `[news] проверка источников: добавлено ${result.added}, пропущено ${result.skipped}, удалено ${result.removed + result.duplicates}`,
+        )
+      }
+    } catch (e) {
+      console.error('[news] проверка источников не удалась:', e)
+    }
+  }
+
+  // Первый проход — через минуту после старта, дальше по расписанию
+  setTimeout(() => void newsRun(), 90_000)
+  setInterval(() => void newsRun(), NEWS_CHECK_INTERVAL_MINUTES * 60_000)
 }

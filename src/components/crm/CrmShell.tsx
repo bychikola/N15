@@ -21,6 +21,9 @@ export function CrmShell({ user, t, active, children }: Props) {
     { id: 'tasks', href: '/crm/tasks', label: t.crm.navTasks },
     { id: 'customers', href: '/crm/customers', label: t.crm.navCustomers },
     { id: 'objects', href: '/crm/objects', label: t.crm.navObjects },
+    // «Новости на проверку»: официальные новости о недвижимости ждут
+    // подтверждения перед публикацией в блоге (src/lib/news.ts)
+    { id: 'news', href: '/crm/news', label: t.crm.navNews },
     { id: 'market', href: '/crm/market', label: t.crm.navMarket },
     { id: 'stats', href: '/crm/stats', label: t.crm.navStats },
     { id: 'mail', href: '/crm/mail', label: t.crm.navMail },

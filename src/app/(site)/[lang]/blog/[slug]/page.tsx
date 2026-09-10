@@ -66,6 +66,10 @@ export default async function BlogPostPage({ params }: PageProps) {
     content?: { root?: { children?: unknown[] } }
     author?: { id: number; name?: string }
     tags?: { tag?: string; id?: string }[]
+    // Новости с официальных источников: в публикации обязательна строка
+    // «Источник: …» (см. src/lib/news.ts)
+    sourceName?: string
+    sourceUrl?: string
   } | undefined
 
   if (!post) notFound()
@@ -115,6 +119,20 @@ export default async function BlogPostPage({ params }: PageProps) {
               <div className="prose prose-invert prose-gold max-w-none" dangerouslySetInnerHTML={{ __html: contentHtml }} />
             ) : (
               <p className="text-[var(--n15-silver)] leading-relaxed">{post.excerpt || ''}</p>
+            )}
+
+            {/* Атрибуция новости: название официального источника и прямая ссылка */}
+            {post.sourceName && (
+              <p className="text-xs text-[var(--n15-muted)] mt-8 border-t border-[var(--n15-gold)]/10 pt-4">
+                {t.blog.source}:{' '}
+                {post.sourceUrl ? (
+                  <a href={post.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-[var(--n15-gold)]/80 hover:text-[var(--n15-gold)] transition-colors">
+                    {post.sourceName}
+                  </a>
+                ) : (
+                  post.sourceName
+                )}
+              </p>
             )}
 
             <OrnamentDivider variant="solar" />

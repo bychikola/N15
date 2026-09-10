@@ -15,6 +15,7 @@ import { AgentTasks } from './collections/AgentTasks'
 import { Applications } from './collections/Applications'
 import { Messages } from './collections/Messages'
 import { Blog } from './collections/Blog'
+import { News } from './collections/News'
 import { Pages } from './collections/Pages'
 import { Users } from './collections/Users'
 import { Media } from './collections/Media'
@@ -31,6 +32,9 @@ import { LegalReports } from './collections/LegalReports'
 import { SiteSettings } from './globals/SiteSettings'
 import { MailSettings } from './globals/MailSettings'
 import { AgentSettings } from './globals/AgentSettings'
+// «Новости (автосбор)»: состояние чтения официальных RSS-каналов
+// (см. src/lib/news.ts и news-service.ts)
+import { NewsSettings } from './globals/NewsSettings'
 
 export default buildConfig({
   secret: process.env.PAYLOAD_SECRET || 'n15-dev-secret-change-in-production',
@@ -52,8 +56,8 @@ export default buildConfig({
   routes: {
     admin: process.env.ADMIN_ROUTE || '/admin',
   },
-  collections: [Users, Media, Objects, Agents, Applications, Tasks, Messages, Blog, Pages, Customers, Emails, MailAttachments, AgentTasks, MarketListings, LegalDocuments, LegalReports, Advertisers, Advertisements, AdvertisingRequests],
-  globals: [SiteSettings, MailSettings, AgentSettings],
+  collections: [Users, Media, Objects, Agents, Applications, Tasks, Messages, Blog, News, Pages, Customers, Emails, MailAttachments, AgentTasks, MarketListings, LegalDocuments, LegalReports, Advertisers, Advertisements, AdvertisingRequests],
+  globals: [SiteSettings, MailSettings, AgentSettings, NewsSettings],
   editor: lexicalEditor(),
   i18n: {
     // Интерфейс админки — только на русском (без переключателя языков)
