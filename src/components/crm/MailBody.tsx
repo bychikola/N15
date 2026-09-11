@@ -1,17 +1,21 @@
-import { Fragment } from 'react'
+'use client'
+
+import { Fragment, useEffect, useRef, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 
 // Текст письма приходит с сервера готовым (IMAP → mailparser → html-to-text):
 // ссылки в нём размечены как [https://…], картинки — как [https://…/logo.png].
 // Показываем их как в обычном почтовом клиенте: подписью ссылки становится
 // текстовая строка перед ней («Смотреть подборку»), сам URL уходит в href и
-// виден только в подсказке при наведении.
+// виден только в подсказке при наведении, а картинки грузятся из сети и
+// показываются изображением. Служебные пиксели (трекинг открытия письма) не
+// грузим — в почтовых клиентах их тоже не видно.
 
 // [url] или голый url в середине строки; скобки и хвостовая пунктуация — не часть ссылки
 const INLINE_RE = /\[(https?:\/\/[^\]]+)\]|https?:\/\/[^\s<>"'«»\]]+/g
 const URL_ONLY_RE = /^\[(https?:\/\/[^\]]+)\]$/
 const URL_SUFFIX_RE = /^(.*?)\s*\[(https?:\/\/[^\]]+)\]\s*([.,;:!?]*)$/
-const IMAGE_RE = /\.(png|jpe?g|gif|webp|svg|bmp|ico)(\?|$)/i
+const IMAGE_EXT_RE = /\.(png|jpe?g|gif|webp|svg|bmp|ico)$/i
 // Служебные картинки (пиксель открытия письма, распорный прозрачный gif) в
 // почтовых клиентах не видны — прячем, чтобы не засоряли текст
 const TRACKER_RE = /(^|\/)(pixel|open|beacon|track|tracking|spacer|blank|transparent|1x1)\.(gif|png|jpe?g)(\?|$)/i
@@ -26,20 +30,44 @@ const SHOWN_MAX = 64
 const linkStyle: CSSProperties = {
   color: '#8a6a3a', textDecoration: 'underline', textUnderlineOffset: 2, wordBreak: 'break-word',
 }
-// Картинки письма мы не подгружаем из сети (трекинг и протухшие токены в URL) —
-// показываем компактную подпись с иконкой, ссылка открывает файл в новой вкладке
+// Подпись на месте картинки — когда файл не открылся (протухший токен в URL,
+// защита от хотлинка): компактная строка с иконкой, ссылка открывает файл
 const imageStyle: CSSProperties = {
   color: '#716b62', textDecoration: 'none', borderBottom: '1px dashed #cfc6b6', wordBreak: 'break-word',
 }
+// Сама картинка: вписываем в ширину письма и ограничиваем высоту, чтобы
+// баннеры и высокие письма-открытки не растягивали просмотр
+const imgStyle: CSSProperties = {
+  display: 'block', maxWidth: '100%', maxHeight: 420, width: 'auto', height: 'auto',
+  borderRadius: 10, border: '1px solid #e5dfd3', background: '#f5f2eb',
+}
+const imgBoxStyle: CSSProperties = { display: 'inline-block', maxWidth: '100%', verticalAlign: 'middle' }
 
 function isLabel(text: string, max = LABEL_MAX): boolean {
   const t = text.trim()
   return t.length > 0 && t.length <= max && !/https?:\/\//i.test(t) && !/[\[\]]/.test(t)
 }
 
+function fileName(url: string): string {
+  const raw = url.split('?')[0].split('/').pop() || url
+  try {
+    return decodeURIComponent(raw)
+  } catch {
+    return raw
+  }
+}
+
+// Имя файла, если URL ведёт на картинку, иначе null. Расширение ищем в пути
+// (до ?…): иначе ссылка-редирект вида …/click?redirect=…%2Fimg.png тоже
+// сошла бы за картинку и вместо ссылки получилось бы битое изображение
+function imageName(url: string): string | null {
+  const path = url.split(/[?#]/)[0]
+  return IMAGE_EXT_RE.test(path) ? fileName(path) : null
+}
+
 // Картинка письма или служебный пиксель (ссылкой не подменяем — покажем как есть)
 function isMedia(url: string): boolean {
-  return IMAGE_RE.test(url) || TRACKER_RE.test(url)
+  return imageName(url) !== null || TRACKER_RE.test(url)
 }
 
 // Короткая подпись для ссылки, у которой нет текста: домен и путь без www и без
@@ -55,15 +83,6 @@ function shortUrl(url: string): string {
   return shown.length > SHOWN_MAX ? shown.slice(0, SHOWN_MAX - 1) + '…' : shown
 }
 
-function fileName(url: string): string {
-  const raw = url.split('?')[0].split('/').pop() || url
-  try {
-    return decodeURIComponent(raw)
-  } catch {
-    return raw
-  }
-}
-
 function MailLink({ href, image, children }: { href: string; image?: string; children?: ReactNode }) {
   return (
     <a href={href} target="_blank" rel="noreferrer" title={href} style={image ? imageStyle : linkStyle}>
@@ -72,7 +91,36 @@ function MailLink({ href, image, children }: { href: string; image?: string; chi
   )
 }
 
-// Ссылки внутри строки: [https://…], голые https://…, служебные пиксели — вон
+function MailImage({ src, name }: { src: string; name: string }) {
+  const [failed, setFailed] = useState(false)
+  const img = useRef<HTMLImageElement>(null)
+
+  // Картинка могла не загрузиться ещё до гидратации — тогда onError до нас не
+  // дойдёт, проверяем результат загрузки сами
+  useEffect(() => {
+    const el = img.current
+    if (el && el.complete && el.naturalWidth === 0) setFailed(true)
+  }, [])
+
+  if (failed) return <MailLink href={src} image={name} />
+
+  return (
+    <a href={src} target="_blank" rel="noreferrer" title={src} style={imgBoxStyle}>
+      <img
+        ref={img}
+        src={src}
+        alt={name}
+        loading="lazy"
+        referrerPolicy="no-referrer"
+        onError={() => setFailed(true)}
+        style={imgStyle}
+      />
+    </a>
+  )
+}
+
+// Ссылки внутри строки: [https://…], голые https://…, картинки — изображением,
+// служебные пиксели — вон
 function renderText(text: string, keyBase: string): ReactNode[] {
   const out: ReactNode[] = []
   let last = 0
@@ -86,10 +134,15 @@ function renderText(text: string, keyBase: string): ReactNode[] {
     const clean = bracketed ? m[1] : m[0].replace(TRAILING_PUNCT_RE, '')
     const tail = bracketed ? '' : m[0].slice(clean.length)
     if (!clean || TRACKER_RE.test(clean)) continue // служебный пиксель не показываем
+    const image = imageName(clean)
     out.push(
-      <MailLink key={`${keyBase}-${n++}`} href={clean} image={IMAGE_RE.test(clean) ? fileName(clean) : undefined}>
-        {shortUrl(clean)}
-      </MailLink>,
+      image ? (
+        <MailImage key={`${keyBase}-${n++}`} src={clean} name={image} />
+      ) : (
+        <MailLink key={`${keyBase}-${n++}`} href={clean}>
+          {shortUrl(clean)}
+        </MailLink>
+      ),
     )
     if (tail) out.push(tail)
   }
@@ -97,7 +150,7 @@ function renderText(text: string, keyBase: string): ReactNode[] {
   return out
 }
 
-// Строка письма: обычный текст, готовая ссылка (href) или невидимая служебная картинка
+// Строка письма: обычный текст, готовая ссылка (href) или картинка
 interface Line {
   text: string
   href?: string
@@ -128,8 +181,9 @@ function buildLines(text: string): ReactNode[] {
       line.hide = true
       continue
     }
-    if (IMAGE_RE.test(url)) {
-      line.image = fileName(url)
+    const image = imageName(url)
+    if (image) {
+      line.image = image // url на своей строке — покажем картинкой
       line.text = ''
       continue
     }
@@ -151,9 +205,13 @@ function buildLines(text: string): ReactNode[] {
     if (nodes.length) nodes.push('\n')
     if (line.href) {
       nodes.push(
-        <MailLink key={i} href={line.href} image={line.image}>
-          {line.text}
-        </MailLink>,
+        line.image ? (
+          <MailImage key={i} src={line.href} name={line.image} />
+        ) : (
+          <MailLink key={i} href={line.href}>
+            {line.text}
+          </MailLink>
+        ),
       )
       if (line.after) nodes.push(line.after)
     } else {
