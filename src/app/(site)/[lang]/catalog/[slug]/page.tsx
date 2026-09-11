@@ -47,10 +47,18 @@ export default async function ObjectPage({ params }: PageProps) {
 
   // Ссылки на объекты бывают двух видов: /catalog/<id> (число) и /catalog/<slug>.
   // parseInt от slug даёт NaN — такие значения в where не отправляем.
+  // Архивные объекты (status = archived) на сайте не показываются — ни в
+  // каталоге, ни по прямой ссылке: локальный API Payload обходит access
+  // коллекции, поэтому фильтруем статус явно (src/lib/archive.ts).
   const numericId = /^\d+$/.test(slug) ? parseInt(slug, 10) : null
   const { docs } = await payload.find({
     collection: 'objects',
-    where: numericId ? { id: { equals: numericId } } : { slug: { equals: slug } },
+    where: {
+      and: [
+        numericId ? { id: { equals: numericId } } : { slug: { equals: slug } },
+        { status: { not_equals: 'archived' } },
+      ],
+    },
     limit: 1,
     depth: 2,
   })

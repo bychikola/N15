@@ -4,6 +4,9 @@ import { DISTRICT_OPTIONS, CITY_DISTRICT_OPTIONS } from '@/lib/districts'
 // на главной, в каталоге и форме CRM (landing-data.ts)
 import { SNT_AREAS } from '@/components/home/landing-data'
 import { evaluateValuation, paramsFromDoc, type ValuationDocLike } from '@/lib/valuation'
+// «Архив объектов»: причины переноса, журнал и группа archive документа —
+// см. src/lib/archive.ts и раздел CRM /crm/archive
+import { ARCHIVE_LOG_LIMIT, ARCHIVE_REASONS, archiveFromDoc, isArchiveReason, type ArchiveGroup } from '@/lib/archive'
 // Автоматическая синхронизация публикаций на площадки: при изменении объекта
 // обновляем опубликованные посты, при снятии с продажи (archived) — снимаем
 // объявления (см. src/lib/publish-service.ts)
@@ -273,6 +276,70 @@ const recalcValuationHook: CollectionBeforeChangeHook = async ({ data, req, oper
   return data
 }
 
+/**
+ * Перенос объекта в архив и возврат из архива — журнал группы archive.
+ *
+ * Архивных объектов не удаляем: «Переместить в архив» (кнопка карточки CRM
+ * или смена статуса) фиксирует причину, комментарий, дату, автора и прежний
+ * статус. По прежнему статусу кнопка «Восстановить объект» возвращает объект
+ * в работу и снова открывает его для публикации. Каждый перенос и возврат
+ * попадает в историю изменений (archive.log) — её показывает раздел
+ * «Архив объектов» и карточка объекта.
+ *
+ * Снятие объявлений при архивации и запрет публикации архивных объектов
+ * обеспечивает модуль публикации (см. src/lib/publish-service.ts): смена
+ * статуса на archived здесь только фиксируется в документе.
+ */
+const archiveTransitionHook: CollectionBeforeChangeHook = ({ data, req, originalDoc }) => {
+  if (!data) return data
+  const prev = (originalDoc || {}) as Record<string, unknown>
+  const prevStatus = typeof prev.status === 'string' ? prev.status : undefined
+  const nextStatus = typeof data.status === 'string' ? data.status : prevStatus
+  if (!nextStatus) return data
+
+  const entering = nextStatus === 'archived' && prevStatus !== 'archived'
+  const leaving = prevStatus === 'archived' && nextStatus !== 'archived'
+  if (!entering && !leaving) return data
+
+  const prevArchive = archiveFromDoc(prev)
+  const incoming = (data.archive && typeof data.archive === 'object' ? data.archive : {}) as ArchiveGroup
+  const user = (req as { user?: { name?: string; email?: string } }).user
+  const by = user?.name || user?.email || 'CRM'
+  const at = new Date().toISOString()
+  const log = Array.isArray(prevArchive.log) ? prevArchive.log : []
+
+  if (entering) {
+    // Причина приходит вместе с формой (модалка «Переместить в архив»); при
+    // смене статуса вручную оставляем прежнюю причину либо «Другая причина»
+    const reason = isArchiveReason(incoming.reason)
+      ? incoming.reason
+      : isArchiveReason(prevArchive.reason)
+        ? prevArchive.reason
+        : 'other'
+    const comment = typeof incoming.comment === 'string' ? incoming.comment.trim() : prevArchive.comment || ''
+    data.archive = {
+      reason,
+      comment,
+      archivedAt: at,
+      archivedBy: by,
+      // Вернуть объект можно только в черновик или публикацию — архив в архив
+      // не восстанавливаем; объект без прежнего статуса вернётся черновиком
+      previousStatus: prevStatus === 'published' ? 'published' : 'draft',
+      log: [...log, { at, event: 'archive', reason, comment, by }].slice(-ARCHIVE_LOG_LIMIT),
+    }
+  } else {
+    // Возврат из архива: причина и комментарий остаются в истории изменений
+    data.archive = {
+      ...prevArchive,
+      log: [
+        ...log,
+        { at, event: 'restore', reason: prevArchive.reason || null, comment: prevArchive.comment || null, by },
+      ].slice(-ARCHIVE_LOG_LIMIT),
+    }
+  }
+  return data
+}
+
 export const Objects: CollectionConfig = {
   slug: 'objects',
   labels: { singular: 'Объект', plural: 'Объекты' },
@@ -282,8 +349,15 @@ export const Objects: CollectionConfig = {
     defaultColumns: ['title', 'type', 'category', 'price', 'status'],
   },
   access: {
-    // Каталог на сайте читает объекты без авторизации
-    read: () => true,
+    // Каталог на сайте читает объекты без авторизации. Архивные объекты
+    // (снятые с продажи) посетителям и клиентам не отдаём вовсе: они живут
+    // только в разделе CRM «Архив объектов» — сайт, каталог, поиск и рекламные
+    // выгрузки берут объекты без статуса archived (см. src/lib/archive.ts).
+    read: ({ req: { user } }) => {
+      const staff = user as { role?: string } | null | undefined
+      if (staff?.role === 'agent' || staff?.role === 'admin') return true
+      return { status: { not_equals: 'archived' } }
+    },
     // Добавлять объекты могут только сотрудники (агент или администратор).
     // Клиенты регистрируются на сайте и работают через заявки — создание
     // объекта напрямую из REST им не нужно и раньше было открыто всем.
@@ -397,6 +471,10 @@ export const Objects: CollectionConfig = {
       // Идёт после нормализации и защиты от дублей: если запись отклонена
       // (дубль), лишних вычислений не делаем.
       recalcValuationHook,
+      // Перенос в архив и возврат из архива (см. шапку хука выше). Последним:
+      // журнал архива пишется уже по принятому документу — если запись
+      // отклонена (дубль), события архива не фиксируем.
+      archiveTransitionHook,
     ],
     // Синхронизация публикаций на площадки (модуль «Публикация», см.
     // src/lib/publish-service.ts): при изменении объекта автоматически
@@ -1057,6 +1135,69 @@ export const Objects: CollectionConfig = {
             },
             { name: 'platform', type: 'text', label: 'Площадка' },
             { name: 'message', type: 'textarea', label: 'Сообщение' },
+            { name: 'by', type: 'text', label: 'Кто выполнил' },
+          ],
+        },
+      ],
+    },
+    {
+      // «Архив объекта» — служебная группа: почему объект снят с продажи,
+      // комментарий, кто и когда его перенёс и в каком статусе он был до
+      // этого (в него объект возвращает «Восстановить объект»). Заполняет
+      // сервер (хук archiveTransitionHook выше), работа ведётся в разделе CRM
+      // «Архив объектов». Группу читают только сотрудники (агент и
+      // администратор): архив не показывается ни посетителям, ни клиентам.
+      name: 'archive',
+      type: 'group',
+      label: 'Архив объекта (внутреннее)',
+      admin: {
+        hidden: true,
+        description:
+          'Перенос объекта в архив: причина, комментарий, дата и автор. Архивные объекты остаются в базе, скрыты с сайта и площадок; возврат — кнопкой «Восстановить объект»',
+      },
+      access: {
+        read: ({ req: { user } }) => {
+          const staff = user as { role?: string } | null | undefined
+          return staff?.role === 'agent' || staff?.role === 'admin'
+        },
+      },
+      fields: [
+        {
+          name: 'reason',
+          type: 'select',
+          label: 'Причина переноса',
+          options: ARCHIVE_REASONS.map((r) => ({ label: r.label, value: r.value })),
+        },
+        { name: 'comment', type: 'textarea', label: 'Комментарий к переносу' },
+        { name: 'archivedAt', type: 'date', label: 'Дата переноса' },
+        { name: 'archivedBy', type: 'text', label: 'Кто перенёс' },
+        {
+          name: 'previousStatus',
+          type: 'select',
+          label: 'Прежний статус (для восстановления)',
+          options: [
+            { label: 'Черновик', value: 'draft' },
+            { label: 'Опубликован', value: 'published' },
+          ],
+        },
+        {
+          name: 'log',
+          type: 'array',
+          label: 'История изменений архива',
+          labels: { singular: 'Запись истории', plural: 'Записи истории' },
+          fields: [
+            { name: 'at', type: 'date', label: 'Когда', required: true },
+            {
+              name: 'event',
+              type: 'select',
+              label: 'Событие',
+              options: [
+                { label: 'Перенос в архив', value: 'archive' },
+                { label: 'Восстановление', value: 'restore' },
+              ],
+            },
+            { name: 'reason', type: 'text', label: 'Причина' },
+            { name: 'comment', type: 'textarea', label: 'Комментарий' },
             { name: 'by', type: 'text', label: 'Кто выполнил' },
           ],
         },

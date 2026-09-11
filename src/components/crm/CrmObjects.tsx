@@ -13,6 +13,9 @@ import { areToSqm, areaNumberText, parseAreaNumber, sqmToAre } from '@/lib/area-
 import { LegalCheckBlock } from '@/components/crm/LegalCheckBlock'
 import { PlacementCheckBlock } from '@/components/crm/PlacementCheckBlock'
 import { HouseDataBlock } from '@/components/crm/HouseDataBlock'
+// «Архив объекта»: причины переноса и группа archive документа
+// (серверные операции — /api/objects/archive-manage, см. src/lib/archive.ts)
+import { ARCHIVE_REASONS, archiveFromDoc, archiveReasonLabel, type ArchiveGroup } from '@/lib/archive'
 
 interface ObjectRow {
   id: number
@@ -461,6 +464,13 @@ export const CrmObjects: FC<{
   const [placeId, setPlaceId] = useState<number | null>(null)
   // «Данные о доме»: открытый блок характеристик дома из официального реестра
   const [houseDataId, setHouseDataId] = useState<number | null>(null)
+  // «Архив объекта»: перенос с причиной и комментарием, возврат из архива
+  const [archive, setArchive] = useState<ArchiveGroup | null>(null)
+  const [archiveOpen, setArchiveOpen] = useState(false)
+  const [archReason, setArchReason] = useState('')
+  const [archComment, setArchComment] = useState('')
+  const [archBusy, setArchBusy] = useState(false)
+  const [archErr, setArchErr] = useState('')
 
   const load = useCallback(async () => {
     const [objectsRes, agentsRes] = await Promise.all([
@@ -547,6 +557,11 @@ export const CrmObjects: FC<{
     setPl(null)
     setPlLinks([])
     setPlErr('')
+    setArchive(null)
+    setArchiveOpen(false)
+    setArchReason('')
+    setArchComment('')
+    setArchErr('')
   }, [myAgentId])
 
   // Кнопка «+ Добавить объект» со страницы «Обзор» ведёт сюда с ?add=1:
@@ -636,6 +651,13 @@ export const CrmObjects: FC<{
     // ручного поиска по адресу подгружаем отдельным запросом
     setPl(placementsFromDoc(o))
     setPlErr('')
+    // Блок «Архив объекта»: причина, дата, комментарий и история переносов
+    // (группу ведёт серверный хук коллекции Objects, см. src/lib/archive.ts)
+    setArchive(archiveFromDoc(o))
+    setArchiveOpen(false)
+    setArchReason('')
+    setArchComment('')
+    setArchErr('')
     void fetch(`/api/objects/placement-links?id=${o.id as number}`, { credentials: 'include' })
       .then((r) => (r.ok ? (r.json() as Promise<{ links?: PlacementLink[] }>) : null))
       .then((d) => setPlLinks(d?.links || []))
@@ -725,17 +747,20 @@ export const CrmObjects: FC<{
     })
   }
 
-  const save = async (force = false) => {
-    if (saving || !form.title.trim()) return
+  // save возвращает true при успешном сохранении — этим пользуется перенос
+  // в архив (см. runArchive): он сохраняет карточку вместе со сменой статуса
+  // и данными архива, поэтому несохранённые правки формы не теряются
+  const save = async (force = false, extra: Record<string, unknown> = {}): Promise<boolean> => {
+    if (saving || !form.title.trim()) return false
     if (!form.price) {
       setSaveError(t.crm.objPriceRequired)
-      return
+      return false
     }
     // Новый объект агента должен быть привязан к профилю агента: объект без
     // агента («бесхозный») агент потом не сможет редактировать и публиковать
     if (!editId && !isAdmin && !form.agent) {
       setSaveError(t.crm.objAgentRequired)
-      return
+      return false
     }
     setSaveError('')
     // Площадь в БД всегда хранится в м²: участок «6 соток» сохраняется как
@@ -795,6 +820,8 @@ export const CrmObjects: FC<{
       ownerName: form.ownerName.trim() || undefined,
       ownerPhone: form.ownerPhone.trim() || undefined,
       cadastralNumber: form.cadastralNumber.trim() || undefined,
+      // Перенос в архив добавляет статус и данные архива (см. runArchive)
+      ...extra,
     }
 
     // Проверка дублей перед сохранением (если не подтвердили force)
@@ -816,7 +843,7 @@ export const CrmObjects: FC<{
           const dupData = await dupRes.json()
           if (dupData.duplicates?.length) {
             setDuplicates(dupData.duplicates)
-            return
+            return false
           }
         }
       } catch {
@@ -838,11 +865,67 @@ export const CrmObjects: FC<{
       resetForm()
       setModalOpen(false)
       await load()
-    } else {
-      // Показываем причину ошибки — раньше неудача была безмолвной
-      const errData = await res.json().catch(() => null) as { errors?: { message?: string }[] } | null
-      const serverMsg = errData?.errors?.[0]?.message
-      setSaveError(serverMsg ? `${t.crm.objSaveError} (${serverMsg})` : t.crm.objSaveError)
+      return true
+    }
+    // Показываем причину ошибки — раньше неудача была безмолвной
+    const errData = await res.json().catch(() => null) as { errors?: { message?: string }[] } | null
+    const serverMsg = errData?.errors?.[0]?.message
+    setSaveError(serverMsg ? `${t.crm.objSaveError} (${serverMsg})` : t.crm.objSaveError)
+    return false
+  }
+
+  // «Переместить в архив»: сохраняем карточку вместе со статусом archived и
+  // причиной/комментарием — серверный хук фиксирует дату, автора и прежний
+  // статус, а модуль публикации снимает объект с сайта и площадок
+  const runArchive = async () => {
+    if (!editId || archBusy) return
+    if (!archReason) {
+      setArchErr(t.crm.archMoveNoReason)
+      return
+    }
+    setArchBusy(true)
+    setArchErr('')
+    // force: проверка дублей уже пройдена при создании объекта — перенос
+    // в архив её не требует
+    const ok = await save(true, { status: 'archived', archive: { reason: archReason, comment: archComment.trim() } })
+    setArchBusy(false)
+    if (!ok) {
+      setArchErr(t.crm.archErr)
+      return
+    }
+    setArchiveOpen(false)
+    setArchReason('')
+    setArchComment('')
+  }
+
+  // «Восстановить объект»: возврат в прежний статус — объект снова доступен
+  // для публикации (и снова виден на сайте, если был опубликован)
+  const runRestore = async () => {
+    if (!editId || archBusy) return
+    if (!window.confirm(t.crm.archRestoreConfirm)) return
+    setArchBusy(true)
+    setArchErr('')
+    try {
+      const res = await fetch('/api/objects/archive-manage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ action: 'restore', objectId: editId }),
+      })
+      const data = (await res.json().catch(() => null)) as { error?: string; status?: string; archive?: ArchiveGroup } | null
+      if (!res.ok) {
+        setArchErr(data?.error || t.crm.archErr)
+        return
+      }
+      setForm((prev) => ({ ...prev, status: data?.status === 'published' ? 'published' : 'draft' }))
+      if (data?.archive) setArchive(data.archive)
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+      await load()
+    } catch {
+      setArchErr(t.crm.archErr)
+    } finally {
+      setArchBusy(false)
     }
   }
 
@@ -922,6 +1005,10 @@ export const CrmObjects: FC<{
 
   // Фильтр по статусу (черновик / опубликован / архив)
   const visibleRows = statusFilter ? rows.filter((o) => o.status === statusFilter) : rows
+
+  // Архивом объекта распоряжаются его агент и администратор — то же правило,
+  // что у правки объектов (см. access коллекции Objects)
+  const canManageArchive = isAdmin || (editId != null && ownObjectIds.includes(editId))
 
   // Кнопка «Проверить сейчас»: сервер прогоняет сверку площадок объекта
   const runPlacementCheck = async () => {
@@ -1244,10 +1331,20 @@ export const CrmObjects: FC<{
           </div>
 
           <Field label={t.crm.objStatus}>
-            <select value={form.status} onChange={(e) => set('status', e.target.value)} style={inputStyle}>
+            {/* «Архив» в списке — не просто статус: сначала спрашиваем причину
+                и комментарий (модалка ниже), иначе перенос не оставит следа
+                в истории. Для нового объекта статус не подменяем. */}
+            <select value={form.status} onChange={(e) => {
+              const v = e.target.value
+              if (v === 'archived' && editId) { setArchiveOpen(true); setArchErr(''); setArchReason(''); setArchComment(''); return }
+              set('status', v)
+            }} style={inputStyle}>
               <option value="draft">{t.crm.statusDraft}</option>
               <option value="published">{t.crm.statusPublished}</option>
-              <option value="archived">{t.crm.statusArchived}</option>
+              {/* Архив — только для сохранённого объекта и только через модалку
+                  с причиной (см. обработчик выше): новый объект «в архив» не
+                  создаём, чтобы перенос всегда попадал в историю */}
+              {editId && <option value="archived">{t.crm.statusArchived}</option>}
             </select>
           </Field>
           <Field label={t.crm.objAgent}>
@@ -1326,6 +1423,138 @@ export const CrmObjects: FC<{
             {saved && <p style={{ margin: 0, color: '#8b683f', fontSize: 11 }}>{t.crm.objSaved} ✓</p>}
             {saveError && <p style={{ margin: 0, color: '#9b4e43', fontSize: 11 }}>{saveError}</p>}
           </div>
+            </div>
+
+            {/* «Архив объекта»: перенос в архив с причиной и комментарием,
+                возврат из архива и история изменений (src/lib/archive.ts).
+                Архивный объект не удаляется: он остаётся в базе, но скрыт
+                с сайта, из каталога, поиска и с площадок публикации. */}
+            {editId && (
+              <div style={{ marginTop: 18, padding: '14px 16px', background: '#fbf8f1', border: '1px solid #e8dfd0', borderRadius: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                  <div style={{ minWidth: 0 }}>
+                    <h3 style={{ margin: 0, fontFamily: "'New Standard', Georgia, serif", fontWeight: 400, fontSize: 16, color: '#25241f' }}>
+                      {t.crm.archCardTitle}
+                    </h3>
+                    <p style={{ margin: '3px 0 0', fontSize: 10, color: '#8a857b', lineHeight: 1.5 }}>
+                      {form.status === 'archived' ? t.crm.archInArchive : t.crm.archMoveText}
+                    </p>
+                  </div>
+                  {form.status === 'archived' && canManageArchive && (
+                    <button type="button" onClick={() => void runRestore()} disabled={archBusy}
+                      style={{ marginLeft: 'auto', border: 0, borderRadius: 7, background: '#a7814e', color: '#fff', padding: '11px 16px', fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '.08em', cursor: 'pointer', opacity: archBusy ? 0.7 : 1 }}>
+                      {archBusy ? t.crm.archBusy : t.crm.archRestore}
+                    </button>
+                  )}
+                  {form.status !== 'archived' && canManageArchive && (
+                    <button type="button" onClick={() => { setArchiveOpen(true); setArchErr(''); setArchReason(''); setArchComment('') }}
+                      style={{ marginLeft: 'auto', border: '1px solid #e3cfc7', borderRadius: 7, background: 'transparent', color: '#9b4e43', padding: '11px 16px', fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '.08em', cursor: 'pointer' }}>
+                      {t.crm.archMoveBtn}
+                    </button>
+                  )}
+                </div>
+
+                {/* Карточка архива: причина, дата, автор и комментарий */}
+                {(form.status === 'archived' || archive?.archivedAt) && (
+                  <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10 }}>
+                    <div>
+                      <div style={{ fontSize: 9, color: '#6f6a61', textTransform: 'uppercase', letterSpacing: '.07em' }}>{t.crm.archReason}</div>
+                      <div style={{ fontSize: 11.5, color: '#3f3a33', marginTop: 3 }}>{archiveReasonLabel(archive?.reason)}</div>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 9, color: '#6f6a61', textTransform: 'uppercase', letterSpacing: '.07em' }}>
+                        {form.status === 'archived' ? t.crm.archDate : t.crm.archWasInArchive}
+                      </div>
+                      <div style={{ fontSize: 11.5, color: '#3f3a33', marginTop: 3 }}>
+                        {archive?.archivedAt
+                          ? new Date(archive.archivedAt).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+                          : '—'}
+                        {archive?.archivedBy ? ` · ${archive.archivedBy}` : ''}
+                      </div>
+                    </div>
+                    <div style={{ gridColumn: '1 / -1' }}>
+                      <div style={{ fontSize: 9, color: '#6f6a61', textTransform: 'uppercase', letterSpacing: '.07em' }}>{t.crm.archComment}</div>
+                      <div style={{ fontSize: 11.5, color: archive?.comment ? '#3f3a33' : '#9b958a', marginTop: 3, lineHeight: 1.5 }}>
+                        {archive?.comment || t.crm.archNoComment}
+                      </div>
+                    </div>
+                    {form.status === 'archived' && archive?.previousStatus && (
+                      <div style={{ gridColumn: '1 / -1', fontSize: 10, color: '#8a857b' }}>
+                        {fmt(t.crm.archRestorePrev, archive.previousStatus === 'published' ? t.crm.statusPublished : t.crm.statusDraft)}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* История изменений: перенос, восстановление, повторный перенос… */}
+                {(archive?.log?.length ?? 0) > 0 && (
+                  <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px dashed #e3d9c8' }}>
+                    <div style={{ fontSize: 9, color: '#8a857b', textTransform: 'uppercase', letterSpacing: '.07em' }}>{t.crm.archHistory}</div>
+                    <div style={{ marginTop: 6 }}>
+                      {[...(archive?.log || [])].reverse().map((e, i) => (
+                        <div key={`${e.at || ''}-${i}`} style={{ padding: '6px 0', borderBottom: i === (archive?.log?.length ?? 0) - 1 ? 0 : '1px solid #eee9e1' }}>
+                          <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
+                            <b style={{ fontSize: 11, color: e.event === 'restore' ? '#3f6b34' : '#8d6b40' }}>
+                              {e.event === 'restore' ? t.crm.archLogRestore : t.crm.archLogArchive}
+                            </b>
+                            <span style={{ fontSize: 10, color: '#8a857b' }}>
+                              {e.at ? new Date(e.at).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
+                            </span>
+                            {e.by && <span style={{ fontSize: 10, color: '#8a857b' }}>· {e.by}</span>}
+                          </div>
+                          <div style={{ fontSize: 10.5, color: '#716b62', marginTop: 3, lineHeight: 1.5 }}>
+                            {archiveReasonLabel(e.reason)}
+                            {e.comment ? ` — ${e.comment}` : ''}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {!canManageArchive && <p style={{ margin: '10px 0 0', fontSize: 10, color: '#9b958a' }}>{t.crm.archOnlyOwn}</p>}
+                {archErr && <p style={{ margin: '10px 0 0', fontSize: 10, color: '#9b4e43' }}>{archErr}</p>}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Модалка «Переместить в архив»: причина (обязательно) и комментарий.
+          Подтверждение сохраняет карточку вместе со сменой статуса — правки
+          формы не теряются (см. runArchive). */}
+      {archiveOpen && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 130, background: 'rgba(32,33,30,.55)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 16px', overflowY: 'auto' }}
+          onClick={() => setArchiveOpen(false)}>
+          <div style={{ background: '#faf8f4', border: '1px solid #ded5c7', borderRadius: 12, width: 'min(100%, 520px)', padding: 22 }}
+            onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ margin: '0 0 6px', fontFamily: "'New Standard', Georgia, serif", fontWeight: 400, fontSize: 20 }}>
+              {t.crm.archMoveTitle}
+            </h2>
+            <p style={{ margin: '0 0 14px', color: '#817b70', fontSize: 12, lineHeight: 1.55 }}>{t.crm.archMoveText}</p>
+            <Field label={t.crm.archMoveReason}>
+              <select value={archReason} onChange={(e) => { setArchReason(e.target.value); setArchErr('') }} style={inputStyle}>
+                <option value="">—</option>
+                {ARCHIVE_REASONS.map((r) => (
+                  <option key={r.value} value={r.value}>{r.label}</option>
+                ))}
+              </select>
+            </Field>
+            <div style={{ marginTop: 12 }}>
+              <Field label={t.crm.archMoveComment}>
+                <textarea rows={3} value={archComment} onChange={(e) => setArchComment(e.target.value)} placeholder={t.crm.archMoveCommentPh} style={inputStyle} />
+              </Field>
+            </div>
+            {archErr && <p style={{ margin: '12px 0 0', color: '#9b4e43', fontSize: 11 }}>{archErr}</p>}
+            <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+              <button type="button" onClick={() => void runArchive()} disabled={archBusy}
+                style={{ flex: 1, border: 0, borderRadius: 8, background: '#a7814e', color: '#fff', padding: '12px 16px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', cursor: 'pointer', opacity: archBusy ? 0.7 : 1 }}>
+                {archBusy ? t.crm.archBusy : t.crm.archMoveBtn}
+              </button>
+              <button type="button" onClick={() => setArchiveOpen(false)}
+                style={{ border: '1px solid #e1d8ca', borderRadius: 8, background: '#fff', color: '#716b62', padding: '12px 16px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', cursor: 'pointer' }}>
+                {t.crm.archMoveCancel}
+              </button>
             </div>
           </div>
         </div>
