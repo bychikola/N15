@@ -280,11 +280,18 @@ async function stashLeftovers(client, id, taskId) {
 // процесс агента). Отдельное соединение с БД, чтобы не конкурировать с
 // записью лога задачи (у pg один запрос на клиента за раз).
 function watchCancellation(id, onCancel) {
-  const state = { cancelled: false, stop: () => {} }
+  // stopped — на случай, если задача завершилась раньше, чем сторож успел
+  // подключиться: иначе соединение и таймер остались бы висеть навсегда
+  // и за много задач исчерпали бы лимит подключений Postgres.
+  const state = { cancelled: false, stopped: false, stop: () => { state.stopped = true } }
   const watcher = new Client({ connectionString: DB })
   watcher
     .connect()
     .then(() => {
+      if (state.stopped) {
+        watcher.end().catch(() => {})
+        return
+      }
       const timer = setInterval(async () => {
         if (state.cancelled) return
         try {
@@ -298,6 +305,7 @@ function watchCancellation(id, onCancel) {
         }
       }, 5000)
       state.stop = () => {
+        state.stopped = true
         clearInterval(timer)
         watcher.end().catch(() => {})
       }

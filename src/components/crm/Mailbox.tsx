@@ -320,8 +320,8 @@ export default function Mailbox() {
               </div>
             ))}
           </div>
-          {/* Просмотр */}
-          <div style={{ background: '#fff', border: '1px solid #e5dfd3', borderRadius: 12, padding: 20, minHeight: 320 }}>
+          {/* Просмотр (minWidth: 0 — длинные ссылки писем не растягивают сетку) */}
+          <div style={{ background: '#fff', border: '1px solid #e5dfd3', borderRadius: 12, padding: 20, minHeight: 320, minWidth: 0 }}>
             {!selected ? (
               <p style={{ margin: 0, color: '#9b958a', fontSize: 13, textAlign: 'center', padding: '60px 0' }}>{t.crm.mailNoSelection}</p>
             ) : (
@@ -338,7 +338,13 @@ export default function Mailbox() {
                   </div>
                 )}
                 <div style={{ fontSize: 11, color: '#9b958a', marginBottom: 16 }}>{fmtDate(selected.receivedAt)}</div>
-                <div style={{ fontSize: 13, color: '#25241f', lineHeight: 1.7, whiteSpace: 'pre-wrap', borderTop: '1px solid #eee9e1', paddingTop: 14 }}>
+                {/* overflowWrap: письма с длинными ссылками/токенами (Авито, рассылки)
+                    иначе уезжают за экран — рвём длинные слова по границе блока */}
+                <div style={{
+                  fontSize: 13, color: '#25241f', lineHeight: 1.7, whiteSpace: 'pre-wrap',
+                  borderTop: '1px solid #eee9e1', paddingTop: 14,
+                  overflowWrap: 'anywhere', wordBreak: 'break-word', maxWidth: '100%',
+                }}>
                   {selected.text || t.crm.mailNoText}
                 </div>
                 {attachments.length > 0 && (
