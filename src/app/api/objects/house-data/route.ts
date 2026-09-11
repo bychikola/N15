@@ -1,9 +1,9 @@
-import { getPayload } from 'payload'
+import { getPayload, type Payload } from 'payload'
 import config from '@payload-config'
 import { NextRequest, NextResponse } from 'next/server'
 import { canAccessCrm, getCrmUser } from '@/app/crm/auth'
 import { myObjectIds } from '@/lib/legal-service'
-import { lookupHouseInfo, persistHouseInfo, savedHouseInfo } from '@/lib/house-info-service'
+import { houseInfoForStaff, lookupHouseInfo, persistHouseInfo, savedHouseInfo } from '@/lib/house-info-service'
 
 /**
  * «Получить данные о доме» — кнопка в карточке объекта CRM.
@@ -22,8 +22,30 @@ import { lookupHouseInfo, persistHouseInfo, savedHouseInfo } from '@/lib/house-i
  * GET ?objectId=… — последний сохранённый снимок (карточка открывается без
  * повторного прогона).
  *
- * Внутренний маршрут CRM: агент — по своим объектам, администратор — по всем.
+ * Внутренний маршрут CRM: данные о доме — общие характеристики дома из
+ * открытого реестра, поэтому их получает любой сотрудник (агент и
+ * администратор) по любому объекту, независимо от того, какой агент ведёт
+ * объект. Кадастровые сведения снимка (номер участка по реестру) видит
+ * только администратор — остальным сотрудникам они не отдаются.
  */
+
+/**
+ * Может ли сотрудник подтверждать характеристики этого объекта: администратор
+ * — у любого объекта, агент — только у своего (см. house-data/manage). Ответ
+ * уходит в UI флагом canApprove: у чужого объекта блок подтверждения просто
+ * не показывается, а не остаётся кнопкой, которая вернёт «Объект ведёт другой
+ * агент» (просмотр характеристик при этом доступен всем сотрудникам).
+ */
+async function canApproveHouse(
+  payload: Payload,
+  user: { id: number; role: string },
+  objectId: number,
+): Promise<boolean> {
+  if (user.role === 'admin') return true
+  const mine = await myObjectIds(payload, user.id)
+  return mine.has(objectId)
+}
+
 export async function POST(req: NextRequest) {
   try {
     const user = await getCrmUser()
@@ -38,13 +60,6 @@ export async function POST(req: NextRequest) {
     }
 
     const payload = await getPayload({ config })
-    if (user.role !== 'admin') {
-      const mine = await myObjectIds(payload, user.id)
-      if (!mine.has(objectId)) {
-        return NextResponse.json({ error: 'Объект ведёт другой агент' }, { status: 403 })
-      }
-    }
-
     const doc = await payload.findByID({ collection: 'objects', id: objectId, depth: 0, overrideAccess: true })
     if (!doc) return NextResponse.json({ error: 'Объект не найден' }, { status: 404 })
 
@@ -66,8 +81,9 @@ export async function POST(req: NextRequest) {
     // Снимок сохраняем best-effort: если запись не прошла, свежий результат
     // всё равно уходит агенту в ответе (persistHouseInfo вернёт его как снимок)
     const saved = await persistHouseInfo(payload, objectId, result, { name: user.name })
+    const canApprove = await canApproveHouse(payload, user, objectId)
 
-    return NextResponse.json({ ok: true, saved })
+    return NextResponse.json({ ok: true, canApprove, saved: houseInfoForStaff(saved, user.role === 'admin') })
   } catch (error) {
     console.error('House data error:', error)
     return NextResponse.json({ error: String(error) }, { status: 500 })
@@ -90,7 +106,13 @@ export async function GET(req: NextRequest) {
     const doc = await payload.findByID({ collection: 'objects', id: objectId, depth: 0, overrideAccess: true })
     if (!doc) return NextResponse.json({ error: 'Объект не найден' }, { status: 404 })
 
-    return NextResponse.json({ ok: true, saved: savedHouseInfo(doc) })
+    const canApprove = await canApproveHouse(payload, user, objectId)
+
+    return NextResponse.json({
+      ok: true,
+      canApprove,
+      saved: houseInfoForStaff(savedHouseInfo(doc), user.role === 'admin'),
+    })
   } catch (error) {
     console.error('House data (saved) error:', error)
     return NextResponse.json({ error: String(error) }, { status: 500 })

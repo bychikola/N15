@@ -361,6 +361,17 @@ export async function persistHouseInfo(
   }
 }
 
+/**
+ * Снимок «Данных о доме» для ответа сотруднику: кадастровые сведения
+ * (номер земельного участка дома по реестру) видит только администратор —
+ * остальным сотрудникам поля нет в ответе вовсе (см. access поля в
+ * коллекции Objects и маршруты /api/objects/house-data).
+ */
+export function houseInfoForStaff(saved: SavedHouseInfo, isAdmin: boolean): SavedHouseInfo {
+  if (isAdmin || !saved.house?.plotCadastral) return saved
+  return { ...saved, house: { ...saved.house, plotCadastral: null } }
+}
+
 /** Массив полей снимка из карточки */
 const fieldsFromGroup = (group: HouseInfoGroup | null): HouseInfoField[] =>
   Array.isArray(group?.fields) ? (group.fields as HouseInfoField[]) : []

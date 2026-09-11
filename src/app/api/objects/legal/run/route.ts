@@ -2,11 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { canAccessCrm, getCrmUser } from '@/app/crm/auth'
-import {
-  buildAndStoreReport,
-  canManageObjectLegal,
-  canReadLegalReport,
-} from '@/lib/legal-service'
+import { buildAndStoreReport, canManageObjectLegal } from '@/lib/legal-service'
 import type { LegalManualMarks } from '@/lib/legal-check'
 
 // «Провести юридическую экспертизу»: кнопка в карточке объекта. Маршрут
@@ -14,11 +10,9 @@ import type { LegalManualMarks } from '@/lib/legal-check'
 // загруженной выписке ЕГРН и отметкам юриста о ручных проверках и сохраняет
 // отчёт в закрытую коллекцию legal-reports.
 //
-// Полный текст отчёта получают только те, кому он открыт (Лана и
-// администраторы, canReadLegalReport). Агент, ведущий объект, может запустить
-// экспертизу, но получает лишь подтверждение — сам отчёт ему недоступен ни в
-// этом ответе, ни через другие маршруты. Отметки юриста агент не заполняет:
-// при таком запуске сохраняются ранее сделанные отметки (keepManual).
+// Экспертиза — закрытая часть карточки: и запуск, и отчёт доступны только
+// администратору (canManageObjectLegal). Остальным сотрудникам маршрут
+// отвечает отказом, как и остальные маршруты документов и отчёта.
 export async function POST(req: NextRequest) {
   try {
     const user = await getCrmUser()
@@ -35,31 +29,21 @@ export async function POST(req: NextRequest) {
 
     const payload = await getPayload({ config })
     const actor = { id: user.id, name: user.name, email: user.email, role: user.role }
-    if (!(await canManageObjectLegal(payload, actor, objectId))) {
+    if (!canManageObjectLegal(actor)) {
       return NextResponse.json({ error: 'Нет доступа к документам объекта' }, { status: 403 })
     }
 
-    const canRead = canReadLegalReport(actor)
     const data = await buildAndStoreReport(
       payload,
       objectId,
       {
         cadastralNumber: typeof body?.cadastralNumber === 'string' ? body.cadastralNumber : undefined,
         manual: (body?.manual || {}) as LegalManualMarks,
-        keepManual: !canRead,
       },
       actor.name,
     )
 
-    if (canRead) {
-      return NextResponse.json({ formed: true, report: data })
-    }
-    // Полный отчёт — только Лане и администраторам; коллегам факт проведения
-    return NextResponse.json({
-      formed: true,
-      note: 'Экспертиза проведена. Отчёт доступен юристу и администратору',
-      checkedAt: data.checkedAt,
-    })
+    return NextResponse.json({ formed: true, report: data })
   } catch (error) {
     console.error('Legal run POST error:', error)
     return NextResponse.json({ error: String(error) }, { status: 500 })

@@ -7,7 +7,7 @@ import { canManageObjectLegal, getLegalDocFile } from '@/lib/legal-service'
 // Файл документа юр. экспертизы. GET — скачивание/просмотр (картинки и PDF
 // открываются inline с CSP sandbox, остальное скачивается; nosniff от XSS
 // через файл). DELETE — удаление документа. Доступ — как у списка документов:
-// агент, ведущий объект; администратор; Лана.
+// только администратор.
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params
@@ -26,7 +26,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     if (!doc || !doc.object || !doc.data) {
       return new Response('Not found', { status: 404 })
     }
-    if (!(await canManageObjectLegal(payload, actor, Number(doc.object)))) {
+    if (!canManageObjectLegal(actor)) {
       return NextResponse.json({ error: 'Нет доступа к документам объекта' }, { status: 403 })
     }
 
@@ -70,7 +70,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     if (!doc || !doc.object) {
       return NextResponse.json({ error: 'Документ не найден' }, { status: 404 })
     }
-    if (!(await canManageObjectLegal(payload, actor, Number(doc.object)))) {
+    if (!canManageObjectLegal(actor)) {
       return NextResponse.json({ error: 'Нет доступа к документам объекта' }, { status: 403 })
     }
 

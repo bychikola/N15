@@ -7,9 +7,8 @@ import { renderLegalReportPdf } from '@/lib/legal-report-pdf'
 import { checkPdfStructure } from '@/lib/pdf'
 
 // Скачивание отчёта юридической экспертизы в PDF. Отчёт — закрытый документ:
-// PDF получают только Лана Козырева и администраторы (та же проверка, что в
-// коллекции legal-reports). Клиентам и другим сотрудникам файл не
-// формируется.
+// PDF получает только администратор (та же проверка, что в коллекции
+// legal-reports). Клиентам и сотрудникам файл не формируется.
 //
 // PDF строится на сервере без внешних библиотек (см. src/lib/pdf.ts):
 // кириллический шрифт встраивается в файл, поэтому скачанный отчёт
@@ -22,7 +21,7 @@ export async function GET(req: NextRequest) {
     }
     const actor = { id: user.id, name: user.name, email: user.email, role: user.role }
     if (!canReadLegalReport(actor)) {
-      return NextResponse.json({ error: 'PDF доступен юристу и администратору' }, { status: 403 })
+      return NextResponse.json({ error: 'PDF доступен только администратору' }, { status: 403 })
     }
     const objectId = Number(req.nextUrl.searchParams.get('objectId') || 0)
     if (!Number.isFinite(objectId) || objectId <= 0) {

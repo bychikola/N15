@@ -19,7 +19,8 @@ export default async function CrmArchivePage() {
   if (!canAccessCrm(user)) redirect('/crm')
 
   const payload = await getPayload({ config })
-  const rows = await loadArchiveBoard(payload)
+  // Внутренние комментарии архива — только администратору (см. archive-service)
+  const rows = await loadArchiveBoard(payload, user.role === 'admin')
 
   // «Свои» объекты агента: восстановить объект может его агент или админ
   // (то же правило, что у правки объектов в коллекции Objects)

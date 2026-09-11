@@ -9,11 +9,11 @@ import { CrmObjects } from '@/components/crm/CrmObjects'
 export const dynamic = 'force-dynamic'
 
 interface PageProps {
-  searchParams: Promise<{ add?: string }>
+  searchParams: Promise<{ add?: string; edit?: string }>
 }
 
 export default async function CrmObjectsPage({ searchParams }: PageProps) {
-  const { add } = await searchParams
+  const { add, edit } = await searchParams
   const t = getDictionary('ru')
   const user = await getCrmUser()
   if (!user) redirect('/crm/login')
@@ -59,6 +59,8 @@ export default async function CrmObjectsPage({ searchParams }: PageProps) {
         myAgentId={myAgentIds[0] ?? null}
         ownObjectIds={myObjectIds}
         autoOpen={add === '1'}
+        // ?edit=<id> — кнопка «Редактировать» из профиля агента («Агенты»)
+        autoEdit={Number(edit) > 0 ? Number(edit) : null}
       />
     </CrmShell>
   )

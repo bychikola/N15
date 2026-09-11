@@ -432,7 +432,9 @@ export const CrmObjects: FC<{
   ownObjectIds?: number[]
   /** Открыть форму нового объекта сразу (?add=1 со страницы «Обзор») */
   autoOpen?: boolean
-}> = ({ t, isAdmin, myAgentId = null, ownObjectIds = [], autoOpen = false }) => {
+  /** Открыть карточку объекта сразу (?edit=<id> из профиля агента) */
+  autoEdit?: number | null
+}> = ({ t, isAdmin, myAgentId = null, ownObjectIds = [], autoOpen = false, autoEdit = null }) => {
   const [rows, setRows] = useState<ObjectRow[]>([])
   const [agents, setAgents] = useState<{ id: number; name: string }[]>([])
   const [form, setForm] = useState<FormState>(emptyForm)
@@ -578,7 +580,10 @@ export const CrmObjects: FC<{
     return () => clearTimeout(timer)
   }, [autoOpen, resetForm])
 
-  const startEdit = (o: Record<string, unknown>) => {
+  // useCallback: функция только раскладывает документ по полям формы (все
+  // зависимости — модульные константы и setState), а стабильная ссылка нужна
+  // эффекту открытия карточки по ?edit=<id> из профиля агента
+  const startEdit = useCallback((o: Record<string, unknown>) => {
     setModalOpen(true)
     setDuplicates(null)
     setSaveError('')
@@ -662,7 +667,34 @@ export const CrmObjects: FC<{
       .then((r) => (r.ok ? (r.json() as Promise<{ links?: PlacementLink[] }>) : null))
       .then((d) => setPlLinks(d?.links || []))
       .catch(() => setPlLinks([]))
-  }
+  }, [])
+
+  // Кнопка «Редактировать» из профиля агента (раздел «Агенты») ведёт сюда
+  // с ?edit=<id>: открываем карточку объекта и убираем параметр из адреса —
+  // как ?add=1 у формы нового объекта. Права те же, что у кнопки в списке:
+  // карточку открывает ответственный агент или администратор, остальным
+  // параметр не открывает ничего (сервер правку чужого объекта не пропустит).
+  // Открываем один раз — ref, иначе эффект повторялся бы на каждом рендере.
+  const autoEditDone = useRef(false)
+  useEffect(() => {
+    if (!autoEdit || loading || autoEditDone.current) return
+    if (!(isAdmin || ownObjectIds.includes(autoEdit))) return
+    autoEditDone.current = true
+    const timer = setTimeout(() => {
+      void (async () => {
+        try {
+          const res = await fetch(`/api/objects/${autoEdit}`, { credentials: 'include' })
+          if (!res.ok) return
+          const data = (await res.json()) as Record<string, unknown>
+          startEdit(data)
+          window.history.replaceState(null, '', window.location.pathname)
+        } catch {
+          // Объект могли удалить в другой вкладке — просто остаёмся в списке
+        }
+      })()
+    }, 0)
+    return () => clearTimeout(timer)
+  }, [autoEdit, loading, isAdmin, ownObjectIds, startEdit])
 
   const onPhotoPick = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
@@ -817,9 +849,12 @@ export const CrmObjects: FC<{
       agent: form.agent ? Number(form.agent) : undefined,
       primaryImage: mediaIds[0],
       images: mediaIds.slice(1),
-      ownerName: form.ownerName.trim() || undefined,
-      ownerPhone: form.ownerPhone.trim() || undefined,
-      cadastralNumber: form.cadastralNumber.trim() || undefined,
+      // Поля собственника и кадастровый номер правят только администраторы:
+      // у сотрудников их нет в форме, отправлять их не нужно (undefined —
+      // поле не участвует в запросе и данные администратора не затираются)
+      ownerName: isAdmin ? form.ownerName.trim() || undefined : undefined,
+      ownerPhone: isAdmin ? form.ownerPhone.trim() || undefined : undefined,
+      cadastralNumber: isAdmin ? form.cadastralNumber.trim() || undefined : undefined,
       // Перенос в архив добавляет статус и данные архива (см. runArchive)
       ...extra,
     }
@@ -832,9 +867,11 @@ export const CrmObjects: FC<{
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
           body: JSON.stringify({
-            ownerName: form.ownerName,
-            ownerPhone: form.ownerPhone,
-            cadastralNumber: form.cadastralNumber,
+            // Признаки собственника шлёт только администратор — у сотрудников
+            // их нет в форме, а сервер эти поля от неадминистраторов не принимает
+            ownerName: isAdmin ? form.ownerName : '',
+            ownerPhone: isAdmin ? form.ownerPhone : '',
+            cadastralNumber: isAdmin ? form.cadastralNumber : '',
             address: { city: form.city, street: form.street, house: form.house, apartment: form.apartment },
             excludeId: editId ?? undefined,
           }),
@@ -1291,18 +1328,23 @@ export const CrmObjects: FC<{
             />
           </div>
 
-          {/* Данные собственника: на телефоне поля становятся во всю ширину */}
-          <div className="crm-owner span-2" style={{ gridColumn: '1 / -1' }}>
-            <Field label={t.crm.objOwnerName}>
-              <input value={form.ownerName} onChange={(e) => set('ownerName', e.target.value)} style={inputStyle} />
-            </Field>
-            <Field label={t.crm.objOwnerPhone}>
-              <input inputMode="tel" value={form.ownerPhone} onChange={(e) => set('ownerPhone', e.target.value)} style={inputStyle} />
-            </Field>
-            <Field label={t.crm.objCadastral}>
-              <input value={form.cadastralNumber} onChange={(e) => set('cadastralNumber', e.target.value)} style={inputStyle} />
-            </Field>
-          </div>
+          {/* Данные собственника: ФИО и телефон собственника и кадастровый номер —
+              закрытые сведения, их видит и правит только администратор (поля
+              скрыты у сотрудников вовсе, а не заблокированы: см. access полей
+              в коллекции Objects). На телефоне поля становятся во всю ширину */}
+          {isAdmin && (
+            <div className="crm-owner span-2" style={{ gridColumn: '1 / -1' }}>
+              <Field label={t.crm.objOwnerName}>
+                <input value={form.ownerName} onChange={(e) => set('ownerName', e.target.value)} style={inputStyle} />
+              </Field>
+              <Field label={t.crm.objOwnerPhone}>
+                <input inputMode="tel" value={form.ownerPhone} onChange={(e) => set('ownerPhone', e.target.value)} style={inputStyle} />
+              </Field>
+              <Field label={t.crm.objCadastral}>
+                <input value={form.cadastralNumber} onChange={(e) => set('cadastralNumber', e.target.value)} style={inputStyle} />
+              </Field>
+            </div>
+          )}
 
           <div className="span-2" style={{ gridColumn: '1 / -1' }}>
             <Field label={t.crm.objDescription}>
@@ -1472,12 +1514,15 @@ export const CrmObjects: FC<{
                         {archive?.archivedBy ? ` · ${archive.archivedBy}` : ''}
                       </div>
                     </div>
-                    <div style={{ gridColumn: '1 / -1' }}>
-                      <div style={{ fontSize: 9, color: '#6f6a61', textTransform: 'uppercase', letterSpacing: '.07em' }}>{t.crm.archComment}</div>
-                      <div style={{ fontSize: 11.5, color: archive?.comment ? '#3f3a33' : '#9b958a', marginTop: 3, lineHeight: 1.5 }}>
-                        {archive?.comment || t.crm.archNoComment}
+                    {/* Комментарий к переносу — внутренний, только администратору */}
+                    {isAdmin && (
+                      <div style={{ gridColumn: '1 / -1' }}>
+                        <div style={{ fontSize: 9, color: '#6f6a61', textTransform: 'uppercase', letterSpacing: '.07em' }}>{t.crm.archComment}</div>
+                        <div style={{ fontSize: 11.5, color: archive?.comment ? '#3f3a33' : '#9b958a', marginTop: 3, lineHeight: 1.5 }}>
+                          {archive?.comment || t.crm.archNoComment}
+                        </div>
                       </div>
-                    </div>
+                    )}
                     {form.status === 'archived' && archive?.previousStatus && (
                       <div style={{ gridColumn: '1 / -1', fontSize: 10, color: '#8a857b' }}>
                         {fmt(t.crm.archRestorePrev, archive.previousStatus === 'published' ? t.crm.statusPublished : t.crm.statusDraft)}
@@ -1504,7 +1549,8 @@ export const CrmObjects: FC<{
                           </div>
                           <div style={{ fontSize: 10.5, color: '#716b62', marginTop: 3, lineHeight: 1.5 }}>
                             {archiveReasonLabel(e.reason)}
-                            {e.comment ? ` — ${e.comment}` : ''}
+                            {/* Комментарии истории — внутренние, только администратору */}
+                            {isAdmin && e.comment ? ` — ${e.comment}` : ''}
                           </div>
                         </div>
                       ))}
@@ -1540,11 +1586,15 @@ export const CrmObjects: FC<{
                 ))}
               </select>
             </Field>
-            <div style={{ marginTop: 12 }}>
-              <Field label={t.crm.archMoveComment}>
-                <textarea rows={3} value={archComment} onChange={(e) => setArchComment(e.target.value)} placeholder={t.crm.archMoveCommentPh} style={inputStyle} />
-              </Field>
-            </div>
+            {/* Внутренний комментарий переноса — поле администратора: агент
+                своих комментариев в архиве не видит, поэтому и не заполняет */}
+            {isAdmin && (
+              <div style={{ marginTop: 12 }}>
+                <Field label={t.crm.archMoveComment}>
+                  <textarea rows={3} value={archComment} onChange={(e) => setArchComment(e.target.value)} placeholder={t.crm.archMoveCommentPh} style={inputStyle} />
+                </Field>
+              </div>
+            )}
             {archErr && <p style={{ margin: '12px 0 0', color: '#9b4e43', fontSize: 11 }}>{archErr}</p>}
             <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
               <button type="button" onClick={() => void runArchive()} disabled={archBusy}
@@ -1576,7 +1626,8 @@ export const CrmObjects: FC<{
                   <div style={{ fontWeight: 600, fontSize: 13 }}>{d.title || `#${d.id}`}</div>
                   <div style={{ fontSize: 11, color: '#817b70', marginTop: 2 }}>
                     {[d.address?.city, d.address?.street, d.address?.house].filter(Boolean).join(', ')}
-                    {d.ownerName ? ` · ${d.ownerName}` : ''}
+                    {/* Имя собственника — закрытые сведения: только администратор */}
+                    {isAdmin && d.ownerName ? ` · ${d.ownerName}` : ''}
                   </div>
                   <div style={{ fontSize: 10, color: d.strength === 'strong' ? '#9b4e43' : '#9b958a', marginTop: 3 }}>
                     {d.matches.map((m) => t.crm[`dupMatch${m.charAt(0).toUpperCase()}${m.slice(1)}` as keyof Dict['crm']] || m).join(' · ')}
@@ -1622,7 +1673,7 @@ export const CrmObjects: FC<{
           onClick={() => setHouseDataId(null)}>
           <div style={{ background: '#faf8f4', border: '1px solid #ded5c7', borderRadius: 12, width: 'min(100%, 860px)', padding: 22 }}
             onClick={(e) => e.stopPropagation()}>
-            <HouseDataBlock objectId={houseDataId} onClose={() => setHouseDataId(null)} onChanged={() => void load()} />
+            <HouseDataBlock objectId={houseDataId} isAdmin={isAdmin} onClose={() => setHouseDataId(null)} onChanged={() => void load()} />
           </div>
         </div>
       )}
@@ -1698,13 +1749,17 @@ export const CrmObjects: FC<{
                 style={{ marginTop: 6, width: '100%', border: 0, borderRadius: 6, background: '#a7814e', color: '#fff', padding: '9px 10px', fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '.07em', cursor: 'pointer' }}>
                 Проверить размещение
               </button>
-              {/* «Провести юридическую экспертизу» — кнопка в карточке каждого
-                  объекта (модуль экспертизы, см. LegalCheckBlock). Доступна
-                  всем сотрудникам; что увидит сотрудник, определяет сервер. */}
-              <button type="button" onClick={() => setLegalId(o.id)}
-                style={{ marginTop: 6, width: '100%', border: '1px solid #dccdb6', borderRadius: 6, background: '#f6efe4', color: '#8d6b40', padding: '7px 10px', fontSize: 9.5, cursor: 'pointer' }}>
-                Провести юридическую экспертизу
-              </button>
+              {/* «Провести юридическую экспертизу» — кнопка карточки объекта
+                  (модуль экспертизы, см. LegalCheckBlock). Документы, выписка
+                  ЕГРН и отчёт — закрытые сведения, поэтому кнопку и блок
+                  показываем только администратору: остальным сотрудникам
+                  экспертная часть карточки не отображается вовсе. */}
+              {isAdmin && (
+                <button type="button" onClick={() => setLegalId(o.id)}
+                  style={{ marginTop: 6, width: '100%', border: '1px solid #dccdb6', borderRadius: 6, background: '#f6efe4', color: '#8d6b40', padding: '7px 10px', fontSize: 9.5, cursor: 'pointer' }}>
+                  Провести юридическую экспертизу
+                </button>
+              )}
               {/* «Получить данные о доме» — характеристики МКД из открытого
                   реестра по адресу объекта; в карточку и в описание значения
                   попадают только после подтверждения агентом (см.

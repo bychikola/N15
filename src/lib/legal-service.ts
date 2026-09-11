@@ -1,19 +1,18 @@
 // ---------------------------------------------------------------------------
 // «Юридическая экспертиза объекта» — серверный слой хранения и доступов.
 //
-// Коллекции legal-documents (закрытое хранилище исходных файлов) и
-// legal-reports (отчёты) имеют полностью закрытые access-правила — все
-// операции идут через маршруты /api/objects/legal/* (см. app/api/objects/legal),
-// которые проверяют права здесь. Отчёт и PDF читают ответственная за проверки
-// (Лана Козырева, см. LEGAL_OFFICER_EMAIL в legal-check.ts) и администраторы;
-// документы — сотрудники, которые ведут объект, администраторы и Лана;
-// клиентам и сайту — ничего. Паспорт и отчёт клиенту не показываются.
+// Коллекции legal-documents (закрытое хранилище исходных файлов: выписка
+// ЕГРН, паспорт собственника, правоустанавливающие документы) и legal-reports
+// (отчёты) имеют полностью закрытые access-правила — все операции идут через
+// маршруты /api/objects/legal/* (см. app/api/objects/legal), которые
+// проверяют права здесь. Права — только у администратора: документы, выписка
+// ЕГРН, паспорт, отчёт и PDF сотрудникам (агентам), клиентам и сайту не
+// показываются вовсе. Паспорт и отчёт клиенту не показываются.
 // ---------------------------------------------------------------------------
 
 import type { Payload } from 'payload'
 import {
   LEGAL_ENGINE_VERSION,
-  LEGAL_OFFICER_EMAIL,
   runLegalExpertise,
   sanitizeManualMarks,
   type LegalDocMeta,
@@ -30,14 +29,9 @@ export interface LegalActor {
   role: string
 }
 
-/** Ответственная за юридические проверки (Лана Козырева) */
-export function isLegalOfficer(actor: Pick<LegalActor, 'email'> | null | undefined): boolean {
-  return !!actor && actor.email === LEGAL_OFFICER_EMAIL
-}
-
-/** Кому открыт отчёт и PDF экспертизы: Лана и администраторы */
-export function canReadLegalReport(actor: Pick<LegalActor, 'email' | 'role'> | null | undefined): boolean {
-  return !!actor && (isLegalOfficer(actor) || actor.role === 'admin')
+/** Кому открыт отчёт и PDF экспертизы: только администратору */
+export function canReadLegalReport(actor: Pick<LegalActor, 'role'> | null | undefined): boolean {
+  return !!actor && actor.role === 'admin'
 }
 
 /** ids профилей агентов (коллекция agents), привязанных к пользователю */
@@ -83,22 +77,14 @@ export async function myObjectIds(payload: Payload, userId: number): Promise<Set
 }
 
 /**
- * Может ли сотрудник работать с документами и экспертизой объекта:
- * администратор — с любым, Лана (юр. экспертизы) — с любым, агент — только
- * с объектами своего профиля (как update-доступ коллекции Objects).
+ * Может ли сотрудник работать с документами и экспертизой объекта (смотреть
+ * документы, загружать их, запускать проверку): только администратор.
+ * Выписка ЕГРН, паспорт собственника, правоустанавливающие документы и отчёт
+ * экспертизы — закрытые сведения, сотрудникам они не показываются вовсе,
+ * независимо от того, кто ведёт объект.
  */
-export async function canManageObjectLegal(payload: Payload, actor: LegalActor, objectId: number): Promise<boolean> {
-  if (actor.role === 'admin') return true
-  if (isLegalOfficer(actor)) return true
-  if (actor.role !== 'agent') return false
-  const doc = await payload
-    .findByID({ collection: 'objects', id: objectId, depth: 0, overrideAccess: true })
-    .catch(() => null)
-  const agentId = (doc as { agent?: unknown } | null)?.agent
-  const agentNum = typeof agentId === 'number' ? agentId : Number(agentId)
-  if (!Number.isFinite(agentNum)) return false
-  const mine = await myAgentIds(payload, actor.id)
-  return mine.has(agentNum)
+export function canManageObjectLegal(actor: LegalActor): boolean {
+  return actor.role === 'admin'
 }
 
 /** Метаданные документов объекта (без содержимого — data никогда не читаем) */
@@ -206,26 +192,19 @@ export async function getReportByObject(payload: Payload, objectId: number) {
   return docs[0] as Record<string, unknown> | undefined
 }
 
-/** Отметки юриста из сохранённого отчёта (перезапуск проверки их не стирает) */
-function readStoredManual(rec: Record<string, unknown> | undefined): LegalManualMarks {
-  const facts = rec?.facts
-  if (!facts || typeof facts !== 'object') return {}
-  return sanitizeManualMarks((facts as Record<string, unknown>).manual)
-}
-
 /**
  * Формирование и сохранение отчёта экспертизы: движок (legal-check.ts)
  * проверяет объект по карточке, загруженной выписке ЕГРН и отметкам юриста;
  * результат хранится в закрытой коллекции legal-reports (один отчёт на
  * объект, перезапуск обновляет его).
  *
- * keepManual — для запуска проверки агентом: отметки юриста, сделанные
- * раньше, сохраняются, потому что агент их не заполняет.
+ * Запускает проверку только администратор (см. app/api/objects/legal/run),
+ * он же заполняет отметки ручных проверок — их и принимает input.manual.
  */
 export async function buildAndStoreReport(
   payload: Payload,
   objectId: number,
-  input: { cadastralNumber?: string; manual?: LegalManualMarks; keepManual?: boolean },
+  input: { cadastralNumber?: string; manual?: LegalManualMarks },
   checkedBy: string,
   now?: Date,
 ): Promise<LegalReportData> {
@@ -243,10 +222,9 @@ export async function buildAndStoreReport(
   } | null
   if (!objectDoc) throw new Error('Объект не найден')
 
-  const [docs, egrn, existing] = await Promise.all([
+  const [docs, egrn] = await Promise.all([
     getObjectDocs(payload, objectId),
     loadEgrnExtract(payload, objectId),
-    getReportByObject(payload, objectId),
   ])
 
   const data = runLegalExpertise({
@@ -263,10 +241,13 @@ export async function buildAndStoreReport(
     docs,
     egrn,
     cadastralNumber: input.cadastralNumber,
-    manual: input.keepManual ? readStoredManual(existing) : input.manual,
+    manual: input.manual,
     now,
   })
   data.checkedBy = checkedBy
+
+  // Один отчёт на объект: перезапуск проверки обновляет прежний
+  const existing = await getReportByObject(payload, objectId)
 
   const store = {
     object: objectId,

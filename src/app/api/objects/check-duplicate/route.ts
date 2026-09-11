@@ -2,6 +2,7 @@ import { getPayload } from 'payload'
 import type { Where } from 'payload'
 import config from '@payload-config'
 import { NextRequest, NextResponse } from 'next/server'
+import { canAccessCrm, getCrmUser } from '@/app/crm/auth'
 
 const normPhone = (v?: string) => (v || '').replace(/[^\d+]/g, '')
 const normCadastral = (v?: string) => (v || '').toLowerCase().replace(/\s+/g, '')
@@ -29,8 +30,20 @@ interface Duplicate {
 
 // Проверка дублей объекта перед сохранением: телефон и кадастровый — жёсткие
 // признаки, адрес — сильный, имя — слабый (только имя не блокирует).
+//
+// Маршрут внутренний: доступен только сотрудникам CRM (агент и администратор).
+// Данные собственника и кадастровый номер объекта — закрытые сведения, поэтому
+// и в запросе, и в ответе они участвуют только у администратора: остальным
+// сотрудникам дубли ищутся по адресу, а поля собственника не отдаются вовсе.
+// Так маршрут нельзя использовать и как справочник персональных данных снаружи.
 export async function POST(req: NextRequest) {
   try {
+    const user = await getCrmUser()
+    if (!user || !canAccessCrm(user)) {
+      return NextResponse.json({ error: 'Доступ только для команды Н15' }, { status: 403 })
+    }
+    const isAdmin = user.role === 'admin'
+
     const body = await req.json()
     const { ownerName, ownerPhone, address, cadastralNumber, excludeId } = body as {
       ownerName?: string
@@ -40,10 +53,10 @@ export async function POST(req: NextRequest) {
       excludeId?: number
     }
 
-    const phone = normPhone(ownerPhone)
-    const cad = normCadastral(cadastralNumber)
+    const phone = isAdmin ? normPhone(ownerPhone) : ''
+    const cad = isAdmin ? normCadastral(cadastralNumber) : ''
     const addr = normAddress(address)
-    const name = normName(ownerName)
+    const name = isAdmin ? normName(ownerName) : ''
 
     const payload = await getPayload({ config })
 
@@ -91,9 +104,10 @@ export async function POST(req: NextRequest) {
           title: o.title as string | undefined,
           price: o.price as number | null | undefined,
           address: o.address as Duplicate['address'],
-          ownerName: o.ownerName as string | null | undefined,
-          ownerPhone: o.ownerPhone as string | null | undefined,
-          cadastralNumber: o.cadastralNumber as string | null | undefined,
+          // Данные собственника и кадастровый номер — только администратору
+          ownerName: isAdmin ? (o.ownerName as string | null | undefined) : null,
+          ownerPhone: isAdmin ? (o.ownerPhone as string | null | undefined) : null,
+          cadastralNumber: isAdmin ? (o.cadastralNumber as string | null | undefined) : null,
           matches,
           // Только имя — слабое совпадение, не блокирует сохранение
           strength: matches.some((m) => m !== 'name') ? 'strong' : 'weak',

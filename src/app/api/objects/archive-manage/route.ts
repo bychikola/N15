@@ -2,7 +2,7 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 import { NextRequest, NextResponse } from 'next/server'
 import { canAccessCrm, getCrmUser } from '@/app/crm/auth'
-import { archiveObject, deleteObjectForever, restoreObject } from '@/lib/archive-service'
+import { archiveObject, deleteObjectForever, restoreObject, stripArchiveComments } from '@/lib/archive-service'
 import { isArchiveReason } from '@/lib/archive'
 
 /**
@@ -56,7 +56,14 @@ export async function POST(req: NextRequest) {
     if (!result.ok) {
       return NextResponse.json({ error: result.error }, { status: 400 })
     }
-    return NextResponse.json({ ok: true, status: result.status, archive: result.archive })
+    return NextResponse.json({
+      ok: true,
+      status: result.status,
+      // Внутренние комментарии архива (перенос и история) — только
+      // администратору: агент не получает их даже в ответе на свою операцию
+      archive:
+        result.archive && user.role !== 'admin' ? stripArchiveComments(result.archive) : result.archive,
+    })
   } catch (error) {
     console.error('Archive manage error:', error)
     return NextResponse.json({ error: String(error) }, { status: 500 })

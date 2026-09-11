@@ -4,13 +4,11 @@
 // Блок «Юридическая экспертиза объекта» в CRM (открывается кнопкой в карточке
 // объекта, см. CrmObjects). Модуль Н15: закрытые документы и закрытый отчёт.
 //
-// Права определяет сервер (маршруты /api/objects/legal/*):
-//   • документы смотрит и загружает агент, ведущий объект, администратор и
-//     юрист (Лана) — у остальных блок показывает только пояснение, не
-//     раскрывая ни документов, ни факта отчёта;
-//   • отчёт и PDF видят только юрист и администратор (сервер возвращает
-//     canReadReport); агент может запустить экспертизу, но получает лишь
-//     подтверждение.
+// Права определяет сервер (маршруты /api/objects/legal/*): документы, выписку
+// ЕГРН, паспорт собственника, отчёт и PDF видит только администратор — у
+// остальных сотрудников блок показывает лишь пояснение и не раскрывает ни
+// документов, ни факта отчёта (закрытые поля и разделы не отображаются вовсе,
+// см. требования к правам CRM).
 // Экспертиза идёт по карточке объекта, загруженной выписке ЕГРН (XML
 // Росреестра разбирается автоматически, см. legal-egrn.ts) и отметкам юриста
 // о ручных проверках. Автоматического доступа к официальным реестрам нет —
@@ -222,7 +220,7 @@ export const LegalCheckBlock: FC<{ objectId: number; onClose: () => void }> = ({
         if (!docsRes.ok) throw new Error(docsData.error || 'Не удалось получить документы')
         setDocs(docsData.docs || [])
       }
-      // Отчёт сразу показываем юристу и администратору (если он сформирован)
+      // Отчёт сразу показываем администратору (если он сформирован)
       if (data.canReadReport && data.report) {
         const repRes = await fetch(`/api/objects/legal/report?objectId=${objectId}`, { credentials: 'include' })
         const repData = (await repRes.json()) as { exists?: boolean; report?: Record<string, unknown>; error?: string }
@@ -343,7 +341,7 @@ export const LegalCheckBlock: FC<{ objectId: number; onClose: () => void }> = ({
     }
   }
 
-  /** Скачивание PDF отчёта (кнопка — только у юриста и администратора) */
+  /** Скачивание PDF отчёта (кнопка — только у администратора) */
   const downloadPdf = async () => {
     setBusy('pdf')
     setError('')
@@ -424,17 +422,17 @@ export const LegalCheckBlock: FC<{ objectId: number; onClose: () => void }> = ({
 
       {/* Обязательная оговорка — в шапке блока и в каждом PDF отчёта */}
       <div style={{ marginTop: 12, border: '1px solid #d9b98c', borderRadius: 8, background: '#fbf3e6', padding: '10px 14px', fontSize: 12, color: '#7a5a2e' }}>
-        {LEGAL_REPORT_DISCLAIMER}. Отчёт закрытый: его видят юрист и администратор, клиентам и на сайт он не показывается.
+        {LEGAL_REPORT_DISCLAIMER}. Отчёт закрытый: его видит только администратор, клиентам и на сайт он не показывается.
       </div>
 
       {!loaded ? (
         <p style={{ color: '#817b70', fontSize: 12, marginTop: 14 }}>Загрузка…</p>
       ) : !perm ? null : !canManage ? (
-        // Чужой объект: не раскрываем ни документы, ни факт экспертизы
+        // Не администратор: документы, выписки и отчёт не раскрываем вовсе
         <div style={{ marginTop: 16, border: '1px solid #e5dfd3', borderRadius: 10, background: '#fff', padding: '18px 16px' }}>
           <p style={{ margin: 0, fontSize: 13, lineHeight: 1.55 }}>
-            Работать с юридической экспертизой этого объекта может агент, который его ведёт, администратор
-            или юрист. Если вам нужен отчёт — обратитесь к нему.
+            Документы, выписка ЕГРН и отчёт юридической экспертизы доступны только администратору.
+            Если вам нужен отчёт — обратитесь к нему.
           </p>
         </div>
       ) : (
@@ -509,257 +507,238 @@ export const LegalCheckBlock: FC<{ objectId: number; onClose: () => void }> = ({
             </div>
           </div>
 
-          {/* ---------- Экспертиза: отметки юриста и запуск — только читающим отчёт ---------- */}
-          {!canReadReport ? (
-            <div style={{ marginTop: 16, border: '1px solid #e5dfd3', borderRadius: 10, background: '#fff', padding: '14px 16px' }}>
-              <p style={{ margin: '0 0 10px', fontSize: 13, lineHeight: 1.55 }}>
-                Экспертизу проводит юрист: система проверяет карточку объекта и загруженную выписку ЕГРН,
-                отметки о ручных проверках (паспорт, ФССП, ЕФРСБ) вносит юрист. Отчёт закрытый — его видят
-                юрист и администратор, клиентам он не показывается.
+          {/* ---------- Экспертиза, отметки и отчёт — только администратору ---------- */}
+          <div style={{ marginTop: 16 }}>
+            <div style={{ border: '1px solid #e5dfd3', borderRadius: 10, background: '#fff', padding: '14px 16px' }}>
+              <h3 style={{ margin: 0, fontFamily: "'New Standard', Georgia, serif", fontWeight: 400, fontSize: 17 }}>
+                Провести экспертизу
+              </h3>
+              <p style={{ margin: '4px 0 10px', color: '#817b70', fontSize: 11, lineHeight: 1.5 }}>
+                Система проверит карточку объекта и загруженную выписку ЕГРН (XML-файл разбирается
+                автоматически). Данные, которых в документах нет, вносить не нужно: ниже — только отметки
+                о проверках, которые выполняет юрист вручную. Официальные реестры автоматически не
+                опрашиваются, отчёт скажет об этом прямо.
               </p>
-              <button type="button" onClick={() => void runCheck()} disabled={reportBusy}
-                style={{ ...goldBtn, background: reportBusy ? '#c9b894' : '#a7814e' }}>
-                {reportBusy ? 'Проверка…' : 'Провести юридическую экспертизу'}
-              </button>
-              {perm?.report && (
-                <p style={{ margin: '10px 0 0', fontSize: 12, color: '#3f6b34' }}>
-                  Экспертиза проводилась ({perm.report.checkedAt ? fmtDate(perm.report.checkedAt) : 'дата не определена'}). Отчёт доступен юристу и администратору.
-                </p>
-              )}
-            </div>
-          ) : (
-            <div style={{ marginTop: 16 }}>
-              <div style={{ border: '1px solid #e5dfd3', borderRadius: 10, background: '#fff', padding: '14px 16px' }}>
-                <h3 style={{ margin: 0, fontFamily: "'New Standard', Georgia, serif", fontWeight: 400, fontSize: 17 }}>
-                  Провести экспертизу
-                </h3>
-                <p style={{ margin: '4px 0 10px', color: '#817b70', fontSize: 11, lineHeight: 1.5 }}>
-                  Система проверит карточку объекта и загруженную выписку ЕГРН (XML-файл разбирается
-                  автоматически). Данные, которых в документах нет, вносить не нужно: ниже — только отметки
-                  о проверках, которые выполняет юрист вручную. Официальные реестры автоматически не
-                  опрашиваются, отчёт скажет об этом прямо.
-                </p>
-                <div style={{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
-                  <label style={{ fontSize: 10, color: '#817b70' }}>
-                    Кадастровый номер для проверки (если не заполнен в карточке)
-                    <input type="text" value={cadastral} onChange={(e) => setCadastral(e.target.value)}
-                      placeholder="15:07:0030021:123" style={{ ...inputStyle, marginTop: 4 }} />
+              <div style={{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
+                <label style={{ fontSize: 10, color: '#817b70' }}>
+                  Кадастровый номер для проверки (если не заполнен в карточке)
+                  <input type="text" value={cadastral} onChange={(e) => setCadastral(e.target.value)}
+                    placeholder="15:07:0030021:123" style={{ ...inputStyle, marginTop: 4 }} />
+                </label>
+                {LEGAL_MANUAL_FIELDS.map((f) => (
+                  <label key={f.name} style={{ fontSize: 10, color: '#817b70' }}>
+                    {f.label}
+                    <select value={manual[f.name] || ''} onChange={(e) => setManual((prev) => ({ ...prev, [f.name]: e.target.value }))}
+                      style={{ ...inputStyle, marginTop: 4 }}>
+                      {f.options.map((o) => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
+                    {f.hint && <span style={{ display: 'block', marginTop: 3, fontSize: 9.5, lineHeight: 1.4 }}>{f.hint}</span>}
                   </label>
-                  {LEGAL_MANUAL_FIELDS.map((f) => (
-                    <label key={f.name} style={{ fontSize: 10, color: '#817b70' }}>
-                      {f.label}
-                      <select value={manual[f.name] || ''} onChange={(e) => setManual((prev) => ({ ...prev, [f.name]: e.target.value }))}
-                        style={{ ...inputStyle, marginTop: 4 }}>
-                        {f.options.map((o) => (
-                          <option key={o.value} value={o.value}>{o.label}</option>
-                        ))}
-                      </select>
-                      {f.hint && <span style={{ display: 'block', marginTop: 3, fontSize: 9.5, lineHeight: 1.4 }}>{f.hint}</span>}
-                    </label>
-                  ))}
-                  <label style={{ fontSize: 10, color: '#817b70', gridColumn: '1 / -1' }}>
-                    Комментарий к ручным проверкам (что именно выявлено)
-                    <textarea value={manualComment} onChange={(e) => setManualComment(e.target.value)} rows={2}
-                      style={{ ...inputStyle, marginTop: 4, resize: 'vertical' }} />
-                  </label>
-                </div>
-                <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                  <button type="button" onClick={() => void runCheck()} disabled={reportBusy}
-                    style={{ ...goldBtn, opacity: reportBusy ? 0.6 : 1 }}>
-                    {reportBusy ? 'Формирование отчёта…' : 'Провести экспертизу'}
-                  </button>
-                  {report?.status ? (
-                    <button type="button" onClick={() => void downloadPdf()} disabled={busy === 'pdf'}
-                      style={{ ...goldBtn, background: busy === 'pdf' ? '#c9b894' : '#8d6b40' }}>
-                      {busy === 'pdf' ? 'Формирование…' : 'Скачать отчёт PDF'}
-                    </button>
-                  ) : null}
-                  {error && <span style={{ color: '#9b4e43', fontSize: 11 }}>{error}</span>}
-                </div>
+                ))}
+                <label style={{ fontSize: 10, color: '#817b70', gridColumn: '1 / -1' }}>
+                  Комментарий к ручным проверкам (что именно выявлено)
+                  <textarea value={manualComment} onChange={(e) => setManualComment(e.target.value)} rows={2}
+                    style={{ ...inputStyle, marginTop: 4, resize: 'vertical' }} />
+                </label>
               </div>
+              <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                <button type="button" onClick={() => void runCheck()} disabled={reportBusy}
+                  style={{ ...goldBtn, opacity: reportBusy ? 0.6 : 1 }}>
+                  {reportBusy ? 'Формирование отчёта…' : 'Провести экспертизу'}
+                </button>
+                {report?.status ? (
+                  <button type="button" onClick={() => void downloadPdf()} disabled={busy === 'pdf'}
+                    style={{ ...goldBtn, background: busy === 'pdf' ? '#c9b894' : '#8d6b40' }}>
+                    {busy === 'pdf' ? 'Формирование…' : 'Скачать отчёт PDF'}
+                  </button>
+                ) : null}
+                {error && <span style={{ color: '#9b4e43', fontSize: 11 }}>{error}</span>}
+              </div>
+            </div>
 
-              {/* ---------- Отчёт (юрист и администратор) ---------- */}
-              {report && report.status ? (
-                <div style={{ marginTop: 14, border: '1px solid #ded5c7', borderRadius: 10, background: '#fff', padding: '16px' }}>
-                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+            {/* ---------- Отчёт (только администратор) ---------- */}
+            {report && report.status ? (
+              <div style={{ marginTop: 14, border: '1px solid #ded5c7', borderRadius: 10, background: '#fff', padding: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                  <div>
+                    <div style={{ fontSize: 10, color: '#817b70', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 4 }}>Итог экспертизы</div>
+                    <div style={{ display: 'inline-block', padding: '7px 14px', borderRadius: 8, background: reportStatusStyle?.bg || '#e8e4dc', color: reportStatusStyle?.color || '#716b62', fontWeight: 600, fontSize: 13 }}>
+                      {LEGAL_STATUS_LABELS[report.status as keyof typeof LEGAL_STATUS_LABELS] || report.status}
+                    </div>
+                    <div style={{ marginTop: 6, fontSize: 11, color: '#817b70', lineHeight: 1.5 }}>
+                      Проверка: {fmtDate(report.checkedAt)}
+                      {report.docsActualAt ? ` · документы актуальны на: ${fmtDate(report.docsActualAt)}` : ' · дата актуальности документов не определена'}
+                      {report.checkedBy ? ` · сформировал: ${report.checkedBy}` : ''}
+                    </div>
+                  </div>
+                  <button type="button" onClick={() => void downloadPdf()} disabled={busy === 'pdf'}
+                    style={{ ...goldBtn, background: busy === 'pdf' ? '#c9b894' : '#a7814e' }}>
+                    {busy === 'pdf' ? 'Формирование…' : 'Скачать отчёт PDF'}
+                  </button>
+                </div>
+
+                {/* Сведения об объекте */}
+                <div style={{ marginTop: 14 }}>
+                  <div style={sectionTitle}>Сведения об объекте</div>
+                  <div style={{ fontSize: 12, lineHeight: 1.6, color: '#25241f' }}>
+                    <div>Кадастровый номер: {extras?.cadastralNumber || '—'}{' '}
+                      <span style={{ color: '#9b958a', fontSize: 10 }}>({CADASTRAL_SOURCE_LABEL[extras?.cadastralSource || 'none']})</span>
+                    </div>
+                    {extras?.addressEgrn ? <div>Адрес по выписке ЕГРН: {extras.addressEgrn}</div> : null}
                     <div>
-                      <div style={{ fontSize: 10, color: '#817b70', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 4 }}>Итог экспертизы</div>
-                      <div style={{ display: 'inline-block', padding: '7px 14px', borderRadius: 8, background: reportStatusStyle?.bg || '#e8e4dc', color: reportStatusStyle?.color || '#716b62', fontWeight: 600, fontSize: 13 }}>
-                        {LEGAL_STATUS_LABELS[report.status as keyof typeof LEGAL_STATUS_LABELS] || report.status}
-                      </div>
-                      <div style={{ marginTop: 6, fontSize: 11, color: '#817b70', lineHeight: 1.5 }}>
-                        Проверка: {fmtDate(report.checkedAt)}
-                        {report.docsActualAt ? ` · документы актуальны на: ${fmtDate(report.docsActualAt)}` : ' · дата актуальности документов не определена'}
-                        {report.checkedBy ? ` · сформировал: ${report.checkedBy}` : ''}
-                      </div>
+                      Площадь: {[
+                        extras?.areaEgrn ? `по выписке — ${extras.areaEgrn} м²` : '',
+                        extras?.areaCard != null ? `по карточке — ${String(extras.areaCard).replace('.', ',')} м²` : '',
+                      ].filter(Boolean).join(', ') || 'не указана'}
                     </div>
-                    <button type="button" onClick={() => void downloadPdf()} disabled={busy === 'pdf'}
-                      style={{ ...goldBtn, background: busy === 'pdf' ? '#c9b894' : '#a7814e' }}>
-                      {busy === 'pdf' ? 'Формирование…' : 'Скачать отчёт PDF'}
-                    </button>
+                    <div style={{ color: '#716b62' }}>
+                      Выписка ЕГРН: {EGRN_STATUS_LABEL[extras?.egrn?.status || 'missing']}
+                      {extras?.egrn?.fileName ? ` · «${extras.egrn.fileName}»` : ''}
+                      {extras?.egrn?.docDate ? `, от ${fmtDate(extras.egrn.docDate)}` : ''}
+                    </div>
+                    {extras?.egrn?.reason ? (
+                      <div style={{ color: '#a1661f', fontSize: 11, marginTop: 2 }}>{extras.egrn.reason}</div>
+                    ) : null}
                   </div>
+                </div>
 
-                  {/* Сведения об объекте */}
-                  <div style={{ marginTop: 14 }}>
-                    <div style={sectionTitle}>Сведения об объекте</div>
-                    <div style={{ fontSize: 12, lineHeight: 1.6, color: '#25241f' }}>
-                      <div>Кадастровый номер: {extras?.cadastralNumber || '—'}{' '}
-                        <span style={{ color: '#9b958a', fontSize: 10 }}>({CADASTRAL_SOURCE_LABEL[extras?.cadastralSource || 'none']})</span>
-                      </div>
-                      {extras?.addressEgrn ? <div>Адрес по выписке ЕГРН: {extras.addressEgrn}</div> : null}
-                      <div>
-                        Площадь: {[
-                          extras?.areaEgrn ? `по выписке — ${extras.areaEgrn} м²` : '',
-                          extras?.areaCard != null ? `по карточке — ${String(extras.areaCard).replace('.', ',')} м²` : '',
-                        ].filter(Boolean).join(', ') || 'не указана'}
-                      </div>
-                      <div style={{ color: '#716b62' }}>
-                        Выписка ЕГРН: {EGRN_STATUS_LABEL[extras?.egrn?.status || 'missing']}
-                        {extras?.egrn?.fileName ? ` · «${extras.egrn.fileName}»` : ''}
-                        {extras?.egrn?.docDate ? `, от ${fmtDate(extras.egrn.docDate)}` : ''}
-                      </div>
-                      {extras?.egrn?.reason ? (
-                        <div style={{ color: '#a1661f', fontSize: 11, marginTop: 2 }}>{extras.egrn.reason}</div>
-                      ) : null}
+                {/* Сведения о собственнике */}
+                <div style={{ marginTop: 14 }}>
+                  <div style={sectionTitle}>Сведения о собственнике</div>
+                  <div style={{ fontSize: 12, lineHeight: 1.6, color: '#25241f' }}>
+                    <div>По карточке объекта: {extras?.ownerCard || '—'}</div>
+                    <div>По выписке ЕГРН: {extras?.ownersEgrn?.length ? extras.ownersEgrn.join(', ') : '—'}</div>
+                    <div>Вид права: {extras?.rightType || '—'}</div>
+                    <div>Основание приобретения: {extras?.basis || '—'}</div>
+                    <div>Зарегистрированные обременения: {extras?.encumbrances?.length ? extras.encumbrances.join('; ') : '—'}</div>
+                    <div style={{ color: '#716b62' }}>
+                      Паспорт: {extras?.manual?.passportCheck === 'match'
+                        ? 'сверен юристом, расхождений нет'
+                        : extras?.manual?.passportCheck === 'mismatch'
+                          ? 'выявлены расхождения'
+                          : 'сверка не отмечена — паспорт читает юрист визуально'}
                     </div>
                   </div>
+                </div>
 
-                  {/* Сведения о собственнике */}
-                  <div style={{ marginTop: 14 }}>
-                    <div style={sectionTitle}>Сведения о собственнике</div>
-                    <div style={{ fontSize: 12, lineHeight: 1.6, color: '#25241f' }}>
-                      <div>По карточке объекта: {extras?.ownerCard || '—'}</div>
-                      <div>По выписке ЕГРН: {extras?.ownersEgrn?.length ? extras.ownersEgrn.join(', ') : '—'}</div>
-                      <div>Вид права: {extras?.rightType || '—'}</div>
-                      <div>Основание приобретения: {extras?.basis || '—'}</div>
-                      <div>Зарегистрированные обременения: {extras?.encumbrances?.length ? extras.encumbrances.join('; ') : '—'}</div>
-                      <div style={{ color: '#716b62' }}>
-                        Паспорт: {extras?.manual?.passportCheck === 'match'
-                          ? 'сверен юристом, расхождений нет'
-                          : extras?.manual?.passportCheck === 'mismatch'
-                            ? 'выявлены расхождения'
-                            : 'сверка не отмечена — паспорт читает юрист визуально'}
+                {/* Результаты проверок */}
+                <div style={{ marginTop: 14 }}>
+                  <div style={sectionTitle}>Результаты проверок</div>
+                  {(report.items || []).map((it) => {
+                    const st = STATUS_STYLE[it.status] || STATUS_STYLE.manual
+                    return (
+                      <div key={it.key} style={{ padding: '7px 0', borderTop: '1px solid #f0ebe2', fontSize: 12 }}>
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
+                          <span style={{ minWidth: 26, color: '#817b70' }}>{it.key}.</span>
+                          <span style={{ flex: 1, color: '#25241f' }}>{it.title}</span>
+                          <span style={{ whiteSpace: 'nowrap', padding: '2px 8px', borderRadius: 999, background: st.bg, color: st.color, fontSize: 9.5 }}>
+                            {LEGAL_ITEM_STATUS_LABELS[it.status as keyof typeof LEGAL_ITEM_STATUS_LABELS] || it.status}
+                          </span>
+                        </div>
+                        {it.note ? <div style={{ marginLeft: 34, marginTop: 3, color: '#716b62', fontSize: 11, lineHeight: 1.45 }}>{it.note}</div> : null}
                       </div>
-                    </div>
-                  </div>
+                    )
+                  })}
+                </div>
 
-                  {/* Результаты проверок */}
+                {/* Что проверено автоматически и что недоступно */}
+                <div style={{ marginTop: 14, display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
+                  {extras?.autoChecks?.length ? (
+                    <div style={{ border: '1px solid #e2e8dc', borderRadius: 8, background: '#f6f8f3', padding: '10px 12px' }}>
+                      <div style={{ ...sectionTitle, color: '#3f6b34' }}>Проверено автоматически</div>
+                      {extras.autoChecks.map((line, i) => (
+                        <div key={i} style={{ fontSize: 11, color: '#4c5a44', padding: '1px 0', lineHeight: 1.45 }}>— {line}</div>
+                      ))}
+                    </div>
+                  ) : null}
+                  {extras?.autoUnavailable?.length ? (
+                    <div style={{ border: '1px solid #e8e0d2', borderRadius: 8, background: '#fbf7f0', padding: '10px 12px' }}>
+                      <div style={{ ...sectionTitle, color: '#7a5a2e' }}>Автоматическая проверка недоступна</div>
+                      {extras.autoUnavailable.map((line, i) => (
+                        <div key={i} style={{ fontSize: 11, color: '#7a6d5a', padding: '1px 0', lineHeight: 1.45 }}>— {line}</div>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+
+                {/* Риски и замечания */}
+                {report.findings && report.findings.length > 0 && (
                   <div style={{ marginTop: 14 }}>
-                    <div style={sectionTitle}>Результаты проверок</div>
-                    {(report.items || []).map((it) => {
-                      const st = STATUS_STYLE[it.status] || STATUS_STYLE.manual
+                    <div style={sectionTitle}>Найденные риски и замечания</div>
+                    {report.findings.map((f, i) => {
+                      const st = FINDING_STYLE[f.level] || FINDING_STYLE.info
                       return (
-                        <div key={it.key} style={{ padding: '7px 0', borderTop: '1px solid #f0ebe2', fontSize: 12 }}>
-                          <div style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
-                            <span style={{ minWidth: 26, color: '#817b70' }}>{it.key}.</span>
-                            <span style={{ flex: 1, color: '#25241f' }}>{it.title}</span>
-                            <span style={{ whiteSpace: 'nowrap', padding: '2px 8px', borderRadius: 999, background: st.bg, color: st.color, fontSize: 9.5 }}>
-                              {LEGAL_ITEM_STATUS_LABELS[it.status as keyof typeof LEGAL_ITEM_STATUS_LABELS] || it.status}
-                            </span>
-                          </div>
-                          {it.note ? <div style={{ marginLeft: 34, marginTop: 3, color: '#716b62', fontSize: 11, lineHeight: 1.45 }}>{it.note}</div> : null}
+                        <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'baseline', padding: '5px 0', fontSize: 12 }}>
+                          <span style={{ flex: 0, padding: '2px 8px', borderRadius: 999, background: st.bg, color: st.color, fontSize: 9.5, whiteSpace: 'nowrap' }}>{st.label}</span>
+                          <span style={{ color: '#25241f', lineHeight: 1.45 }}>{f.text} <span style={{ color: '#9b958a', fontSize: 10 }}>(проверка {f.itemKey})</span></span>
                         </div>
                       )
                     })}
                   </div>
+                )}
 
-                  {/* Что проверено автоматически и что недоступно */}
-                  <div style={{ marginTop: 14, display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
-                    {extras?.autoChecks?.length ? (
-                      <div style={{ border: '1px solid #e2e8dc', borderRadius: 8, background: '#f6f8f3', padding: '10px 12px' }}>
-                        <div style={{ ...sectionTitle, color: '#3f6b34' }}>Проверено автоматически</div>
-                        {extras.autoChecks.map((line, i) => (
-                          <div key={i} style={{ fontSize: 11, color: '#4c5a44', padding: '1px 0', lineHeight: 1.45 }}>— {line}</div>
-                        ))}
-                      </div>
-                    ) : null}
-                    {extras?.autoUnavailable?.length ? (
-                      <div style={{ border: '1px solid #e8e0d2', borderRadius: 8, background: '#fbf7f0', padding: '10px 12px' }}>
-                        <div style={{ ...sectionTitle, color: '#7a5a2e' }}>Автоматическая проверка недоступна</div>
-                        {extras.autoUnavailable.map((line, i) => (
-                          <div key={i} style={{ fontSize: 11, color: '#7a6d5a', padding: '1px 0', lineHeight: 1.45 }}>— {line}</div>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
-
-                  {/* Риски и замечания */}
-                  {report.findings && report.findings.length > 0 && (
-                    <div style={{ marginTop: 14 }}>
-                      <div style={sectionTitle}>Найденные риски и замечания</div>
-                      {report.findings.map((f, i) => {
-                        const st = FINDING_STYLE[f.level] || FINDING_STYLE.info
-                        return (
-                          <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'baseline', padding: '5px 0', fontSize: 12 }}>
-                            <span style={{ flex: 0, padding: '2px 8px', borderRadius: 999, background: st.bg, color: st.color, fontSize: 9.5, whiteSpace: 'nowrap' }}>{st.label}</span>
-                            <span style={{ color: '#25241f', lineHeight: 1.45 }}>{f.text} <span style={{ color: '#9b958a', fontSize: 10 }}>(проверка {f.itemKey})</span></span>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  )}
-
-                  {/* Отсутствующие документы */}
-                  {report.missingDocs && report.missingDocs.length > 0 && (
-                    <div style={{ marginTop: 12 }}>
-                      <div style={sectionTitle}>Чего не хватает из документов</div>
-                      {report.missingDocs.map((m, i) => (
-                        <div key={i} style={{ fontSize: 12, color: '#9b4e43', padding: '2px 0' }}>— {m}</div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Рекомендации */}
-                  {report.recommendations && report.recommendations.length > 0 && (
-                    <div style={{ marginTop: 12 }}>
-                      <div style={sectionTitle}>Рекомендации</div>
-                      {report.recommendations.map((r, i) => (
-                        <div key={i} style={{ fontSize: 12, padding: '2px 0', lineHeight: 1.45 }}>{i + 1}. {r}</div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Источники и дата проверки */}
-                  {report.sources && report.sources.length > 0 && (
-                    <div style={{ marginTop: 12 }}>
-                      <div style={sectionTitle}>Источники и дата проверки</div>
-                      <div style={{ fontSize: 11, color: '#716b62', padding: '1px 0' }}>
-                        Проверка выполнена {fmtDate(report.checkedAt)}{report.checkedBy ? `, сотрудник: ${report.checkedBy}` : ''}
-                      </div>
-                      {report.sources.map((s, i) => (
-                        <div key={i} style={{ fontSize: 11, padding: '1px 0' }}>
-                          — {s.name}{s.url ? (
-                            <a href={s.url} target="_blank" rel="noopener" style={{ color: '#8d6b40' }}> ({s.url})</a>
-                          ) : null}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Перечень загруженных документов */}
+                {/* Отсутствующие документы */}
+                {report.missingDocs && report.missingDocs.length > 0 && (
                   <div style={{ marginTop: 12 }}>
-                    <div style={sectionTitle}>Загруженные документы (перечень)</div>
-                    {report.docs && report.docs.length > 0 ? (
-                      report.docs.map((d, i) => (
-                        <div key={i} style={{ fontSize: 11, color: '#716b62', padding: '1px 0' }}>
-                          — {d.docTypeLabel || d.fileName}{d.docDate ? `, от ${fmtDate(d.docDate)}` : ''}
-                          {d.fileName ? ` · «${d.fileName}»` : ''}{fmtSize(d.size) ? ` (${fmtSize(d.size)})` : ''}
-                        </div>
-                      ))
-                    ) : (
-                      <div style={{ fontSize: 11, color: '#9b958a' }}>—</div>
-                    )}
+                    <div style={sectionTitle}>Чего не хватает из документов</div>
+                    {report.missingDocs.map((m, i) => (
+                      <div key={i} style={{ fontSize: 12, color: '#9b4e43', padding: '2px 0' }}>— {m}</div>
+                    ))}
                   </div>
+                )}
 
-                  <p style={{ margin: '14px 0 0', fontSize: 10.5, color: '#9b958a', lineHeight: 1.5 }}>
-                    Отчёт сформирован системой и носит предварительный характер: он фиксирует результаты
-                    проверок и не заменяет заключение юриста и официальные документы. В отчёте нет паспортных
-                    данных, содержимого документов и подписей; клиентам он не показывается.
-                  </p>
+                {/* Рекомендации */}
+                {report.recommendations && report.recommendations.length > 0 && (
+                  <div style={{ marginTop: 12 }}>
+                    <div style={sectionTitle}>Рекомендации</div>
+                    {report.recommendations.map((r, i) => (
+                      <div key={i} style={{ fontSize: 12, padding: '2px 0', lineHeight: 1.45 }}>{i + 1}. {r}</div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Источники и дата проверки */}
+                {report.sources && report.sources.length > 0 && (
+                  <div style={{ marginTop: 12 }}>
+                    <div style={sectionTitle}>Источники и дата проверки</div>
+                    <div style={{ fontSize: 11, color: '#716b62', padding: '1px 0' }}>
+                      Проверка выполнена {fmtDate(report.checkedAt)}{report.checkedBy ? `, сотрудник: ${report.checkedBy}` : ''}
+                    </div>
+                    {report.sources.map((s, i) => (
+                      <div key={i} style={{ fontSize: 11, padding: '1px 0' }}>
+                        — {s.name}{s.url ? (
+                          <a href={s.url} target="_blank" rel="noopener" style={{ color: '#8d6b40' }}> ({s.url})</a>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Перечень загруженных документов */}
+                <div style={{ marginTop: 12 }}>
+                  <div style={sectionTitle}>Загруженные документы (перечень)</div>
+                  {report.docs && report.docs.length > 0 ? (
+                    report.docs.map((d, i) => (
+                      <div key={i} style={{ fontSize: 11, color: '#716b62', padding: '1px 0' }}>
+                        — {d.docTypeLabel || d.fileName}{d.docDate ? `, от ${fmtDate(d.docDate)}` : ''}
+                        {d.fileName ? ` · «${d.fileName}»` : ''}{fmtSize(d.size) ? ` (${fmtSize(d.size)})` : ''}
+                      </div>
+                    ))
+                  ) : (
+                    <div style={{ fontSize: 11, color: '#9b958a' }}>—</div>
+                  )}
                 </div>
-              ) : null}
-            </div>
-          )}
+
+                <p style={{ margin: '14px 0 0', fontSize: 10.5, color: '#9b958a', lineHeight: 1.5 }}>
+                  Отчёт сформирован системой и носит предварительный характер: он фиксирует результаты
+                  проверок и не заменяет заключение юриста и официальные документы. В отчёте нет паспортных
+                  данных, содержимого документов и подписей; клиентам он не показывается.
+                </p>
+              </div>
+            ) : null}
+          </div>
         </>
       )}
     </div>

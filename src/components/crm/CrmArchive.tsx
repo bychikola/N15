@@ -341,12 +341,15 @@ export const CrmArchive: FC<Props> = ({ t, rows, isAdmin, ownObjectIds }) => {
                   </div>
                 </div>
 
-                <div style={{ marginTop: 8 }}>
-                  <div style={labelStyle}>{t.crm.archComment}</div>
-                  <div style={{ fontSize: 11.5, color: row.archive.comment ? '#3f3a33' : '#9b958a', marginTop: 3, lineHeight: 1.5 }}>
-                    {row.archive.comment || t.crm.archNoComment}
+                {/* Комментарий к переносу — внутренний, строка есть только у админа */}
+                {isAdmin && (
+                  <div style={{ marginTop: 8 }}>
+                    <div style={labelStyle}>{t.crm.archComment}</div>
+                    <div style={{ fontSize: 11.5, color: row.archive.comment ? '#3f3a33' : '#9b958a', marginTop: 3, lineHeight: 1.5 }}>
+                      {row.archive.comment || t.crm.archNoComment}
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {/* История изменений архива: перенос, восстановление, повторный перенос… */}
                 <div style={{ marginTop: 10 }}>
@@ -372,7 +375,8 @@ export const CrmArchive: FC<Props> = ({ t, rows, isAdmin, ownObjectIds }) => {
                             </div>
                             <div style={{ fontSize: 10.5, color: '#716b62', marginTop: 3, lineHeight: 1.5 }}>
                               {archiveReasonLabel(e.reason)}
-                              {e.comment ? ` — ${e.comment}` : ''}
+                              {/* Комментарии истории — внутренние, только админу */}
+                              {isAdmin && e.comment ? ` — ${e.comment}` : ''}
                             </div>
                           </div>
                         ))

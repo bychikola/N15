@@ -12,9 +12,9 @@ import { LEGAL_STATUS_LABELS } from '@/lib/legal-check'
 
 // Статус юридической экспертизы объекта для карточки CRM: что доступно
 // текущему сотруднику (документы и запуск проверки), загружены ли документы,
-// сформирован ли отчёт. Детали отчёта этим маршрутом не отдаются — их читают
-// только Лана и администраторы (см. report/route.ts), агент видит лишь факт
-// проведения проверки.
+// сформирован ли отчёт. Документы и отчёт читает только администратор (см.
+// report/route.ts) — остальным сотрудникам маршрут отвечает лишь «недоступно»,
+// не раскрывая ни перечня документов, ни факта проверки.
 export async function GET(req: NextRequest) {
   try {
     const user = await getCrmUser()
@@ -29,9 +29,9 @@ export async function GET(req: NextRequest) {
     const payload = await getPayload({ config })
     const actor = { id: user.id, name: user.name, email: user.email, role: user.role }
     const canReadReport = canReadLegalReport(actor)
-    const canManage = canReadReport || (await canManageObjectLegal(payload, actor, objectId))
+    const canManage = canManageObjectLegal(actor)
     if (!canManage) {
-      // Другой агент/клиент: существование проверки не раскрываем
+      // Не администратор: существование проверки не раскрываем
       return NextResponse.json({ canManage: false, canReadReport: false })
     }
 

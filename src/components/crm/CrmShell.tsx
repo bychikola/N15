@@ -24,6 +24,10 @@ export function CrmShell({ user, t, active, children }: Props) {
     // «Архив объектов»: снятые с продажи объекты остаются в базе, но скрыты
     // с сайта, из каталога, поиска и с площадок публикации (src/lib/archive.ts)
     { id: 'archive', href: '/crm/archive', label: t.crm.navArchive },
+    // «Агенты»: риелторы агентства и объекты каждого. Раздел виден всем
+    // сотрудникам CRM (объекты коллег — на чтение, редактирует их
+    // ответственный агент или администратор, см. src/app/crm/agents)
+    { id: 'agents', href: '/crm/agents', label: t.crm.navAgents },
     // «Новости на проверку»: официальные новости о недвижимости ждут
     // подтверждения перед публикацией в блоге (src/lib/news.ts)
     { id: 'news', href: '/crm/news', label: t.crm.navNews },

@@ -1,12 +1,12 @@
 import type { CollectionConfig } from 'payload'
-import { LEGAL_OFFICER_EMAIL, LEGAL_STATUS_LABELS, type LegalCheckStatus } from '@/lib/legal-check'
+import { LEGAL_STATUS_LABELS, type LegalCheckStatus } from '@/lib/legal-check'
 
 // ---------------------------------------------------------------------------
 // Отчёты «Юридической экспертизы объекта» (модуль CRM). Отчёт — закрытый
-// документ: читают его только аккаунт Ланы Козыревой (LEGAL_OFFICER_EMAIL) и
-// администраторы; клиентам, агентам, сайту и админ-панели коллекция
-// недоступна (read по правилу доступа, панель скрыта, изменения — только
-// серверными маршрутами /api/objects/legal/*, см. src/lib/legal-service.ts).
+// документ: читают его только администраторы; клиентам, агентам, сайту и
+// админ-панели коллекция недоступна (read по правилу доступа, панель скрыта,
+// изменения — только серверными маршрутами /api/objects/legal/*, см.
+// src/lib/legal-service.ts).
 //
 // В отчёте нет паспортных данных, подписей, личных контактов и полного
 // текста закрытых документов — только результаты шести проверок, найденные
@@ -23,11 +23,11 @@ export const LegalReports: CollectionConfig = {
   labels: { singular: 'Отчёт юр. экспертизы', plural: 'Отчёты юр. экспертизы' },
   admin: {
     hidden: true,
-    description: 'Закрытые отчёты: читают юрист и администраторы, правки — только серверные маршруты',
+    description: 'Закрытые отчёты: читает только администратор, правки — только серверные маршруты',
   },
   access: {
-    // Отчёт доступен Лане Козыревой (по email) и администраторам
-    read: ({ req: { user } }) => !!user && (user.email === LEGAL_OFFICER_EMAIL || user.role === 'admin'),
+    // Отчёт доступен только администраторам
+    read: ({ req: { user } }) => !!user && user.role === 'admin',
     create: () => false,
     update: () => false,
     delete: () => false,

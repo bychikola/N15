@@ -18,6 +18,13 @@
 // «Подтвердить отмеченные» отправляет выбранное в публичную группу
 // housePublic (см. сервер: src/lib/house-info-service.ts). Оттуда же —
 // перенос значений в поля карточки и абзац в описание объекта.
+//
+// Права (см. house-data/route.ts): характеристики дома из открытого реестра
+// получает и смотрит любой сотрудник по любому объекту; подтверждение —
+// правка карточки, поэтому оно доступно администратору и агенту, который
+// ведёт объект (сервер отдаёт это флагом canApprove — у чужого объекта блок
+// подтверждения не показывается вовсе). Кадастровый номер участка по реестру
+// видит только администратор.
 // ---------------------------------------------------------------------------
 
 import { useCallback, useEffect, useState, type FC } from 'react'
@@ -154,12 +161,22 @@ const FieldRow: FC<{
   )
 }
 
-export const HouseDataBlock: FC<{ objectId: number; onClose: () => void; onChanged?: () => void }> = ({
+export const HouseDataBlock: FC<{
+  objectId: number
+  /** Администратору показываются кадастровые сведения снимка */
+  isAdmin: boolean
+  onClose: () => void
+  onChanged?: () => void
+}> = ({
   objectId,
+  isAdmin,
   onClose,
   onChanged,
 }) => {
   const [saved, setSaved] = useState<SavedHouseUi | null>(null)
+  // Подтверждать характеристики (правка карточки) может администратор и агент
+  // объекта — решает сервер, до ответа блок подтверждения скрыт
+  const [canApprove, setCanApprove] = useState(false)
   const [checked, setChecked] = useState<Record<string, boolean>>({})
   const [applyToCard, setApplyToCard] = useState(true)
   const [toDescription, setToDescription] = useState(false)
@@ -180,9 +197,10 @@ export const HouseDataBlock: FC<{ objectId: number; onClose: () => void; onChang
         credentials: 'include',
         body: JSON.stringify({ objectId }),
       })
-      const data = (await res.json()) as { error?: string; saved?: SavedHouseUi }
+      const data = (await res.json()) as { error?: string; canApprove?: boolean; saved?: SavedHouseUi }
       if (!res.ok || !data.saved) throw new Error(data.error || '')
       setSaved(data.saved)
+      setCanApprove(Boolean(data.canApprove))
       setChecked(data.saved.approved || {})
       onChanged?.()
     } catch (e) {
@@ -200,9 +218,10 @@ export const HouseDataBlock: FC<{ objectId: number; onClose: () => void; onChang
       try {
         const res = await fetch(`/api/objects/house-data?objectId=${objectId}`, { credentials: 'include' })
         if (res.ok) {
-          const data = (await res.json()) as { saved?: SavedHouseUi }
+          const data = (await res.json()) as { canApprove?: boolean; saved?: SavedHouseUi }
           if (alive && data.saved?.fields?.length) {
             setSaved(data.saved)
+            setCanApprove(Boolean(data.canApprove))
             setChecked(data.saved.approved || {})
             return
           }
@@ -220,6 +239,7 @@ export const HouseDataBlock: FC<{ objectId: number; onClose: () => void; onChang
   }
 
   const approve = async () => {
+    if (!canApprove) return
     const keys = Object.keys(checked).filter((k) => checked[k])
     if (!keys.length) {
       setErr('Отметьте хотя бы одну характеристику')
@@ -307,7 +327,9 @@ export const HouseDataBlock: FC<{ objectId: number; onClose: () => void; onChang
                 {saved.matchedBy === 'cadastral' ? 'кадастровым номером' : 'адресом'}
               </span>
             </span>
-            {saved.house.plotCadastral && (
+            {/* Кадастровые сведения — только администратору (сервер их и не
+                присылает остальным сотрудникам, здесь — та же проверка) */}
+            {isAdmin && saved.house.plotCadastral && (
               <span>Кадастровый номер участка: <span style={{ color: '#6f6a61' }}>{saved.house.plotCadastral}</span></span>
             )}
             <span>Поисковый запрос: <span style={{ color: '#6f6a61' }}>{saved.query || '—'}</span></span>
@@ -354,8 +376,11 @@ export const HouseDataBlock: FC<{ objectId: number; onClose: () => void; onChang
         )}
       </div>
 
-      {/* Подтверждение: до него значения клиенту не показываются */}
-      {confirmedCount > 0 && (
+      {/* Подтверждение: до него значения клиенту не показываются. Показываем
+          только тому, кому сервер разрешил (администратор и агент объекта):
+          у чужого объекта подтверждение — правка чужой карточки, поэтому
+          блока нет вовсе */}
+      {confirmedCount > 0 && canApprove && (
         <div style={{ marginTop: 14, background: '#fbf8f1', border: '1px solid #e8dfd0', borderRadius: 10, padding: '12px 14px' }}>
           <div style={{ fontSize: 9, color: '#8a857b', textTransform: 'uppercase', letterSpacing: '.07em' }}>
             Подтверждение агентом

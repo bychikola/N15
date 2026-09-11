@@ -7,9 +7,9 @@ import { LEGAL_DOC_TYPES } from '@/lib/legal-check'
 
 // Документы юридической экспертизы объекта (закрытое хранилище, см.
 // коллекцию legal-documents). Файлы живут base64 в БД — в файловую систему и
-// на сайт не попадают. Доступ: агент, который ведёт объект; администратор;
-// Лана (юр. экспертизы). Метаданные списком — GET, загрузка файла — POST
-// (multipart).
+// на сайт не попадают. Доступ только у администратора: остальным сотрудникам
+// ни перечень документов, ни файлы не показываются. Метаданные списком — GET,
+// загрузка файла — POST (multipart).
 //
 // Выписка ЕГРН принимается и XML-файлом Росреестра (его система разбирает
 // автоматически, см. legal-egrn.ts), и PDF/сканом — тогда данные сверяет
@@ -63,7 +63,7 @@ export async function GET(req: NextRequest) {
 
     const payload = await getPayload({ config })
     const actor = { id: user.id, name: user.name, email: user.email, role: user.role }
-    if (!(await canManageObjectLegal(payload, actor, objectId))) {
+    if (!canManageObjectLegal(actor)) {
       return NextResponse.json({ error: 'Нет доступа к документам объекта' }, { status: 403 })
     }
     const docs = await getObjectDocs(payload, objectId)
@@ -127,7 +127,7 @@ export async function POST(req: NextRequest) {
 
     const payload = await getPayload({ config })
     const actor = { id: user.id, name: user.name, email: user.email, role: user.role }
-    if (!(await canManageObjectLegal(payload, actor, objectId))) {
+    if (!canManageObjectLegal(actor)) {
       return NextResponse.json({ error: 'Нет доступа к документам объекта' }, { status: 403 })
     }
 

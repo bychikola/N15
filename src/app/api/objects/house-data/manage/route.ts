@@ -3,7 +3,7 @@ import config from '@payload-config'
 import { NextRequest, NextResponse } from 'next/server'
 import { canAccessCrm, getCrmUser } from '@/app/crm/auth'
 import { myObjectIds } from '@/lib/legal-service'
-import { approveHouseInfo } from '@/lib/house-info-service'
+import { approveHouseInfo, houseInfoForStaff } from '@/lib/house-info-service'
 import type { HouseFieldKey } from '@/lib/house-info'
 
 /**
@@ -17,7 +17,11 @@ import type { HouseFieldKey } from '@/lib/house-info'
  * Подтвердить можно только найденные значения: «Не найдено» и «Требует
  * проверки» подтверждению не подлежат.
  *
- * Внутренний маршрут CRM: агент — по своим объектам, администратор — по всем.
+ * Внутренний маршрут CRM. Сама проверка реестра и просмотр характеристик
+ * открыты всем сотрудникам по любому объекту (см. house-data/route.ts), а
+ * подтверждение — это правка карточки объекта и публикация значений клиенту,
+ * поэтому оно доступно администратору и агенту, который ведёт объект (то же
+ * правило, что у правки объектов в коллекции Objects).
  */
 export async function POST(req: NextRequest) {
   try {
@@ -59,7 +63,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       ok: true,
-      saved: result.saved,
+      // Кадастровые сведения снимка — только администратору (см. house-data)
+      saved: result.saved ? houseInfoForStaff(result.saved, user.role === 'admin') : result.saved,
       items: result.items,
       patch: result.patch,
       paragraph: result.paragraph,

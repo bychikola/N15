@@ -5,9 +5,8 @@ import { canAccessCrm, getCrmUser } from '@/app/crm/auth'
 import { canReadLegalReport, getReportByObject } from '@/lib/legal-service'
 
 // Чтение сформированного отчёта экспертизы. Отчёт — закрытый документ: этот
-// маршрут отвечает только Лане Козыревой и администраторам (см. также
-// коллекцию legal-reports). Клиентам, другим агентам и сайту отчёт не
-// показывается.
+// маршрут отвечает только администратору (см. также коллекцию legal-reports).
+// Клиентам, агентам и сайту отчёт не показывается.
 export async function GET(req: NextRequest) {
   try {
     const user = await getCrmUser()
@@ -16,7 +15,7 @@ export async function GET(req: NextRequest) {
     }
     const actor = { id: user.id, name: user.name, email: user.email, role: user.role }
     if (!canReadLegalReport(actor)) {
-      return NextResponse.json({ error: 'Отчёт доступен юристу и администратору' }, { status: 403 })
+      return NextResponse.json({ error: 'Отчёт доступен только администратору' }, { status: 403 })
     }
     const objectId = Number(req.nextUrl.searchParams.get('objectId') || 0)
     if (!Number.isFinite(objectId) || objectId <= 0) {

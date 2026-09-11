@@ -10,7 +10,10 @@
  *
  * Права: агент управляет архивом только своих объектов (профиль агента в
  * поле agent привязан к его учётной записи, agents.user), администратор —
- * любыми; «Удалить окончательно» доступно только администратору.
+ * любыми; «Удалить окончательно» доступно только администратору. Внутренние
+ * комментарии архива (комментарий к переносу и комментарии истории) видит
+ * только администратор — при чтении с overrideAccess их снимает
+ * stripArchiveComments, а на странице раздела блоки прячутся (см. CrmArchive).
  */
 import type { Payload } from 'payload'
 import { archiveFromDoc, RESTORABLE_STATUSES, type ArchiveGroup } from './archive'
@@ -218,12 +221,22 @@ export function archiveAddressLine(doc: Record<string, unknown>): string {
   return parts.filter(Boolean).join(', ')
 }
 
+/** Журнал и комментарий переноса без внутренних комментариев (для сотрудников) */
+export function stripArchiveComments(archive: ArchiveGroup): ArchiveGroup {
+  return {
+    ...archive,
+    comment: null,
+    log: (archive.log || []).map((e) => ({ ...e, comment: null })),
+  }
+}
+
 /**
  * Список архива для раздела «Архив объектов»: архивные объекты с агентом,
  * причиной, датой, комментарием и историей изменений (свежие переносы —
  * сверху). Поиск и фильтры выполняет клиентская часть раздела.
+ * isAdmin — внутренние комментарии читает только администратор (см. файл).
  */
-export async function loadArchiveBoard(payload: Payload, limit = 500): Promise<ArchiveRow[]> {
+export async function loadArchiveBoard(payload: Payload, isAdmin: boolean, limit = 500): Promise<ArchiveRow[]> {
   const { docs } = await payload.find({
     collection: 'objects',
     where: { status: { equals: 'archived' } },
@@ -234,7 +247,10 @@ export async function loadArchiveBoard(payload: Payload, limit = 500): Promise<A
   })
 
   const rows = (docs as unknown as Record<string, unknown>[]).map((o) => {
-    const archive = archiveFromDoc(o)
+    // Внутренние комментарии архива (к переносу и в истории) — только
+    // администратору: остальным сотрудникам они не уходят даже в разметку
+    // страницы (access полей здесь не срабатывает — чтение с overrideAccess)
+    const archive = isAdmin ? archiveFromDoc(o) : stripArchiveComments(archiveFromDoc(o))
     const img = o.primaryImage as { url?: string } | undefined
     const agent = o.agent as { id?: number; name?: string } | undefined
     const agentId = agentIdOf(o.agent)

@@ -74,29 +74,6 @@ async function myAgentIds(req: AccessReq): Promise<Set<number>> {
   return promise
 }
 
-/** id профиля агента из relationship-поля (в doc лежит id или объект) */
-const agentIdOf = (value: unknown): number | null => {
-  if (typeof value === 'number') return value
-  if (value && typeof value === 'object' && typeof (value as { id?: unknown }).id === 'number') {
-    return (value as { id: number }).id
-  }
-  return null
-}
-
-/**
- * «Свой» объект для текущего пользователя: в объекте указан профиль агента,
- * привязанный к его учётной записи (agents.user = этот пользователь).
- * Объекты без агента и с чужим агентом «своими» не считаются — их контакты
- * собственника агент не видит и редактировать их не может.
- */
-async function isOwnObjectFor(req: AccessReq, doc: { agent?: unknown } | null | undefined): Promise<boolean> {
-  if (!doc) return false
-  const agentId = agentIdOf(doc.agent)
-  if (agentId == null) return false
-  const mine = await myAgentIds(req)
-  return mine.has(agentId)
-}
-
 /**
  * Автоматический пересчёт рыночной оценки — внутренний инструмент CRM.
  *
@@ -453,7 +430,13 @@ export const Objects: CollectionConfig = {
           or.push({ cadastralNumber: { equals: data.cadastralNumber } })
         }
         if (or.length) {
-          const where: Where = data.id ? { and: [{ or }, { id: { not_equals: data.id } }] } : { or }
+          // Сам правимый документ из поиска исключаем по originalDoc.id: в
+          // beforeChange приходит data, куда Payload уже подмешал поля
+          // исходного документа (merge в beforeValidate), а data.id при
+          // правке не заполняется — по нему объект находился как «свой же
+          // дубль» и падала любая правка с заполненным телефоном/кадастровым
+          const selfId = (originalDoc as { id?: number } | undefined)?.id
+          const where: Where = selfId ? { and: [{ or }, { id: { not_equals: selfId } }] } : { or }
           const { docs } = await req.payload.find({
             collection: 'objects',
             where,
@@ -804,17 +787,12 @@ export const Objects: CollectionConfig = {
       name: 'ownerName',
       type: 'text',
       label: 'Собственник (имя)',
-      // Контакты собственника — персональные данные: посетители и клиенты их
-      // не видят вовсе, агент — только у своих объектов (см. isOwnObjectFor),
-      // администратор — у всех. Поле просто исчезает из выдачи REST.
+      // Данные и контакты собственника — персональные данные: их видит только
+      // администратор (у любого объекта). Агентам, клиентам и посетителям
+      // поле не отдаётся вовсе — оно просто исчезает из выдачи REST, а в
+      // карточке CRM раздел собственника не показывается (см. CrmObjects).
       access: {
-        read: async ({ req, doc }) => {
-          const user = req.user as AccessReq['user'] | undefined
-          if (!user) return false
-          if (user.role === 'admin') return true
-          if (user.role !== 'agent') return false
-          return isOwnObjectFor(req, doc)
-        },
+        read: ({ req: { user } }) => user?.role === 'admin',
       },
       admin: {
         description: 'По имени и телефону собственника система находит дубли объекта',
@@ -824,14 +802,9 @@ export const Objects: CollectionConfig = {
       name: 'ownerPhone',
       type: 'text',
       label: 'Собственник (телефон)',
+      // Как и имя собственника — персональные данные, только администратор
       access: {
-        read: async ({ req, doc }) => {
-          const user = req.user as AccessReq['user'] | undefined
-          if (!user) return false
-          if (user.role === 'admin') return true
-          if (user.role !== 'agent') return false
-          return isOwnObjectFor(req, doc)
-        },
+        read: ({ req: { user } }) => user?.role === 'admin',
       },
       admin: {
         description: 'Хранится нормализованно: только цифры и +',
@@ -841,14 +814,9 @@ export const Objects: CollectionConfig = {
       name: 'cadastralNumber',
       type: 'text',
       label: 'Кадастровый номер',
+      // Кадастровый номер — закрытые сведения: только администратор
       access: {
-        read: async ({ req, doc }) => {
-          const user = req.user as AccessReq['user'] | undefined
-          if (!user) return false
-          if (user.role === 'admin') return true
-          if (user.role !== 'agent') return false
-          return isOwnObjectFor(req, doc)
-        },
+        read: ({ req: { user } }) => user?.role === 'admin',
       },
       admin: {
         description: 'Например: 15:07:0030021:123',
@@ -1145,8 +1113,10 @@ export const Objects: CollectionConfig = {
       // комментарий, кто и когда его перенёс и в каком статусе он был до
       // этого (в него объект возвращает «Восстановить объект»). Заполняет
       // сервер (хук archiveTransitionHook выше), работа ведётся в разделе CRM
-      // «Архив объектов». Группу читают только сотрудники (агент и
-      // администратор): архив не показывается ни посетителям, ни клиентам.
+      // «Архив объектов». Причину, дату и историю читают сотрудники (агент и
+      // администратор), а внутренние комментарии (комментарий к переносу и
+      // комментарии истории) — только администратор; посетителям и клиентам
+      // группа не отдаётся вовсе.
       name: 'archive',
       type: 'group',
       label: 'Архив объекта (внутреннее)',
@@ -1168,7 +1138,14 @@ export const Objects: CollectionConfig = {
           label: 'Причина переноса',
           options: ARCHIVE_REASONS.map((r) => ({ label: r.label, value: r.value })),
         },
-        { name: 'comment', type: 'textarea', label: 'Комментарий к переносу' },
+        {
+          // Внутренний комментарий — только администратору (как и остальные
+          // внутренние комментарии объекта, см. ownerName/cadastralNumber)
+          name: 'comment',
+          type: 'textarea',
+          label: 'Комментарий к переносу',
+          access: { read: ({ req: { user } }) => user?.role === 'admin' },
+        },
         { name: 'archivedAt', type: 'date', label: 'Дата переноса' },
         { name: 'archivedBy', type: 'text', label: 'Кто перенёс' },
         {
@@ -1197,7 +1174,13 @@ export const Objects: CollectionConfig = {
               ],
             },
             { name: 'reason', type: 'text', label: 'Причина' },
-            { name: 'comment', type: 'textarea', label: 'Комментарий' },
+            {
+              // Внутренний комментарий истории — только администратору
+              name: 'comment',
+              type: 'textarea',
+              label: 'Комментарий',
+              access: { read: ({ req: { user } }) => user?.role === 'admin' },
+            },
             { name: 'by', type: 'text', label: 'Кто выполнил' },
           ],
         },
@@ -1245,7 +1228,14 @@ export const Objects: CollectionConfig = {
         { name: 'houseId', type: 'text', label: 'Номер дома в реестре' },
         { name: 'houseAddress', type: 'text', label: 'Адрес дома в реестре' },
         { name: 'registryUpdatedAt', type: 'date', label: 'Актуализировано в реестре' },
-        { name: 'plotCadastral', type: 'text', label: 'Кадастровый номер участка по реестру' },
+        {
+          // Кадастровые сведения — только администратору (в маршруте данных о
+          // доме снимок дополнительно чистится для остальных сотрудников)
+          name: 'plotCadastral',
+          type: 'text',
+          label: 'Кадастровый номер участка по реестру',
+          access: { read: ({ req: { user } }) => user?.role === 'admin' },
+        },
         { name: 'query', type: 'text', label: 'Поисковый запрос' },
         {
           name: 'matchedBy',
