@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useI18n } from '@/i18n/i18n-provider'
+import MailBody from './MailBody'
 
 const POLL_MS = 30_000
 
@@ -338,14 +339,16 @@ export default function Mailbox() {
                   </div>
                 )}
                 <div style={{ fontSize: 11, color: '#9b958a', marginBottom: 16 }}>{fmtDate(selected.receivedAt)}</div>
-                {/* overflowWrap: письма с длинными ссылками/токенами (Авито, рассылки)
-                    иначе уезжают за экран — рвём длинные слова по границе блока */}
+                {/* MailBody превращает [https://…] из текста письма в гиперссылки
+                    (см. MailBody.tsx). overflowWrap: письма с длинными ссылками/
+                    токенами (Авито, рассылки) иначе уезжают за экран — рвём
+                    длинные слова по границе блока */}
                 <div style={{
                   fontSize: 13, color: '#25241f', lineHeight: 1.7, whiteSpace: 'pre-wrap',
                   borderTop: '1px solid #eee9e1', paddingTop: 14,
                   overflowWrap: 'anywhere', wordBreak: 'break-word', maxWidth: '100%',
                 }}>
-                  {selected.text || t.crm.mailNoText}
+                  <MailBody text={selected.text} emptyLabel={t.crm.mailNoText} />
                 </div>
                 {attachments.length > 0 && (
                   <div style={{ borderTop: '1px solid #eee9e1', marginTop: 14, paddingTop: 12 }}>
