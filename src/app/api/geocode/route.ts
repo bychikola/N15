@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { rateLimited, clientIp } from '@/lib/rate-limit'
 
 // Серверный геокодер: ключ YANDEX_GEOCODER_API_KEY (без NEXT_PUBLIC_) не
 // попадает в браузер. Вызывается картой объекта (публичная страница) и
@@ -6,18 +7,12 @@ import { NextRequest, NextResponse } from 'next/server'
 // открытый эндпоинт (иначе чужой сайт жёг бы квоту геокодера).
 const RATE_WINDOW_MS = 60_000
 const RATE_MAX = 60
-const hits = new Map<string, number[]>()
 
 export async function POST(req: NextRequest) {
   try {
-    const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown'
-    const now = Date.now()
-    const arr = (hits.get(ip) || []).filter((ts) => now - ts < RATE_WINDOW_MS)
-    if (arr.length >= RATE_MAX) {
+    if (rateLimited(`geocode:${clientIp(req.headers)}`, RATE_MAX, RATE_WINDOW_MS)) {
       return NextResponse.json({ error: 'rate limit' }, { status: 429 })
     }
-    arr.push(now)
-    hits.set(ip, arr)
 
     const body = await req.json().catch(() => null)
     const address = String((body as { address?: string } | null)?.address || '').trim().slice(0, 300)

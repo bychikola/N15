@@ -15,7 +15,15 @@ export function rateLimited(key: string, max: number, windowMs: number): boolean
   return false
 }
 
-/** IP клиента за прокси (Caddy шлёт X-Forwarded-For) */
+/**
+ * IP клиента за прокси. Caddy ДОПИСЫВАЕТ реальный адрес в конец цепочки
+ * X-Forwarded-For, поэтому берём ПОСЛЕДНИЙ элемент: первый клиент может
+ * подделать сам (передав свой заголовок) — иначе лимит обходится сменой
+ * подставленного значения на каждый запрос.
+ */
 export function clientIp(headers: Headers): string {
-  return headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown'
+  const xff = headers.get('x-forwarded-for')
+  if (!xff) return 'unknown'
+  const parts = xff.split(',').map((s) => s.trim()).filter(Boolean)
+  return parts.length ? parts[parts.length - 1] : 'unknown'
 }
