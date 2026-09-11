@@ -484,36 +484,23 @@ html[data-theme='dark'] span.theme-icon-moon { display: block; }
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--n15-green-gold) 68%, transparent);
 }
 
-/* «Что вы ищете?» */
+/* «Подберите недвижимость» */
 .lp-objects { width: min(90%, 1280px); margin: 105px auto; }
-.lp-objects-heading { display: grid; grid-template-columns: 1.2fr .8fr; gap: 52px; align-items: end; margin-bottom: 44px; }
-.lp-objects-heading > p { margin: 0 0 7px; color: #777267; line-height: 1.8; max-width: 430px; }
-.lp-categories { border-top: 1px solid #d8d1c4; }
-.lp-categories > details { border-bottom: 1px solid #d8d1c4; scroll-margin-top: 25px; }
-.lp-categories > details > summary { min-height: 100px; display: grid; grid-template-columns: 48px 1fr 35px; align-items: center; gap: 16px; cursor: pointer; list-style: none; }
-.lp-categories > details > summary::-webkit-details-marker { display: none; }
-.lp-categories > details > summary > span { font-size: 9px; color: #a87c3f; letter-spacing: .15em; }
-.lp-categories h3 { margin: 0 0 8px; font-family: 'New Standard', Georgia, serif; font-weight: 400; font-size: clamp(22px, 2.6vw, 33px); color: inherit; }
-.lp-categories summary p { margin: 0; color: #777267; font-size: 11px; }
-.lp-categories summary i { justify-self: end; color: #a87c3f; font: normal 300 23px Arial; transition: transform .2s; }
-.lp-categories details[open] > summary i { transform: rotate(45deg); }
-.lp-filters { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; padding: 0 0 28px 64px; }
-.lp-filters > div { padding: 17px 0; background: transparent; }
-.lp-filters small { display: block; margin-bottom: 12px; color: #8b7656; text-transform: uppercase; letter-spacing: .12em; font-size: 9px; }
-.lp-chips { display: flex; flex-wrap: wrap; gap: 8px; }
-.lp-chips a { padding: 9px 11px; background: #F6F2E9; border: 1px solid #ddd4c5; font-size: 10px; color: #24231f; transition: .2s; }
-/* Чипы подбора — навигация по каталогу: при наведении (и фокусе) зелёные */
-.lp-chips a:hover, .lp-chips a:focus-visible { background: var(--n15-green); color: #F6F2E9; border-color: var(--n15-green); }
-.lp-land-filters { grid-template-columns: .75fr 1.25fr; }
-.lp-land-filters .lp-settlement-filter { grid-column: 1/-1; }
-.lp-settlement-groups { border-top: 1px solid #ddd4c5; display: flex; flex-direction: column; }
-.lp-settlement-groups details { border-bottom: 1px solid #ddd4c5; }
-.lp-settlement-groups summary { padding: 11px 4px; display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 10px; cursor: pointer; list-style: none; font-size: 12px; }
-.lp-settlement-groups summary::-webkit-details-marker { display: none; }
-.lp-settlement-groups summary i { color: #a87c3f; font: normal 15px Arial; }
-.lp-settlement-groups details[open] summary i { transform: rotate(45deg); }
-.lp-settlement-groups p { margin: 0; padding: 0 4px 12px; color: #777267; font-size: 9px; line-height: 1.9; }
-.lp-settlement-count { color: #8e7049; font-size: 9px; letter-spacing: .08em; }
+.lp-objects-heading { margin-bottom: 44px; }
+/* Сетка 2×2: светлые карточки категорий с тонкими рамками; каждая — ссылка
+   на каталог с фильтром по категории, стрелка справа указывает переход */
+.lp-categories { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.lp-category-card {
+  display: grid; grid-template-columns: 40px 1fr 35px; align-items: center; gap: 18px;
+  min-height: 132px; padding: 28px 26px; background: rgba(255, 255, 255, .58);
+  border: 1px solid #d8d1c4; transition: background .25s, border-color .25s;
+}
+.lp-category-card h3 { margin: 0; font-family: 'New Standard', Georgia, serif; font-weight: 400; font-size: clamp(22px, 2.4vw, 30px); color: inherit; transition: color .25s; }
+.lp-category-num { font-size: 9px; color: #a87c3f; letter-spacing: .15em; }
+.lp-category-card i { justify-self: end; color: #a87c3f; font: normal 300 23px Arial; transition: transform .25s, color .25s; }
+.lp-category-card:hover, .lp-category-card:focus-visible { background: #fff; border-color: #b9a98c; }
+.lp-category-card:hover h3, .lp-category-card:focus-visible h3 { color: var(--n15-green); }
+.lp-category-card:hover i, .lp-category-card:focus-visible i { color: var(--n15-green); transform: translateX(5px); }
 
 /* Избранные объекты — карточки и сетка «как в каталоге» (ObjectCard).
    Колонки (телефон 1 / планшет 2 / ноутбук 3 / компьютер 4) заданы
@@ -871,13 +858,12 @@ html[data-theme='dark'] .lp-featured .object-card { border: 0; }
   .lp-hero-copy { max-width: 360px; font-size: 15px; margin: 22px 0 26px; }
   .lp-hero-note { display: none; }
   .lp-objects { width: auto; margin: 72px 22px; }
-  .lp-objects-heading { grid-template-columns: 1fr; gap: 20px; }
+  .lp-objects-heading { margin-bottom: 28px; }
   .lp-objects-heading h2 { font-size: 43px; }
-  .lp-categories > details > summary { min-height: 90px; grid-template-columns: 32px 1fr 25px; gap: 10px; }
-  .lp-categories h3 { font-size: 25px; }
-  .lp-filters, .lp-land-filters { grid-template-columns: 1fr; padding: 0 0 24px; }
-  .lp-filters > div { padding: 16px 0; }
-  .lp-land-filters .lp-settlement-filter { grid-column: auto; }
+  /* На телефоне карточки категорий друг под другом, отступы компактнее */
+  .lp-categories { grid-template-columns: 1fr; gap: 12px; }
+  .lp-category-card { grid-template-columns: 28px 1fr 25px; gap: 10px; min-height: 92px; padding: 20px 18px; }
+  .lp-category-card h3 { font-size: 25px; }
   .lp-cards { width: auto; margin: 0 22px; }
   /* «Показать все →» на телефоне — под заголовком, слева (в одну строку
      с заголовком не помещается без сжатия) */
