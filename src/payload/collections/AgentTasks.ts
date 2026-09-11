@@ -2,8 +2,10 @@ import type { CollectionConfig } from 'payload'
 
 // Задачи для ИИ-агента: запрос → воркер на сервере правит код, коммитит,
 // пушит и деплоит. Чтение — у кого есть доступ к ИИ-агенту (agentAccess),
-// изменение/удаление — только администратор (отмена задачи идёт через
-// /api/agent/tasks/[id] с проверкой в маршруте).
+// но только СВОИ задачи: в журнале видны пути, куски кода и данные задачи —
+// чужие журналы не показываем. Администратор видит и отменяет все задачи.
+// Изменение/удаление — только администратор (отмена задачи идёт через
+// /api/agent/tasks/[id] с проверкой автор-или-админ в маршруте).
 export const AgentTasks: CollectionConfig = {
   slug: 'agent-tasks',
   labels: { singular: 'Задача агента', plural: 'Задачи агента' },
@@ -13,7 +15,11 @@ export const AgentTasks: CollectionConfig = {
     defaultColumns: ['status', 'prompt', 'createdAt'],
   },
   access: {
-    read: ({ req: { user } }) => Boolean(user?.agentAccess) || user?.role === 'admin',
+    read: ({ req: { user } }) => {
+      if (!user) return false
+      if (user.role === 'admin') return true
+      return user.agentAccess ? { user: { equals: user.id } } : false
+    },
     create: ({ req: { user } }) => user?.role === 'admin',
     update: ({ req: { user } }) => user?.role === 'admin',
     delete: ({ req: { user } }) => user?.role === 'admin',
