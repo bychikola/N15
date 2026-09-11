@@ -1,15 +1,22 @@
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { NextRequest, NextResponse } from 'next/server'
+import { canAccessCrm, getCrmUser } from '@/app/crm/auth'
 import { platformSearchLinks, PLATFORM_SPECS, type ObjectLike } from '@/lib/listing-check'
 
 /**
  * Поисковые ссылки площадок по адресу объекта — для ручной проверки
- * в блоке «Где размещён объект» карточки CRM. Адрес объекта публичен на
- * сайте, поэтому маршрут открытый (как сам REST объектов).
+ * в блоке «Где размещён объект» карточки CRM (единственный потребитель).
+ * Маршрут внутренний: адреса архивных/снятых объектов не должны утекать
+ * наружу, поэтому доступ — только команда Н15.
  */
 export async function GET(req: NextRequest) {
   try {
+    const user = await getCrmUser()
+    if (!user || !canAccessCrm(user)) {
+      return NextResponse.json({ error: 'Доступ только для команды Н15' }, { status: 403 })
+    }
+
     const id = Number(req.nextUrl.searchParams.get('id'))
     if (!Number.isFinite(id) || id <= 0) {
       return NextResponse.json({ error: 'Не указан объект' }, { status: 400 })

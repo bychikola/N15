@@ -24,6 +24,22 @@ const STATUSES: PlacementStatus[] = ['active', 'removed', 'needsCheck']
 
 const VALID_URL_RE = /^https?:\/\//
 
+/** ids профилей агентов, привязанных к пользователю (копия логики Objects.ts) */
+async function myAgentIds(payload: Awaited<ReturnType<typeof getPayload>>, userId: number | string): Promise<Set<number>> {
+  const ids = new Set<number>()
+  const { docs } = await payload.find({
+    collection: 'agents',
+    where: { user: { equals: userId } },
+    limit: 100,
+    depth: 0,
+    overrideAccess: true,
+  })
+  for (const agent of docs) {
+    if (typeof agent.id === 'number') ids.add(agent.id)
+  }
+  return ids
+}
+
 export async function POST(req: NextRequest) {
   try {
     const user = await getCrmUser()
@@ -58,6 +74,16 @@ export async function POST(req: NextRequest) {
     })
     if (!doc) {
       return NextResponse.json({ error: 'Объект не найден' }, { status: 404 })
+    }
+    // Агент управляет площадками только своих объектов (как в publish-manage
+    // и access.update коллекции Objects); администратор — любых
+    if (user.role !== 'admin') {
+      const mine = await myAgentIds(payload, user.id)
+      const agentRef = (doc as unknown as { agent?: unknown }).agent
+      const agentNum = typeof agentRef === 'number' ? agentRef : Number(agentRef)
+      if (!Number.isFinite(agentNum) || !mine.has(agentNum)) {
+        return NextResponse.json({ error: 'Это не ваш объект — управление доступно его агенту или администратору' }, { status: 403 })
+      }
     }
     const prev = ((doc as unknown as { placements?: unknown }).placements || {}) as PlacementsGroup
     // Момент действия агента — групповая дата «последней проверки» блока
