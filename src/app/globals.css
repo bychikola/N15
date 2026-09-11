@@ -608,38 +608,40 @@ html[data-theme='dark'] .lp-featured .object-card { border: 0; }
 .lp-mortgage-results b { text-align: right; font-family: 'New Standard', Georgia, serif; font-weight: 400; font-size: 11px; }
 .lp-mortgage-results > a { display: flex; justify-content: space-between; margin-top: 10px; padding: 10px 11px; background: #a87c3f; border-radius: 8px; color: #fff; font-size: 8px; text-transform: uppercase; letter-spacing: .09em; }
 
-/* Справочник (тёмная секция, как на живом прототипе) */
+/* Справочник (тёмная секция, как на живом прототипе). Блок — одна широкая
+   строка того же формата, что «Дизайн и ремонт под ключ»: название слева,
+   «+» справа; содержимое (регионы) по умолчанию свёрнуто */
 .lp-country { padding: 105px max(5vw, 28px); background: #292a26; color: #fff; }
-.lp-country-heading { width: min(100%, 1280px); margin: 0 auto 48px; display: grid; grid-template-columns: 1.2fr .8fr; gap: 52px; align-items: end; }
-.lp-country-heading > p { max-width: 440px; margin: 0 0 7px; color: rgba(255,255,255,.58); font-size: 13px; line-height: 1.8; }
-/* «Ближний пригород» и «Районы…» — единые заголовки-разделители:
-   одинаковый шрифт, размер, цвет, межбуквенный интервал и отступы;
-   без рамки-коробки — только тонкие горизонтальные линии */
-.lp-nearby, .lp-country-disclosure { border-top: 1px solid rgba(255,255,255,.2); width: min(100%, 1280px); margin: 0 auto; }
-.lp-country-disclosure { border-bottom: 1px solid rgba(255,255,255,.2); }
-.lp-nearby summary, .lp-country-disclosure > summary { cursor: pointer; color: #c5a46d; justify-content: space-between; align-items: center; padding: 21px 0; font-family: 'New Standard', Georgia, serif; font-weight: 400; font-size: 19px; list-style: none; display: flex; }
-.lp-nearby summary::-webkit-details-marker, .lp-country-disclosure > summary::-webkit-details-marker { display: none; }
-.lp-nearby summary i, .lp-country-disclosure > summary i { font: 22px Arial; transition: transform .2s; }
+.lp-country-row { width: min(100%, 1280px); margin: 0 auto; }
+/* «Ближний пригород» — заголовок-разделитель: тот же шрифт, размер, цвет,
+   межбуквенный интервал и отступы; без рамки-коробки — только линии */
+.lp-nearby { border-top: 1px solid rgba(255,255,255,.2); width: min(100%, 1280px); margin: 0 auto; }
+.lp-nearby summary { cursor: pointer; color: #c5a46d; justify-content: space-between; align-items: center; padding: 21px 0; font-family: 'New Standard', Georgia, serif; font-weight: 400; font-size: 19px; list-style: none; display: flex; }
+.lp-nearby summary::-webkit-details-marker { display: none; }
+.lp-nearby summary i { font: 22px Arial; transition: transform .2s; }
 /* Поворот «+» только у заголовка, который раскрыли (direct child): внутри
-   «Районов…» лежат свои раскрывающиеся списки (районы, категории СНТ/СНО/ДНТ) */
-.lp-nearby[open] > summary i, .lp-country-disclosure[open] > summary i { transform: rotate(45deg); }
+   лежат свои раскрывающиеся списки (регионы, категории СНТ/СНО/ДНТ) */
+.lp-nearby[open] > summary i { transform: rotate(45deg); }
 /* Открытый список пригородов — тонкая линия под шапкой, как у районов;
    сами пункты — чипы-ссылки (см. .lp-place-chip-nearby ниже) */
 .lp-nearby-places {
   border-top: 1px solid rgba(255,255,255,.15); margin: 0; padding: 18px 0 26px;
   display: flex; flex-wrap: wrap; gap: 8px;
 }
-.lp-districts { border-top: 1px solid rgba(255,255,255,.15); }
-.lp-districts details { border-bottom: 1px solid rgba(255,255,255,.2); }
-.lp-districts summary { cursor: pointer; grid-template-columns: 48px 1fr 30px; align-items: center; min-height: 67px; list-style: none; display: grid; }
-.lp-districts summary::-webkit-details-marker { display: none; }
-.lp-districts summary span { color: #c5a46d; letter-spacing: .15em; font-size: 9px; }
-.lp-districts summary strong { font-family: 'New Standard', Georgia, serif; font-weight: 400; font-size: 19px; }
-.lp-districts summary i { color: #c5a46d; justify-self: end; font: 300 22px Arial, sans-serif; transition: transform .2s; }
-/* Только сам раскрытый район (direct child): поворот «+» не должен задевать
-   «+» категорий СНТ/СНО/ДНТ внутри раскрытого района */
-.lp-districts > details[open] > summary i { transform: rotate(45deg); }
-.lp-districts details > p { color: rgba(255,255,255,.58); margin: 0; padding: 0 44px 26px 48px; font-size: 12px; line-height: 2; }
+/* Строки-аккордеоны внутри тёмных блоков: регионы «Межрегиональной
+   недвижимости» и направления «Юридических услуг» — номер, название, «+»
+   справа; раскрываются в города региона / короткое описание услуги */
+.lp-districts, .lp-legal-list { border-top: 1px solid rgba(255,255,255,.15); }
+.lp-districts details, .lp-legal-list details { border-bottom: 1px solid rgba(255,255,255,.2); }
+.lp-districts summary, .lp-legal-list summary { cursor: pointer; grid-template-columns: 48px 1fr 30px; align-items: center; min-height: 67px; list-style: none; display: grid; }
+.lp-districts summary::-webkit-details-marker, .lp-legal-list summary::-webkit-details-marker { display: none; }
+.lp-districts summary span, .lp-legal-list summary span { color: #c5a46d; letter-spacing: .15em; font-size: 9px; }
+.lp-districts summary strong, .lp-legal-list summary strong { font-family: 'New Standard', Georgia, serif; font-weight: 400; font-size: 19px; }
+.lp-districts summary i, .lp-legal-list summary i { color: #c5a46d; justify-self: end; font: 300 22px Arial, sans-serif; transition: transform .2s; }
+/* Только сама раскрытая строка (direct child): поворот «+» не должен задевать
+   «+» вложенных строк (города региона, категории СНТ/СНО/ДНТ) */
+.lp-districts > details[open] > summary i, .lp-legal-list > details[open] > summary i { transform: rotate(45deg); }
+.lp-districts details > p, .lp-legal-list details > p { color: rgba(255,255,255,.58); margin: 0; padding: 0 44px 26px 48px; font-size: 12px; line-height: 2; }
 /* Нас. пункты — чипы-кнопки: ведут на каталог с фильтром по району */
 .lp-places { margin: 0; padding: 0 44px 26px 48px; display: flex; flex-wrap: wrap; gap: 7px; }
 .lp-place-chip {
@@ -731,15 +733,39 @@ html[data-theme='dark'] .lp-featured .object-card { border: 0; }
 
 /* Услуги — аккордеон (как на живом прототипе) */
 .lp-services { width: min(90%, 1280px); margin: 96px auto; }
-.lp-design-disclosure { border-top: 1px solid #d8d1c4; border-bottom: 1px solid #d8d1c4; }
-.lp-design-disclosure > summary {
+/* Единый формат широкой строки у трёх блоков главной: «Дизайн и ремонт
+   под ключ», «Межрегиональная недвижимость» и «Юридические услуги» —
+   одна строка во всю ширину, название слева, «+» справа, по умолчанию
+   свёрнута. Геометрия, шрифт названия и место «+» общие; цвет линий
+   и «+» задаёт секция (светлая кремовая или тёмная) */
+.lp-design-disclosure,
+.lp-country-row,
+.lp-legal-row { border-top: 1px solid #d8d1c4; border-bottom: 1px solid #d8d1c4; }
+.lp-country-row,
+.lp-legal-row { border-color: rgba(255,255,255,.2); }
+.lp-design-disclosure > summary,
+.lp-country-row > summary,
+.lp-legal-row > summary {
   cursor: pointer; grid-template-columns: 1fr 32px; align-items: center; gap: 18px;
   min-height: 128px; padding: 12px clamp(2px, 1.6vw, 22px); list-style: none; display: grid;
 }
-.lp-design-disclosure > summary::-webkit-details-marker { display: none; }
-.lp-design-disclosure > summary h2 { letter-spacing: -.04em; margin: 0; font-family: 'New Standard', Georgia, serif; font-weight: 400; font-size: clamp(28px, 3.4vw, 46px); line-height: 1.06; color: inherit; }
-.lp-design-disclosure > summary i { color: #a87c3f; justify-self: end; font: 25px Arial, sans-serif; transition: transform .2s; }
-.lp-design-disclosure[open] > summary i { transform: rotate(45deg); }
+.lp-design-disclosure > summary::-webkit-details-marker,
+.lp-country-row > summary::-webkit-details-marker,
+.lp-legal-row > summary::-webkit-details-marker { display: none; }
+.lp-design-disclosure > summary h2,
+.lp-country-row > summary h2,
+.lp-legal-row > summary h2 { letter-spacing: -.04em; margin: 0; font-family: 'New Standard', Georgia, serif; font-weight: 400; font-size: clamp(28px, 3.4vw, 46px); line-height: 1.06; color: inherit; }
+.lp-design-disclosure > summary i,
+.lp-country-row > summary i,
+.lp-legal-row > summary i { justify-self: end; font: 25px Arial, sans-serif; transition: transform .2s; }
+.lp-design-disclosure > summary i { color: #a87c3f; }
+.lp-country-row > summary i, .lp-legal-row > summary i { color: #c5a46d; }
+.lp-design-disclosure[open] > summary i,
+.lp-country-row[open] > summary i,
+.lp-legal-row[open] > summary i { transform: rotate(45deg); }
+/* Подпись под раскрытой строкой тёмного блока — подсказка или подзаголовок
+   того же кегля, что подзаголовки прежних шапок блоков */
+.lp-row-lead { margin: 0 0 22px; padding: 0 clamp(2px, 1.6vw, 22px); color: rgba(255,255,255,.58); font-size: 13px; line-height: 1.8; }
 .lp-service-list { display: grid; grid-template-columns: repeat(2, 1fr); border-top: 1px solid #d8d1c4; margin-top: 18px; }
 .lp-service-list article { border-bottom: 1px solid #d8d1c4; border-right: 1px solid #d8d1c4; min-height: 172px; padding: 22px 26px; }
 .lp-service-list article:nth-child(2n) { border-right: 0; }
@@ -748,18 +774,10 @@ html[data-theme='dark'] .lp-featured .object-card { border: 0; }
 .lp-home-service h3 { margin: 16px 0 9px; font-family: 'New Standard', Georgia, serif; font-weight: 400; font-size: 20px; line-height: 1.2; color: inherit; }
 .lp-home-service p { margin: 0; color: #777267; font-size: 12px; line-height: 1.6; }
 
-/* Юр-блок (тёмная секция) */
+/* Юр-блок (тёмная секция): сам блок — одна широкая строка, внутри —
+   семь направлений строками (см. .lp-legal-list) */
 .lp-legal { padding: 96px max(5vw, 28px); background: #292a26; color: #fff; }
-.lp-legal-heading { width: min(100%, 1280px); margin: 0 auto 39px; display: grid; grid-template-columns: 1fr 1fr; gap: 20px 52px; align-items: end; }
-.lp-legal-heading .lp-eyebrow-light { grid-column: 1/-1; margin-bottom: 0; }
-.lp-legal-heading > p:last-child { margin: 0 0 7px; color: rgba(255,255,255,.55); line-height: 1.8; max-width: 420px; }
-/* 4 направления: «Ипотечный брокер» и «Независимый оценщик» переехали
-   в общий раздел «Услуги», поэтому сетка из 3 колонок становится 4 */
-.lp-legal-grid { width: min(100%, 1280px); margin: 0 auto; display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid rgba(255,255,255,.17); border-left: 1px solid rgba(255,255,255,.17); }
-.lp-legal-grid article { min-height: 194px; padding: 22px; border-right: 1px solid rgba(255,255,255,.17); border-bottom: 1px solid rgba(255,255,255,.17); }
-.lp-legal-grid span { color: #d7ba8b; font-size: 9px; letter-spacing: .15em; }
-.lp-legal-grid h3 { margin: 37px 0 10px; font-family: 'New Standard', Georgia, serif; font-weight: 400; font-size: 19px; color: inherit; }
-.lp-legal-grid p { margin: 0; color: rgba(255,255,255,.52); font-size: 11px; line-height: 1.7; }
+.lp-legal-row { width: min(100%, 1280px); margin: 0 auto; }
 .lp-legal-action { width: min(100%, 1280px); margin: 21px auto 0; padding: 16px 0; display: flex; justify-content: space-between; color: #d7ba8b; border-bottom: 1px solid rgba(255,255,255,.17); font-size: 10px; text-transform: uppercase; letter-spacing: .14em; }
 
 /* About — кремовая секция (компактная) */
@@ -845,11 +863,6 @@ html[data-theme='dark'] .lp-featured .object-card { border: 0; }
 .lp-footer .lp-footer-phone:hover { color: #EFE3C9; }
 .lp-footer .lp-team-login:hover { color: var(--n15-green-gold); }
 
-/* Средние экраны: 4 направления юр-блока в 2×2, пока в один ряд тесно */
-@media (min-width: 821px) and (max-width: 1100px) {
-  .lp-legal-grid { grid-template-columns: repeat(2, 1fr); }
-}
-
 /* Мобильная адаптация */
 @media (max-width: 820px) {
   .lp-hero { min-height: 585px; align-items: flex-end; padding-bottom: 70px; }
@@ -878,13 +891,14 @@ html[data-theme='dark'] .lp-featured .object-card { border: 0; }
   .lp-mortgage-panel { grid-template-columns: 1fr; padding: 14px; }
   .lp-services { width: auto; margin: 72px 22px; }
   .lp-country { padding: 72px 22px; }
-  .lp-country-heading { grid-template-columns: 1fr; gap: 18px; }
   .lp-service-list { grid-template-columns: 1fr; }
   .lp-service-list article { border-right: 0; min-height: 0; padding: 22px 24px; }
   .lp-legal { padding: 72px 22px; }
-  .lp-legal-heading { grid-template-columns: 1fr; gap: 18px; }
-  .lp-legal-grid { grid-template-columns: 1fr; }
-  .lp-legal-grid article { min-height: 0; }
+  /* Подпись под раскрытой строкой блока — ближе к списку пунктов */
+  .lp-row-lead { margin-bottom: 16px; }
+  /* Описания направлений юр-блока на телефоне — во всю ширину строки,
+     без правого отступа (тексты длиннее, чем пометки регионов) */
+  .lp-legal-list details > p { padding: 0 0 20px 48px; }
   .lp-about { grid-template-columns: 1fr; min-height: 0; }
   /* Фото Фатимы на телефоне: задаём высоту (иначе ряд схлопывается),
      чтобы образ был виден и карточку можно было открыть нажатием */

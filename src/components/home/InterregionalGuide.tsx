@@ -17,32 +17,37 @@ interface Props {
 /** Сколько предложений города показывается в раскрытой строке (остальные — в каталоге) */
 const OBJECTS_PER_CITY = 5
 
+// Имена групп раскрывающихся строк (атрибут name у <details>): браузер сам
+// закрывает прежний пункт группы, когда открывают новый — одновременно
+// открыт только один пункт. У блока «Другие регионы России» своя строка,
+// она ходит в одну группу с регионами справочника
+const BLOCK_ROW_GROUP = 'n15-landing-row'
+const REGION_ROW_GROUP = 'n15-country-region'
+
 const groupVisible = (group: InterregionalGroup, objectsByCity: ReadonlyMap<string, readonly InterregionalObject[]>) =>
   group.cities.length > 0 || (group.extra ?? []).some((city) => objectsByCity.has(city))
 
-// Блок «Межрегиональная недвижимость» на главной: строки-регионы (01-04)
-// раскрываются в города — те же разделители и стрелки, что у районов
-// республики в прежнем справочнике. Каждый город — строка: название,
-// счётчик объектов и «+»; строка раскрывается в актуальные предложения Н15
-// в этом городе (ссылки на карточки объектов) и на каталог города
-// (/catalog?city=). Ключевые города видны всегда; в городе без объектов
-// строка помечается «Объектов Н15 пока нет» — показываем его в справочнике,
-// не выдумывая предложений.
+// Блок «Межрегиональная недвижимость» на главной — одна широкая строка того же
+// формата, что «Дизайн и ремонт под ключ»: название слева, «+» справа, по
+// умолчанию свёрнута. Внутри — регионы справочника (01-04) и «Другие регионы
+// России» (05): строки раскрываются в города и их актуальные предложения.
+// Каждый город — строка: название, счётчик объектов и «+»; строка раскрывается
+// в актуальные предложения Н15 в этом городе (ссылки на карточки объектов)
+// и на каталог города (/catalog?city=). Ключевые города видны всегда; в городе
+// без объектов строка помечается «Объектов Н15 пока нет» — показываем его
+// в справочнике, не выдумывая предложений.
 export default function InterregionalGuide({ t, lang, objectsByCity }: Props) {
   return (
     <section className="lp-country" id="country">
-      <div className="lp-country-heading">
-        <div>
-          <p className="lp-eyebrow lp-eyebrow-light">{t.landing.countryEyebrow}</p>
-          <h2 className="lp-h2">{t.landing.countryTitle}</h2>
-        </div>
-        <p>{t.landing.countrySubtitle}</p>
-      </div>
-
-      <div className="lp-country-disclosure">
+      <details className="lp-country-row" name={BLOCK_ROW_GROUP}>
+        <summary>
+          <h2>{t.landing.countryTitle}</h2>
+          <i>+</i>
+        </summary>
+        <p className="lp-row-lead">{t.landing.countrySubtitle}</p>
         <div className="lp-districts">
           {INTERREGIONAL_REGIONS.map((region, index) => (
-            <details key={region.title}>
+            <details key={region.title} name={REGION_ROW_GROUP}>
               <summary>
                 <span>{String(index + 1).padStart(2, '0')}</span>
                 <strong>{region.title}</strong>
@@ -79,8 +84,23 @@ export default function InterregionalGuide({ t, lang, objectsByCity }: Props) {
               )}
             </details>
           ))}
+          {/* Пятая строка блока: регионов справочника у неё нет — раскрывается
+              предложением подобрать недвижимость по запросу (см. заявку) */}
+          <details name={REGION_ROW_GROUP}>
+            <summary>
+              <span>{String(INTERREGIONAL_REGIONS.length + 1).padStart(2, '0')}</span>
+              <strong>{t.landing.countryOtherTitle}</strong>
+              <i>+</i>
+            </summary>
+            <p>
+              {t.landing.countryOtherText}{' '}
+              <Link className="lp-city-cta" href={`/${lang}/contacts`}>
+                {t.landing.countryCityLead}
+              </Link>
+            </p>
+          </details>
         </div>
-      </div>
+      </details>
     </section>
   )
 }

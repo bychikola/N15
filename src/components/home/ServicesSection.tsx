@@ -1,9 +1,14 @@
 import type { Dict } from '@/i18n/dictionaries'
 
+// Имя группы раскрывающихся строк (атрибут name у <details>): блок ходит
+// в одну группу с «Межрегиональной недвижимостью» и «Юридическими услугами» —
+// браузер закрывает прежний пункт, когда открывают новый
+const BLOCK_ROW_GROUP = 'n15-landing-row'
+
 export default function ServicesSection({ t }: { t: Dict }) {
   return (
     <section className="lp-section lp-services" id="design">
-      <details className="lp-design-disclosure">
+      <details className="lp-design-disclosure" name={BLOCK_ROW_GROUP}>
         <summary>
           <h2>
             {t.landing.servicesTitle1}
