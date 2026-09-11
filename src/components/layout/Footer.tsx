@@ -24,7 +24,9 @@ export const Footer: FC = () => {
   ]
 
   return (
-    <footer className="w-full bg-[var(--n15-charcoal)] border-t border-[var(--n15-gold)]/10">
+    // n15-footer — глубокий зелёный футера (см. globals.css): внутри него
+    // прежние «тёмные» токены читаются как кремовый с золотом на зелёном
+    <footer className="n15-footer w-full bg-[var(--n15-charcoal)] border-t border-[var(--n15-gold)]/10">
       {/* Всё содержимое живёт в общем контейнере сайта: декоративная линия,
           блоки и нижняя строка выровнены по одной сетке и не выходят за
           ширину экрана */}

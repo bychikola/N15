@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type FC } from 'react'
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import { useI18n } from '@/i18n/i18n-provider'
 import { LangSwitcher } from '@/i18n/lang-switcher'
 import { ThemeSwitcher } from '@/components/ui/ThemeSwitcher'
@@ -103,6 +104,8 @@ export const Header: FC = () => {
   // направлений (ширина панели после переключения ещё не отрисована)
   const servicesPanelRef = useRef<HTMLDivElement>(null)
   const { lang, t } = useI18n()
+  // Текущий адрес — для подсветки активного пункта меню
+  const pathname = usePathname()
 
   // Раздел «Недвижимость»: общий каталог + направления. Каждый пункт ведёт
   // на свою страницу: каталог с фильтром (Покупка/Аренда), направление
@@ -198,6 +201,25 @@ export const Header: FC = () => {
     { href: `/${lang}/contacts`, label: t.nav.contacts },
   ]
 
+  // Активный пункт меню — раздел текущей страницы. В адресах пунктов могут
+  // быть параметры (?type=sale) — сравниваем только путь. Активный пункт
+  // подсвечен кремовым текстом и тонкой золотой линией: на зелёной шапке
+  // заливка и зелёный акцент не читаются, поэтому акцент здесь золотой.
+  const isActivePath = (href: string) => {
+    const path = href.split('?')[0]
+    return pathname === path || pathname.startsWith(`${path}/`)
+  }
+  const navItemClass = (active: boolean) =>
+    `relative text-sm tracking-wider uppercase transition-colors duration-300 ${
+      active
+        ? 'text-[var(--n15-white)] after:absolute after:left-0 after:right-0 after:-bottom-1 after:h-px after:bg-[var(--n15-green-gold)]'
+        : 'text-[var(--n15-silver)] hover:text-[var(--n15-gold)]'
+    }`
+  // «Недвижимость» активна на страницах каталога, продажи и направлений,
+  // «Услуги» — на страницах услуг: подсвечиваем и раскрытый раздел.
+  const realtyActive = realtyLinks.some((link) => isActivePath(link.href))
+  const servicesActive = isActivePath(`/${lang}/services`)
+
   // Панели «Недвижимость» и «Услуги» не должны быть открыты одновременно.
   // При открытии «Услуг» показываем только первый уровень: выбранное ранее
   // направление сбрасываем — подпункты не раскрываются «сразу».
@@ -283,7 +305,9 @@ export const Header: FC = () => {
   }, [servicesOpen, realtyOpen])
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 bg-[var(--n15-black)]/80 backdrop-blur-md border-b border-[var(--n15-gold)]/10">
+    // n15-header — глубокий зелёный шапки (см. globals.css): внутри неё
+    // кремовый текст и светлое золото вместо тёмного фирменного золота
+    <header className="n15-header fixed top-0 left-0 right-0 z-50 bg-[var(--n15-black)]/80 backdrop-blur-md border-b border-[var(--n15-gold)]/10">
       <div className="n15-container flex items-center justify-between h-20">
         {/* Logo */}
         <Link href={`/${lang}`} className="flex items-center group" aria-label="Н15 — на главную">
@@ -310,7 +334,7 @@ export const Header: FC = () => {
               onClick={() => toggleRealty()}
               aria-expanded={realtyOpen}
               aria-haspopup="true"
-              className="flex items-center gap-2 text-sm tracking-wider uppercase text-[var(--n15-silver)] hover:text-[var(--n15-gold)] transition-colors duration-300 cursor-pointer"
+              className={`flex items-center gap-2 cursor-pointer ${navItemClass(realtyOpen || realtyActive)}`}
               style={{ background: 'none', border: 0, cursor: 'pointer' }}
             >
               {t.nav.realty}
@@ -322,7 +346,7 @@ export const Header: FC = () => {
             </button>
             {realtyOpen && (
               <div className="absolute top-full left-0 pt-2">
-                <div className="min-w-56 py-2 bg-[var(--n15-black)] border border-[var(--n15-gold)]/15 shadow-xl">
+                <div className="n15-menu-panel min-w-56 py-2 bg-[var(--n15-black)] border border-[var(--n15-gold)]/15 shadow-xl">
                   {realtyLinks.map((link) => (
                     <Link
                       key={link.href}
@@ -354,7 +378,7 @@ export const Header: FC = () => {
               onClick={() => toggleServices()}
               aria-expanded={servicesOpen}
               aria-haspopup="true"
-              className="flex items-center gap-2 text-sm tracking-wider uppercase text-[var(--n15-silver)] hover:text-[var(--n15-gold)] transition-colors duration-300 cursor-pointer"
+              className={`flex items-center gap-2 cursor-pointer ${navItemClass(servicesOpen || servicesActive)}`}
               style={{ background: 'none', border: 0, cursor: 'pointer' }}
             >
               {t.nav.services}
@@ -369,7 +393,7 @@ export const Header: FC = () => {
                 ref={servicesPanelRef}
                 className={`absolute top-full pt-2 ${servicesAlignRight ? 'right-0' : 'left-0'}`}
               >
-                <div className="flex flex-col bg-[var(--n15-black)] border border-[var(--n15-gold)]/15 shadow-xl">
+                <div className="n15-menu-panel flex flex-col bg-[var(--n15-black)] border border-[var(--n15-gold)]/15 shadow-xl">
                   <div className="flex">
                     {/* Первый уровень: направления — кнопки */}
                     <div className="flex flex-col py-2 w-72">
@@ -433,7 +457,7 @@ export const Header: FC = () => {
             <Link
               key={link.href}
               href={link.href}
-              className="text-sm tracking-wider text-[var(--n15-silver)] hover:text-[var(--n15-gold)] transition-colors duration-300 uppercase"
+              className={navItemClass(isActivePath(link.href))}
             >
               {link.label}
             </Link>
@@ -452,7 +476,7 @@ export const Header: FC = () => {
               href={SITE_PHONE_TEL}
               aria-label={t.nav.callUs}
               title={t.nav.callUs}
-              className="inline-flex items-center gap-2 px-2.5 py-2.5 xl:px-4 xl:py-2 text-sm tracking-wider uppercase border border-[var(--n15-gold)]/30 text-[var(--n15-gold)] hover:bg-[var(--n15-gold)]/8 transition-all duration-300"
+              className="n15-cta-green inline-flex items-center gap-2 px-2.5 py-2.5 xl:px-4 xl:py-2 text-sm tracking-wider uppercase border border-[var(--n15-gold)]/40 transition-all duration-300"
             >
               {phoneIcon}
               <span className="hidden xl:inline">{t.nav.callUs}</span>
@@ -533,7 +557,7 @@ export const Header: FC = () => {
                 type="button"
                 onClick={() => toggleRealty()}
                 aria-expanded={realtyOpen}
-                className="flex items-center justify-between w-full text-sm tracking-wider uppercase text-[var(--n15-silver)] py-2 cursor-pointer"
+                className={`flex items-center justify-between w-full py-2 cursor-pointer ${navItemClass(realtyOpen || realtyActive)}`}
                 style={{ background: 'none', border: 0, cursor: 'pointer' }}
               >
                 {t.nav.realty}
@@ -571,7 +595,7 @@ export const Header: FC = () => {
                 type="button"
                 onClick={() => toggleServices()}
                 aria-expanded={servicesOpen}
-                className="flex items-center justify-between w-full text-sm tracking-wider uppercase text-[var(--n15-silver)] py-2 cursor-pointer"
+                className={`flex items-center justify-between w-full py-2 cursor-pointer ${navItemClass(servicesOpen || servicesActive)}`}
                 style={{ background: 'none', border: 0, cursor: 'pointer' }}
               >
                 {t.nav.services}
@@ -643,7 +667,7 @@ export const Header: FC = () => {
               <Link
                 key={link.href}
                 href={link.href}
-                className="text-sm tracking-wider uppercase text-[var(--n15-silver)] hover:text-[var(--n15-gold)] transition-colors py-2"
+                className={`py-2 ${navItemClass(isActivePath(link.href))}`}
                 onClick={() => setIsOpen(false)}
               >
                 {link.label}
@@ -653,7 +677,7 @@ export const Header: FC = () => {
                 tel:-ссылка на общий номер; текст номера не показывается */}
             <a
               href={SITE_PHONE_TEL}
-              className="flex items-center justify-center gap-2 px-5 py-3 text-sm tracking-wider uppercase border border-[var(--n15-gold)]/30 text-[var(--n15-gold)] hover:bg-[var(--n15-gold)]/8 transition-colors"
+              className="n15-cta-green flex items-center justify-center gap-2 px-5 py-3 text-sm tracking-wider uppercase border border-[var(--n15-gold)]/40 transition-colors"
               onClick={() => setIsOpen(false)}
             >
               {phoneIcon}

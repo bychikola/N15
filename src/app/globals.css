@@ -34,6 +34,20 @@
   --n15-burgundy:    #722F37;
   --n15-burgundy-light: #8E3A44;
 
+  /* Глубокий зелёный — дополнительный фирменный цвет (вдохновлён интерьером
+     офиса). Кремовую основу не заменяет: зелёными остаются шапка, футер,
+     кнопки-CTA, активные пункты и тонкие линии-акценты, а контент — светлым. */
+  --n15-green:        #1E4032;  /* основной глубокий зелёный */
+  --n15-green-light:  #2E5A46;  /* наведение, вторичные зелёные поверхности */
+  --n15-green-dark:   #152C22;  /* выпадающие панели меню, мобильное меню */
+
+  /* Текст и золото на зелёных поверхностях — одинаковы в обеих темах:
+     тёплый кремовый и светлое золото читаются на глубоком зелёном,
+     а тёмный фирменный золотой на нём терялся бы. */
+  --n15-on-green:       #F4F0E5;
+  --n15-on-green-muted: #B9C7BA;
+  --n15-green-gold:     #D7BA8B;
+
   /* Semantic */
   --background: var(--n15-black);
   --foreground: var(--n15-silver);
@@ -56,8 +70,8 @@
   /* Hybrid catalog tokens */
   --card-gradient: linear-gradient(to top, rgba(176, 141, 62, .68), rgba(176, 141, 62, 0) 60%);
   --card-price-fg: #F6F2E9;
-  --pill-bg: rgba(246, 242, 233, .92);
-  --pill-fg: #722F37;
+  --pill-bg: rgba(30, 64, 50, .92);   /* бейдж «Продажа»/«Аренда» на фото — зелёный */
+  --pill-fg: #F4F0E5;
   --search-bg: rgba(255, 255, 255, .6);
   --search-border: rgba(176, 141, 62, .35);
 
@@ -84,6 +98,12 @@ html[data-theme='dark'] {
   --n15-burgundy:    #722F37;
   --n15-burgundy-light: #8E3A44;
 
+  /* Зелёный в тёмной теме чуть светлее — глубокий зелёный на почти чёрном
+     фоне сливался бы с ним */
+  --n15-green:        #234A38;
+  --n15-green-light:  #2F6049;
+  --n15-green-dark:   #172F24;
+
   --background: var(--n15-black);
   --foreground: var(--n15-silver);
   --heading: var(--n15-white);
@@ -100,8 +120,8 @@ html[data-theme='dark'] {
   /* Hybrid catalog tokens */
   --card-gradient: linear-gradient(to top, rgba(200, 164, 78, .68), rgba(200, 164, 78, 0) 60%);
   --card-price-fg: #F5F5F7;
-  --pill-bg: rgba(245, 245, 247, .92);
-  --pill-fg: #722F37;
+  --pill-bg: rgba(35, 74, 56, .92);
+  --pill-fg: #F4F0E5;
   --search-bg: rgba(26, 26, 30, .6);
   --search-border: rgba(200, 164, 78, .35);
 
@@ -186,6 +206,58 @@ a:hover {
 .btn-ghost:hover {
   color: var(--n15-white) !important;
   background-color: var(--n15-charcoal) !important;
+}
+
+/* ── Зелёные поверхности: шапка и футер ────────── */
+/* Шапка и футер — единственные крупные зелёные блоки сайта (кремовая
+   основа не меняется). Внутри них переопределяем прежние «тёмные» токены,
+   поэтому разметка компонентов остаётся прежней, а цвета читаются как
+   кремовый с золотом на глубоком зелёном. Переопределение стоит прямо на
+   элементе, поэтому наследуемые значения из :root и тёмной темы его не
+   перебивают. */
+.n15-header,
+.n15-footer {
+  --n15-black:      var(--n15-green);        /* фон шапки */
+  --n15-charcoal:   var(--n15-green-dark);   /* панели меню, мобильное меню */
+  --n15-white:      var(--n15-on-green);     /* активный пункт, заголовки */
+  --n15-silver:     #EAE4D6;                 /* ссылки меню — кремовый */
+  --n15-muted:      var(--n15-on-green-muted);
+  --n15-gold:       var(--n15-green-gold);   /* золото на зелёном — светлое */
+  --n15-gold-light: #EBD9B4;
+  --n15-gold-dim:   #C0A574;
+  --on-accent:      #16301F;                 /* тёмно-зелёный на золоте */
+}
+
+/* Тонкая золотая линия отделяет зелёную шапку и футер от кремового контента */
+.n15-header {
+  border-bottom-color: color-mix(in srgb, var(--n15-green-gold) 30%, transparent);
+}
+/* Футер — тот же глубокий зелёный, что у шапки и лендинг-футера */
+.n15-footer {
+  --n15-charcoal: var(--n15-green);
+  --n15-black:    var(--n15-green-dark);
+  border-top-color: color-mix(in srgb, var(--n15-green-gold) 30%, transparent);
+}
+
+/* Выпадающие панели меню — на тон темнее шапки, чтобы читалась граница */
+.n15-header .n15-menu-panel {
+  background: var(--n15-green-dark);
+}
+/* Логотип — золотисто-коричневый: на зелёном чуть светлее, иначе темнеет */
+.n15-header img[alt='Н15'],
+.n15-footer img[alt='Н15'] {
+  filter: brightness(1.32);
+}
+
+/* Кнопка-CTA на зелёной поверхности (шапка): светлее фона, чтобы читалась;
+   границу держит тонкая золотая линия, текст — кремовый */
+.n15-cta-green {
+  background: var(--n15-green-light);
+  color: var(--n15-on-green);
+}
+.n15-cta-green:hover {
+  background: color-mix(in srgb, var(--n15-green-light) 84%, var(--n15-on-green));
+  color: var(--n15-on-green);
 }
 
 /* ── N15 Utility Classes ───────────────────────── */
@@ -397,13 +469,20 @@ html[data-theme='dark'] span.theme-icon-moon { display: block; }
 .lp-hero-actions { display: flex; flex-wrap: wrap; gap: 14px; }
 .lp-hero-note { position: absolute; z-index: 2; right: 5.2vw; bottom: 33px; margin: 0; text-transform: uppercase; letter-spacing: .28em; font-size: 9px; color: rgba(255,255,255,.7); }
 
-/* Кнопки */
+/* Кнопки-CTA («Выбрать объект», «Ваша реклама», «Позвонить» в контактах) —
+   глубокий зелёный с кремовой надписью; на тёмном фото и тёмной секции
+   кнопку отделяет тонкая золотая линия */
 .lp-button {
   display: inline-flex; align-items: center; justify-content: space-between; gap: 28px;
-  min-width: 195px; padding: 16px 19px; background: #a87c3f; color: #fff;
-  font-size: 11px; text-transform: uppercase; letter-spacing: .13em; transition: background .2s;
+  min-width: 195px; padding: 16px 19px; background: var(--n15-green); color: #F6F2E9;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--n15-green-gold) 42%, transparent);
+  font-size: 11px; text-transform: uppercase; letter-spacing: .13em;
+  transition: background .2s, box-shadow .2s;
 }
-.lp-button:hover { background: #8f672f; }
+.lp-button:hover {
+  background: var(--n15-green-light);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--n15-green-gold) 68%, transparent);
+}
 
 /* «Что вы ищете?» */
 .lp-objects { width: min(90%, 1280px); margin: 105px auto; }
@@ -423,7 +502,8 @@ html[data-theme='dark'] span.theme-icon-moon { display: block; }
 .lp-filters small { display: block; margin-bottom: 12px; color: #8b7656; text-transform: uppercase; letter-spacing: .12em; font-size: 9px; }
 .lp-chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .lp-chips a { padding: 9px 11px; background: #F6F2E9; border: 1px solid #ddd4c5; font-size: 10px; color: #24231f; transition: .2s; }
-.lp-chips a:hover { background: #24231f; color: #fff; border-color: #24231f; }
+/* Чипы подбора — навигация по каталогу: при наведении (и фокусе) зелёные */
+.lp-chips a:hover, .lp-chips a:focus-visible { background: var(--n15-green); color: #F6F2E9; border-color: var(--n15-green); }
 .lp-land-filters { grid-template-columns: .75fr 1.25fr; }
 .lp-land-filters .lp-settlement-filter { grid-column: 1/-1; }
 .lp-settlement-groups { border-top: 1px solid #ddd4c5; display: flex; flex-direction: column; }
@@ -451,8 +531,8 @@ html[data-theme='dark'] span.theme-icon-moon { display: block; }
   --n15-gold-light: #C8A44E;
   --card-price-fg: #F6F2E9;
   --card-gradient: linear-gradient(to top, rgba(176, 141, 62, .68), rgba(176, 141, 62, 0) 60%);
-  --pill-bg: rgba(246, 242, 233, .92);
-  --pill-fg: #722F37;
+  --pill-bg: rgba(30, 64, 50, .92);
+  --pill-fg: #F4F0E5;
 }
 /* В лендинге секция всегда светлая — золотая рамка карточек «тёмной темы» не нужна */
 html[data-theme='dark'] .lp-featured .object-card { border: 0; }
@@ -462,12 +542,12 @@ html[data-theme='dark'] .lp-featured .object-card { border: 0; }
    кнопка уходит под заголовок (см. мобильный медиа-запрос ниже). */
 .lp-featured-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 14px 44px; width: min(90%, 1280px); margin: 0 auto 23px; }
 .lp-featured-title { margin: 0; }
-/* Контурная золотая кнопка; при наведении заливается, как .lp-button */
-.lp-featured-all { display: inline-flex; align-items: center; gap: 9px; padding: 12px 17px; border: 1px solid #a87c3f; color: #a87c3f; font-size: 11px; text-transform: uppercase; letter-spacing: .13em; white-space: nowrap; transition: background .2s, color .2s; }
-.lp-featured-all:hover, .lp-featured-all:focus-visible { background: #a87c3f; color: #fff; }
+/* Контурная зелёная кнопка; при наведении заливается, как .lp-button */
+.lp-featured-all { display: inline-flex; align-items: center; gap: 9px; padding: 12px 17px; border: 1px solid var(--n15-green); color: var(--n15-green); font-size: 11px; text-transform: uppercase; letter-spacing: .13em; white-space: nowrap; transition: background .2s, color .2s; }
+.lp-featured-all:hover, .lp-featured-all:focus-visible { background: var(--n15-green); color: #F6F2E9; }
 .lp-featured-filter { display: flex; flex-wrap: wrap; align-items: baseline; gap: 16px; margin-top: 12px; }
 .lp-featured-filter-summary { font-size: 12px; color: #777267; }
-.lp-featured-filter-reset { font-size: 10px; text-transform: uppercase; letter-spacing: .13em; color: #a87c3f; text-decoration: underline; }
+.lp-featured-filter-reset { font-size: 10px; text-transform: uppercase; letter-spacing: .13em; color: var(--n15-green); text-decoration: underline; }
 .lp-cards { width: min(90%, 1280px); margin: 0 auto; }
 /* Подбор по нас. пункту пуст — сообщение вместо карточек-заглушек */
 .lp-featured-empty { display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center; }
@@ -536,7 +616,8 @@ html[data-theme='dark'] .lp-featured .object-card { border: 0; }
 .lp-mortgage-results > div { display: flex; justify-content: space-between; align-items: center; gap: 11px; padding: 7px 0; border-bottom: 1px solid #ebe5db; }
 .lp-mortgage-results > div:first-child { padding-top: 0; display: block; }
 .lp-mortgage-results span { color: #817b70; font-size: 8px; text-transform: uppercase; letter-spacing: .08em; }
-.lp-mortgage-results strong { display: block; margin-top: 5px; font-family: 'New Standard', Georgia, serif; font-weight: 400; font-size: 21px; color: #a87c3f; }
+/* Главная цифра расчёта — важный элемент, поэтому зелёная, а не золотая */
+.lp-mortgage-results strong { display: block; margin-top: 5px; font-family: 'New Standard', Georgia, serif; font-weight: 400; font-size: 21px; color: var(--n15-green); }
 .lp-mortgage-results b { text-align: right; font-family: 'New Standard', Georgia, serif; font-weight: 400; font-size: 11px; }
 .lp-mortgage-results > a { display: flex; justify-content: space-between; margin-top: 10px; padding: 10px 11px; background: #a87c3f; border-radius: 8px; color: #fff; font-size: 8px; text-transform: uppercase; letter-spacing: .09em; }
 
@@ -745,10 +826,11 @@ html[data-theme='dark'] .lp-featured .object-card { border: 0; }
 .lp-about-copy { flex-direction: column; justify-content: center; padding: 52px max(4.4vw, 35px); display: flex; }
 .lp-about-copy h2 { margin: 0 0 22px; color: inherit; }
 .lp-about-copy > p { color: #777267; line-height: 1.8; max-width: 550px; }
-.lp-signature { border-top: 1px solid #d7cfbf; border-bottom: 1px solid #d7cfbf; margin: 24px 0 5px; padding: 17px 0; }
+/* Тонкие зелёные линии вокруг девиза и направлений */
+.lp-signature { border-top: 1px solid color-mix(in srgb, var(--n15-green) 28%, transparent); border-bottom: 1px solid color-mix(in srgb, var(--n15-green) 28%, transparent); margin: 24px 0 5px; padding: 17px 0; }
 .lp-signature span { color: #a87c3f; text-transform: uppercase; letter-spacing: .18em; margin-bottom: 8px; font-size: 9px; display: block; }
 .lp-signature p { color: #24231f !important; margin: 0 !important; font-family: 'New Standard', Georgia, serif; font-weight: 400; font-size: 16px; line-height: 1.5; }
-.lp-directions { border-top: 1px solid #d7cfbf; border-bottom: 1px solid #d7cfbf; margin-top: 25px; }
+.lp-directions { border-top: 1px solid color-mix(in srgb, var(--n15-green) 28%, transparent); border-bottom: 1px solid color-mix(in srgb, var(--n15-green) 28%, transparent); margin-top: 25px; }
 .lp-directions summary { padding: 16px 0; display: flex; justify-content: space-between; cursor: pointer; list-style: none; font-family: 'New Standard', Georgia, serif; font-size: 15px; }
 .lp-directions summary::-webkit-details-marker { display: none; }
 .lp-directions i { font: normal 17px Arial; color: #a87c3f; }
@@ -763,14 +845,18 @@ html[data-theme='dark'] .lp-featured .object-card { border: 0; }
 .lp-contact-copy small { color: rgba(255,255,255,.45); text-transform: uppercase; letter-spacing: .15em; margin-top: 33px; display: block; }
 .lp-contact .lp-eyebrow { color: #d7ba8b; }
 
-/* Футер лендинга — тёмный (как на живом прототипе) */
-.lp-footer { color: rgba(255,255,255,.5); text-transform: uppercase; letter-spacing: .14em; background: #1e1f1c; justify-content: space-between; align-items: center; padding: 36px 5vw; font-size: 9px; display: flex; }
+/* Футер лендинга — глубокий зелёный (как шапка сайта) */
+.lp-footer { color: rgba(244, 240, 229, .58); text-transform: uppercase; letter-spacing: .14em; background: var(--n15-green); border-top: 1px solid color-mix(in srgb, var(--n15-green-gold) 30%, transparent); justify-content: space-between; align-items: center; padding: 36px 5vw; font-size: 9px; display: flex; }
 .lp-footer p { margin: 0; line-height: 1.7; }
 .lp-footer .lp-brand { flex-direction: column; display: flex; }
-.lp-footer .lp-brand img { object-fit: contain; object-position: left center; width: 52px; max-height: 38px; display: block; }
+.lp-footer .lp-brand img { object-fit: contain; object-position: left center; width: 52px; max-height: 38px; display: block; filter: brightness(1.32); }
 .lp-footer .lp-brand-caption { text-transform: uppercase; letter-spacing: .32em; margin-top: 6px; font-size: 8px; color: #fff; }
 .lp-footer .lp-footer-phone { color: #d7ba8b; white-space: nowrap; font-family: 'New Standard', Georgia, serif; font-weight: 400; font-size: 15px; letter-spacing: .035em; }
-.lp-footer .lp-team-login { color: rgba(255,255,255,.42); text-transform: uppercase; letter-spacing: .12em; border-bottom: 1px solid rgba(255,255,255,.2); padding-bottom: 4px; font-size: 9px; }
+.lp-footer .lp-team-login { color: rgba(244, 240, 229, .55); text-transform: uppercase; letter-spacing: .12em; border-bottom: 1px solid color-mix(in srgb, var(--n15-green-gold) 38%, transparent); padding-bottom: 4px; font-size: 9px; }
+/* Ссылки футера на зелёном: при наведении — светлое золото (фирменное
+   золото #97692D на глубоком зелёном читается плохо) */
+.lp-footer .lp-footer-phone:hover { color: #EFE3C9; }
+.lp-footer .lp-team-login:hover { color: var(--n15-green-gold); }
 
 /* Средние экраны: 4 направления юр-блока в 2×2, пока в один ряд тесно */
 @media (min-width: 821px) and (max-width: 1100px) {

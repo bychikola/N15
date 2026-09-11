@@ -125,8 +125,8 @@ export const LkShell: FC<{ children: ReactNode; active?: string }> = ({ children
               <Link key={item.href} href={item.href}
                 className={`flex items-center gap-3 px-3 py-2.5 text-sm whitespace-nowrap transition-colors border-l-2 ${
                   isActive(item.href)
-                    ? 'border-[var(--n15-gold)] text-[var(--n15-gold)] bg-[var(--n15-gold)]/6'
-                    : 'border-transparent text-[var(--n15-silver)] hover:text-[var(--n15-gold)] hover:bg-[var(--n15-gold)]/3'
+                    ? 'border-[var(--n15-green)] text-[var(--n15-green)] bg-[var(--n15-green)]/6'
+                    : 'border-transparent text-[var(--n15-silver)] hover:text-[var(--n15-green)] hover:bg-[var(--n15-green)]/3'
                 }`}>
                 <span className="material-symbols-outlined text-lg leading-none" aria-hidden="true">{item.icon}</span>
                 <span className="flex-1">{item.label}</span>
