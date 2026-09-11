@@ -35,6 +35,8 @@ try { ({ simpleParser } = require('mailparser')) } catch { /* появится �
 
 const DB = process.env.DATABASE_URI
 const REPO = process.env.N15_REPO || '/root/n15'
+// Актуальная строка подключения к БД (host резолвится на старте, см. resolveDbUri)
+let dbUri = DB
 const POLL_MS = 5000
 // Большие задачи (модуль с PDF, перестройка раздела) не укладывались в 20 мин
 // и агент убивался на середине. 45 минут + мягкое завершение (SIGTERM, затем
@@ -284,7 +286,7 @@ function watchCancellation(id, onCancel) {
   // подключиться: иначе соединение и таймер остались бы висеть навсегда
   // и за много задач исчерпали бы лимит подключений Postgres.
   const state = { cancelled: false, stopped: false, stop: () => { state.stopped = true } }
-  const watcher = new Client({ connectionString: DB })
+  const watcher = new Client({ connectionString: dbUri })
   watcher
     .connect()
     .then(() => {
@@ -797,6 +799,55 @@ async function refreshAgentEnv() {
   }
 }
 
+// Адрес Postgres из .env хранит IP контейнера, а он меняется при пересборке
+// (docker выдаёт новый адрес) — тогда воркер падал с ECONNREFUSED в цикле.
+// Спрашиваем актуальный IP у docker; если не вышло — работаем со старым.
+async function resolveDbUri() {
+  if (!DB) return DB
+  try {
+    const u = new URL(DB)
+    if (u.hostname === 'localhost' || u.hostname === '127.0.0.1') return DB
+    const names = await runCommand('docker', ['ps', '--format', '{{.Names}}'], REPO, 15000)
+    const container = names.out.split('\n').map((s) => s.trim()).filter(Boolean)
+      .find((n) => /postgres/i.test(n))
+    if (!container) return DB
+    const ipRes = await runCommand(
+      'docker',
+      ['inspect', container, '--format', '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}'],
+      REPO,
+      15000,
+    )
+    const ip = ipRes.out.trim()
+    if (ip && ip !== u.hostname) {
+      console.log(`postgres: контейнер ${container} → ${ip} (в .env было ${u.hostname})`)
+      u.hostname = ip
+      return u.toString()
+    }
+    return DB
+  } catch (e) {
+    console.error('resolveDbUri failed:', e.message)
+    return DB
+  }
+}
+
+// Подключение к БД с повторами: контейнер базы мог ещё подниматься после
+// деплоя, а старый адрес — устареть (каждую попытку резолвим заново).
+async function connectWithRetry() {
+  const attempts = 12
+  for (let i = 1; i <= attempts; i++) {
+    dbUri = await resolveDbUri()
+    const c = new Client({ connectionString: dbUri })
+    try {
+      await c.connect()
+      return c
+    } catch (e) {
+      console.error(`db connect ${i}/${attempts} failed: ${e.message}`)
+      await new Promise((r) => setTimeout(r, 5000))
+    }
+  }
+  throw new Error('не удалось подключиться к Postgres')
+}
+
 async function main() {
   // Проверка доступности CLI и репозитория
   if (!existsSync(REPO)) {
@@ -810,8 +861,7 @@ async function main() {
   }
   console.log('claude CLI:', cliCheck.out.trim())
 
-  client = new Client({ connectionString: DB })
-  await client.connect()
+  client = await connectWithRetry()
   // Задачи, оборванные рестартом воркера, навсегда залипают в 'running' —
   // при старте сбрасываем их в 'failed', чтобы очередь не встала.
   const stuck = await client.query(
