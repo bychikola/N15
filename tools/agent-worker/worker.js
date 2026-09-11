@@ -85,9 +85,10 @@ async function appendLog(client, id, text) {
   )
 }
 
-function runCommand(cmd, args, cwd, timeoutMs, onChunk, extraEnv) {
+function runCommand(cmd, args, cwd, timeoutMs, onChunk, extraEnv, onChild) {
   return new Promise((resolve) => {
     const child = spawn(cmd, args, { cwd, env: { ...process.env, ...(extraEnv || {}) }, shell: false })
+    onChild?.(child)
     let out = ''
     const timer = setTimeout(() => child.kill('SIGKILL'), timeoutMs)
     child.stdout.on('data', (d) => { const s = d.toString(); out += s; onChunk?.(s) })
@@ -105,7 +106,7 @@ function runCommand(cmd, args, cwd, timeoutMs, onChunk, extraEnv) {
 
 // Запуск настоящего Claude Code CLI в headless-режиме.
 // Стрим-события (stream-json) пишем в лог задачи.
-async function runClaude(client, id, prompt) {
+async function runClaude(client, id, prompt, opts = {}) {
   await appendLog(client, id, `\n— Claude Code (${new Date().toLocaleTimeString('ru-RU')}) —\n`)
   const args = [
     '-p', `${SYSTEM_RULES}\n\nЗапрос пользователя:\n${prompt}`,
@@ -122,6 +123,8 @@ async function runClaude(client, id, prompt) {
       // и пишет "no stdin data received" в каждую задачу
       stdio: ['ignore', 'pipe', 'pipe'],
     })
+    // Хэндл процесса наружу — чтобы отмена из CRM могла его остановить
+    opts.onChild?.(child)
     let out = ''
     let buffer = ''
     // Таймаут: сначала SIGTERM (CLI завершится штатно), через паузу — SIGKILL
@@ -272,6 +275,37 @@ async function stashLeftovers(client, id, taskId) {
   return r.code === 0
 }
 
+// Слежение за отменой задачи из CRM: пока идёт работа, раз в 5 секунд
+// смотрит статус задачи в БД. Увидев 'cancelled' — зовёт onCancel (остановить
+// процесс агента). Отдельное соединение с БД, чтобы не конкурировать с
+// записью лога задачи (у pg один запрос на клиента за раз).
+function watchCancellation(id, onCancel) {
+  const state = { cancelled: false, stop: () => {} }
+  const watcher = new Client({ connectionString: DB })
+  watcher
+    .connect()
+    .then(() => {
+      const timer = setInterval(async () => {
+        if (state.cancelled) return
+        try {
+          const r = await watcher.query('SELECT status FROM agent_tasks WHERE id = $1', [id])
+          if (r.rows[0] && r.rows[0].status === 'cancelled') {
+            state.cancelled = true
+            onCancel()
+          }
+        } catch {
+          // БД недоступна — повторим на следующем тике
+        }
+      }, 5000)
+      state.stop = () => {
+        clearInterval(timer)
+        watcher.end().catch(() => {})
+      }
+    })
+    .catch((e) => console.error('cancel watcher connect failed:', e.message))
+  return state
+}
+
 // Текущий коммит origin/master (после fetch). Пустая строка — репо без remote.
 async function remoteHead() {
   const r = await runCommand('git', ['rev-parse', 'origin/master'], REPO, 30000)
@@ -300,9 +334,32 @@ async function runAgentTask(client, task) {
   const headBefore = (await runCommand('git', ['rev-parse', 'HEAD'], REPO, 30000)).out.trim()
   const dirtyBefore = (await runCommand('git', ['status', '--porcelain'], REPO, 30000)).out.trim()
 
-  // 1. Настоящий Claude Code CLI (с плагинами из ~/.claude на сервере)
-  const agent = await runClaude(client, id, task.prompt)
-  await appendLog(client, id, `\n— Claude Code завершил (exit ${agent.code}${agent.timedOut ? ', по таймауту' : ''}) —\n`)
+  // 1. Настоящий Claude Code CLI (с плагинами из ~/.claude на сервере).
+  // Отмена из CRM: следим за статусом и убиваем процесс агента SIGTERM→SIGKILL.
+  let agentChild = null
+  const cancelWatch = watchCancellation(id, () => {
+    appendLog(client, id, `\n⛔ Отмена из CRM — останавливаю агента...\n`)
+    if (agentChild) {
+      agentChild.kill('SIGTERM')
+      setTimeout(() => { try { agentChild.kill('SIGKILL') } catch { /* уже мёртв */ } }, 8000)
+    }
+  })
+  const agent = await runClaude(client, id, task.prompt, { onChild: (c) => { agentChild = c } })
+  cancelWatch.stop()
+  await appendLog(client, id, `\n— Claude Code завершил (exit ${agent.code}${agent.timedOut ? ', по таймауту' : ''}${cancelWatch.cancelled ? ', отменён' : ''}) —\n`)
+
+  // Отменено пользователем: убираем незавершённые правки и завершаем задачу
+  if (cancelWatch.cancelled) {
+    const stashed = await stashLeftovers(client, id, task.id)
+    await updateTask(client, id, {
+      status: 'cancelled',
+      result: 'Отменена пользователем. Если агент успел закоммитить и запушить — изменения в master (откат — отдельной задачей).' +
+        (stashed ? ` Незавершённые правки сохранены в git stash (task-${task.id}).` : ''),
+    })
+    log(id, 'cancelled by user')
+    return
+  }
+
   if (agent.code !== 0) {
     // Понятная причина вместо «exit null»: у каждого сбоя своя подсказка.
     // Незавершённые правки (если остались) убираем в stash, чтобы половина
@@ -358,12 +415,19 @@ async function runAgentTask(client, task) {
       appendLog(client, id, chunk)
     }, { APP_DIR: REPO })
     await appendLog(client, id, `\n— Деплой завершён (exit ${deploy.code}) —\n`)
+    // Отмену во время деплоя не прерываем: гасить сборку посередине опасно
+    // (compose может остаться между остановкой и запуском контейнера).
+    // Отмечаем факт отмены в итоге задачи — пользователь видит, что произошло.
+    const afterDeploy = await client.query('SELECT status FROM agent_tasks WHERE id = $1', [id])
+    const cancelledDuringDeploy = afterDeploy.rows[0] && afterDeploy.rows[0].status === 'cancelled'
     if (deploy.code === 0) {
       await updateTask(client, id, {
-        status: 'done',
-        result: agent.out.slice(-2000) || 'Изменения применены и сайт обновлён.',
+        status: cancelledDuringDeploy ? 'cancelled' : 'done',
+        result: cancelledDuringDeploy
+          ? 'Отменена во время деплоя — сборку не прерывал (это опасно). Изменения собраны и применены на сайте; откат — отдельной задачей.'
+          : (agent.out.slice(-2000) || 'Изменения применены и сайт обновлён.'),
       })
-      log(id, 'done')
+      log(id, cancelledDuringDeploy ? 'done (cancelled during deploy)' : 'done')
     } else {
       await updateTask(client, id, {
         status: 'failed',

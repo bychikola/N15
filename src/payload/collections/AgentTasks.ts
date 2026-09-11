@@ -1,7 +1,9 @@
 import type { CollectionConfig } from 'payload'
 
 // Задачи для ИИ-агента: запрос → воркер на сервере правит код, коммитит,
-// пушит и деплоит. Доступ — только администратор.
+// пушит и деплоит. Чтение — у кого есть доступ к ИИ-агенту (agentAccess),
+// изменение/удаление — только администратор (отмена задачи идёт через
+// /api/agent/tasks/[id] с проверкой в маршруте).
 export const AgentTasks: CollectionConfig = {
   slug: 'agent-tasks',
   labels: { singular: 'Задача агента', plural: 'Задачи агента' },
@@ -11,7 +13,7 @@ export const AgentTasks: CollectionConfig = {
     defaultColumns: ['status', 'prompt', 'createdAt'],
   },
   access: {
-    read: ({ req: { user } }) => user?.role === 'admin',
+    read: ({ req: { user } }) => Boolean(user?.agentAccess) || user?.role === 'admin',
     create: ({ req: { user } }) => user?.role === 'admin',
     update: ({ req: { user } }) => user?.role === 'admin',
     delete: ({ req: { user } }) => user?.role === 'admin',
@@ -32,6 +34,7 @@ export const AgentTasks: CollectionConfig = {
         { label: 'Выполняется', value: 'running' },
         { label: 'Готово', value: 'done' },
         { label: 'Ошибка', value: 'failed' },
+        { label: 'Отменена', value: 'cancelled' },
       ],
       defaultValue: 'queued',
       required: true,

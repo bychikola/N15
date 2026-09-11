@@ -64,12 +64,14 @@ if [ -n "$DATABASE_URI" ]; then
       const adr = await c.query(\"SELECT to_regclass('public.advertising_requests') AS t\");
       const ns = await c.query(\"SELECT 1 FROM payload_globals WHERE slug = 'news-settings' LIMIT 1\");
       // Новые колонки объектов: единица площади (сотки), район города, СНТ
+      // Новое значение статуса задачи агента 'cancelled' (отмена из CRM)
+      const ce = await c.query(\"SELECT 1 FROM pg_enum e JOIN pg_type t ON t.oid = e.enumtypid WHERE t.typname = 'enum_agent_tasks_status' AND e.enumlabel = 'cancelled'\");
       const au = await c.query(\"SELECT column_name FROM information_schema.columns WHERE table_name='objects' AND column_name='area_unit'\");
       const cd = await c.query(\"SELECT column_name FROM information_schema.columns WHERE table_name='objects_address' AND column_name='city_district'\");
       const sn = await c.query(\"SELECT column_name FROM information_schema.columns WHERE table_name='objects_address' AND column_name='snt'\");
       const ok = o.rows[0].t && t.rows[0].t && cu.rows[0].t && lr.rows.length > 0 && un.rows.length > 0 && own.rows.length > 0 && em.rows[0].t && ms.rows[0].t && loc.rows.length > 0 && at.rows[0].t && ma.rows[0].t && ag.rows.length > 0 && aa.rows.length > 0
         && nw.rows[0].t && ml.rows[0].t && ld.rows[0].t && lrp.rows[0].t && adv.rows[0].t && ads.rows[0].t && adr.rows[0].t && ns.rows.length > 0
-        && au.rows.length > 0 && cd.rows.length > 0 && sn.rows.length > 0;
+        && au.rows.length > 0 && cd.rows.length > 0 && sn.rows.length > 0 && ce.rows.length > 0;
       await c.end();
       process.exit(ok ? 0 : 1);
     })().catch(() => process.exit(1));

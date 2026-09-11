@@ -8,7 +8,7 @@ const POLL_MS = 5000
 interface AgentTask {
   id: number
   prompt: string
-  status: 'queued' | 'running' | 'done' | 'failed'
+  status: 'queued' | 'running' | 'done' | 'failed' | 'cancelled'
   log?: string
   result?: string
   createdAt?: string
@@ -19,6 +19,16 @@ const STATUS_KEYS: Record<string, string> = {
   running: 'agentStatusRunning',
   done: 'agentStatusDone',
   failed: 'agentStatusFailed',
+  cancelled: 'agentStatusCancelled',
+}
+
+// Цвета плашки статуса (фон, текст)
+function statusColors(status: string): { bg: string; fg: string } {
+  if (status === 'done') return { bg: '#e5efdd', fg: '#4e7a3a' }
+  if (status === 'failed') return { bg: '#f4e0dc', fg: '#9b4e43' }
+  if (status === 'running') return { bg: '#f2eadf', fg: '#8d6b40' }
+  if (status === 'cancelled') return { bg: '#ece9e4', fg: '#817b70' }
+  return { bg: '#efede8', fg: '#817b70' }
 }
 
 // Модульная функция — стабильная идентичность: поллинг-эффект и обработчики
@@ -202,6 +212,27 @@ export default function AgentChat() {
 
   const refresh = async () => {
     setTasks(await fetchTasks())
+  }
+
+  // Отмена задачи: у «в очереди» снимает её сразу, у «выполняется» воркер
+  // увидит статус и остановит агента (см. tools/agent-worker/worker.js)
+  const [cancellingId, setCancellingId] = useState<number | null>(null)
+  const cancelTask = async (taskId: number) => {
+    if (cancellingId) return
+    setCancellingId(taskId)
+    try {
+      await fetch(`/api/agent/tasks/${taskId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ action: 'cancel' }),
+      })
+      await refresh()
+    } catch {
+      // молчим — список обновится поллингом
+    } finally {
+      setCancellingId(null)
+    }
   }
 
   useEffect(() => {
@@ -398,14 +429,26 @@ export default function AgentChat() {
               >
                 <span style={{
                   flexShrink: 0, padding: '5px 10px', borderRadius: 999, fontSize: 9, textTransform: 'uppercase', letterSpacing: '.08em',
-                  background: task.status === 'done' ? '#e5efdd' : task.status === 'failed' ? '#f4e0dc' : task.status === 'running' ? '#f2eadf' : '#efede8',
-                  color: task.status === 'done' ? '#4e7a3a' : task.status === 'failed' ? '#9b4e43' : task.status === 'running' ? '#8d6b40' : '#817b70',
+                  background: statusColors(task.status).bg,
+                  color: statusColors(task.status).fg,
                 }}>
                   {t.crm[STATUS_KEYS[task.status] as keyof typeof t.crm] || task.status}{task.status === 'running' ? '…' : ''}
                 </span>
                 <span style={{ flex: 1, fontSize: 13, color: '#25241f', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {task.prompt}
                 </span>
+                {(task.status === 'running' || task.status === 'queued') && (
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); void cancelTask(task.id) }}
+                    disabled={cancellingId === task.id}
+                    title={t.crm.agentCancel}
+                    aria-label={t.crm.agentCancel}
+                    style={{ flexShrink: 0, border: '1px solid #e2c9c2', borderRadius: 7, background: '#fff', color: '#9b4e43', padding: '6px 10px', fontSize: 10, cursor: 'pointer', opacity: cancellingId === task.id ? 0.5 : 1 }}
+                  >
+                    ✕ {t.crm.agentCancel}
+                  </button>
+                )}
                 <span style={{ fontSize: 10, color: '#9b958a', flexShrink: 0 }}>
                   {task.createdAt ? new Date(task.createdAt).toLocaleString(t.locale, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''}
                 </span>
@@ -500,8 +543,8 @@ export default function AgentChat() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                       <span style={{
                         flexShrink: 0, padding: '3px 8px', borderRadius: 999, fontSize: 8, textTransform: 'uppercase', letterSpacing: '.08em',
-                        background: task.status === 'done' ? '#e5efdd' : task.status === 'failed' ? '#f4e0dc' : task.status === 'running' ? '#f2eadf' : '#efede8',
-                        color: task.status === 'done' ? '#4e7a3a' : task.status === 'failed' ? '#9b4e43' : task.status === 'running' ? '#8d6b40' : '#817b70',
+                        background: statusColors(task.status).bg,
+                        color: statusColors(task.status).fg,
                       }}>
                         {t.crm[STATUS_KEYS[task.status] as keyof typeof t.crm] || task.status}{task.status === 'running' ? '…' : ''}
                       </span>
