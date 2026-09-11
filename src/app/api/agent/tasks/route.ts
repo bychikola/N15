@@ -25,6 +25,13 @@ export async function GET(req: NextRequest) {
   }
 }
 
+// Лимит текста задачи. Прежние 4000 символов обрезали обычные рабочие запросы
+// (вставил письмо, лог, кусок кода — и задача отклонялась). Воркер передаёт
+// промпт аргументом командной строки, а Linux ограничивает один аргумент
+// 128 КБ (MAX_ARG_STRLEN) — поэтому меряем в БАЙТАХ и оставляем запас
+// (кириллица = 2 байта на символ).
+const MAX_PROMPT_BYTES = 100_000
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
@@ -32,8 +39,13 @@ export async function POST(req: NextRequest) {
     if (!prompt) {
       return NextResponse.json({ error: 'Текст запроса не указан' }, { status: 400 })
     }
-    if (prompt.length > 4000) {
-      return NextResponse.json({ error: 'Запрос слишком длинный' }, { status: 400 })
+    const promptBytes = Buffer.byteLength(prompt, 'utf8')
+    if (promptBytes > MAX_PROMPT_BYTES) {
+      const kb = (n: number) => Math.round(n / 1024)
+      return NextResponse.json(
+        { error: `Запрос слишком длинный: ${kb(promptBytes)} КБ, максимум ${kb(MAX_PROMPT_BYTES)} КБ` },
+        { status: 400 },
+      )
     }
 
     const payload = await getPayload({ config })
