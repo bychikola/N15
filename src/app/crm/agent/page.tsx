@@ -15,7 +15,8 @@ export default async function CrmAgentPage() {
   }
   return (
     <CrmShell user={user} t={t} active="agent">
-      <AgentChat />
+      {/* Конфиг агента (в нём API-ключ) и авторизация ChatGPT — только админ */}
+      <AgentChat isAdmin={user.role === 'admin'} />
     </CrmShell>
   )
 }

@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
   try {
     const payload = await getPayload({ config })
     const me = await payload.auth({ headers: req.headers })
-    if (!me.user || !me.user.agentAccess) {
+    if (!me.user || me.user.role !== 'admin') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
     const settings = await payload.findGlobal({ slug: 'agent-settings', overrideAccess: true })
@@ -68,7 +68,7 @@ export async function PUT(req: NextRequest) {
 
     const payload = await getPayload({ config })
     const me = await payload.auth({ headers: req.headers })
-    if (!me.user || !me.user.agentAccess) {
+    if (!me.user || me.user.role !== 'admin') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 

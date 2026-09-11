@@ -53,7 +53,12 @@ async function fetchTasks(): Promise<AgentTask[]> {
   }
 }
 
-export default function AgentChat() {
+interface AgentChatProps {
+  /** Конфиг агента (ключ) и авторизация ChatGPT доступны только админу */
+  isAdmin?: boolean
+}
+
+export default function AgentChat({ isAdmin = false }: AgentChatProps) {
   const { t } = useI18n()
   const [tasks, setTasks] = useState<AgentTask[]>([])
   const [prompt, setPrompt] = useState('')
@@ -144,7 +149,9 @@ export default function AgentChat() {
 
   // Определяем активного провайдера по сохранённому конфигу и запоминаем
   // эталонные конфиги (дефолт ChatGPT + шаблон DeepSeek), которые отдаёт сервер.
+  // Не-админам конфиг недоступен (в нём API-ключ) — не запрашиваем вовсе.
   useEffect(() => {
+    if (!isAdmin) return
     let cancelled = false
     fetch('/api/agent/config', { credentials: 'include' })
       .then((r) => (r.ok ? r.json() : null))
@@ -161,7 +168,7 @@ export default function AgentChat() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [isAdmin])
 
   // Переключение провайдера: сохраняем эталонный конфиг с сервера —
   // не вырезаем _deepseek_template, чтобы переключение работало в обе стороны.
@@ -314,19 +321,21 @@ export default function AgentChat() {
         >
           {t.crm.agentJournal}
         </button>
-        <button
-          type="button"
-          onClick={() => void openSettings()}
-          title={t.crm.agentSettings}
-          aria-label={t.crm.agentSettings}
-          style={{ border: '1px solid #d9d1c4', borderRadius: 8, background: '#fff', color: '#716b62', padding: '9px 12px', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}
-        >
-          ⚙
-        </button>
+        {isAdmin && (
+          <button
+            type="button"
+            onClick={() => void openSettings()}
+            title={t.crm.agentSettings}
+            aria-label={t.crm.agentSettings}
+            style={{ border: '1px solid #d9d1c4', borderRadius: 8, background: '#fff', color: '#716b62', padding: '9px 12px', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}
+          >
+            ⚙
+          </button>
+        )}
       </div>
 
-      {/* Выбор провайдера */}
-      {configLoaded && (
+      {/* Выбор провайдера — только админ (в конфиге API-ключ) */}
+      {isAdmin && configLoaded && (
         <div style={{ display: 'flex', gap: 8, marginBottom: 18 }}>
           {(['chatgpt', 'deepseek'] as const).map((p) => (
             <button key={p} type="button" onClick={() => void applyProvider(p)}
