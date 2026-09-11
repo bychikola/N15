@@ -36,7 +36,11 @@ try { ({ simpleParser } = require('mailparser')) } catch { /* появится �
 const DB = process.env.DATABASE_URI
 const REPO = process.env.N15_REPO || '/root/n15'
 const POLL_MS = 5000
-const AGENT_TIMEOUT_MS = 20 * 60 * 1000
+// Большие задачи (модуль с PDF, перестройка раздела) не укладывались в 20 мин
+// и агент убивался на середине. 45 минут + мягкое завершение (SIGTERM, затем
+// SIGKILL) — CLI успевает дописать лог и прибрать за собой.
+const AGENT_TIMEOUT_MS = 45 * 60 * 1000
+const AGENT_KILL_GRACE_MS = 10 * 1000
 const DEPLOY_TIMEOUT_MS = 40 * 60 * 1000
 const AUTH_PROMPT = '__AUTH__' // спец-задача: авторизация ChatGPT (Codex) из CRM
 const AUTH_JSON = `${process.env.HOME || '/home/n15'}/.codex/auth.json`
@@ -120,7 +124,15 @@ async function runClaude(client, id, prompt) {
     })
     let out = ''
     let buffer = ''
-    const timer = setTimeout(() => child.kill('SIGKILL'), AGENT_TIMEOUT_MS)
+    // Таймаут: сначала SIGTERM (CLI завершится штатно), через паузу — SIGKILL
+    let timedOut = false
+    let killTimer = null
+    const timer = setTimeout(() => {
+      timedOut = true
+      appendLog(client, id, `\n⏱ Превышен лимит времени (${AGENT_TIMEOUT_MS / 60000} мин) — останавливаю агента...\n`)
+      child.kill('SIGTERM')
+      killTimer = setTimeout(() => child.kill('SIGKILL'), AGENT_KILL_GRACE_MS)
+    }, AGENT_TIMEOUT_MS)
 
     const onLine = (line) => {
       try {
@@ -162,38 +174,102 @@ async function runClaude(client, id, prompt) {
     })
     child.on('close', (code) => {
       clearTimeout(timer)
+      if (killTimer) clearTimeout(killTimer)
       if (buffer.trim()) onLine(buffer)
-      resolve({ code, out })
+      resolve({ code, out, timedOut })
     })
     child.on('error', (e) => {
       clearTimeout(timer)
-      resolve({ code: -1, out: String(e) })
+      if (killTimer) clearTimeout(killTimer)
+      resolve({ code: -1, out: String(e), timedOut })
     })
   })
+}
+
+// Путь без префикса репозитория: tsc/eslint печатают абсолютные пути,
+// git — относительные; приводим к одному виду для сравнения.
+function normPath(p) {
+  const r = REPO.replace(/\\/g, '/').replace(/\/+$/, '')
+  return p.replace(/\\/g, '/').replace(`${r}/`, '').replace(/^\.\//, '')
+}
+
+// Файлы, на которые указывают строки с ошибками.
+// tsc:   src/x.ts(12,3): error TS2322: ...
+// eslint (stylish): строка-заголовок с путём без отступа, ниже — "12:3  error  ..."
+function errorFiles(output) {
+  const files = new Set()
+  let current = ''
+  for (const raw of (output || '').split('\n')) {
+    const line = raw.replace(/\r$/, '')
+    if (!line.trim()) continue
+    if (!/^\s/.test(line)) {
+      const tsc = line.trim().match(/^(\S+\.(?:ts|tsx|js|jsx|mjs|cjs))\(\d+,\d+\):\s*error/)
+      if (tsc) { files.add(normPath(tsc[1])); continue }
+      const head = line.trim()
+      if (/\.(ts|tsx|js|jsx|mjs|cjs)$/.test(head)) { current = normPath(head); continue }
+      continue
+    }
+    if (/\berror\b/.test(line) && current) files.add(current)
+  }
+  return files
 }
 
 // Гейт tsc/lint после агента, перед деплоем. Коммит и push делает сам агент
 // (как обычная сессия Claude Code) — воркер лишь убеждается, что код
 // собирается, иначе сломанный код не уедет на прод.
-async function verifyCodeGate(client, id) {
+// changedFiles — файлы, которые тронул агент: ошибки в НИХ блокируют деплой,
+// а предсуществующие ошибки в чужих файлах (чужой незавершённый код) — нет,
+// иначе одна такая ошибка останавливает все задачи подряд.
+async function verifyCodeGate(client, id, changedFiles) {
   await appendLog(client, id, `\n— Проверки (tsc/lint) перед деплоем —\n`)
   if (!existsSync(`${REPO}/node_modules`)) {
     await appendLog(client, id, `node_modules отсутствует — tsc/lint пропущены (проверит сборка при деплое).\n`)
-    return true
+    return { ok: true }
   }
-  const tsc = await runCommand(`${REPO}/node_modules/.bin/tsc`, ['--noEmit'], REPO, 5 * 60 * 1000)
+  const changed = new Set((changedFiles || []).map(normPath))
+
+  const tsc = await runCommand(`${REPO}/node_modules/.bin/tsc`, ['--noEmit'], REPO, 10 * 60 * 1000)
   await appendLog(client, id, tsc.out.slice(-3000))
   if (tsc.code !== 0) {
-    await appendLog(client, id, `\n⨯ tsc не прошёл (exit ${tsc.code}) — деплой отменён.\n`)
-    return false
+    const bad = [...errorFiles(tsc.out)].filter((f) => changed.has(f))
+    if (bad.length) {
+      await appendLog(client, id, `\n⨯ tsc не прошёл (exit ${tsc.code}) — ошибки в изменённых файлах: ${bad.join(', ')}. Деплой отменён.\n`)
+      return { ok: false, step: 'tsc', files: bad }
+    }
+    await appendLog(client, id, `\n⚠ tsc вернул ошибки, но ни одна не в файлах агента (предсуществующие) — продолжаю.\n`)
   }
-  const lint = await runCommand('npm', ['run', 'lint'], REPO, 5 * 60 * 1000)
+
+  const lint = await runCommand('npm', ['run', 'lint'], REPO, 10 * 60 * 1000)
   await appendLog(client, id, lint.out.slice(-3000))
   if (lint.code !== 0) {
-    await appendLog(client, id, `\n⨯ lint не прошёл (exit ${lint.code}) — деплой отменён.\n`)
-    return false
+    const bad = [...errorFiles(lint.out)].filter((f) => changed.has(f))
+    if (bad.length) {
+      await appendLog(client, id, `\n⨯ lint не прошёл (exit ${lint.code}) — ошибки в изменённых файлах: ${bad.join(', ')}. Деплой отменён.\n`)
+      return { ok: false, step: 'lint', files: bad }
+    }
+    await appendLog(client, id, `\n⚠ lint вернул ошибки, но ни одна не в файлах агента (предсуществующие) — продолжаю.\n`)
   }
-  return true
+  return { ok: true }
+}
+
+// Незавершённые правки прерванного агента — в git stash. Иначе половина
+// работы молча уехала бы в следующую задачу (следующий агент делает git add -A).
+async function stashLeftovers(client, id, taskId) {
+  const dirty = (await runCommand('git', ['status', '--porcelain'], REPO, 30000)).out.trim()
+  if (!dirty) return false
+  const r = await runCommand(
+    'git',
+    ['stash', 'push', '-u', '-m', `task-${taskId}-прервано`],
+    REPO,
+    60000,
+  )
+  await appendLog(
+    client,
+    id,
+    `\nНезавершённые правки убраны в git stash (${r.code === 0 ? 'ок' : `exit ${r.code}`}):\n${r.out.slice(0, 800)}\n` +
+      'Восстановить при необходимости: sudo -u n15 git -C /root/n15 stash list && git stash pop\n',
+  )
+  return r.code === 0
 }
 
 // Текущий коммит origin/master (после fetch). Пустая строка — репо без remote.
@@ -226,18 +302,30 @@ async function runAgentTask(client, task) {
 
   // 1. Настоящий Claude Code CLI (с плагинами из ~/.claude на сервере)
   const agent = await runClaude(client, id, task.prompt)
-  await appendLog(client, id, `\n— Claude Code завершил (exit ${agent.code}) —\n`)
+  await appendLog(client, id, `\n— Claude Code завершил (exit ${agent.code}${agent.timedOut ? ', по таймауту' : ''}) —\n`)
   if (agent.code !== 0) {
-    let result = `Claude Code завершился с ошибкой (exit ${agent.code}). Хвост: ${agent.out.slice(-1500)}`
-    // ChatGPT-режим: подсказки по типичным ошибкам прокси/подписки
-    if (LOCAL_PROXY_RE.test(agentEnv.ANTHROPIC_BASE_URL || '')) {
-      if (/401|403|unauthorized|invalid token|not authenticated/i.test(agent.out)) {
-        result += ' Подсказка: токен ChatGPT протух — выполни sudo -u n15 codex login --device-auth'
-      } else if (/429|rate limit|quota exceeded/i.test(agent.out)) {
-        result += ' Подсказка: исчерпан лимит ChatGPT Plus (роллинг-окно ~5 ч) — повтори задачу позже'
-      }
+    // Понятная причина вместо «exit null»: у каждого сбоя своя подсказка.
+    // Незавершённые правки (если остались) убираем в stash, чтобы половина
+    // работы не уехала в следующую задачу.
+    let result
+    if (agent.timedOut) {
+      result = `⏱ Превышен лимит времени (${AGENT_TIMEOUT_MS / 60000} мин) — агент остановлен на середине. ` +
+        'Задача слишком большая: разбей её на части и отправь заново. Правки, которые агент успел закоммитить и запушить, уже в master.'
+      const stashed = await stashLeftovers(client, id, task.id)
+      if (stashed) result += ` Незавершённые правки сохранены в git stash (task-${task.id}).`
+    } else if (/ECONNREFUSED|Connection refused|ENOTFOUND|ETIMEDOUT|fetch failed/i.test(agent.out)) {
+      result = `Агент не смог связаться с API модели (exit ${agent.code}). Проверь провайдера: journalctl -u n15-agent -n 30. Хвост: ${agent.out.slice(-800)}`
+    } else if (LOCAL_PROXY_RE.test(agentEnv.ANTHROPIC_BASE_URL || '') &&
+        /401|403|unauthorized|invalid token|not authenticated/i.test(agent.out)) {
+      result = 'Токен ChatGPT (Codex) протух или отклонён. На сервере: sudo -u n15 codex login --device-auth'
+    } else if (LOCAL_PROXY_RE.test(agentEnv.ANTHROPIC_BASE_URL || '') &&
+        /429|rate limit|quota exceeded/i.test(agent.out)) {
+      result = 'Исчерпан лимит ChatGPT Plus (роллинг-окно ~5 ч) — повтори задачу позже.'
+    } else {
+      result = `Claude Code завершился с ошибкой (exit ${agent.code}). Хвост: ${agent.out.slice(-1500)}`
     }
     await updateTask(client, id, { status: 'failed', result })
+    log(id, `agent failed: ${agent.timedOut ? 'timeout' : 'exit ' + agent.code}`)
     return
   }
 
@@ -249,10 +337,18 @@ async function runAgentTask(client, task) {
 
   // 2. Агент запушил изменения → гейт tsc/lint → деплой
   if (remoteBefore && remoteAfter !== remoteBefore) {
-    if (!(await verifyCodeGate(client, id))) {
+    // Файлы, которые тронул агент (от состояния до запуска до текущего HEAD —
+    // закоммиченное + рабочая копия) — гейт блокирует только ошибки в них
+    const filesOut = await runCommand('git', ['diff', '--name-only', `${headBefore}..HEAD`], REPO, 30000)
+    const workOut = await runCommand('git', ['diff', '--name-only'], REPO, 30000)
+    const changedFiles = [...new Set(
+      `${filesOut.out}\n${workOut.out}`.split('\n').map((s) => s.trim()).filter(Boolean),
+    )]
+    const gate = await verifyCodeGate(client, id, changedFiles)
+    if (!gate.ok) {
       await updateTask(client, id, {
         status: 'failed',
-        result: 'Код после агента не прошёл tsc/lint — деплой отменён. Хвост лога в журнале задачи.',
+        result: `Код после агента не прошёл ${gate.step} — ошибки в изменённых файлах: ${(gate.files || []).join(', ')}. Деплой отменён, подробности в журнале задачи.`,
       })
       log(id, 'gate failed, deploy cancelled')
       return
