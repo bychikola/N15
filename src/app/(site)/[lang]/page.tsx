@@ -18,6 +18,8 @@ import ContactSection from '@/components/home/ContactSection'
 // серверной ошибкой («This page couldn't load»)
 import { DISTRICT_OPTIONS, CITY_DISTRICT_OPTIONS } from '@/lib/districts'
 import { SNT_AREAS } from '@/components/home/landing-data'
+// Регионы «Межрегиональной недвижимости» для блока на главной — из CRM
+import { loadInterregionalRegions } from '@/lib/interregional-service'
 
 export const dynamic = 'force-dynamic'
 
@@ -119,6 +121,10 @@ export default async function HomePage({ params, searchParams }: PageProps) {
     }
   })
 
+  // Регионы блока «Межрегиональная недвижимость» — справочник CRM
+  // (коллекции regions и settlements, см. src/lib/interregional-service.ts)
+  const interregionalRegions = await loadInterregionalRegions(payload)
+
   // Телефон из глобала (fallback — из прототипа)
   const site = await payload.findGlobal({ slug: 'site-settings', depth: 0 })
   const sitePhones = ((site as Record<string, unknown>).phones as { phone?: string }[] | undefined) || []
@@ -161,7 +167,7 @@ export default async function HomePage({ params, searchParams }: PageProps) {
           filterSummary={filterSummary}
           emptyNote={filterEmptyNote}
         />
-        <InterregionalGuide t={t} lang={lang} />
+        <InterregionalGuide t={t} lang={lang} regions={interregionalRegions} />
         <ServicesSection t={t} lang={lang} />
         <LegalSection t={t} lang={lang} />
         <AboutSection t={t} />

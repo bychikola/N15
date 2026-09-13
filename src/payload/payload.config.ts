@@ -29,6 +29,12 @@ import { AdvertisingRequests } from './collections/AdvertisingRequests'
 // доступ только через маршруты /api/objects/legal/* (см. src/lib/legal-service.ts)
 import { LegalDocuments } from './collections/LegalDocuments'
 import { LegalReports } from './collections/LegalReports'
+// «Межрегиональная недвижимость»: справочник регионов и населённых пунктов
+// (страница /interregional, фильтр «Город» каталога). Пустые коллекции при
+// старте заполняет список из кода — см. src/lib/interregional-service.ts
+import { Regions } from './collections/Regions'
+import { Settlements } from './collections/Settlements'
+import { seedInterregional } from '@/lib/interregional-service'
 import { SiteSettings } from './globals/SiteSettings'
 import { MailSettings } from './globals/MailSettings'
 import { AgentSettings } from './globals/AgentSettings'
@@ -59,7 +65,7 @@ export default buildConfig({
   routes: {
     admin: process.env.ADMIN_ROUTE || '/admin',
   },
-  collections: [Users, Media, Objects, Agents, Applications, Tasks, Messages, Blog, News, Pages, Customers, Emails, MailAttachments, AgentTasks, MarketListings, LegalDocuments, LegalReports, Advertisers, Advertisements, AdvertisingRequests],
+  collections: [Users, Media, Objects, Agents, Applications, Tasks, Messages, Blog, News, Pages, Customers, Emails, MailAttachments, AgentTasks, MarketListings, LegalDocuments, LegalReports, Advertisers, Advertisements, AdvertisingRequests, Regions, Settlements],
   globals: [SiteSettings, MailSettings, AgentSettings, NewsSettings, PlatformSettings],
   editor: lexicalEditor(),
   i18n: {
@@ -78,6 +84,21 @@ export default buildConfig({
       }),
   typescript: {
     outputFile: './src/payload-types.ts',
+  },
+  // Первый запуск на пустой базе: заполняем справочник межрегиональной
+  // недвижимости списком из кода. Если в regions уже есть записи, сид ничего
+  // не делает — справочник ведётся в CRM, а не в коде (см.
+  // src/lib/interregional-service.ts). Ошибка сида старт не роняет: страницы
+  // просто покажут пустой справочник, а сид повторится при следующем запуске.
+  onInit: async (payload) => {
+    try {
+      const created = await seedInterregional(payload)
+      if (created > 0) {
+        console.log(`[interregional] справочник заполнен: записей — ${created}`)
+      }
+    } catch (e) {
+      console.error('[interregional] не удалось заполнить справочник:', e)
+    }
   },
   sharp,
 })

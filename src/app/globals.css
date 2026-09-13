@@ -790,3 +790,11 @@ html[data-theme='dark'] .lp-featured .object-card { border: 0; }
   .lp-eyebrow { letter-spacing: .22em; }
   .lp-hero-copy { font-size: 15px; }
 }
+
+/* ── Межрегиональная недвижимость: регионы и населённые пункты ──
+   Строка региона — нативный <details>: свёрнута по умолчанию, раскрывается
+   нажатием и работает без JavaScript (см. компонент InterregionalRegions).
+   «+» у открытой строки поворачивается в «×», как у остальных списков сайта */
+.ir-region > summary::-webkit-details-marker { display: none; }
+.ir-region-plus { transition: transform .2s; }
+.ir-region[open] > summary .ir-region-plus { transform: rotate(45deg); }

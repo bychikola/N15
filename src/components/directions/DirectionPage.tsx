@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { Header } from '@/components/layout/Header'
 import { Footer } from '@/components/layout/Footer'
 import { SectionWrapper } from '@/components/ui/SectionWrapper'
@@ -17,13 +18,16 @@ interface DirectionPageProps {
   primary: Cta
   /** Дополнительная кнопка (необязательно) */
   secondary?: Cta
+  /** Содержимое направления между шагами и кнопками: у межрегиональных
+   *  объектов — справочник регионов и населённых пунктов */
+  children?: ReactNode
 }
 
 // Страница направления раздела «Недвижимость» (новостройки, межрегиональные
 // объекты, зарубежная недвижимость). Единая структура в стиле страниц услуг:
 // заголовок, описание направления, шаги подбора и кнопки CTA. Шаги общие
 // для всех направлений (t.directions.step*).
-export function DirectionPage({ t, direction, primary, secondary }: DirectionPageProps) {
+export function DirectionPage({ t, direction, primary, secondary, children }: DirectionPageProps) {
   const steps = [
     { step: '01', title: t.directions.step1Title, desc: t.directions.step1Desc },
     { step: '02', title: t.directions.step2Title, desc: t.directions.step2Desc },
@@ -53,6 +57,7 @@ export function DirectionPage({ t, direction, primary, secondary }: DirectionPag
               </div>
             ))}
           </div>
+          {children}
           <div className="flex flex-wrap justify-center gap-4">
             <Button variant="primary" href={primary.href}>{primary.label}</Button>
             {secondary && (

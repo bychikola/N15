@@ -36,11 +36,12 @@ export const areaNumberText = (v: number): string => {
 }
 
 /**
- * Индекс формы слова «сотка» по числу — для словарных форм { one, few, many }:
+ * Индекс формы слова по числу — для словарных форм { one, few, many }
+ * (русские правила, они же у «сотки», «объекта», «населённого пункта»):
  *   1 → one («1 сотка»), 2–4 → few («3 сотки»), 5–20 → many («6 соток»),
  *   дробные: «1,5 сотки», «2,5 сотки», «11,5 соток».
  */
-export function arePluralIndex(n: number): 0 | 1 | 2 {
+export function pluralIndex(n: number): 0 | 1 | 2 {
   const abs = Math.abs(n)
   const fractional = abs !== Math.floor(abs)
   const int = Math.floor(abs)
@@ -51,6 +52,9 @@ export function arePluralIndex(n: number): 0 | 1 | 2 {
   if (last >= 2 && last <= 4) return 1
   return 2
 }
+
+/** Форма слова «сотка» по числу — частный случай pluralIndex */
+export const arePluralIndex = pluralIndex
 
 /** Формы слова «сотка» для показа (см. словари: catalog.areaUnits) */
 export interface AreaUnitWords {

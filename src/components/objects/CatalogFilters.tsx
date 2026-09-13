@@ -6,9 +6,8 @@ import type { Dict } from '@/i18n/dictionaries'
 // лендинга: категории из GARDENING_AREAS, всё внутри Владикавказского округа
 import { DISTRICT_OPTIONS, LOCALITIES_BY_DISTRICT, LOCALITY_OPTIONS, CITY_DISTRICT_OPTIONS, GARDENING_CATEGORY_ORDER, GARDENING_AREAS } from '@/lib/districts'
 import { SNT_AREAS } from '@/components/home/landing-data'
-// Города «Межрегиональной недвижимости» — справочник регионов/городов,
-// по которым Н15 показывает объекты за пределами Северной Осетии
-import { INTERREGIONAL_REGIONS, INTERREGIONAL_CITIES } from '@/lib/interregional'
+// Города «Межрегиональной недвижимости» приходят готовыми группами из CRM
+// (см. src/lib/interregional-service.ts) — в клиентском компоненте списка нет
 // Конвертация площади участков: 1 сотка = 100 м² (см. также хелперы ввода)
 import { SQM_PER_ARE, areaNumberText, parseAreaNumber } from '@/lib/area-format'
 
@@ -49,22 +48,15 @@ export const emptyFilters: FiltersState = {
 // Число из фильтра: позволяет и «600», и «11,5» (запятая — как вводят вручную)
 const numOf = (v: string): number | null => parseAreaNumber(v)
 
-// Группы фильтра «Город»: города справочника по регионам. Подгруппа
-// с label (Московская область, Ленинградская область…) становится
-// отдельной группой, чтобы города разных регионов не смешивались.
-// В списке и ключевые города, и «прочие» (extra): фильтр работает по
-// любому городу справочника, не только по строкам на главной.
-const CITY_GROUPS = INTERREGIONAL_REGIONS.flatMap((region) =>
-  region.groups.map((group) => ({
-    label: group.label ?? region.title,
-    options: [...group.cities, ...(group.extra ?? [])].map((city) => ({
-      value: city,
-      label: city,
-    })),
-  })),
-)
+/**
+ * Группы фильтра «Город» (межрегиональные объекты): населённые пункты по
+ * регионам. Подгруппа с названием (Московская область, Ленинградская
+ * область…) становится отдельной группой, чтобы города разных регионов не
+ * смешивались. Список приходит из CRM (см. src/lib/interregional-service.ts).
+ */
+export type CityGroup = { label: string; options: { value: string; label: string }[] }
 
-export function buildWhere(f: FiltersState, q: string): Record<string, unknown> {
+export function buildWhere(f: FiltersState, q: string, knownCities: readonly string[]): Record<string, unknown> {
   const conds: Record<string, unknown>[] = []
   // На сайте показываем только опубликованные (черновики и архив скрыты)
   conds.push({ status: { equals: 'published' } })
@@ -75,7 +67,7 @@ export function buildWhere(f: FiltersState, q: string): Record<string, unknown> 
   if (f.cityDistrict && isKnown(f.cityDistrict, CITY_DISTRICT_OPTIONS)) conds.push({ 'address.cityDistrict': { equals: f.cityDistrict } })
   if (f.locality) conds.push({ 'address.locality': { equals: f.locality } })
   if (f.snt && isKnown(f.snt, SNT_AREAS)) conds.push({ 'address.snt': { equals: f.snt } })
-  if (f.city && isKnown(f.city, INTERREGIONAL_CITIES)) conds.push({ 'address.city': { equals: f.city } })
+  if (f.city && isKnown(f.city, knownCities)) conds.push({ 'address.city': { equals: f.city } })
   if (isKnown(f.rooms, OBJECT_ROOMS)) {
     conds.push(f.rooms === '4'
       ? { rooms: { greater_than_equal: 4 } }
@@ -168,9 +160,11 @@ interface CatalogFiltersProps {
   state: FiltersState
   onChange: (patch: Partial<FiltersState>) => void
   t: Dict
+  /** Группы фильтра «Город» — населённые пункты межрегионального справочника из CRM */
+  cityGroups: CityGroup[]
 }
 
-export default function CatalogFilters({ state, onChange, t }: CatalogFiltersProps) {
+export default function CatalogFilters({ state, onChange, t, cityGroups }: CatalogFiltersProps) {
   const typeOptions = Object.entries(t.typeLabels).map(([value, label]) => ({ value, label }))
   const categoryOptions = Object.entries(t.categoryLabels).map(([value, label]) => ({ value, label }))
   // Пункты зависят от выбранного района: показываем только его нас. пункты
@@ -234,7 +228,7 @@ export default function CatalogFilters({ state, onChange, t }: CatalogFiltersPro
         {/* «Город» — объекты за пределами Северной Осетии (межрегиональные
             направления Н15): города сгруппированы по регионам справочника.
             Выбор города снимает осетинские адресные фильтры — и наоборот */}
-        <Dropdown label={t.catalog.cityLabel} value={state.city} groups={CITY_GROUPS} compactLabel
+        <Dropdown label={t.catalog.cityLabel} value={state.city} groups={cityGroups} compactLabel
           onSelect={(v) => apply(v
             ? { city: v, district: '', cityDistrict: '', locality: '', snt: '' }
             : { city: '' })} />
