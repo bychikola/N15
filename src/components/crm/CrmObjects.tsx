@@ -10,6 +10,8 @@ import { geocodeAddress } from '@/lib/geocode'
 import { sortAgents } from '@/lib/agents-sort'
 // Площадь участков: сотки ↔ м² (1 сотка = 100 м²), чтение «11,5» с запятой
 import { areToSqm, areaNumberText, parseAreaNumber, sqmToAre } from '@/lib/area-format'
+// Подписи этажей дома: «1 этаж», «2 этаж» (см. также t.crm.objFloors)
+import { floorLabel } from '@/lib/floor-format'
 import { LegalCheckBlock } from '@/components/crm/LegalCheckBlock'
 import { PlacementCheckBlock } from '@/components/crm/PlacementCheckBlock'
 import { HouseDataBlock } from '@/components/crm/HouseDataBlock'
@@ -145,9 +147,30 @@ const rowPlacementSummary = (o: Record<string, unknown>): { checked: boolean; fo
   return { checked: !!p.lastCheckedAt, found: active.size }
 }
 
+// Дом и таунхаус: только у них есть этажность дома и поэтажные описания
+// помещений. У квартиры один этаж — этаж квартиры в доме (поля «Этаж» и
+// «Всего этажей»), у участка и коммерческого объекта этажей нет вовсе.
+const isHouseCategory = (category: string) => category === 'house' || category === 'townhouse'
+
+// Поэтажные описания из документа объекта: место в массиве — номер этажа
+// минус один (floorNumber), а не порядок строк в базе. Так «3 этаж» останется
+// третьим, даже если 1-й и 2-й не заполнены (пропуски — пустые поля).
+const floorDescsFromDoc = (o: Record<string, unknown>): string[] => {
+  const rows = (o.floorDescriptions as { floorNumber?: number; description?: string }[] | undefined) || []
+  const byFloor: string[] = []
+  for (const row of rows) {
+    byFloor[Math.max(1, Math.round(row.floorNumber || 0)) - 1] = row.description || ''
+  }
+  return Array.from(byFloor, (d) => d || '')
+}
+
 const emptyForm = {
   title: '', type: 'sale', category: 'apartment', price: '', area: '', areaUnit: 'sqm', livingArea: '',
   kitchenArea: '', rooms: '', floor: '', totalFloors: '', buildingType: '', condition: '',
+  // Этажность дома (только дом и таунхаус, см. save): выбор из списка «1/2/3
+  // этажа» либо своё число («другое значение»). У остальных категорий
+  // этажность по-прежнему вводится в totalFloors выше.
+  floorsMode: '', floorsOther: '',
   heating: '', balcony: '', water: '', sewerage: '', electricity: '', gas: '', internet: '',
   city: 'Владикавказ', district: '', cityDistrict: '', locality: '', snt: '', street: '', house: '', apartment: '',
   lat: '', lng: '', description: '', status: 'draft', agent: '',
@@ -442,6 +465,10 @@ export const CrmObjects: FC<{
   const [photos, setPhotos] = useState<PhotoItem[]>([])
   const [features, setFeatures] = useState<string[]>([])
   const [featureInput, setFeatureInput] = useState('')
+  // Описания помещений по этажам дома: индекс массива — номер этажа минус
+  // один («1 этаж» — floorDescs[0]). Сколько полей показывать, решает
+  // этажность (form.floorsMode), в базу уходит floorDescriptions объекта.
+  const [floorDescs, setFloorDescs] = useState<string[]>([])
   // Перетаскивание фото для смены порядка
   const [dragPhotoIdx, setDragPhotoIdx] = useState<number | null>(null)
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null)
@@ -473,6 +500,19 @@ export const CrmObjects: FC<{
   const [archComment, setArchComment] = useState('')
   const [archBusy, setArchBusy] = useState(false)
   const [archErr, setArchErr] = useState('')
+
+  // Этажность дома: у дома и таунхауса — список «1/2/3 этажа» и своё число
+  // («другое значение»), у остальных категорий — прежние поля «Этаж» и
+  // «Этажей» (см. save и разметку формы ниже).
+  const isHouse = isHouseCategory(form.category)
+  const houseFloorsCount = isHouse
+    ? Math.round(form.floorsMode === 'other' ? toNum(form.floorsOther) ?? 0 : toNum(form.floorsMode) ?? 0)
+    : 0
+  // Сколько полей «N этаж» показывать: по выбранной этажности (у одноэтажного
+  // дома — только «1 этаж», у двухэтажного — «1 этаж» и «2 этаж»). Пока
+  // этажность не выбрана, показываем сохранённые описания — иначе их нельзя
+  // было бы ни увидеть, ни исправить.
+  const floorFieldCount = houseFloorsCount > 0 ? houseFloorsCount : floorDescs.length
 
   const load = useCallback(async () => {
     const [objectsRes, agentsRes] = await Promise.all([
@@ -553,6 +593,7 @@ export const CrmObjects: FC<{
     setEditId(null)
     setPhotos([])
     setFeatures([])
+    setFloorDescs([])
     setSaveError('')
     setDuplicates(null)
     setAddrTouched(false)
@@ -597,6 +638,10 @@ export const CrmObjects: FC<{
     // без единицы — как раньше, в м².
     const areaUnit: 'sqm' | 'are' =
       o.category === 'land' && (o.areaUnit as string | undefined) === 'are' ? 'are' : 'sqm'
+    // Этажность дома: 1/2/3 — выбранный пункт списка, любое другое число
+    // (например, 4) — пункт «другое значение» с числом в отдельном поле
+    const floorsTotal = o.totalFloors != null ? String(o.totalFloors) : ''
+    const floorsMode = !floorsTotal ? '' : ['1', '2', '3'].includes(floorsTotal) ? floorsTotal : 'other'
     setForm({
       ...emptyForm,
       title: (o.title as string) || '',
@@ -613,7 +658,9 @@ export const CrmObjects: FC<{
       kitchenArea: o.kitchenArea != null ? String(o.kitchenArea) : '',
       rooms: o.rooms != null ? String(o.rooms) : '',
       floor: o.floor != null ? String(o.floor) : '',
-      totalFloors: o.totalFloors != null ? String(o.totalFloors) : '',
+      totalFloors: floorsTotal,
+      floorsMode,
+      floorsOther: floorsMode === 'other' ? floorsTotal : '',
       buildingType: (o.buildingType as string) || '',
       condition: (o.condition as string) || '',
       heating: (o.heating as string) || '',
@@ -649,6 +696,7 @@ export const CrmObjects: FC<{
     }
     setPhotos(all)
     setFeatures(((o.features as { feature?: string }[] | undefined) || []).map((f) => f.feature || '').filter(Boolean))
+    setFloorDescs(floorDescsFromDoc(o))
     const rt = o.description as { root?: { children?: { children?: { text?: string }[] }[] } } | undefined
     const descText = (rt?.root?.children || []).map((p) => (p.children || []).map((c) => c.text || '').join('')).filter(Boolean).join('\n')
     setForm((prev) => ({ ...prev, description: descText }))
@@ -806,6 +854,20 @@ export const CrmObjects: FC<{
         : areaNum
       : undefined
     const mediaIds = photos.map((p) => p.id).filter((id): id is number => id !== null)
+    // Этажность дома (дом и таунхаус): выбранное число этажей из списка или
+    // своё («другое значение»). Хранится, как и раньше, в totalFloors — его
+    // читают карточка сайта, оценка и публикации.
+    // Этажность — целое число этажей («4,5 этажа» не бывает)
+    const houseFloorsNum = !isHouse
+      ? null
+      : form.floorsMode === 'other' ? toNum(form.floorsOther) : toNum(form.floorsMode)
+    const houseFloors = houseFloorsNum != null ? Math.round(houseFloorsNum) : undefined
+    // Описания помещений по этажам: на каждый этаж свой пункт. Если этажность
+    // не выбрана (старый объект), показываем и сохраняем то, что было, — иначе
+    // открытие карточки молча стирало бы сохранённые описания.
+    const floorRows = (isHouse ? floorDescs.slice(0, houseFloors && houseFloors > 0 ? houseFloors : floorDescs.length) : [])
+      .map((d, i) => ({ floorNumber: i + 1, description: (d || '').trim() }))
+      .filter((row) => row.description)
     const body: Record<string, unknown> = {
       title: form.title.trim(),
       type: form.type,
@@ -817,7 +879,10 @@ export const CrmObjects: FC<{
       kitchenArea: form.kitchenArea ? Number(form.kitchenArea) : undefined,
       rooms: form.rooms ? Number(form.rooms) : undefined,
       floor: form.floor ? Number(form.floor) : undefined,
-      totalFloors: form.totalFloors ? Number(form.totalFloors) : undefined,
+      totalFloors: isHouse ? houseFloors : form.totalFloors ? Number(form.totalFloors) : undefined,
+      // Квартиры, участки и коммерция поэтажных описаний не получают —
+      // поле не отправляем, чтобы не затереть чужие данные
+      floorDescriptions: isHouse ? floorRows : undefined,
       buildingType: form.buildingType || undefined,
       condition: form.condition || undefined,
       heating: form.heating || undefined,
@@ -1176,8 +1241,55 @@ export const CrmObjects: FC<{
           <Field label={t.crm.objLivingArea}><input type="number" value={form.livingArea} onChange={(e) => set('livingArea', e.target.value)} style={inputStyle} /></Field>
           <Field label={t.crm.objKitchenArea}><input type="number" value={form.kitchenArea} onChange={(e) => set('kitchenArea', e.target.value)} style={inputStyle} /></Field>
           <Field label={t.crm.objRooms}><input type="number" value={form.rooms} onChange={(e) => set('rooms', e.target.value)} style={inputStyle} /></Field>
-          <Field label={t.crm.objFloor}><input type="number" value={form.floor} onChange={(e) => set('floor', e.target.value)} style={inputStyle} /></Field>
-          <Field label={t.crm.objTotalFloors}><input type="number" value={form.totalFloors} onChange={(e) => set('totalFloors', e.target.value)} style={inputStyle} /></Field>
+          {/* Этажность дома — только у дома и таунхауса: сразу видно, сколько
+              этажей, и появляются поля описаний. Квартиры (этаж квартиры в
+              доме), участки и коммерция — прежние «Этаж» и «Этажей». */}
+          {isHouse ? (
+            <>
+              <Field label={t.crm.objFloors}>
+                <select value={form.floorsMode} onChange={(e) => set('floorsMode', e.target.value)} style={inputStyle}>
+                  <option value="">{t.crm.objFloorsNone}</option>
+                  <option value="1">1 этаж</option>
+                  <option value="2">2 этажа</option>
+                  <option value="3">3 этажа</option>
+                  <option value="other">{t.crm.objFloorsOther}</option>
+                </select>
+              </Field>
+              {form.floorsMode === 'other' && (
+                <Field label={t.crm.objFloorsCount}>
+                  <input type="number" min={1} step={1} value={form.floorsOther} onChange={(e) => set('floorsOther', e.target.value)} style={inputStyle} />
+                </Field>
+              )}
+            </>
+          ) : (
+            <>
+              <Field label={t.crm.objFloor}><input type="number" value={form.floor} onChange={(e) => set('floor', e.target.value)} style={inputStyle} /></Field>
+              <Field label={t.crm.objTotalFloors}><input type="number" value={form.totalFloors} onChange={(e) => set('totalFloors', e.target.value)} style={inputStyle} /></Field>
+            </>
+          )}
+          {/* Описание помещений по этажам дома: у одноэтажного — только
+              «1 этаж», у двухэтажного — «1 этаж» и «2 этаж», у трёхэтажного —
+              ещё «3 этаж». Сохраняется отдельно на каждый этаж
+              (floorDescriptions объекта) и показывается в карточке на сайте. */}
+          {isHouse && floorFieldCount > 0 && (
+            <div className="span-2" style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {Array.from({ length: floorFieldCount }, (_, i) => (
+                <Field key={i} label={floorLabel(i + 1, t.crm.objFloorN)}>
+                  <textarea
+                    rows={2}
+                    value={floorDescs[i] || ''}
+                    onChange={(e) => setFloorDescs((prev) => {
+                      const next = [...prev]
+                      next[i] = e.target.value
+                      return next
+                    })}
+                    placeholder={t.crm.objFloorPh}
+                    style={inputStyle}
+                  />
+                </Field>
+              ))}
+            </div>
+          )}
           <Field label={t.crm.objBuildingType}>
             <input value={form.buildingType} onChange={(e) => set('buildingType', e.target.value)} style={inputStyle} list="crm-building-type" />
           </Field>

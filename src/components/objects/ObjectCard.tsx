@@ -1,5 +1,6 @@
 import type { Dict } from '@/i18n/dictionaries'
 import { areaHuman, type AreaUnit } from '@/lib/area-format'
+import { floorHuman } from '@/lib/floor-format'
 
 export interface ObjectListItem {
   id: number
@@ -46,10 +47,16 @@ export default function ObjectCard({ obj, lang, t }: ObjectCardProps) {
   // м² и остальные категории — как раньше: «600 м²»
   const areaLabel = areaHuman(obj.area, obj.areaUnit, t.catalog.areaUnits, (n) =>
     n.toLocaleString(t.locale, { maximumFractionDigits: 3 }))
+  // Дом и таунхаус — этажность дома («2 этажа»); у остальных категорий —
+  // как раньше: «этаж / всего этажей» (этаж квартиры в доме)
+  const isHouse = obj.category === 'house' || obj.category === 'townhouse'
+  const floorsLabel = isHouse
+    ? floorHuman(obj.totalFloors, t.object.floorUnits, (n) => n.toLocaleString(t.locale))
+    : (obj.floor || obj.totalFloors) && `${obj.floor || '?'}/${obj.totalFloors || '?'} ${t.object.floor.toLowerCase()}`
   const meta = [
     areaLabel,
     obj.rooms && `${obj.rooms} ${t.catalog.rooms}`,
-    (obj.floor || obj.totalFloors) && `${obj.floor || '?'}/${obj.totalFloors || '?'} ${t.object.floor.toLowerCase()}`,
+    floorsLabel,
   ].filter(Boolean).join(' • ')
 
   const agentInitials = obj.agent?.name

@@ -577,6 +577,29 @@ export const Objects: CollectionConfig = {
       label: 'Всего этажей',
     },
     {
+      // Описания помещений по этажам частного дома: «1 этаж — кухня-гостиная,
+      // санузел, спальня», «2 этаж — две спальни, санузел, балкон». Этажность
+      // дома хранится в totalFloors (в CRM — выпадающий список «1/2/3 этажа»),
+      // здесь — только тексты по каждому этажу, отдельной строкой на этаж.
+      // Заполняется только у дома и таунхауса (у квартир этаж один — этаж
+      // квартиры в доме, участкам и коммерции поэтажные описания не нужны);
+      // показывается в карточке объекта на сайте.
+      name: 'floorDescriptions',
+      type: 'array',
+      label: 'Этажи дома',
+      admin: {
+        condition: (_data, siblingData) => {
+          const category = (siblingData as { category?: string } | undefined)?.category
+          return category === 'house' || category === 'townhouse'
+        },
+        description: 'Помещения каждого этажа дома: «1 этаж — кухня-гостиная, санузел», «2 этаж — спальни, балкон». Показывается в карточке объекта на сайте',
+      },
+      fields: [
+        { name: 'floorNumber', type: 'number', label: 'Этаж', required: true },
+        { name: 'description', type: 'textarea', label: 'Помещения' },
+      ],
+    },
+    {
       name: 'buildingType',
       type: 'text',
       label: 'Тип дома',

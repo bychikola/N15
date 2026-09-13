@@ -17,6 +17,7 @@ import { ViewRequestForm } from '@/components/objects/ViewRequestForm'
 import { AgentContactButtons } from '@/components/ui/AgentContactButtons'
 import { getDictionary, type Dict } from '@/i18n/dictionaries'
 import { areaHuman, type AreaUnit } from '@/lib/area-format'
+import { floorHuman, floorLabel } from '@/lib/floor-format'
 
 interface PageProps {
   params: Promise<{ lang: string; slug: string }>
@@ -70,6 +71,9 @@ export default async function ObjectPage({ params }: PageProps) {
     id: number; title: string; type: string; category: string
     price: number; area?: number; areaUnit?: AreaUnit; livingArea?: number; kitchenArea?: number
     rooms?: number; floor?: number; totalFloors?: number
+    // Поэтажные описания помещений частного дома (заполняются в CRM):
+    // «1 этаж — кухня-гостиная, санузел, спальня», «2 этаж — …»
+    floorDescriptions?: { floorNumber?: number; description?: string }[]
     buildingType?: string; condition?: string; heating?: string; balcony?: string
     water?: string; sewerage?: string; electricity?: string; gas?: string; internet?: string
     address?: { city?: string; district?: string; cityDistrict?: string; locality?: string; snt?: string; street?: string; house?: string; apartment?: string }
@@ -121,6 +125,20 @@ export default async function ObjectPage({ params }: PageProps) {
   // Площадь участка, введённая в сотках, показывается «6 соток» (как ввёл агент)
   const areaFmt = (n: number) => n.toLocaleString(t.locale, { maximumFractionDigits: 3 })
   const areaHumanLabel = areaHuman(obj.area, obj.areaUnit, t.catalog.areaUnits, areaFmt)
+  // Дом и таунхаус — этажность дома («2 этажа») и описания помещений по
+  // этажам («1 этаж: кухня-гостиная, санузел…», заполняются в CRM); у
+  // остальных категорий — как раньше: «этаж / всего этажей»
+  const isHouse = obj.category === 'house' || obj.category === 'townhouse'
+  const floorSpecs = isHouse
+    ? [
+        { label: t.object.floors, value: floorHuman(obj.totalFloors, t.object.floorUnits, areaFmt) },
+        ...(obj.floorDescriptions || [])
+          .map((f) => ({ floorNumber: f.floorNumber || 0, description: (f.description || '').trim() }))
+          .filter((f) => f.description)
+          .sort((a, b) => a.floorNumber - b.floorNumber)
+          .map((f) => ({ label: floorLabel(f.floorNumber, t.object.floorN), value: f.description })),
+      ]
+    : [{ label: t.object.floor, value: obj.floor || obj.totalFloors ? `${obj.floor || '?'} / ${obj.totalFloors || '?'}` : null }]
   const gallery = obj.images?.filter((i) => i.url) || []
 
   const allSlides: { url: string; alt: string; thumb?: string; tile?: string }[] = []
@@ -236,7 +254,7 @@ export default async function ObjectPage({ params }: PageProps) {
                     { label: t.object.living, value: obj.livingArea ? `${obj.livingArea} ${t.catalog.sqm}` : null },
                     { label: t.object.kitchen, value: obj.kitchenArea ? `${obj.kitchenArea} ${t.catalog.sqm}` : null },
                     { label: t.object.rooms, value: obj.rooms?.toString() },
-                    { label: t.object.floor, value: obj.floor || obj.totalFloors ? `${obj.floor || '?'} / ${obj.totalFloors || '?'}` : null },
+                    ...floorSpecs,
                     { label: t.object.buildingType, value: buildTypeLabel(t, obj.buildingType) },
                     { label: t.object.condition, value: conditionLabel(t, obj.condition) },
                     { label: t.object.heating, value: obj.heating ? (t.object.heatingOptions[obj.heating as keyof typeof t.object.heatingOptions] ?? obj.heating) : null },
