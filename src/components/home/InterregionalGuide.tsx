@@ -1,168 +1,32 @@
-import Link from 'next/link'
 import type { Dict } from '@/i18n/dictionaries'
-import {
-  INTERREGIONAL_REGIONS,
-  type InterregionalGroup,
-  type InterregionalObject,
-} from '@/lib/interregional'
+import { INTERREGIONAL_REGIONS } from '@/lib/interregional'
 
 interface Props {
   t: Dict
   lang: string
-  /** Публикованные объекты по городам справочника: город → объекты Н15,
-   *  свежие первыми. Город, которого нет в карте, считается пустым. */
-  objectsByCity: ReadonlyMap<string, readonly InterregionalObject[]>
 }
 
-/** Сколько предложений города показывается в раскрытой строке (остальные — в каталоге) */
-const OBJECTS_PER_CITY = 5
-
-// Имена групп раскрывающихся строк (атрибут name у <details>): браузер сам
-// закрывает прежний пункт группы, когда открывают новый — одновременно
-// открыт только один пункт. У блока «Другие регионы России» своя строка,
-// она ходит в одну группу с регионами справочника
-const BLOCK_ROW_GROUP = 'n15-landing-row'
-const REGION_ROW_GROUP = 'n15-country-region'
-
-const groupVisible = (group: InterregionalGroup, objectsByCity: ReadonlyMap<string, readonly InterregionalObject[]>) =>
-  group.cities.length > 0 || (group.extra ?? []).some((city) => objectsByCity.has(city))
-
-// Блок «Межрегиональная недвижимость» на главной — одна широкая строка того же
-// формата, что «Дизайн и ремонт под ключ»: название слева, «+» справа, по
-// умолчанию свёрнута. Внутри — регионы справочника (01-04) и «Другие регионы
-// России» (05): строки раскрываются в города и их актуальные предложения.
-// Каждый город — строка: название, счётчик объектов и «+»; строка раскрывается
-// в актуальные предложения Н15 в этом городе (ссылки на карточки объектов)
-// и на каталог города (/catalog?city=). Ключевые города видны всегда; в городе
-// без объектов строка помечается «Объектов Н15 пока нет» — показываем его
-// в справочнике, не выдумывая предложений.
-export default function InterregionalGuide({ t, lang, objectsByCity }: Props) {
+// Блок «Межрегиональная недвижимость» на главной — сетка карточек-ссылок
+// того же формата, что у категорий недвижимости (см. SearchCategories):
+// номер, название региона и стрелка. Карточка целиком ведёт на страницу
+// направления «Межрегиональные объекты» — там города регионов и их
+// предложения. Названия регионов — справочник src/lib/interregional.ts.
+export default function InterregionalGuide({ t, lang }: Props) {
   return (
-    <section className="lp-country" id="country">
-      <details className="lp-country-row" name={BLOCK_ROW_GROUP}>
-        <summary>
-          <h2>{t.landing.countryTitle}</h2>
-          <i>+</i>
-        </summary>
-        <p className="lp-row-lead">{t.landing.countrySubtitle}</p>
-        <div className="lp-districts">
-          {INTERREGIONAL_REGIONS.map((region, index) => (
-            <details key={region.title} name={REGION_ROW_GROUP}>
-              <summary>
-                <span>{String(index + 1).padStart(2, '0')}</span>
-                <strong>{region.title}</strong>
-                <i>+</i>
-              </summary>
-              {region.groups.some((group) => groupVisible(group, objectsByCity)) ? (
-                region.groups.map((group) => {
-                  if (!groupVisible(group, objectsByCity)) return null
-                  const cities = [
-                    ...group.cities,
-                    // Прочие города справочника: показываем только те,
-                    // где реально есть опубликованные объекты
-                    ...(group.extra ?? []).filter((city) => objectsByCity.has(city)),
-                  ]
-                  return (
-                    <div key={group.label ?? group.cities[0]}>
-                      {group.label && <p className="lp-region-subtitle">{group.label}</p>}
-                      <ul className="lp-city-list">
-                        {cities.map((city) => (
-                          <CityRow
-                            key={city}
-                            city={city}
-                            objects={objectsByCity.get(city)}
-                            t={t}
-                            lang={lang}
-                          />
-                        ))}
-                      </ul>
-                    </div>
-                  )
-                })
-              ) : (
-                <p>{t.landing.countryRegionEmpty}</p>
-              )}
-            </details>
-          ))}
-          {/* Пятая строка блока: регионов справочника у неё нет — раскрывается
-              предложением подобрать недвижимость по запросу (см. заявку) */}
-          <details name={REGION_ROW_GROUP}>
-            <summary>
-              <span>{String(INTERREGIONAL_REGIONS.length + 1).padStart(2, '0')}</span>
-              <strong>{t.landing.countryOtherTitle}</strong>
-              <i>+</i>
-            </summary>
-            <p>
-              {t.landing.countryOtherText}{' '}
-              <Link className="lp-city-cta" href={`/${lang}/contacts`}>
-                {t.landing.countryCityLead}
-              </Link>
-            </p>
-          </details>
-        </div>
-      </details>
+    <section className="lp-section lp-objects" id="country">
+      <div className="lp-objects-heading">
+        <h2 className="lp-h2">{t.landing.countryTitle}</h2>
+      </div>
+
+      <div className="lp-categories">
+        {INTERREGIONAL_REGIONS.map((region, index) => (
+          <a className="lp-category-card" key={region.title} href={`/${lang}/interregional`}>
+            <span className="lp-category-num">{String(index + 1).padStart(2, '0')}</span>
+            <h3>{region.title}</h3>
+            <i aria-hidden="true">→</i>
+          </a>
+        ))}
+      </div>
     </section>
-  )
-}
-
-function CityRow({
-  city,
-  objects,
-  t,
-  lang,
-}: {
-  city: string
-  objects: readonly InterregionalObject[] | undefined
-  t: Dict
-  lang: string
-}) {
-  const count = objects?.length ?? 0
-  return (
-    <li>
-      <details className="lp-city">
-        <summary>
-          <span className="lp-city-name">{city}</span>
-          {count > 0 ? (
-            <em className="lp-city-count">{count}</em>
-          ) : (
-            <small className="lp-city-none">{t.landing.countryCityNone}</small>
-          )}
-          <i>+</i>
-        </summary>
-        {count > 0 ? (
-          <div className="lp-city-body">
-            <ul className="lp-city-objects">
-              {objects!.slice(0, OBJECTS_PER_CITY).map((obj) => (
-                <li key={obj.id}>
-                  <Link className="lp-city-object" href={`/${lang}/catalog/${obj.slug ?? obj.id}`}>
-                    <span className="lp-city-object-title">{obj.title}</span>
-                    {(obj.street || obj.house) && (
-                      <span className="lp-city-object-addr">
-                        {[obj.street, obj.house].filter(Boolean).join(', ')}
-                      </span>
-                    )}
-                    {obj.price != null && (
-                      <span className="lp-city-object-price">
-                        {obj.price.toLocaleString(t.locale)} {t.common.currency}
-                      </span>
-                    )}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-            <Link className="lp-city-link-all" href={`/${lang}/catalog?city=${encodeURIComponent(city)}`}>
-              {t.landing.countryCityAll} — {count}
-            </Link>
-          </div>
-        ) : (
-          <p className="lp-city-empty">
-            {t.landing.countryCityNone}.{' '}
-            <Link className="lp-city-cta" href={`/${lang}/contacts`}>
-              {t.landing.countryCityLead}
-            </Link>
-          </p>
-        )}
-      </details>
-    </li>
   )
 }

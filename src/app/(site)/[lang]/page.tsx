@@ -18,9 +18,6 @@ import ContactSection from '@/components/home/ContactSection'
 // серверной ошибкой («This page couldn't load»)
 import { DISTRICT_OPTIONS, CITY_DISTRICT_OPTIONS } from '@/lib/districts'
 import { SNT_AREAS } from '@/components/home/landing-data'
-// Справочник и объекты «Межрегиональной недвижимости»: блок на главной
-// показывает города регионов и их актуальные предложения (данные из базы)
-import { INTERREGIONAL_CITIES, type InterregionalObject } from '@/lib/interregional'
 
 export const dynamic = 'force-dynamic'
 
@@ -68,48 +65,6 @@ export default async function HomePage({ params, searchParams }: PageProps) {
   const qSnt = typeof sp.snt === 'string' && isKnown(sp.snt, SNT_AREAS) ? sp.snt : ''
 
   const payload = await getPayload({ config })
-
-  // Предложения «Межрегиональной недвижимости»: опубликованные объекты
-  // в городах справочника регионов (address.city), свежие первыми. Блок на
-  // главной группирует их по городам: у города без объектов — пометка
-  // «Объектов Н15 пока нет», с объектами — раскрывающийся список.
-  const { docs: interregionalDocs } = await payload.find({
-    collection: 'objects',
-    where: {
-      and: [
-        { status: { equals: 'published' } },
-        { 'address.city': { in: [...INTERREGIONAL_CITIES] } },
-      ],
-    },
-    sort: '-createdAt',
-    limit: 1000,
-    depth: 0,
-  })
-  const interregionalByCity = new Map<string, InterregionalObject[]>()
-  for (const d of interregionalDocs) {
-    const o = d as unknown as {
-      address?: { city?: string; street?: string | null; house?: string | null }
-      title?: string | null
-      price?: number | null
-      type?: string | null
-      slug?: string | null
-    }
-    const addr = o.address
-    const city = addr?.city
-    if (!city) continue
-    const list = interregionalByCity.get(city)
-    const item: InterregionalObject = {
-      id: d.id as number,
-      slug: o.slug ?? null,
-      title: o.title ?? '',
-      price: typeof o.price === 'number' ? o.price : null,
-      type: o.type === 'rent' ? 'rent' : 'sale',
-      street: addr.street ?? null,
-      house: addr.house ?? null,
-    }
-    if (list) list.push(item)
-    else interregionalByCity.set(city, [item])
-  }
 
   // Блок «Актуальные объекты»: только опубликованные (черновики скрыты).
   // Проданные, снятые с публикации и архивные в CRM переводятся в статус
@@ -206,9 +161,9 @@ export default async function HomePage({ params, searchParams }: PageProps) {
           filterSummary={filterSummary}
           emptyNote={filterEmptyNote}
         />
-        <InterregionalGuide t={t} lang={lang} objectsByCity={interregionalByCity} />
-        <ServicesSection t={t} />
-        <LegalSection t={t} />
+        <InterregionalGuide t={t} lang={lang} />
+        <ServicesSection t={t} lang={lang} />
+        <LegalSection t={t} lang={lang} />
         <AboutSection t={t} />
         <ContactSection t={t} phone={phone} />
         <footer className="lp-footer">
