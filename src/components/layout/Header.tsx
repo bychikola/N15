@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation'
 import { useI18n } from '@/i18n/i18n-provider'
 import { LangSwitcher } from '@/i18n/lang-switcher'
 import { ThemeSwitcher } from '@/components/ui/ThemeSwitcher'
+import { MusicPlayer } from '@/components/layout/MusicPlayer'
 import CabinetBadge from '@/components/layout/CabinetBadge'
 import MortgageCalculator from '@/components/layout/MortgageCalculator'
 
@@ -509,6 +510,9 @@ export const Header: FC = () => {
           </div>
           <LangSwitcher className="ml-3" />
           <ThemeSwitcher className="ml-3" />
+          {/* Фоновая музыка: трек зависит от языка сайта, автозапуска нет.
+              Ползунок громкости и подпись о лицензии — при наведении на кнопку */}
+          <MusicPlayer />
         </nav>
 
         {/* Mobile hamburger: точный inline-стиль, чтобы крест всегда был ровно по центру кнопки */}
@@ -708,6 +712,10 @@ export const Header: FC = () => {
               {cabinetIcon}
               {t.nav.cabinet}
             </Link>
+            {/* Фоновая музыка на телефоне: звук по умолчанию выключен (как
+                и везде — автозапуска нет), поэтому это именно кнопка
+                «включить», а не выключенный плеер */}
+            <MusicPlayer variant="mobile" />
             <div className="flex justify-center items-center gap-3 pt-1">
               <LangSwitcher onNavigate={() => setIsOpen(false)} />
               <ThemeSwitcher />

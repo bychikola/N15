@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import type { FC } from 'react'
 import { OrnamentDivider } from '@/components/ui/OrnamentDivider'
+import { MusicCredit } from '@/components/layout/MusicPlayer'
 import { useI18n } from '@/i18n/i18n-provider'
 
 // Ссылки колонки «Компания»
@@ -87,6 +88,8 @@ export const Footer: FC = () => {
           <p className="text-base text-[var(--n15-silver)]">
             {t.footer.made}
           </p>
+          {/* Сведения о фоновой музыке: автор и лицензия трека (условие CC BY) */}
+          <MusicCredit className="w-full" />
         </div>
       </div>
     </footer>
