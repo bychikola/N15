@@ -82,8 +82,8 @@ export default async function ObjectPage({ params }: PageProps) {
     features?: { feature?: string }[]
     // Подтверждённые агентом характеристики дома (год постройки, материал
     // стен, этажность, серия, капремонт, УК, площадь) — заполняются в CRM
-    // кнопкой «Получить данные о доме». Неподтверждённые значения и статусы
-    // «Не найдено»/«Требует проверки» клиенту не показываются.
+    // кнопкой «Искать в открытых источниках». Неподтверждённые значения и
+    // статусы «Не найдено»/«Требует проверки» клиенту не показываются.
     housePublic?: { items?: { key?: string; label?: string; value?: string; source?: string; checkedAt?: string }[]; confirmedAt?: string }
     isPremium?: boolean; isExclusive?: boolean
     // Поля phone/whatsapp/telegram намеренно не используются: номера агентов
