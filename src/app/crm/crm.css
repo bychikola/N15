@@ -74,3 +74,42 @@ body{margin:0}.crm-sidebar{box-sizing:border-box}.crm-chat-panel{box-sizing:bord
   .crm-nav-add{display:block;margin-top:2px;background:#a7814e;color:#fff;border-radius:8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;text-align:center}
   .crm-nav-add:hover{background:#b38a52;color:#fff}
 }
+
+/* Список заявок (раздел «Заявки», режим по умолчанию): компактные строки
+   вместо широкой таблицы — колонки не растягиваются на всю ширину,
+   на телефоне строка складывается в столбик без горизонтальной прокрутки
+   (раскладку держим в CSS: инлайн-стили медиа-запросами не переопределить) */
+.crm-leads{background:#fff;border:1px solid #e5dfd3;border-radius:12px;max-width:1000px}
+.crm-leads-head{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1.5fr) minmax(0,.8fr) 128px 72px;gap:12px;align-items:center;padding:12px 15px;border-bottom:1px solid #e5dfd3;background:#faf8f4;border-radius:12px 12px 0 0}
+.crm-leads-head span{font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:#927046}
+.crm-leads-head span:last-child{text-align:right}
+.crm-lead{position:relative;display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1.5fr) minmax(0,.8fr) 128px 72px;gap:12px;align-items:center;padding:11px 15px;border-top:1px solid #eee9e1;cursor:pointer}
+.crm-leads-head + .crm-lead,.crm-lead:first-child{border-top:0}
+.crm-lead:hover{background:#fbf9f5}
+.crm-lead:focus-visible{outline:2px solid #b68a51;outline-offset:-2px}
+.crm-lead.open{z-index:3}
+.crm-lead-client,.crm-lead-object,.crm-lead-agent{min-width:0}
+.crm-lead-name{display:block;font-weight:600;font-size:12px;color:#25241f;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.crm-lead-name:hover{color:#8d6b40}
+.crm-lead-title{display:block;font-size:12px;color:#25241f;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.crm-lead-sub{display:block;margin-top:3px;font-size:10px;color:#8a857b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.crm-lead-sub a{color:#8d6b40;text-decoration:none}
+.crm-lead-agent{font-size:11px;color:#5a564e;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.crm-lead-date{font-size:10px;color:#817b70;white-space:nowrap;text-align:right}
+.crm-lead-stage{position:relative;display:inline-flex;justify-content:flex-end}
+.crm-stage-pill{display:inline-flex;align-items:center;gap:5px;border:0;border-radius:999px;padding:5px 10px;font:600 9px Arial,Helvetica,sans-serif;text-transform:uppercase;letter-spacing:.08em;cursor:pointer;white-space:nowrap}
+.crm-stage-pill:focus-visible{outline:2px solid #b68a51;outline-offset:1px}
+.crm-stage-menu{position:absolute;top:calc(100% + 6px);right:0;z-index:5;min-width:200px;background:#fff;border:1px solid #ded5c7;border-radius:10px;box-shadow:0 10px 26px rgba(37,36,31,.14);padding:6px;display:flex;flex-direction:column}
+.crm-stage-menu button{display:flex;align-items:center;gap:9px;border:0;border-radius:7px;background:none;padding:9px 10px;font:12px Arial,Helvetica,sans-serif;color:#25241f;text-align:left;cursor:pointer}
+.crm-stage-menu button:hover{background:#f7f4ee}
+.crm-stage-menu button[aria-current=true]{background:#f2eadf;font-weight:600}
+.crm-stage-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+@media(max-width:760px){
+  .crm-leads-head{display:none}
+  .crm-lead{grid-template-columns:minmax(0,1fr) auto;row-gap:7px;padding:13px 15px}
+  .crm-lead-client{grid-column:1;grid-row:1}
+  .crm-lead-date{grid-column:2;grid-row:1}
+  .crm-lead-object{grid-column:1/-1;grid-row:2}
+  .crm-lead-agent{grid-column:1;grid-row:3}
+  .crm-lead-stage{grid-column:2;grid-row:3}
+}
