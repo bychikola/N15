@@ -35,6 +35,9 @@ import { AgentSettings } from './globals/AgentSettings'
 // «Новости (автосбор)»: состояние чтения официальных RSS-каналов
 // (см. src/lib/news.ts и news-service.ts)
 import { NewsSettings } from './globals/NewsSettings'
+// «Интеграции площадок»: доступы к официальным каналам Авито/ЦИАН/Домклика
+// и результаты проверок соединения (см. src/lib/platform-integration-service.ts)
+import { PlatformSettings } from './globals/PlatformSettings'
 
 export default buildConfig({
   secret: process.env.PAYLOAD_SECRET || 'n15-dev-secret-change-in-production',
@@ -57,7 +60,7 @@ export default buildConfig({
     admin: process.env.ADMIN_ROUTE || '/admin',
   },
   collections: [Users, Media, Objects, Agents, Applications, Tasks, Messages, Blog, News, Pages, Customers, Emails, MailAttachments, AgentTasks, MarketListings, LegalDocuments, LegalReports, Advertisers, Advertisements, AdvertisingRequests],
-  globals: [SiteSettings, MailSettings, AgentSettings, NewsSettings],
+  globals: [SiteSettings, MailSettings, AgentSettings, NewsSettings, PlatformSettings],
   editor: lexicalEditor(),
   i18n: {
     // Интерфейс админки — только на русском (без переключателя языков)

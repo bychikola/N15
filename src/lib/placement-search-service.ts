@@ -24,17 +24,20 @@ import {
   FOUND_MIN_MATCH,
   allPlatformSearchLinks,
   compareWithListing,
-  channelConfigured,
   MARKET_CHANNELS,
   OWN_CHANNELS,
   objectSearchQuery,
   platformSearchLink,
+  searchObjectFromDoc,
   type PlacementChannelSpec,
+  type PlacementCheckSource,
   type PlacementProbe,
   type SearchObjectLike,
 } from './placement-search'
 import type { ListingLike } from './listing-check'
 import { marketPlatformByUrl } from './market-parser'
+import { platformChannelAccess, type PlatformChannelAccess } from './platform-integration-service'
+import { CONNECTION_STATUS_LABELS, type ConnectionStatus } from './platform-integrations'
 
 const HARD_LIMIT_LISTINGS = 1000
 
@@ -76,26 +79,31 @@ type CandidateListing = ListingLike & { url?: string | null; title?: string | nu
 
 /** Итог поиска по одной площадке (до сборки строки результата) */
 interface ChannelOutcome {
-  found?: { listing: CandidateListing; note: string }
+  /** Находка: объявление, подпись источника и откуда оно взялось */
+  found?: { listing: CandidateListing; note: string; source: PlacementCheckSource }
   candidates?: number
   unavailableReason?: string
+  /** Официальный канал ответил в этом прогоне — статус подключения фактический */
+  apiAnswered?: boolean
 }
 
 // --- Источники -----------------------------------------------------------------------
 
 /**
- * Поиск объявлений площадки по официальному каналу (API/фид по договору).
- * Формат ответа у каждой площадки свой, поэтому разбор появляется здесь по
- * мере подключения доступа. Пока адаптера нет — возвращаем причину, а не
- * выдуманные объявления: вызывающий код покажет «проверка недоступна».
+ * Доступы площадок раздела «Интеграции площадок» (см.
+ * platform-integration-service.ts): подключена ли площадка, что ответила и
+ * как получить её объявления. Без доступа канал остаётся неподключённым — и
+ * строка результата честно пишет об этом, а не показывает пустую карточку.
  */
-async function fetchChannelListings(
-  spec: PlacementChannelSpec,
-): Promise<{ listings: ListingLike[]; error?: string }> {
-  return {
-    listings: [],
-    error: `Автоматический поиск по каналу «${spec.name}» не подключён. Для проверки нужен доступ: ${spec.requirement}`,
+async function channelAccessMap(
+  payload: Payload,
+): Promise<Map<string, PlatformChannelAccess>> {
+  const map = new Map<string, PlatformChannelAccess>()
+  for (const spec of MARKET_CHANNELS) {
+    const access = await platformChannelAccess(payload, spec.slug)
+    if (access) map.set(spec.slug, access)
   }
+  return map
 }
 
 /** Своя публикация из группы publishing: статус поста/страницы для площадки */
@@ -154,26 +162,8 @@ export async function searchObjectPlacements(
   const district = typeof addr.district === 'string' ? addr.district : ''
   const city = (addr.locality || addr.city || '').trim()
 
-  const object: SearchObjectLike = {
-    address: {
-      city: addr.city || undefined,
-      locality: addr.locality || undefined,
-      street: addr.street || undefined,
-      house: addr.house || undefined,
-      apartment: addr.apartment || undefined,
-    },
-    cadastralNumber: typeof doc.cadastralNumber === 'string' ? doc.cadastralNumber : null,
-    price: pub.price ?? null,
-    area: pub.area ?? null,
-    rooms: pub.rooms ?? null,
-    floor: pub.floor ?? null,
-    totalFloors: pub.totalFloors ?? null,
-    description: pub.description || '',
-    photos: pub.photos || [],
-    category,
-    dealType: pub.type ?? null,
-    district: district && district !== city ? district : '',
-  }
+  const object: SearchObjectLike = searchObjectFromDoc(doc, pub)
+  const accessBySlug = await channelAccessMap(payload)
 
   const query = objectSearchQuery(object)
   const searchLinks = allPlatformSearchLinks(query)
@@ -258,27 +248,47 @@ export async function searchObjectPlacements(
     const best = stored[0]
     const outcome: ChannelOutcome = { candidates: stored.length }
 
+    const access = accessBySlug.get(spec.slug)
+
     if (best && best.cmp.match >= FOUND_MIN_MATCH) {
-      outcome.found = { listing: best.listing, note: 'Найдено среди сохранённых в CRM объявлений рынка' }
-    } else if (spec.kind === 'api' && channelConfigured(spec)) {
-      // Канал есть — спрашиваем площадку; адаптер подключается по договору
-      const res = await fetchChannelListings(spec)
+      outcome.found = {
+        listing: best.listing,
+        note: 'Найдено среди сохранённых в CRM объявлений рынка',
+        source: 'market',
+      }
+    } else if (access?.configured) {
+      // Площадка подключена — спрашиваем её официальный API и сверяем
+      // объявления агентства с объектом (данные реальные, без имитации)
+      const res = await access.listings()
+      // Канал ответил в этом прогоне: статус подключения показываем не по
+      // прошлой проверке, а по факту — иначе «найдено» соседствовало бы с
+      // устаревшим «доступ отклонён»
+      outcome.apiAnswered = !res.error
       outcome.candidates = (outcome.candidates || 0) + (res.listings || []).length
       const matches = (res.listings || [])
         .map((l) => ({ listing: l as CandidateListing, cmp: compareWithListing(object, l) }))
         .sort((a, b) => b.cmp.match - a.cmp.match)
       if (matches[0] && matches[0].cmp.match >= FOUND_MIN_MATCH) {
-        outcome.found = { listing: matches[0].listing, note: 'Найдено официальным каналом площадки' }
+        outcome.found = {
+          listing: matches[0].listing,
+          note: 'Найдено официальным каналом площадки',
+          source: 'api',
+        }
       } else if (res.error) {
         outcome.unavailableReason = res.error
       }
     } else {
-      outcome.unavailableReason = spec.kind === 'api'
-        ? `Официальный канал не подключён. ${spec.requirement}`
-        : spec.requirement
+      // Доступа нет — так и пишем: пустая карточка не должна выглядеть
+      // работающим парсером (см. CONNECTION_STATUS_LABELS)
+      outcome.unavailableReason = access?.status === 'needsAdmin' || spec.kind === 'none'
+        ? `Нужен доступ администратора: ${spec.requirement}`
+        : `Площадка не подключена: ${spec.requirement}. Подключение выполняет администратор — раздел «Интеграции площадок»`
     }
 
-    probes.push(probeForChannel(spec, outcome, linkFor(spec.slug), object))
+    const connection: ConnectionStatus = outcome.apiAnswered
+      ? 'connected'
+      : access?.status || (spec.kind === 'none' ? 'needsAdmin' : 'notConfigured')
+    probes.push(probeForChannel(spec, outcome, linkFor(spec.slug), object, connection))
   }
 
   const sorted = sortProbes(probes)
@@ -312,6 +322,7 @@ function probeForChannel(
   outcome: ChannelOutcome,
   searchUrl: string,
   object: SearchObjectLike,
+  connection: ConnectionStatus,
 ): Probe {
   const base: Probe = {
     platform: spec.slug,
@@ -320,15 +331,19 @@ function probeForChannel(
     source: 'none',
     url: searchUrl,
     price: null,
+    connection,
+    connectionLabel: CONNECTION_STATUS_LABELS[connection],
   }
 
   if (outcome.found) {
-    const { listing, note } = outcome.found
+    const { listing, note, source } = outcome.found
     const cmp = compareWithListing(object, listing)
     return {
       ...base,
       status: 'found',
-      source: 'market',
+      // Источник тот, откуда находка пришла на самом деле: объявления рынка
+      // из CRM или ответ официального канала площадки
+      source,
       url: listing.url || searchUrl,
       listingUrl: listing.url || null,
       reason: note,

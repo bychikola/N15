@@ -36,6 +36,9 @@ export function CrmShell({ user, t, active, children }: Props) {
     { id: 'mail', href: '/crm/mail', label: t.crm.navMail },
     // Рекламой управляет администратор — агентам раздел не показываем
     ...(isAdmin ? [{ id: 'advertising', href: '/crm/advertising', label: t.crm.navAdvertising }] : []),
+    // «Интеграции площадок»: в настройках лежат ключи и токены Авито/ЦИАН/
+    // Домклика — подключение и проверка соединения только у администратора
+    ...(isAdmin ? [{ id: 'integrations', href: '/crm/integrations', label: t.crm.intTitle }] : []),
     ...(user.agentAccess ? [{ id: 'agent', href: '/crm/agent', label: t.crm.navAgent }] : []),
   ]
 

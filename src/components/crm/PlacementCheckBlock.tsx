@@ -7,14 +7,16 @@
 // комнаты, этаж, цена, описание, фотографии) и ищет этот же объект на
 // площадках — агенту не нужно ничего вводить и привязывать ссылки вручную.
 //
-// Результат по каждой площадке: найдено/не найдено/проверка недоступна,
+// Результат по каждой площадке: найдено/не найдено/не подключена,
 // автоматически сформированная ссылка, совпадение адреса и параметров,
 // совпадение фотографий, цена, дата публикации и вероятность, что найдено
 // именно это объявление.
 //
-// Площадки без официального API/фида, запрещающие автосбор, показываются как
-// «проверка недоступна» с причиной — результат по ним не имитируется
-// (сервер: src/lib/placement-search-service.ts).
+// Площадки без подключённого официального канала подписаны «Площадка не
+// подключена» или «Нужен доступ администратора» — пустая карточка не
+// выдаётся за работающий парсер, результат не имитируется (сервер:
+// src/lib/placement-search-service.ts, подключение — раздел CRM «Интеграции
+// площадок»).
 // ---------------------------------------------------------------------------
 
 import { useCallback, useEffect, useState, type FC } from 'react'
@@ -35,6 +37,9 @@ interface PlacementProbeUi {
   probability?: number | null
   title?: string | null
   candidates?: number
+  /** Состояние подключения площадки: площадка не подключена / нужен доступ администратора */
+  connection?: string | null
+  connectionLabel?: string | null
 }
 
 interface SearchProfileUi {
@@ -55,7 +60,9 @@ interface SearchProfileUi {
 const STATUS_STYLE: Record<PlacementProbeUi['status'], { bg: string; color: string; label: string }> = {
   found: { bg: '#e6efe1', color: '#3f6b34', label: 'Найдено' },
   notFound: { bg: '#efeadf', color: '#817b70', label: 'Не найдено' },
-  unavailable: { bg: '#ece8e0', color: '#716b62', label: 'Проверка недоступна' },
+  // Не «проверка недоступна», а прямое объяснение: площадка не подключена
+  // (или подключение выполняет администратор) — см. connectionLabel
+  unavailable: { bg: '#ece8e0', color: '#716b62', label: 'Площадка не подключена' },
 }
 
 const SOURCE_LABEL: Record<string, string> = {
@@ -103,7 +110,12 @@ const Chip: FC<{ label: string; value: string }> = ({ label, value }) => (
 
 /** Одна площадка: статус, ссылка, совпадения, цена, дата, вероятность */
 const ProbeRow: FC<{ probe: PlacementProbeUi }> = ({ probe }) => {
-  const pill = STATUS_STYLE[probe.status] || STATUS_STYLE.unavailable
+  const base = STATUS_STYLE[probe.status] || STATUS_STYLE.unavailable
+  // Для неподключённой площадки подпись точнее берётся с сервера: «Площадка не
+  // подключена» или «Нужен доступ администратора» (зависит от площадки)
+  const pill = probe.status === 'unavailable' && probe.connectionLabel
+    ? { ...base, label: probe.connectionLabel }
+    : base
   const linkLabel =
     probe.status === 'found' ? 'Объявление' : probe.status === 'notFound' ? 'Ссылка на площадку' : 'Поиск по параметрам объекта'
   const meta: { label: string; value: string }[] = [
@@ -302,7 +314,7 @@ export const PlacementCheckBlock: FC<{ objectId: number; onClose: () => void }> 
           {found > 0 ? `Найдено на площадках: ${found}` : 'Совпадений не найдено'}
         </b>
         {notFound > 0 && <span style={{ fontSize: 10, color: '#8a857b' }}>не найдено: {notFound}</span>}
-        {unavailable > 0 && <span style={{ fontSize: 10, color: '#8a857b' }}>проверка недоступна: {unavailable}</span>}
+        {unavailable > 0 && <span style={{ fontSize: 10, color: '#8a857b' }}>площадка не подключена: {unavailable}</span>}
         {checkedAt && (
           <span style={{ fontSize: 10, color: '#8a857b' }}>
             {savedOnly ? 'Прошлая проверка: ' : 'Проверено: '}
@@ -321,10 +333,11 @@ export const PlacementCheckBlock: FC<{ objectId: number; onClose: () => void }> 
       </div>
 
       <p style={{ margin: '12px 0 0', fontSize: 10, color: '#9b958a', lineHeight: 1.5 }}>
-        Площадки без официального API/фида, запрещающие автоматический поиск, отмечены как
-        «проверка недоступна» — результат по ним не выдумывается, а ссылка ведёт на поиск по
-        параметрам объекта для проверки вручную. Вероятность — оценка по совпадению признаков
-        карточки и фотографий, а не статистический расчёт.
+        Площадки отмечены как «Площадка не подключена» или «Нужен доступ администратора» — результат
+        по ним не выдумывается, ссылка ведёт на поиск по параметрам объекта для проверки вручную.
+        Подключением официальных каналов (Авито, ЦИАН, Домклик) занимается администратор в разделе
+        «Интеграции площадок». Вероятность — оценка по совпадению признаков карточки и фотографий,
+        а не статистический расчёт.
       </p>
     </div>
   )

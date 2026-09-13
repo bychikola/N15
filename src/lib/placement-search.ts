@@ -6,13 +6,14 @@
  * автоматически — агент ничего не вводит руками.
  *
  * ЧЕСТНОСТЬ РЕЗУЛЬТАТА (требование владельца): площадка показывается как
- * «проверка недоступна», если у неё нет официального API/фида и её правила
- * запрещают автоматический сбор. Такой результат не имитируется — вместо
- * выдуманного «найдено/не найдено» показывается причина и автоматически
- * сформированная ссылка на поиск для ручной проверки. Автопоиск выполняется
- * только там, где канал есть: собственные публикации (сайт N15, VK,
- * Telegram), официальные каналы площадок (ключи в окружении, см. PLATFORM_SPECS)
- * и сохранённые в CRM объявления рынка.
+ * «Площадка не подключена» или «Нужен доступ администратора», если её
+ * официальный канал не подключён (см. platform-integrations.ts), а не как
+ * пустая карточка работающего парсера. Такой результат не имитируется —
+ * вместо выдуманного «найдено/не найдено» показывается причина и
+ * автоматически сформированная ссылка на поиск для ручной проверки.
+ * Автопоиск выполняется только там, где канал есть: собственные публикации
+ * (сайт N15, VK, Telegram), официальные каналы площадок (доступы из раздела
+ * «Интеграции площадок») и сохранённые в CRM объявления рынка.
  *
  * Файл без побочных эффектов (импортирует только чистые listing-check и
  * market-parser): работает на сервере и в быстрых проверках node.
@@ -26,10 +27,11 @@ import {
   type ObjectLike,
 } from './listing-check'
 import { MARKET_PLATFORM_NAMES } from './market-parser'
+import { INTEGRATION_SPECS, type ConnectionStatus, type PlatformListing } from './platform-integrations'
 
 // --- Результат проверки по площадке ---------------------------------------------
 
-/** Найдено / не найдено / проверка недоступна (без имитации) */
+/** Найдено / не найдено / площадка не подключена (без имитации) */
 export type PlacementCheckStatus = 'found' | 'notFound' | 'unavailable'
 
 /** Чем получен результат: своя публикация, официальный канал, база рынка */
@@ -46,7 +48,7 @@ export interface PlacementProbe {
   url: string
   /** Прямая ссылка на найденное объявление (когда статус «найдено») */
   listingUrl?: string | null
-  /** Почему такой статус: каким каналом проверяли либо почему проверка недоступна */
+  /** Почему такой статус: каким каналом проверяли либо почему площадка не опрошена */
   reason?: string | null
   /** Совпадение адреса и параметров, % (null — сравнения не было) */
   match?: number | null
@@ -64,12 +66,22 @@ export interface PlacementProbe {
   title?: string | null
   /** Сколько объявлений площадки просмотрено */
   candidates?: number
+  /**
+   * Состояние подключения площадки (см. platform-integrations.ts): почему
+   * проверки нет — «площадка не подключена» или «нужен доступ администратора».
+   * Пустой статус без этого поля выглядел бы как работающий парсер.
+   */
+  connection?: ConnectionStatus | null
+  /** Подпись состояния подключения для карточки */
+  connectionLabel?: string | null
 }
 
 export const PLACEMENT_STATUS_LABELS: Record<PlacementCheckStatus, string> = {
   found: 'Найдено',
   notFound: 'Не найдено',
-  unavailable: 'Проверка недоступна',
+  // Площадка не опрошена (нет официального доступа) — это не результат
+  // проверки, а её отсутствие: так и подписано в интерфейсе
+  unavailable: 'Площадка не подключена',
 }
 
 export const PLACEMENT_SOURCE_LABELS: Record<PlacementCheckSource, string> = {
@@ -85,9 +97,10 @@ export const PLACEMENT_SOURCE_LABELS: Record<PlacementCheckSource, string> = {
  * Чем площадка проверяется автоматически:
  * own  — наша собственная публикация (сайт N15, VK, Telegram): точные данные
  *        из группы publishing, поиск не нужен;
- * api  — официальный канал площадки (API/фид по договору): ключи в окружении;
- * none — официального канала нет, правила площадки запрещают автосбор —
- *        статус «проверка недоступна».
+ * api  — официальный канал площадки (API по договору): доступы в разделе
+ *        «Интеграции площадок» или в окружении;
+ * none — программного доступа нет (фид загружается в кабинет вручную) —
+ *        статус «Нужен доступ администратора».
  */
 export type PlacementChannelKind = 'own' | 'api' | 'none'
 
@@ -123,16 +136,23 @@ export const OWN_CHANNELS: PlacementChannelSpec[] = [
   },
 ]
 
-/** Площадки объявлений: официальный канал есть — сверяем, нет — не имитируем */
-export const MARKET_CHANNELS: PlacementChannelSpec[] = PLATFORM_SPECS.map((spec) => ({
-  slug: spec.slug,
-  name: spec.name,
-  kind: spec.api ? 'api' : 'none',
-  env: spec.api?.env,
-  requirement: spec.api
-    ? `Доступ к объявлениям площадки: ${spec.api.note}`
-    : 'Официального API/фида для поиска чужих объявлений нет, правила площадки запрещают автоматический сбор',
-}))
+/**
+ * Площадки объявлений: официальный канал есть — сверяем по нему, нет — не
+ * имитируем. Реестр каналов один — platform-integrations.ts (там же реальные
+ * проверки соединения и забор своих объявлений), здесь берём площадки
+ * объявлений с их требованиями к доступу.
+ */
+const MARKET_SLUGS = new Set<string>(PLATFORM_SPECS.map((p) => p.slug))
+
+export const MARKET_CHANNELS: PlacementChannelSpec[] = INTEGRATION_SPECS
+  .filter((spec) => MARKET_SLUGS.has(spec.slug))
+  .map((spec) => ({
+    slug: spec.slug,
+    name: spec.name,
+    kind: spec.probe ? 'api' : 'none',
+    env: spec.credentials.map((c) => c.env),
+    requirement: spec.channel.needs,
+  }))
 
 export const PLACEMENT_CHANNELS: PlacementChannelSpec[] = [...MARKET_CHANNELS, ...OWN_CHANNELS]
 
@@ -143,9 +163,8 @@ export const placementChannelBySlug = (slug: string): PlacementChannelSpec | und
 export const placementPlatformName = (slug?: string | null): string =>
   (slug && (MARKET_PLATFORM_NAMES[slug] || placementChannelBySlug(slug)?.name)) || slug || '—'
 
-/** Настроен ли официальный канал площадки (ключи в окружении) */
-export const channelConfigured = (spec: PlacementChannelSpec): boolean =>
-  !!spec.env && spec.env.length > 0 && spec.env.every((k) => process.env[k] && String(process.env[k]).trim().length > 0)
+// Настроен ли официальный канал площадки — решает platform-integration-service
+// (доступы хранятся в CRM, окружение — запасной источник), см. platformChannelAccess
 
 // --- Поисковый запрос и ссылки по данным объекта -----------------------------------
 
@@ -281,4 +300,131 @@ export const probeParamLabels = (params?: string[] | null): string[] =>
 export const platformHasOfficialChannel = (slug: string): boolean => {
   const spec = PLATFORM_SPECS.find((p) => p.slug === slug)
   return !!spec && platformHasApi(spec)
+}
+
+// --- Проверка объекта по подключённой площадке ------------------------------------------
+
+/**
+ * Результат сверки объекта CRM с объявлениями агентства на площадке —
+ * то, что видит администратор в разделе «Интеграции площадок»: найдено ли
+ * объявление, ссылка, цена, дата, совпадение параметров и фотографий.
+ */
+export interface PlatformObjectCheck {
+  platform: string
+  name: string
+  /** Найдено ли объявление этого объекта среди объявлений агентства */
+  found: boolean
+  /** Сколько объявлений площадки проверено */
+  checked: number
+  listingUrl: string | null
+  title: string | null
+  price: number | null
+  publishedAt: string | null
+  /** Совпадение адреса и параметров, % */
+  match: number | null
+  /** Совпавшие признаки (address, price, area, rooms, floor, photos, description) */
+  matchParams: string[]
+  /** Совпадение фотографий, % */
+  photoMatch: number | null
+  /** Вероятность, что это то самое объявление, % */
+  probability: number | null
+  /** Понятный итог: найдено, не найдено или почему проверка не выполнена */
+  reason: string
+}
+
+/**
+ * Данные объекта публикации (см. PublishObjectLike в publishing.ts) — только
+ * те поля, что нужны для поиска. Структурный тип, чтобы чистый движок поиска
+ * не зависел от модуля публикации.
+ */
+export interface PublishLike {
+  price?: number | null
+  area?: number | null
+  rooms?: number | null
+  floor?: number | null
+  totalFloors?: number | null
+  description?: string | null
+  photos?: string[] | null
+  type?: string | null
+}
+
+/**
+ * Признаки объекта CRM для поиска: адрес из карточки, цена/площадь/комнаты/
+ * этаж/описание/фотографии — из объекта публикации (данные снимаются с
+ * карточки автоматически, агенту вводить нечего).
+ */
+export function searchObjectFromDoc(doc: Record<string, unknown>, pub: PublishLike): SearchObjectLike {
+  const addr = (doc.address || {}) as Record<string, string | undefined>
+  const city = (addr.locality || addr.city || '').trim()
+  const district = typeof addr.district === 'string' ? addr.district : ''
+  return {
+    address: {
+      city: addr.city || undefined,
+      locality: addr.locality || undefined,
+      street: addr.street || undefined,
+      house: addr.house || undefined,
+      apartment: addr.apartment || undefined,
+    },
+    cadastralNumber: typeof doc.cadastralNumber === 'string' ? doc.cadastralNumber : null,
+    price: pub.price ?? null,
+    area: pub.area ?? null,
+    rooms: pub.rooms ?? null,
+    floor: pub.floor ?? null,
+    totalFloors: pub.totalFloors ?? null,
+    description: pub.description || '',
+    photos: pub.photos || [],
+    category: typeof doc.category === 'string' ? doc.category : null,
+    dealType: pub.type ?? null,
+    district: district && district !== city ? district : '',
+  }
+}
+
+/**
+ * Поиск объявления объекта среди объявлений агентства, полученных с площадки
+ * официальным каналом. Лучшее совпадение выше порога — находка; иначе честное
+ * «не найдено» с числом просмотренных объявлений (пустой список — площадка не
+ * отдала объявления, сверять не с чем).
+ */
+export function matchObjectInListings(
+  object: SearchObjectLike,
+  listings: PlatformListing[],
+): Omit<PlatformObjectCheck, 'platform' | 'name'> {
+  const ranked = listings
+    .map((listing) => ({ listing, cmp: compareWithListing(object, listing) }))
+    .sort((a, b) => b.cmp.probability - a.cmp.probability)
+  const best = ranked[0]
+
+  if (!best || best.cmp.match < FOUND_MIN_MATCH) {
+    return {
+      found: false,
+      checked: listings.length,
+      listingUrl: null,
+      title: null,
+      price: null,
+      publishedAt: null,
+      match: best ? best.cmp.match : null,
+      matchParams: best ? best.cmp.matched : [],
+      photoMatch: best ? best.cmp.photoMatch : null,
+      probability: best ? best.cmp.probability : null,
+      reason: listings.length
+        ? `Проверено объявлений площадки: ${listings.length} — совпадений с объектом нет`
+        : 'Площадка не отдала объявления агентства — сверять не с чем',
+    }
+  }
+
+  return {
+    found: true,
+    checked: listings.length,
+    listingUrl: best.listing.url,
+    title: best.listing.title,
+    price: typeof best.listing.price === 'number' ? best.listing.price : null,
+    publishedAt: best.listing.publishedAt,
+    match: best.cmp.match,
+    matchParams: best.cmp.matched,
+    photoMatch: best.cmp.photoMatch,
+    probability: best.cmp.probability,
+    reason: best.listing.url
+      ? 'Объявление этого объекта найдено среди объявлений агентства на площадке'
+      : 'Объявление найдено, но площадка не отдала ссылку на него — откройте кабинет площадки',
+  }
 }
