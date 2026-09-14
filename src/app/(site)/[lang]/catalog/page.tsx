@@ -9,6 +9,7 @@ import { loadInterregionalCityOptions } from '@/lib/interregional-service'
 
 interface PageProps {
   params: Promise<{ lang: string }>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
 }
 
 // Справочник фильтра «Город» читается из CRM при каждом запросе: заведённый
@@ -16,15 +17,32 @@ interface PageProps {
 export const dynamic = 'force-dynamic'
 
 /**
- * Каталог объектов: серверная часть — только шапка и справочник городов
- * «Межрегиональной недвижимости» из CRM; сама выдача и фильтры — клиентские
- * (см. CatalogContent), данные тянутся из /api/objects.
+ * Каталог объектов: серверная часть — только шапка, справочник городов
+ * «Межрегиональной недвижимости» из CRM и имя агента для фильтра «Объекты
+ * агента» (кнопка на странице агентства ведёт в /catalog?agent=…);
+ * сама выдача и фильтры — клиентские (см. CatalogContent), данные тянутся
+ * из /api/objects.
  */
-export default async function CatalogPage({ params }: PageProps) {
+export default async function CatalogPage({ params, searchParams }: PageProps) {
   const { lang } = await params
   const t = getDictionary(lang)
   const payload = await getPayload({ config })
   const { groups: cityGroups, cities: knownCities } = await loadInterregionalCityOptions(payload)
+
+  // Имя агента подписи фильтра: ссылки с карточек команды передают id в
+  // параметре agent — читаем его из базы, чтобы показать фамилию в подписи
+  const sp = await searchParams
+  const agentRaw = sp.agent
+  const agentId = Number(Array.isArray(agentRaw) ? agentRaw[0] : agentRaw)
+  let agentName: string | undefined
+  if (Number.isInteger(agentId) && agentId > 0) {
+    try {
+      const agent = await payload.findByID({ collection: 'agents', id: agentId, depth: 0 })
+      agentName = agent?.name || undefined
+    } catch {
+      // Агент не найден (или запрос упал) — фильтр просто не показываем
+    }
+  }
 
   return (
     <>
@@ -37,7 +55,7 @@ export default async function CatalogPage({ params }: PageProps) {
           </div>
         </section>
         <Suspense fallback={<section className="bg-[var(--n15-charcoal)] py-8"><p className="text-[var(--n15-muted)] text-center py-20">{t.catalog.loading}</p></section>}>
-          <CatalogContent cityGroups={cityGroups} knownCities={knownCities} />
+          <CatalogContent cityGroups={cityGroups} knownCities={knownCities} agentName={agentName} />
         </Suspense>
       </main>
       <Footer />

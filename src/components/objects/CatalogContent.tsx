@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useI18n } from '@/i18n/i18n-provider'
 import ObjectCard, { type ObjectListItem } from '@/components/objects/ObjectCard'
-import CatalogFilters, { buildWhere, emptyFilters, OBJECT_TYPES, OBJECT_CATEGORIES, OBJECT_ROOMS, type CityGroup, type FiltersState } from '@/components/objects/CatalogFilters'
+import CatalogFilters, { buildWhere, emptyFilters, AGENT_URL_PARAM, OBJECT_TYPES, OBJECT_CATEGORIES, OBJECT_ROOMS, type CityGroup, type FiltersState } from '@/components/objects/CatalogFilters'
 // Справочники допустимых значений локаций — те же, что в фильтрах каталога
 import { DISTRICT_OPTIONS, CITY_DISTRICT_OPTIONS } from '@/lib/districts'
 import { SNT_AREAS } from '@/components/home/landing-data'
@@ -29,6 +29,7 @@ const URL_PARAM: Record<keyof FiltersState, string> = {
   locality: 'locality',
   snt: 'snt',
   city: 'city',
+  agent: AGENT_URL_PARAM,
 }
 
 // Значения select-фильтров сверяем с опциями полей (списки и зачем — см.
@@ -60,6 +61,9 @@ function filtersFromParams(sp: URLSearchParams, knownCities: readonly string[]):
     locality: sp.get('locality') ?? '',
     snt: isKnown(sp.get('snt') ?? '', SNT_AREAS) ? (sp.get('snt') as string) : '',
     city: isKnown(sp.get('city') ?? '', knownCities) ? (sp.get('city') as string) : '',
+    // Фильтр «Объекты агента» приходит только ссылкой (карточки команды,
+    // страница агентства) — допустимость id проверяет buildWhere
+    agent: sp.get(AGENT_URL_PARAM) ?? '',
   }
 }
 
@@ -68,12 +72,15 @@ interface CatalogContentProps {
   cityGroups: CityGroup[]
   /** Допустимые значения фильтра «Город» — для сверки ссылок */
   knownCities: string[]
+  /** Имя агента для чипа «Объекты агента» (читает серверная страница
+   *  каталога из параметра agent, см. catalog/page.tsx) */
+  agentName?: string
 }
 
 /** Выдача каталога: поиск, фильтры, карточки объектов и подгрузка следующих
  *  страниц. Данные — клиентские запросы к /api/objects; справочник фильтра
  *  «Город» приходит с сервера (см. страницу каталога) */
-export default function CatalogContent({ cityGroups, knownCities }: CatalogContentProps) {
+export default function CatalogContent({ cityGroups, knownCities, agentName }: CatalogContentProps) {
   const searchParams = useSearchParams()
   const router = useRouter()
   const { lang, t } = useI18n()
@@ -191,6 +198,25 @@ export default function CatalogContent({ cityGroups, knownCities }: CatalogConte
   const hasFilters = useMemo(() => Object.values(filters).some(Boolean) || q !== '', [filters, q])
   const showMore = objects.length < totalDocs
 
+  // Фильтр «Объекты агента»: ссылка с карточек команды (см. about/page.tsx).
+  // Панель фильтров его не показывает — снимается чипом над выдачей, поэтому
+  // сброс «всех фильтров» удаляет и его (удалить одиночный параметр из URL
+  // надёжнее, чем собрать ссылку из состояния: в URL могут быть легаси-ключи)
+  const removeAgent = useCallback(() => {
+    setFilters((prev) => ({ ...prev, agent: '' }))
+    setLoading(true)
+    const params = new URLSearchParams(searchParams.toString())
+    params.delete(AGENT_URL_PARAM)
+    router.replace(`/${lang}/catalog?${params.toString()}`, { scroll: false })
+  }, [lang, router, searchParams])
+
+  const clearAll = useCallback(() => {
+    setFilters(emptyFilters)
+    setQ('')
+    setSort('')
+    removeAgent()
+  }, [removeAgent])
+
   return (
     <section className="bg-[var(--n15-charcoal)] py-8">
       <div className="n15-container">
@@ -210,12 +236,30 @@ export default function CatalogContent({ cityGroups, knownCities }: CatalogConte
 
       <CatalogFilters state={filters} onChange={onChangeFilters} t={t} cityGroups={cityGroups} />
 
+      {/* Фильтр, пришедший ссылкой с карточек команды (страница агентства):
+          у остальных фильтров есть поля в панели, у этого — только чип */}
+      {filters.agent && agentName && (
+        <div className="flex flex-wrap items-center gap-2 mt-4">
+          <span className="inline-flex items-center gap-2 px-3 py-1.5 text-xs text-[var(--n15-silver)] border border-[var(--n15-gold)]/30 bg-[var(--n15-black)]/40">
+            <span className="text-[10px] tracking-[0.2em] uppercase text-[var(--n15-muted)]">
+              {t.catalog.agentFilterLabel}
+            </span>
+            {agentName}
+            <button type="button" onClick={removeAgent}
+              className="text-[var(--n15-gold)] hover:text-[var(--n15-white)] transition-colors cursor-pointer"
+              aria-label={t.catalog.resetFilters}>
+              ×
+            </button>
+          </span>
+        </div>
+      )}
+
       {/* Count + sort */}
       <div className="flex flex-wrap items-center justify-between gap-3 my-4">
         <p className="text-xs text-[var(--n15-muted)]">
           {t.catalog.found} <span className="text-[var(--n15-gold)]">{loading ? '...' : totalDocs}</span> {t.catalog.foundObjects}
           {hasFilters && (
-            <button onClick={() => { setFilters(emptyFilters); setQ(''); setSort('') }}
+            <button onClick={clearAll}
               className="ml-4 text-[var(--n15-gold)] underline">
               {t.catalog.resetFilters}
             </button>
@@ -266,7 +310,7 @@ export default function CatalogContent({ cityGroups, knownCities }: CatalogConte
                 ? t.catalog.nothingInCity
                 : t.catalog.nothingFound}
           </p>
-          <button onClick={() => { setFilters(emptyFilters); setQ(''); setSort('') }}
+          <button onClick={clearAll}
             className="text-sm text-[var(--n15-gold)] underline">
             {t.catalog.resetAll}
           </button>

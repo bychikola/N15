@@ -20,6 +20,10 @@ export const OBJECT_CATEGORIES = ['apartment', 'house', 'townhouse', 'commercial
 export const OBJECT_ROOMS = ['1', '2', '3', '4']
 const isKnown = (v: string, options: readonly string[]) => options.includes(v)
 
+/** Имя URL-параметра фильтра «Объекты агента» — ссылки с карточек команды
+ *  на странице агентства ведут в /catalog?agent=<id> */
+export const AGENT_URL_PARAM = 'agent'
+
 export interface FiltersState {
   type: string
   category: string
@@ -39,10 +43,14 @@ export interface FiltersState {
   /** Город вне Северной Осетии (межрегиональные объекты). Взаимоисключается
    *  с осетинскими адресными фильтрами: район/нас. пункт/товарищество. */
   city: string
+  /** id агента: показываем только его объекты. Постоянного поля в панели
+   *  фильтров у него нет — фильтр приходит ссылкой с карточек команды,
+   *  а снимается чипом «Объекты агента» над выдачей */
+  agent: string
 }
 
 export const emptyFilters: FiltersState = {
-  type: '', category: '', rooms: '', priceMin: '', priceMax: '', areaMin: '', areaMax: '', areaUnit: '', district: '', cityDistrict: '', locality: '', snt: '', city: '',
+  type: '', category: '', rooms: '', priceMin: '', priceMax: '', areaMin: '', areaMax: '', areaUnit: '', district: '', cityDistrict: '', locality: '', snt: '', city: '', agent: '',
 }
 
 // Число из фильтра: позволяет и «600», и «11,5» (запятая — как вводят вручную)
@@ -87,8 +95,17 @@ export function buildWhere(f: FiltersState, q: string, knownCities: readonly str
     const max = numOf(f.areaMax)
     if (max != null && Number.isFinite(max)) conds.push({ area: { less_than_equal: Math.round(max * areaMul * 100) / 100 } })
   }
+  const agent = agentId(f.agent)
+  if (agent != null) conds.push({ agent: { equals: agent } })
   if (q) conds.push({ or: [{ title: { contains: q } }, { 'address.street': { contains: q } }] })
   return conds.length ? { and: conds } : {}
+}
+
+// id агента: только целое положительное число (в базе они такие). Мусорные
+// значения из ссылки отбрасываем — серверный where с нецелым id падает
+function agentId(v: string): number | null {
+  const n = Number(v)
+  return Number.isInteger(n) && n > 0 ? n : null
 }
 
 // Подписи фильтров всегда в одну строку (whitespace-nowrap), чтобы все фильтры были одинаковой высоты.
