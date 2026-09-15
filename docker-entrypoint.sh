@@ -114,10 +114,16 @@ if [ -n "$DATABASE_URI" ]; then
     # Бэкап production-сборки в рантайме (в образ не кладём): dev-сервер
     # перезапишет .next, после инициализации восстановим его из архива.
     tar -czf /app/.next-prod.tar.gz -C /app .next
-    # Лимит кучи: на VPS ~2 ГБ свободной памяти, dev-сервер без лимита ловит
-    # OOM-killer (в логе приложения пусто, причина видна только в dmesg).
-    # С лимитом переполнение даёт внятную ошибку JS в /tmp/dev-init.log.
-    NODE_OPTIONS=--max-old-space-size=1536 NODE_ENV=development node_modules/.bin/next dev -p 3001 >/tmp/dev-init.log 2>&1 &
+    # Два подводных камня dev-push, из-за которых сайт не поднимался:
+    # 1) drizzle-kit при удалении таблиц/колонок (агент убрал поля из глобала)
+    #    спрашивает «Accept warnings and push schema to database? (y/N)» —
+    #    в контейнере ответить некому, push висел вечно. Подаём бесконечные «y»
+    #    через stdin (yes): вопрос и список удаляемого остаются в логе.
+    # 2) Лимит кучи: на VPS ~2 ГБ свободной памяти, dev-сервер без лимита ловит
+    #    OOM-killer (в логе приложения пусто, причина видна только в dmesg).
+    # $! в пайплайне — это PID последней команды (next dev), поэтому kill ниже
+    # останавливает именно сервер; yes умирает сам по SIGPIPE.
+    yes | NODE_OPTIONS=--max-old-space-size=1536 NODE_ENV=development node_modules/.bin/next dev -p 3001 >/tmp/dev-init.log 2>&1 &
     DEV_PID=$!
     INIT_OK=0
     i=0
