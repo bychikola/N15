@@ -30,8 +30,9 @@ if [ -n "$DATABASE_URI" ]; then
   # Значение статуса 'cancelled' (отмена задачи агента из CRM) добавляем сами:
   # drizzle-kit push (движок push-схемы Payload) НЕ умеет ALTER TYPE ADD VALUE —
   # он пытается пересоздать enum и зависает, из-за чего dev-push не завершался
-  # и контейнер крутился в цикле «Schema missing». Best-effort, идемпотентно:
-  # если статус не enum — просто ничего не делаем.
+  # и контейнер крутился в цикле «Schema missing». Идемпотентно; если статус
+  # не enum — просто ничего не делаем. Ошибку не глотаем молча: без нового
+  # значения push снова зависнет, и в логе должно быть видно почему.
   node -e "
     const { Client } = require('pg');
     const c = new Client({ connectionString: process.env.DATABASE_URI });
@@ -39,10 +40,21 @@ if [ -n "$DATABASE_URI" ]; then
       await c.connect();
       const t = await c.query(\"SELECT DISTINCT t.typname FROM pg_type t JOIN pg_attribute a ON a.atttypid = t.oid JOIN pg_class cl ON cl.oid = a.attrelid WHERE cl.relname = 'agent_tasks' AND a.attname = 'status' AND t.typtype = 'e'\");
       for (const row of t.rows) {
-        await c.query('ALTER TYPE \"' + row.typname + '\" ADD VALUE IF NOT EXISTS \\'cancelled\\'').catch(() => {});
+        // имя типа берём из каталога БД, но всё равно пропускаем только
+        // безопасные идентификаторы (защита от подстановки в DDL)
+        if (!/^[a-z_][a-z0-9_]*$/.test(row.typname)) {
+          console.warn('enum cancelled: неожиданное имя типа, пропускаю:', row.typname);
+          continue;
+        }
+        try {
+          await c.query('ALTER TYPE \"' + row.typname + '\" ADD VALUE IF NOT EXISTS \\'cancelled\\'');
+          console.log('enum cancelled →', row.typname);
+        } catch (e) {
+          console.warn('enum cancelled: не удалось добавить в', row.typname, '—', e.message);
+        }
       }
       await c.end();
-    })().catch(() => process.exit(0));
+    })().catch((e) => { console.warn('enum cancelled: ошибка —', e.message); process.exit(0); });
   " || true
 
   # Инициализация схемы: Payload в production НЕ создаёт таблицы автоматически,
@@ -106,14 +118,27 @@ if [ -n "$DATABASE_URI" ]; then
     DEV_PID=$!
     INIT_OK=0
     i=0
-    while [ "$i" -lt 90 ]; do
+    # 12 попыток по 10 минут: первый запрос dev-сервера компилирует приложение
+    # и выполняет push схемы — на слабом VPS это может идти дольше 5 минут.
+    # fetch (undici) обрывает запрос ровно на 5 минутах — используем http.get,
+    # у которого лимит задаём сами; неудачная попытка не мешает: сервер
+    # продолжает компиляцию в фоне, следующая попытка обычно отвечает быстро.
+    while [ "$i" -lt 12 ]; do
       i=$((i+1))
-      # Запрос к REST API заставляет Payload инициализироваться и выполнить push
-      if node -e "fetch('http://localhost:3001/api/objects?limit=1').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))" 2>/dev/null; then
+      if node -e "
+        const http = require('http');
+        const req = http.get('http://localhost:3001/api/objects?limit=1', (res) => {
+          res.resume();
+          process.exit(res.statusCode >= 200 && res.statusCode < 400 ? 0 : 1);
+        });
+        req.setTimeout(600000, () => { req.destroy(); process.exit(1); });
+        req.on('error', () => process.exit(1));
+      " 2>/dev/null; then
         INIT_OK=1
         break
       fi
-      sleep 2
+      echo "  ...схема ещё создаётся (попытка $i из 12)"
+      sleep 5
     done
     kill "$DEV_PID" 2>/dev/null || true
     wait "$DEV_PID" 2>/dev/null || true
