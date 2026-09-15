@@ -27,6 +27,24 @@ if [ -n "$DATABASE_URI" ]; then
   done
   echo "PostgreSQL is up."
 
+  # Значение статуса 'cancelled' (отмена задачи агента из CRM) добавляем сами:
+  # drizzle-kit push (движок push-схемы Payload) НЕ умеет ALTER TYPE ADD VALUE —
+  # он пытается пересоздать enum и зависает, из-за чего dev-push не завершался
+  # и контейнер крутился в цикле «Schema missing». Best-effort, идемпотентно:
+  # если статус не enum — просто ничего не делаем.
+  node -e "
+    const { Client } = require('pg');
+    const c = new Client({ connectionString: process.env.DATABASE_URI });
+    (async () => {
+      await c.connect();
+      const t = await c.query(\"SELECT DISTINCT t.typname FROM pg_type t JOIN pg_attribute a ON a.atttypid = t.oid JOIN pg_class cl ON cl.oid = a.attrelid WHERE cl.relname = 'agent_tasks' AND a.attname = 'status' AND t.typtype = 'e'\");
+      for (const row of t.rows) {
+        await c.query('ALTER TYPE \"' + row.typname + '\" ADD VALUE IF NOT EXISTS \\'cancelled\\'').catch(() => {});
+      }
+      await c.end();
+    })().catch(() => process.exit(0));
+  " || true
+
   # Инициализация схемы: Payload в production НЕ создаёт таблицы автоматически,
   # а CLI миграций (payload migrate) падает с ERR_REQUIRE_ASYNC_MODULE в этом
   # окружении (tsx vs ESM-модуль lexical). Надёжный способ — запустить dev-сервер
@@ -63,15 +81,19 @@ if [ -n "$DATABASE_URI" ]; then
       const ads = await c.query(\"SELECT to_regclass('public.advertisements') AS t\");
       const adr = await c.query(\"SELECT to_regclass('public.advertising_requests') AS t\");
       const ns = await c.query(\"SELECT 1 FROM payload_globals WHERE slug = 'news-settings' LIMIT 1\");
+      // Межрегиональная недвижимость (регионы/населённые пункты) и
+      // «Интеграции площадок» (ключи Авито/ЦИАН/Домклика)
+      const rg = await c.query(\"SELECT to_regclass('public.regions') AS t\");
+      const st = await c.query(\"SELECT to_regclass('public.settlements') AS t\");
+      const ps = await c.query(\"SELECT 1 FROM payload_globals WHERE slug = 'platform-settings' LIMIT 1\");
       // Новые колонки объектов: единица площади (сотки), район города, СНТ
-      // Новое значение статуса задачи агента 'cancelled' (отмена из CRM)
-      const ce = await c.query(\"SELECT 1 FROM pg_enum e JOIN pg_type t ON t.oid = e.enumtypid WHERE t.typname = 'enum_agent_tasks_status' AND e.enumlabel = 'cancelled'\");
       const au = await c.query(\"SELECT column_name FROM information_schema.columns WHERE table_name='objects' AND column_name='area_unit'\");
       const cd = await c.query(\"SELECT column_name FROM information_schema.columns WHERE table_name='objects_address' AND column_name='city_district'\");
       const sn = await c.query(\"SELECT column_name FROM information_schema.columns WHERE table_name='objects_address' AND column_name='snt'\");
       const ok = o.rows[0].t && t.rows[0].t && cu.rows[0].t && lr.rows.length > 0 && un.rows.length > 0 && own.rows.length > 0 && em.rows[0].t && ms.rows[0].t && loc.rows.length > 0 && at.rows[0].t && ma.rows[0].t && ag.rows.length > 0 && aa.rows.length > 0
         && nw.rows[0].t && ml.rows[0].t && ld.rows[0].t && lrp.rows[0].t && adv.rows[0].t && ads.rows[0].t && adr.rows[0].t && ns.rows.length > 0
-        && au.rows.length > 0 && cd.rows.length > 0 && sn.rows.length > 0 && ce.rows.length > 0;
+        && rg.rows[0].t && st.rows[0].t && ps.rows.length > 0
+        && au.rows.length > 0 && cd.rows.length > 0 && sn.rows.length > 0;
       await c.end();
       process.exit(ok ? 0 : 1);
     })().catch(() => process.exit(1));
