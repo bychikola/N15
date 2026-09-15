@@ -114,7 +114,10 @@ if [ -n "$DATABASE_URI" ]; then
     # Бэкап production-сборки в рантайме (в образ не кладём): dev-сервер
     # перезапишет .next, после инициализации восстановим его из архива.
     tar -czf /app/.next-prod.tar.gz -C /app .next
-    NODE_ENV=development node_modules/.bin/next dev -p 3001 >/tmp/dev-init.log 2>&1 &
+    # Лимит кучи: на VPS ~2 ГБ свободной памяти, dev-сервер без лимита ловит
+    # OOM-killer (в логе приложения пусто, причина видна только в dmesg).
+    # С лимитом переполнение даёт внятную ошибку JS в /tmp/dev-init.log.
+    NODE_OPTIONS=--max-old-space-size=1536 NODE_ENV=development node_modules/.bin/next dev -p 3001 >/tmp/dev-init.log 2>&1 &
     DEV_PID=$!
     INIT_OK=0
     i=0
@@ -137,6 +140,10 @@ if [ -n "$DATABASE_URI" ]; then
         INIT_OK=1
         break
       fi
+      if ! kill -0 "$DEV_PID" 2>/dev/null; then
+        echo "  ⨯ dev-сервер завершился на попытке $i — схема не будет создана"
+        break
+      fi
       echo "  ...схема ещё создаётся (попытка $i из 12)"
       sleep 5
     done
@@ -149,6 +156,19 @@ if [ -n "$DATABASE_URI" ]; then
     if [ "$INIT_OK" != "1" ]; then
       echo "Schema init failed. Dev log:" >&2
       tail -60 /tmp/dev-init.log >&2
+      # Активность БД в момент провала: видно, ждёт ли push блокировку
+      node -e "
+        const { Client } = require('pg');
+        const c = new Client({ connectionString: process.env.DATABASE_URI });
+        (async () => {
+          await c.connect();
+          const r = await c.query(\"SELECT pid, state, wait_event_type, wait_event, now()-query_start AS dur, left(replace(query, E'\\\\n', ' '), 90) AS q FROM pg_stat_activity WHERE datname = current_database() AND pid <> pg_backend_pid() ORDER BY dur DESC NULLS LAST LIMIT 8\");
+          for (const row of r.rows) {
+            console.error('db:', row.state, '| wait:', row.wait_event_type || '-', row.wait_event || '-', '| dur:', row.dur, '|', row.q);
+          }
+          await c.end();
+        })().catch((e) => console.error('db activity check failed:', e.message));
+      " 2>&1 >&2 || true
       exit 1
     fi
     echo "Schema created."
