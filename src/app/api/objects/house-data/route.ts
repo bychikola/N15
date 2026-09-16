@@ -95,6 +95,9 @@ export async function POST(req: NextRequest) {
       locality: typeof address.locality === 'string' ? address.locality : null,
       street: typeof address.street === 'string' ? address.street : null,
       house: typeof address.house === 'string' ? address.house : null,
+      // Корпус хранится отдельным полем, а в реестр адрес уходит строкой —
+      // разбор дома и корпуса делает normalizeHouseAddress (см. src/lib/house-info)
+      corpus: typeof address.corpus === 'string' ? address.corpus : null,
       snt: typeof address.snt === 'string' ? address.snt : null,
     }
     const normalized = normalizeHouseAddress(query)

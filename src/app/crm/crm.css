@@ -40,6 +40,25 @@ body{margin:0}.crm-sidebar{box-sizing:border-box}.crm-chat-panel{box-sizing:bord
 .crm-addr{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
 .crm-addr-full{grid-column:1/-1}
 .crm-addr-half{max-width:340px}
+/* Подсказки адресного справочника: выпадающий список под полем улицы/дома.
+   Поле остаётся обычным вводом, список — только помощь, поэтому позиция
+   absolute: разметка формы не сдвигается, пока список закрыт */
+.crm-suggest-wrap{position:relative}
+.crm-suggest{position:absolute;z-index:30;left:0;right:0;top:calc(100% + 4px);max-height:230px;overflow:auto;border:1px solid #ded5c7;border-radius:9px;background:#fff;box-shadow:0 12px 26px rgba(60,48,32,.16)}
+.crm-suggest-item{display:flex;align-items:baseline;justify-content:space-between;gap:10px;width:100%;box-sizing:border-box;border:0;border-bottom:1px solid #f1ece3;background:none;padding:11px 12px;font:12px Arial,Helvetica,sans-serif;color:#25241f;text-align:left;cursor:pointer}
+.crm-suggest-item:last-child{border-bottom:0}
+.crm-suggest-item.active{background:#f7f2ea}
+.crm-suggest-item em{color:#9b958a;font-style:normal;font-size:10px}
+.crm-field-note{margin:7px 0 0;color:#9b958a;font-size:10px;line-height:1.5;text-transform:none;letter-spacing:0}
+/* Полный адрес строкой — собран из частей, руками не правится */
+.crm-addr-full-text{margin:0;padding:12px;border:1px solid #e5dfd3;border-radius:7px;background:#f7f4ee;color:#25241f;font-size:12px;line-height:1.5;text-transform:none;letter-spacing:0}
+/* Адрес точки расходится с введённым — заменяем только с согласия агента */
+.crm-addr-confirm{display:flex;flex-direction:column;gap:10px;padding:14px;border:1px solid #e0cdb4;border-radius:9px;background:#fdf7ee}
+.crm-addr-confirm p{margin:0;color:#8b683f;font-size:11px;line-height:1.55;text-transform:none;letter-spacing:0}
+.crm-addr-confirm .crm-addr-full-text{background:#fff}
+.crm-addr-confirm-actions{display:flex;flex-wrap:wrap;gap:10px}
+.crm-addr-confirm-actions button{border:0;border-radius:7px;background:#a7814e;color:#fff;padding:11px 16px;font-size:10px;text-transform:uppercase;letter-spacing:.08em;cursor:pointer}
+.crm-addr-confirm-actions button.keep{background:transparent;color:#8b683f;border:1px solid #ddcdb6}
 .crm-map-block{padding-top:2px}
 .crm-map-bar{display:flex;align-items:center;gap:14px;margin-bottom:10px}
 .crm-map-bar button{border:0;border-radius:7px;background:#a7814e;color:#fff;padding:12px 20px;font-size:10px;text-transform:uppercase;letter-spacing:.1em;cursor:pointer}
@@ -49,7 +68,7 @@ body{margin:0}.crm-sidebar{box-sizing:border-box}.crm-chat-panel{box-sizing:bord
 .crm-map-status.err{color:#9b4e43}
 .crm-map-canvas{height:300px;border:1px solid #d9d1c4;border-radius:10px;overflow:hidden;background:#e9e2d5}
 .crm-owner{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
-@media(max-width:640px){.crm-property-form input,.crm-property-form select,.crm-property-form textarea{font-size:16px}.crm-owner{grid-template-columns:1fr}.crm-map-canvas{height:250px}.crm-map-bar{flex-wrap:wrap;gap:10px}}
+@media(max-width:640px){.crm-property-form input,.crm-property-form select,.crm-property-form textarea{font-size:16px}.crm-suggest-item{font-size:16px;padding:13px 12px}.crm-owner{grid-template-columns:1fr}.crm-map-canvas{height:250px}.crm-map-bar{flex-wrap:wrap;gap:10px}}
 
 /* ── Google Material Symbols (иконки) ──────────── */
 .material-symbols-outlined{font-family:'Material Symbols Outlined';font-weight:normal;font-style:normal;line-height:1;letter-spacing:normal;text-transform:none;display:inline-block;white-space:nowrap;word-wrap:normal;direction:ltr;font-feature-settings:'liga';-webkit-font-smoothing:antialiased}

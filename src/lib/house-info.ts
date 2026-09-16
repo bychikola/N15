@@ -492,6 +492,20 @@ export interface NormalizedAddress {
 const joinParts = (parts: (string | null | undefined)[], sep = ' '): string =>
   parts.map((p) => (p || '').trim()).filter(Boolean).join(sep)
 
+// Слова-типы улиц: в адресном справочнике они остаются в названии («Проспект
+// Коста», «Железнодорожный переулок», «7 линия») — так они и хранятся в адресе
+// объекта. Перед таким названием «ул.» не пишем: «ул. проспект Коста» —
+// неверная запись. Тип в названии ищем только у многословных названий, чтобы
+// не тронуть улицы, которые сами называются Набережная или Линия.
+const STREET_TYPE_WORDS = new Set([
+  'ул', 'улица', 'проспект', 'пр', 'пр-т', 'переулок', 'пер', 'площадь', 'пл',
+  'шоссе', 'проезд', 'бульвар', 'аллея', 'линия', 'тупик', 'тракт',
+])
+export const streetHasTypeWord = (street: string): boolean => {
+  const words = street.toLowerCase().replace(/\./g, ' ').split(/\s+/).filter(Boolean)
+  return words.length > 1 && words.some((w) => STREET_TYPE_WORDS.has(w))
+}
+
 /**
  * Адрес объекта в вид для поиска: части (город, улица, дом, корпус,
  * строение) хранятся отдельно, из них собираются человекочитаемый адрес,
@@ -517,7 +531,7 @@ export function normalizeHouseAddress(addr: HouseQueryAddress): NormalizedAddres
       city ? `г. ${city}` : '',
       locality && locality !== city ? `населённый пункт ${locality}` : '',
       snt ? `СНТ «${snt}»` : '',
-      street ? `ул. ${street}` : '',
+      street ? (streetHasTypeWord(street) ? street : `ул. ${street}`) : '',
       house ? `д. ${house}` : '',
       corpus ? `корп. ${corpus}` : '',
       building ? `стр. ${building}` : '',

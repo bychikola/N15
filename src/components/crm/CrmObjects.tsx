@@ -6,7 +6,20 @@ import type { Dict } from '@/i18n/dictionaries'
 // категории СНТ/СНО/ДНТ из GARDENING_AREAS (всё внутри Владикавказского округа)
 import { DISTRICT_OPTIONS, LOCALITIES_BY_DISTRICT, LOCALITY_OPTIONS, CITY_DISTRICT_OPTIONS, GARDENING_CATEGORY_ORDER, GARDENING_AREAS, VLAV_OKRUG } from '@/lib/districts'
 import { loadYmaps, type Ymaps } from '@/lib/ymaps'
-import { geocodeAddress } from '@/lib/geocode'
+// Адресные подсказки и обратное геокодирование точки: сервер спрашивает
+// адресный справочник (улицы и дома) и геокодер, клиент получает готовые
+// строки и разобранные части адреса (см. /api/crm/address)
+import {
+  geocodeAddress,
+  reverseGeocodePoint,
+  suggestHouses,
+  suggestStreets,
+  type AddressSuggestion,
+  type ReversedAddress,
+} from '@/lib/geocode'
+// Полный адрес собирается тем же разбором, что и в данных о доме: одно
+// написание адреса на карточке, в реестре и в фильтрах
+import { normalizeHouseAddress } from '@/lib/house-info'
 import { sortAgents } from '@/lib/agents-sort'
 // Площадь участков: сотки ↔ м² (1 сотка = 100 м²), чтение «11,5» с запятой
 import { areToSqm, areaNumberText, parseAreaNumber, sqmToAre } from '@/lib/area-format'
@@ -270,12 +283,18 @@ const emptyForm = {
   // этажность по-прежнему вводится в totalFloors выше.
   floorsMode: '', floorsOther: '',
   heating: '', balcony: '', water: '', sewerage: '', electricity: '', gas: '', internet: '',
-  city: 'Владикавказ', district: '', cityDistrict: '', locality: '', snt: '', street: '', house: '', apartment: '',
+  city: 'Владикавказ', district: '', cityDistrict: '', locality: '', snt: '', street: '', house: '',
+  // Корпус — отдельное поле адреса (был частью номера дома: «15 к2»);
+  // полный адрес — собранная строка, её видит агент и хранит объект
+  corpus: '', fullAddress: '', apartment: '',
   lat: '', lng: '', description: '', status: 'draft', agent: '',
   ownerName: '', ownerPhone: '', cadastralNumber: '',
 }
 
 type FormState = typeof emptyForm
+
+/** Адресные поля, которые заполняют карта и подсказки справочника */
+type AddrField = 'city' | 'district' | 'cityDistrict' | 'locality' | 'street' | 'house' | 'corpus'
 
 // Шрифт полей не задаём здесь: его даёт crm.css (.crm-property-form input),
 // на телефонах он увеличивается до 16px, чтобы iOS не приближала страницу при вводе
@@ -289,6 +308,162 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     <label style={{ display: 'flex', flexDirection: 'column', gap: 7, color: '#6f6a61', fontSize: 9, textTransform: 'uppercase', letterSpacing: '.08em' }}>
       {label}{children}
     </label>
+  )
+}
+
+/**
+ * Поле с подсказками адресного справочника — улица и номер дома. Поле
+ * остаётся обычным вводом: подсказка только помогает, а если справочник
+ * недоступен или подходящих строк нет, значение вводится вручную. Список
+ * появляется по первым буквам (у домов — сразу, как только выбрана улица),
+ * стрелки и Enter выбирают строку, Escape закрывает список. Подсказки улиц
+ * зависят от населённого пункта и района формы — их передаёт загрузчик
+ * списка (см. разметку адреса ниже).
+ */
+const SuggestInput: FC<{
+  t: Dict
+  value: string
+  onChange: (v: string) => void
+  /** Выбор строки: подставить значение (и, например, корпус дома) */
+  onPick?: (item: AddressSuggestion) => void
+  load: (query: string) => Promise<AddressSuggestion[]>
+  placeholder?: string
+  /** Список открывается сразу при фокусе — номера домов выбранной улицы */
+  openOnFocus?: boolean
+  /** Ключ изменился (выбрана другая улица) — список перечитывается заново */
+  reloadKey?: string
+}> = ({ t, value, onChange, onPick, load, placeholder, openOnFocus = false, reloadKey = '' }) => {
+  const [items, setItems] = useState<AddressSuggestion[]>([])
+  const [open, setOpen] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [empty, setEmpty] = useState(false)
+  const [focused, setFocused] = useState(false)
+  // Счётчик возвратов в поле: по нему список перечитывается заново
+  const [refocus, setRefocus] = useState(0)
+  const [active, setActive] = useState(-1)
+  // Ответы устаревших запросов не показываем: быстрый набор «перебивает» медленный
+  const genRef = useRef(0)
+  // Значение, выбранное из списка: повторно его не ищем (см. эффект ниже)
+  const pickedRef = useRef('')
+  const loadRef = useRef(load)
+  useEffect(() => {
+    loadRef.current = load
+  }, [load])
+
+  useEffect(() => {
+    // Каждое изменение состояния поля отменяет незавершённый запрос
+    const gen = ++genRef.current
+    if (!focused) return
+    const text = value.trim()
+    // Улица ищется с двух букв; дома улицы показываются и без ввода номера
+    const tooShort = !openOnFocus && text.length < 2
+    // Выбранную из списка строку заново не ищем: список не должен
+    // распахиваться обратно сразу после выбора. Правка значения — новый поиск.
+    const picked = pickedRef.current !== '' && pickedRef.current === value
+    // «Ничего не найдено» показываем только когда справочник реально спрошен:
+    // пустое поле дома без выбранной улицы искать нечего
+    const searchable = openOnFocus ? Boolean(text || reloadKey.trim()) : text.length >= 2
+    const timer = setTimeout(() => {
+      // Короткий запрос: списка нет, но и ждать ответа справочника нечего
+      if (tooShort || picked) {
+        setItems([])
+        setOpen(false)
+        setEmpty(false)
+        setBusy(false)
+        return
+      }
+      setBusy(true)
+      void (async () => {
+        try {
+          const found = await loadRef.current(text)
+          if (gen !== genRef.current) return
+          setItems(found)
+          setActive(-1)
+          setOpen(found.length > 0)
+          setEmpty(found.length === 0 && searchable)
+        } finally {
+          if (gen === genRef.current) setBusy(false)
+        }
+      })()
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [value, focused, reloadKey, openOnFocus, refocus])
+
+  const pick = (item: AddressSuggestion) => {
+    pickedRef.current = item.value
+    setOpen(false)
+    setActive(-1)
+    if (onPick) onPick(item)
+    else onChange(item.value)
+  }
+
+  const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Escape') {
+      setOpen(false)
+      return
+    }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      if (!items.length) return
+      e.preventDefault()
+      setOpen(true)
+      setActive((prev) => {
+        const next = e.key === 'ArrowDown' ? prev + 1 : prev - 1
+        return next < 0 ? items.length - 1 : next >= items.length ? 0 : next
+      })
+      return
+    }
+    if (e.key === 'Enter' && open && active >= 0 && items[active]) {
+      e.preventDefault()
+      pick(items[active])
+    }
+  }
+
+  return (
+    <div className="crm-suggest-wrap">
+      <input
+        value={value}
+        placeholder={placeholder}
+        autoComplete="off"
+        onChange={(e) => onChange(e.target.value)}
+        onFocus={() => {
+          // Возврат в поле — снова показываем список (в том числе для уже
+          // выбранной строки: улицу или дом можно выбрать заново)
+          pickedRef.current = ''
+          setFocused(true)
+          setRefocus((n) => n + 1)
+        }}
+        onBlur={() => {
+          setFocused(false)
+          setOpen(false)
+        }}
+        onKeyDown={onKeyDown}
+        style={inputStyle}
+      />
+      {open && items.length > 0 && (
+        <div className="crm-suggest" role="listbox">
+          {items.map((item, i) => (
+            <button
+              key={`${item.value}-${i}`}
+              type="button"
+              role="option"
+              aria-selected={i === active}
+              className={i === active ? 'crm-suggest-item active' : 'crm-suggest-item'}
+              onMouseDown={(e) => {
+                // mousedown раньше blur: выбор не теряется при клике и на телефоне
+                e.preventDefault()
+                pick(item)
+              }}
+              onMouseEnter={() => setActive(i)}
+            >
+              <span>{item.value}</span>
+              {item.hint && <em>{item.hint}</em>}
+            </button>
+          ))}
+        </div>
+      )}
+      {busy && <p className="crm-field-note">{t.crm.objSuggestSearching}</p>}
+      {!busy && empty && <p className="crm-field-note">{t.crm.objSuggestEmpty}</p>}
+    </div>
   )
 }
 
@@ -315,6 +490,56 @@ const addressForMap = (f: FormState): string => {
   return [place, f.street.trim(), f.house.trim()].filter(Boolean).join(', ')
 }
 
+/**
+ * Полный адрес объекта одной строкой: «г. Владикавказ, ул. Кутузова, д. 7,
+ * корп. 2». Собирается тем же разбором, что и адрес для поиска в реестре
+ * (normalizeHouseAddress), поэтому карточка, фильтры и данные о доме видят
+ * одно и то же написание. Пустой состав даёт пустую строку — поле «Полный
+ * адрес» остаётся тем, что было.
+ */
+const fullAddressOf = (f: FormState): string =>
+  normalizeHouseAddress({
+    city: f.city,
+    locality: f.locality,
+    snt: f.snt,
+    street: f.street,
+    house: f.house,
+    corpus: f.corpus,
+  }).display
+
+/**
+ * Полный адрес для хранения: пустая заготовка «г. Владикавказ» (в форме город
+ * стоит по умолчанию) адресом не является — её сохранять нечего, иначе у всех
+ * новых объектов в поле полного адреса окажется один город.
+ */
+const addressComposed = (f: FormState): string =>
+  f.street.trim() || f.house.trim() || f.corpus.trim() || f.snt.trim() || f.locality.trim() ? fullAddressOf(f) : ''
+
+/**
+ * Полный адрес формы: собранный из частей, а пока адресные поля не правили —
+ * сохранённый у объекта (адрес мог прийти из импорта без разбора на части).
+ * Стоит агенту тронуть поля адреса, и строка считается заново — стёртые поля
+ * не оставляют за собой прежний адрес.
+ */
+const fullAddressValue = (f: FormState, touched: boolean): string =>
+  addressComposed(f) || (touched ? '' : f.fullAddress.trim())
+
+/**
+ * Совпадают ли значения адреса без служебных слов: «ул. Кутузова» и
+ * «Кутузова» — один и тот же адрес, подтверждение не нужно; «Кутузова» и
+ * «Кирова» — разные, и уже введённое значение без согласия не затирается.
+ */
+const ADDRESS_NOISE_RE = /(^|\s)(ул|улица|пр|проспект|пер|переулок|д|дом|к|корп|корпус|стр|строение)\.?(\s|$)/g
+const sameAddressValue = (a: string, b: string): boolean => {
+  const norm = (v: string) =>
+    v
+      .toLowerCase()
+      .replace(/ё/g, 'е')
+      .replace(ADDRESS_NOISE_RE, ' ')
+      .replace(/[^a-zа-я0-9]/g, '')
+  return norm(a) === norm(b)
+}
+
 const toNum = (v: string): number | null => {
   if (!v.trim()) return null
   const n = Number(v)
@@ -337,9 +562,11 @@ interface ObjMapProps {
   lng: string
   /** Новые координаты метки; null — метку убрали */
   onCoords: (lat: number | null, lng: number | null) => void
+  /** Адрес, определённый по точке клика: разобранные части и строка целиком */
+  onAddressFound: (found: ReversedAddress, full: string) => void
 }
 
-const ObjMapEditor: FC<ObjMapProps> = ({ t, address, autoSearch, addrTouched, lat, lng, onCoords }) => {
+const ObjMapEditor: FC<ObjMapProps> = ({ t, address, autoSearch, addrTouched, lat, lng, onCoords, onAddressFound }) => {
   const apiKey = process.env.NEXT_PUBLIC_YANDEX_MAPS_API_KEY
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<Ymaps | null>(null)
@@ -348,13 +575,46 @@ const ObjMapEditor: FC<ObjMapProps> = ({ t, address, autoSearch, addrTouched, la
   const [ready, setReady] = useState(false)
   const [searching, setSearching] = useState(false)
   const [err, setErr] = useState<'notfound' | 'noaddress' | 'unavailable' | null>(null)
+  // Обратное геокодирование точки: «Ищем адрес…» → найден / не определён.
+  // Состояние живёт до следующего клика — агент видит, чем закончился выбор
+  const [rev, setRev] = useState<'idle' | 'busy' | 'found' | 'empty' | 'offline'>('idle')
+  const [revFull, setRevFull] = useState('')
   // Актуальные пропсы для асинхронных колбэков карты (dragend, click, geocode)
-  const propsRef = useRef({ address, autoSearch, addrTouched, lat, lng, onCoords })
+  const propsRef = useRef({ address, autoSearch, addrTouched, lat, lng, onCoords, onAddressFound })
   useEffect(() => {
-    propsRef.current = { address, autoSearch, addrTouched, lat, lng, onCoords }
-  }, [address, autoSearch, addrTouched, lat, lng, onCoords])
+    propsRef.current = { address, autoSearch, addrTouched, lat, lng, onCoords, onAddressFound }
+  }, [address, autoSearch, addrTouched, lat, lng, onCoords, onAddressFound])
   // Поколение поиска: ответы устаревших запросов геокодера игнорируем
   const genRef = useRef(0)
+  // Поколение обратного геокодирования: точка изменилась — старый ответ не нужен
+  const revGenRef = useRef(0)
+
+  // Точка выбрана: адрес определяет обратный геокодер, поля заполняет форма.
+  // Координаты уже проставлены — даже если адрес не определился, объект
+  // остаётся привязан к выбранной точке (см. onCoords выше).
+  const resolvePoint = useCallback((coords: [number, number]) => {
+    const gen = ++revGenRef.current
+    setRev('busy')
+    setRevFull('')
+    void (async () => {
+      try {
+        const result = await reverseGeocodePoint(coords[0], coords[1])
+        if (gen !== revGenRef.current) return
+        if (result?.found && result.address) {
+          const full = result.full || ''
+          setRev('found')
+          setRevFull(full)
+          propsRef.current.onAddressFound(result.address, full)
+          return
+        }
+        // Сервис ответил, но адреса по точке нет: «не удалось определить» —
+        // это не то же самое, что «сервис недоступен»
+        setRev(result?.reason === 'unavailable' ? 'offline' : 'empty')
+      } catch {
+        if (gen === revGenRef.current) setRev('offline')
+      }
+    })()
+  }, [])
 
   const removePin = useCallback(() => {
     const mk = markerRef.current
@@ -376,11 +636,14 @@ const ObjMapEditor: FC<ObjMapProps> = ({ t, address, autoSearch, addrTouched, la
     pin.events.add('dragend', () => {
       genRef.current++ // ручная установка важнее незавершённого авто-поиска
       const c = pin.geometry.getCoordinates() as [number, number]
-      propsRef.current.onCoords(round6(c[0]), round6(c[1]))
+      const coords: [number, number] = [round6(c[0]), round6(c[1])]
+      propsRef.current.onCoords(coords[0], coords[1])
+      // Метку передвинули — адрес пересчитывается по новой точке
+      resolvePoint(coords)
     })
     map.geoObjects.add(pin)
     markerRef.current = pin
-  }, [removePin])
+  }, [removePin, resolvePoint])
 
   // Геокодирование строки адреса; null — ничего не найдено.
   // Через HTTP-геокодер (отдельный ключ): ymaps.geocode с ключом JS API — 403.
@@ -413,7 +676,8 @@ const ObjMapEditor: FC<ObjMapProps> = ({ t, address, autoSearch, addrTouched, la
         })
         mapRef.current = map
         if (known) putPin(center)
-        // Клик по карте — быстрая установка метки (удобно с телефона)
+        // Клик по карте — установка метки (удобно с телефона) и определение
+        // адреса точки обратным геокодером: пункт, район, улица, дом, корпус
         map.events.add('click', (e: Ymaps) => {
           const c = e.get('coords') as [number, number] | undefined
           if (!c) return
@@ -421,6 +685,7 @@ const ObjMapEditor: FC<ObjMapProps> = ({ t, address, autoSearch, addrTouched, la
           const coords: [number, number] = [round6(c[0]), round6(c[1])]
           putPin(coords)
           propsRef.current.onCoords(coords[0], coords[1])
+          resolvePoint(coords)
         })
         setReady(true)
       })
@@ -440,7 +705,7 @@ const ObjMapEditor: FC<ObjMapProps> = ({ t, address, autoSearch, addrTouched, la
       ymapsRef.current = null
       markerRef.current = null
     }
-  }, [apiKey, putPin])
+  }, [apiKey, putPin, resolvePoint])
 
   // Авто-поиск по точному адресу: после паузы в вводе ищем адрес и ставим
   // метку. Если адрес перестал быть точным — метку убираем, чтобы объект
@@ -522,13 +787,30 @@ const ObjMapEditor: FC<ObjMapProps> = ({ t, address, autoSearch, addrTouched, la
   }, [geocode, putPin])
 
   const noKey = !apiKey
-  const statusText = err === 'unavailable' || noKey
-    ? t.crm.objMapNoKey
-    : err === 'notfound'
-      ? t.crm.objMapNotFound
-      : err === 'noaddress'
-        ? t.crm.objMapNoAddress
-        : t.crm.objMapHint
+  // Состояния карты по старшинству: недоступность → поиск → результат по
+  // точке → результат поиска по адресу → подсказка. «Ищем адрес…» и «Адрес
+  // найден» — про клик по карте, их видит агент, выбирающий точку.
+  let statusText = t.crm.objMapHint
+  let statusErr = false
+  if (noKey || err === 'unavailable') {
+    statusText = t.crm.objMapNoKey
+    statusErr = true
+  } else if (rev === 'busy' || searching) {
+    statusText = rev === 'busy' ? t.crm.objAddrSearching : t.crm.objMapSearch
+  } else if (rev === 'found') {
+    statusText = revFull ? `${t.crm.objAddrFound}: ${revFull}` : t.crm.objAddrFound
+  } else if (rev === 'empty') {
+    statusText = t.crm.objAddrEmpty
+    statusErr = true
+  } else if (rev === 'offline') {
+    statusText = t.crm.objAddrUnavailable
+    statusErr = true
+  } else if (err === 'notfound') {
+    statusText = t.crm.objMapNotFound
+    statusErr = true
+  } else if (err === 'noaddress') {
+    statusText = t.crm.objMapNoAddress
+  }
 
   return (
     <div>
@@ -539,7 +821,7 @@ const ObjMapEditor: FC<ObjMapProps> = ({ t, address, autoSearch, addrTouched, la
         {searching && <span>{t.crm.objMapSearch}</span>}
       </div>
       <div ref={containerRef} className="crm-map-canvas" />
-      <p className={noKey || err ? 'crm-map-status err' : 'crm-map-status'}>{statusText}</p>
+      <p className={statusErr ? 'crm-map-status err' : 'crm-map-status'}>{statusText}</p>
     </div>
   )
 }
@@ -593,6 +875,9 @@ export const CrmObjects: FC<{
   const [duplicates, setDuplicates] = useState<DuplicateInfo[] | null>(null)
   // Адрес менялся с момента открытия формы — для авто-поиска метки на карте
   const [addrTouched, setAddrTouched] = useState(false)
+  // Адрес с карты расходится с уже заполненными полями — ждём решения агента
+  // («Заменить адрес» / «Оставить как есть»), а не стираем данные молча
+  const [pendingAddr, setPendingAddr] = useState<{ proposed: Partial<Record<AddrField, string>>; full: string } | null>(null)
   // «Где размещён объект»: привязанные объявления площадок открытого объекта
   const [pl, setPl] = useState<PlacementsUi | null>(null)
   const [plLinks, setPlLinks] = useState<PlacementLink[]>([])
@@ -624,6 +909,13 @@ export const CrmObjects: FC<{
   // этажность не выбрана, показываем сохранённые описания — иначе их нельзя
   // было бы ни увидеть, ни исправить.
   const floorFieldCount = houseFloorsCount > 0 ? houseFloorsCount : floorDescs.length
+
+  // Актуальные значения формы для асинхронных ответов карты: пока идёт обратное
+  // геокодирование, агент мог продолжить заполнять поля
+  const formRef = useRef(form)
+  useEffect(() => {
+    formRef.current = form
+  }, [form])
 
   const load = useCallback(async () => {
     const [objectsRes, agentsRes] = await Promise.all([
@@ -708,6 +1000,7 @@ export const CrmObjects: FC<{
     setSaveError('')
     setDuplicates(null)
     setAddrTouched(false)
+    setPendingAddr(null)
     setPl(null)
     setPlLinks([])
     setPlErr('')
@@ -740,6 +1033,7 @@ export const CrmObjects: FC<{
     setDuplicates(null)
     setSaveError('')
     setAddrTouched(false)
+    setPendingAddr(null)
     const addr = o.address as Record<string, unknown> | undefined
     const coords = o.coordinates as Record<string, unknown> | undefined
     const agentRel = o.agent as Record<string, unknown> | undefined
@@ -788,6 +1082,10 @@ export const CrmObjects: FC<{
       snt: (addr?.snt as string) || '',
       street: (addr?.street as string) || '',
       house: (addr?.house as string) || '',
+      corpus: (addr?.corpus as string) || '',
+      // Полный адрес объекта: показываем сохранённый, пока адресные поля не
+      // изменили (потом строка собирается заново из частей адреса)
+      fullAddress: (addr?.fullAddress as string) || '',
       apartment: (addr?.apartment as string) || '',
       lat: coords?.lat != null ? String(coords.lat) : '',
       lng: coords?.lng != null ? String(coords.lng) : '',
@@ -1156,6 +1454,11 @@ export const CrmObjects: FC<{
         snt: form.snt.trim() || null,
         street: form.street,
         house: form.house,
+        // Корпус дома хранится отдельно от номера дома (дом 16, корпус 2) —
+        // вместе с полным адресом, собранным из частей. Полный адрес строкой
+        // нужен карточке и поиску, когда части по отдельности не читаются.
+        corpus: form.corpus,
+        fullAddress: fullAddressValue(form, addrTouched),
         apartment: form.apartment,
       },
       coordinates: form.lat || form.lng ? { lat: Number(form.lat) || undefined, lng: Number(form.lng) || undefined } : undefined,
@@ -1345,7 +1648,7 @@ export const CrmObjects: FC<{
 
   // Адресные поля: помечаем, что адрес менялся (для авто-поиска на карте).
   // При смене района сбрасываем населённый пункт, если он не входит в новый район.
-  const setAddr = (k: 'city' | 'district' | 'cityDistrict' | 'locality' | 'street' | 'house' | 'apartment', v: string) => {
+  const setAddr = (k: AddrField | 'apartment', v: string) => {
     setAddrTouched(true)
     setForm((prev) => ({
       ...prev,
@@ -1363,6 +1666,48 @@ export const CrmObjects: FC<{
       lat: plat != null ? String(plat) : '',
       lng: plng != null ? String(plng) : '',
     }))
+  }
+
+  // Подстановка адресных полей: адрес пришёл с карты, а не из набора букв,
+  // поэтому авто-поиск по строке адреса не должен сдвигать метку с выбранной
+  // точки — снимаем пометку «адрес правили» (см. addrTouched).
+  const applyAddressFields = (fields: Partial<Record<AddrField, string>>) => {
+    setForm((prev) => ({ ...prev, ...fields }))
+    setAddrTouched(false)
+  }
+
+  /**
+   * Адрес точки с карты (клик или перетаскивание метки). Подставляем только
+   * найденные значения: пустое не затирает введённое. Если найденный адрес
+   * расходится с уже заполненными полями — ничего не меняем и спрашиваем
+   * подтверждение: данные в форме не стираются молча.
+   */
+  const applyMapAddress = (found: ReversedAddress, full: string) => {
+    const current = formRef.current
+    const proposed: Partial<Record<AddrField, string>> = {}
+    if (found.locality) proposed.locality = found.locality
+    if (found.district) proposed.district = found.district
+    if (found.cityDistrict) proposed.cityDistrict = found.cityDistrict
+    if (found.street) proposed.street = found.street
+    if (found.house) proposed.house = found.house
+    if (found.corpus) proposed.corpus = found.corpus
+    // Город: справочник называет Владикавказ — ставим и в поле «Город»
+    // (как в карточках города). Остальные пункты остаются населёнными пунктами.
+    if (/^владикавказ$/i.test(found.locality)) proposed.city = found.locality
+
+    // Квартира не заполняется никогда: точку ставят у дома, а квартиру
+    // агент знает сам (см. требования к форме).
+    const conflicts = (Object.keys(proposed) as AddrField[]).filter((key) => {
+      const was = (current[key] || '').trim()
+      const next = (proposed[key] || '').trim()
+      return was && !sameAddressValue(was, next)
+    })
+    if (conflicts.length) {
+      setPendingAddr({ proposed, full })
+      return
+    }
+    setPendingAddr(null)
+    applyAddressFields(proposed)
   }
 
   // Фильтр по статусу (черновик / опубликован / архив)
@@ -1670,14 +2015,43 @@ export const CrmObjects: FC<{
                 </Field>
               </div>
             )}
+            {/* Улица: подсказки адресного справочника по первым буквам. Список
+                зависит от населённого пункта и района формы, ручной ввод
+                сохраняется — подсказка только помогает (см. SuggestInput). */}
             <div className="crm-addr-full">
               <Field label={t.crm.objStreet}>
-                <input value={form.street} onChange={(e) => setAddr('street', e.target.value)} style={inputStyle} />
+                <SuggestInput
+                  t={t}
+                  value={form.street}
+                  onChange={(v) => setAddr('street', v)}
+                  onPick={(item) => setAddr('street', item.value)}
+                  load={(q) => suggestStreets({ query: q, locality: form.locality, district: form.district, city: form.city })}
+                />
+              </Field>
+            </div>
+            {/* Дом, корпус и квартира в одну строку: дом — с номерами
+                выбранной улицы из справочника, корпус дома отдельным полем,
+                квартира не подставляется автоматически никогда */}
+            <div className="crm-addr-half">
+              <Field label={t.crm.objHouse}>
+                <SuggestInput
+                  t={t}
+                  value={form.house}
+                  onChange={(v) => setAddr('house', v)}
+                  onPick={(item) => {
+                    setAddr('house', item.value)
+                    // Справочник различает дом и корпус — пустое поле заполняем
+                    if (item.corpus && !form.corpus.trim()) setAddr('corpus', item.corpus)
+                  }}
+                  load={(q) => suggestHouses({ query: q, street: form.street, locality: form.locality, district: form.district, city: form.city })}
+                  openOnFocus
+                  reloadKey={form.street}
+                />
               </Field>
             </div>
             <div className="crm-addr-half">
-              <Field label={t.crm.objHouse}>
-                <input value={form.house} onChange={(e) => setAddr('house', e.target.value)} style={inputStyle} />
+              <Field label={t.crm.objCorpus}>
+                <input value={form.corpus} onChange={(e) => setAddr('corpus', e.target.value)} style={inputStyle} />
               </Field>
             </div>
             <div className="crm-addr-half">
@@ -1685,6 +2059,37 @@ export const CrmObjects: FC<{
                 <input value={form.apartment} onChange={(e) => setAddr('apartment', e.target.value)} style={inputStyle} />
               </Field>
             </div>
+            {/* Полный адрес одной строкой — то, что уходит в карточку объекта.
+                Собирается из частей, поэтому правится не руками, а полями выше */}
+            <div className="crm-addr-full">
+              <Field label={t.crm.objFullAddress}>
+                <p className="crm-addr-full-text">
+                  {fullAddressValue(form, addrTouched) || t.crm.objFullAddressEmpty}
+                </p>
+              </Field>
+            </div>
+            {/* Адрес точки на карте разошёлся с заполненными полями: спрашиваем,
+                заменять ли введённое — без ответа агента данные не стираются */}
+            {pendingAddr && (
+              <div className="crm-addr-confirm crm-addr-full">
+                <p>{t.crm.objAddrConfirm}</p>
+                {pendingAddr.full && <p className="crm-addr-full-text">{pendingAddr.full}</p>}
+                <div className="crm-addr-confirm-actions">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      applyAddressFields(pendingAddr.proposed)
+                      setPendingAddr(null)
+                    }}
+                  >
+                    {t.crm.objAddrReplace}
+                  </button>
+                  <button type="button" className="keep" onClick={() => setPendingAddr(null)}>
+                    {t.crm.objAddrKeep}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Карта: авто-поиск точного адреса, метку можно передвинуть */}
@@ -1697,6 +2102,7 @@ export const CrmObjects: FC<{
               lat={form.lat}
               lng={form.lng}
               onCoords={setMapCoords}
+              onAddressFound={applyMapAddress}
             />
           </div>
 

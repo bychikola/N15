@@ -750,6 +750,22 @@ export const Objects: CollectionConfig = {
         },
         { name: 'street', type: 'text', label: 'Улица' },
         { name: 'house', type: 'text', label: 'Дом' },
+        {
+          name: 'corpus',
+          type: 'text',
+          label: 'Корпус',
+          admin: {
+            description: 'Корпус или строение дома, если есть: дом 16, корпус 2. Пусто — если корпуса нет',
+          },
+        },
+        {
+          name: 'fullAddress',
+          type: 'text',
+          label: 'Полный адрес',
+          admin: {
+            description: 'Адрес одной строкой — собирается формой CRM из города, пункта, улицы, дома и корпуса',
+          },
+        },
         { name: 'apartment', type: 'text', label: 'Квартира' },
       ],
     },
