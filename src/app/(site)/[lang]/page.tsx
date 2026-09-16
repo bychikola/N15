@@ -9,8 +9,7 @@ import SearchCategories from '@/components/home/SearchCategories'
 import FeaturedObjects from '@/components/home/FeaturedObjects'
 import type { ObjectListItem } from '@/components/objects/ObjectCard'
 import InterregionalGuide from '@/components/home/InterregionalGuide'
-import ServicesSection from '@/components/home/ServicesSection'
-import LegalSection from '@/components/home/LegalSection'
+import ServicesAccordion from '@/components/home/ServicesAccordion'
 import AboutSection from '@/components/home/AboutSection'
 import ContactSection from '@/components/home/ContactSection'
 // Справочники допустимых значений фильтров: where-запрос по select-полю
@@ -168,8 +167,7 @@ export default async function HomePage({ params, searchParams }: PageProps) {
           emptyNote={filterEmptyNote}
         />
         <InterregionalGuide t={t} lang={lang} regions={interregionalRegions} />
-        <ServicesSection t={t} lang={lang} />
-        <LegalSection t={t} lang={lang} />
+        <ServicesAccordion t={t} lang={lang} />
         <AboutSection t={t} />
         <ContactSection t={t} phone={phone} />
         <footer className="lp-footer">

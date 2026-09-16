@@ -656,9 +656,31 @@ html[data-theme='dark'] .lp-featured .object-card { border: 0; }
 .lp-snt-cat[open] summary i { transform: rotate(45deg); }
 .lp-snt-cat .lp-places { margin: 0; padding: 4px 0 16px; }
 
-/* Призыв юр-блока под сеткой карточек: строка во всю ширину блока,
-   надпись слева, стрелка справа */
-.lp-legal-action { margin: 21px 0 0; padding: 16px 0; display: flex; justify-content: space-between; color: #a87c3f; border-bottom: 1px solid #d8d1c4; font-size: 10px; text-transform: uppercase; letter-spacing: .14em; }
+/* Услуги: две компактные карточки-гармошки рядом — «Дизайн и ремонт под
+   ключ» и «Юридические услуги». Блок уже остальных секций (900px), карточки
+   не растягиваются на всю ширину экрана; каждая — внешний прямоугольник,
+   перечень услуг — внутренние строки-ссылки. Перечень раскрывается нажатием
+   на заголовок: <details>, поэтому без клиентского JS. Карточка раскрывается
+   сама по себе — соседняя не тянется за ней по высоте (align-items: start) */
+.lp-services { width: min(90%, 900px); margin: 105px auto; }
+.lp-services-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-items: start; }
+.lp-services-card { background: rgba(255, 255, 255, .58); border: 1px solid #d8d1c4; transition: background .25s, border-color .25s; }
+.lp-services-card:hover, .lp-services-card[open] { background: #fff; border-color: #b9a98c; }
+.lp-services-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 78px; padding: 20px 22px; cursor: pointer; list-style: none; }
+.lp-services-head::-webkit-details-marker { display: none; }
+.lp-services-title { margin: 0; font-family: 'New Standard', Georgia, serif; font-weight: 400; font-size: clamp(19px, 1.9vw, 23px); letter-spacing: -.01em; line-height: 1.15; color: inherit; transition: color .25s; }
+.lp-services-card:hover .lp-services-title, .lp-services-card[open] .lp-services-title { color: var(--n15-green); }
+/* Стрелка раскрытия — тонкий шеврон из двух граней; в открытой карточке
+   разворачивается вверх */
+.lp-services-arrow { flex: none; width: 7px; height: 7px; margin-right: 3px; border-right: 1px solid #a87c3f; border-bottom: 1px solid #a87c3f; transform: rotate(45deg); transition: transform .25s; }
+.lp-services-card[open] .lp-services-arrow { transform: rotate(-135deg); }
+.lp-services-list { list-style: none; margin: 0; padding: 0 18px 18px; display: grid; gap: 8px; }
+.lp-services-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 12px 14px; background: rgba(255, 255, 255, .66); border: 1px solid #e2dbcd; color: #24231f; font-size: 14px; line-height: 1.35; transition: background .25s, border-color .25s, color .25s; }
+.lp-services-row i { color: #a87c3f; font: normal 300 15px Arial; transition: transform .25s, color .25s; }
+.lp-services-row:hover, .lp-services-row:focus-visible { background: #fff; border-color: #b9a98c; color: var(--n15-green); }
+.lp-services-row:hover i, .lp-services-row:focus-visible i { color: var(--n15-green); transform: translateX(4px); }
+/* Призыв к консультации — последняя строка юр-карточки, золотом */
+.lp-services-row-cta { color: #a87c3f; text-transform: uppercase; letter-spacing: .14em; font-size: 10px; }
 
 /* About — кремовая секция (компактная) */
 .lp-about { background: #f3eee3; grid-template-columns: 1fr 1fr; min-height: 420px; display: grid; }
@@ -757,6 +779,13 @@ html[data-theme='dark'] .lp-featured .object-card { border: 0; }
   .lp-categories { grid-template-columns: 1fr; gap: 12px; }
   .lp-category-card { grid-template-columns: 28px 1fr 25px; gap: 10px; min-height: 92px; padding: 20px 18px; }
   .lp-category-card h3 { font-size: 25px; }
+  /* На телефоне карточки услуг друг под другом, отступы компактнее */
+  .lp-services { width: auto; margin: 72px 22px; }
+  .lp-services-grid { grid-template-columns: 1fr; gap: 12px; }
+  .lp-services-head { min-height: 68px; padding: 16px 18px; }
+  .lp-services-title { font-size: 21px; }
+  .lp-services-list { padding: 0 14px 14px; gap: 6px; }
+  .lp-services-row { padding: 11px 12px; font-size: 13px; }
   .lp-cards { width: auto; margin: 0 22px; }
   /* «Показать все →» на телефоне — под заголовком, слева (в одну строку
      с заголовком не помещается без сжатия) */
