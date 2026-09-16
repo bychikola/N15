@@ -20,6 +20,7 @@
 // ---------------------------------------------------------------------------
 
 import { useCallback, useEffect, useState, type FC } from 'react'
+import { safeHttpUrl } from '@/lib/safe-url'
 
 interface PlacementProbeUi {
   platform: string

@@ -19,6 +19,7 @@
 
 import { useCallback, useEffect, useMemo, useState, type FC } from 'react'
 import type { Dict } from '@/i18n/dictionaries'
+import { safeHttpUrl } from '@/lib/safe-url'
 import {
   CONNECTION_STATUS_HINTS,
   CONNECTION_STATUS_LABELS,
@@ -575,10 +576,13 @@ export const PlatformIntegrations: FC<{ t: Dict; objects: ObjectOption[] }> = ({
                         <span style={{ fontSize: 9, color: '#9b958a', textTransform: 'uppercase', letterSpacing: '.06em' }}>
                           Ссылка на объявление:{' '}
                         </span>
-                        {check.listingUrl ? (
-                          <a href={check.listingUrl} target="_blank" rel="noopener noreferrer" style={{ color: '#8d6b40', textDecoration: 'underline' }}>
+                        {safeHttpUrl(check.listingUrl) ? (
+                          <a href={safeHttpUrl(check.listingUrl)!} target="_blank" rel="noopener noreferrer" style={{ color: '#8d6b40', textDecoration: 'underline' }}>
                             {check.listingUrl}
                           </a>
+                        ) : check.listingUrl ? (
+                          // Ссылка площадки пришла в неожиданной схеме — текстом, без перехода
+                          <span style={{ color: '#9b958a' }}>{check.listingUrl}</span>
                         ) : (
                           <span style={{ color: '#9b958a' }}>—</span>
                         )}
