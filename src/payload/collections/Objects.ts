@@ -95,7 +95,7 @@ async function myAgentIds(req: AccessReq): Promise<Set<number>> {
  * независимая оценка — точную стоимость определяют осмотр и оценщик.
  */
 const VALUATION_TRIGGER_KEYS = [
-  'type', 'category', 'price', 'area', 'livingArea', 'kitchenArea', 'rooms',
+  'type', 'category', 'price', 'area', 'livingArea', 'kitchenArea', 'plotArea', 'rooms',
   'floor', 'totalFloors', 'buildingType', 'condition', 'builtYear', 'heating',
   'balcony', 'water', 'sewerage', 'electricity', 'gas', 'internet', 'elevator',
   'yard', 'parking', 'address', 'features', 'valuation',
@@ -249,6 +249,10 @@ const recalcValuationHook: CollectionBeforeChangeHook = async ({ data, req, oper
     manualNote,
     manualBy,
     manualAt: manualActive && manualSent ? new Date().toISOString() : (prevVal.manualAt || null),
+    // Отчёт «оценка по рынку» (кнопка в CRM, формат см. src/lib/market-valuation.ts)
+    // живёт в этой же группе отдельным снимком: пересчёт системной оценки его
+    // не трогает, снимок заменяется только новым запуском оценки
+    marketRun: 'marketRun' in nextVal ? nextVal.marketRun : (prevVal.marketRun ?? null),
   }
   return data
 }
@@ -562,6 +566,21 @@ export const Objects: CollectionConfig = {
       label: 'Площадь кухни (м²)',
     },
     {
+      // Земельный участок частного дома — отдельный ценообразующий признак
+      // (6 соток = 600 м²). У квартир и коммерции участка нет, у земельных
+      // участков площадь самого объекта хранится в «Площади»
+      name: 'plotArea',
+      type: 'number',
+      label: 'Земельный участок (м²)',
+      admin: {
+        condition: (_data, siblingData) => {
+          const category = (siblingData as { category?: string } | undefined)?.category
+          return category === 'house' || category === 'townhouse'
+        },
+        description: 'Площадь участка частного дома в м² (6 соток = 600 м²). Участвует в рыночной оценке: маленький участок удешевляет лот, большой — добавляет к цене',
+      },
+    },
+    {
       name: 'rooms',
       type: 'number',
       label: 'Кол-во комнат',
@@ -852,13 +871,16 @@ export const Objects: CollectionConfig = {
     {
       name: 'cadastralNumber',
       type: 'text',
-      label: 'Кадастровый номер',
-      // Кадастровый номер — закрытые сведения: только администратор
+      label: 'Кадастровый номер объекта',
+      // Кадастровый номер — закрытые сведения: читает и меняет только
+      // администратор (агент поля не видит, при сохранении значение
+      // остаётся прежним — Payload возвращает его из исходного документа)
       access: {
         read: ({ req: { user } }) => user?.role === 'admin',
+        update: ({ req: { user } }) => user?.role === 'admin',
       },
       admin: {
-        description: 'Например: 15:07:0030021:123',
+        description: 'Например: 15:07:0030021:123. Виден только администратору',
       },
     },
     {
@@ -952,6 +974,23 @@ export const Objects: CollectionConfig = {
         { name: 'manualNote', type: 'textarea', label: 'Комментарий к ручной правке' },
         { name: 'manualBy', type: 'text', label: 'Кто скорректировал' },
         { name: 'manualAt', type: 'date', label: 'Когда скорректировано' },
+        {
+          // Снимок отчёта «оценка по рынку» (диапазон, аналоги, дата расчёта,
+          // предупреждение) — внутренний документ агентства, формируется
+          // кнопкой в карточке объекта, см. src/lib/market-valuation.ts
+          name: 'marketRun',
+          type: 'json',
+          label: 'Оценка по рынку (отчёт)',
+          // Кнопка «Провести оценку по рынку» — администраторская: отчёт
+          // виден и перезаписывается только им (см. app/api/objects/market-valuation)
+          access: {
+            read: ({ req: { user } }) => user?.role === 'admin',
+            update: ({ req: { user } }) => user?.role === 'admin',
+          },
+          admin: {
+            description: 'Предварительный расчёт агентства по фактическим объявлениям, не отчёт об оценке',
+          },
+        },
       ],
     },
     {

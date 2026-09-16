@@ -183,7 +183,39 @@ function toView(src: Record<string, unknown>): ReportView {
 
 const LABEL_OF: Record<string, string> = Object.fromEntries(LEGAL_DOC_TYPES.map((d) => [d.value, d.label]))
 
-export const LegalCheckBlock: FC<{ objectId: number; onClose: () => void }> = ({ objectId, onClose }) => {
+/**
+ * Фокусная проверка: блок открыт кнопкой «Проверить обременения» или
+ * «Проверить банкротство собственника». Отдельных реестров у системы нет —
+ * это та же экспертиза, в которой подсвечен нужный пункт отчёта
+ * (обременения — пункт 4, банкротство — пункт 6), поэтому блок сразу
+ * запускает проверку и показывает пункт крупно.
+ */
+export type LegalFocus = 'encumbrances' | 'bankruptcy'
+
+const FOCUS_ITEM: Record<LegalFocus, { key: string; title: string; lead: string }> = {
+  encumbrances: {
+    key: '4',
+    title: 'Проверка обременений объекта',
+    lead:
+      'Ипотека, залог, аресты, запреты и сервитуты — пункт 4 отчёта ниже. Основание: выписка ЕГРН, ' +
+      'загруженная в карточку, и сверка с ней юриста. Доступа к ЕГРН в реальном времени у системы нет, ' +
+      'поэтому отсутствие обременений подтверждает только текст выписки.',
+  },
+  bankruptcy: {
+    key: '6',
+    title: 'Проверка банкротства собственника',
+    lead:
+      'Банкротство — пункт 6 отчёта ниже. Проверяется по реестру ЕФРСБ; открытого API у него нет, ' +
+      'поэтому автоматический запрос из CRM невозможен: система не имитирует результат, проверку ' +
+      'выполняет юрист по ссылке из отчёта и отмечает её вручную.',
+  },
+}
+
+export const LegalCheckBlock: FC<{ objectId: number; onClose: () => void; focus?: LegalFocus }> = ({
+  objectId,
+  onClose,
+  focus,
+}) => {
   const [perm, setPerm] = useState<PermState | null>(null)
   const [docs, setDocs] = useState<DocMeta[] | null>(null)
   const [error, setError] = useState('')
@@ -207,8 +239,10 @@ export const LegalCheckBlock: FC<{ objectId: number; onClose: () => void }> = ({
   const [loaded, setLoaded] = useState(false)
 
   // Первичная загрузка прав, документов и отчёта (первый вызов — из эффекта
-  // ниже; последующие — после загрузки/удаления документа или проверки)
-  async function loadAll() {
+  // ниже; последующие — после загрузки/удаления документа или проверки).
+  // Возвращает состояние прав — по нему эффект решает, запускать ли фокусную
+  // проверку (кнопки «Проверить обременения» / «Проверить банкротство»).
+  async function loadAll(): Promise<PermState | null> {
     try {
       const res = await fetch(`/api/objects/legal/status?objectId=${objectId}`, { credentials: 'include' })
       const data = (await res.json()) as PermState & { error?: string }
@@ -237,29 +271,14 @@ export const LegalCheckBlock: FC<{ objectId: number; onClose: () => void }> = ({
           setError(repData.error)
         }
       }
+      return data
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
+      return null
     } finally {
       setLoaded(true)
     }
   }
-
-  // Первичная загрузка прав, документов и отчёта (один раз при открытии блока).
-  // Отложена на тик, как в остальных экранах CRM: сетевые ответы меняют
-  // состояние уже после await, без каскадных рендеров из эффекта.
-  useEffect(() => {
-    let cancelled = false
-    const timer = setTimeout(() => {
-      if (!cancelled) {
-        void loadAll()
-      }
-    }, 0)
-    return () => {
-      cancelled = true
-      clearTimeout(timer)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
 
   const uploadDoc = async () => {
     if (!upFile) {
@@ -340,6 +359,29 @@ export const LegalCheckBlock: FC<{ objectId: number; onClose: () => void }> = ({
       setReportBusy(false)
     }
   }
+
+  // Первичная загрузка прав, документов и отчёта (один раз при открытии блока).
+  // Отложена на тик, как в остальных экранах CRM: сетевые ответы меняют
+  // состояние уже после await, без каскадных рендеров из эффекта.
+  // Фокусная проверка (кнопки «Проверить обременения» / «Проверить банкротство
+  // собственника») запускает экспертизу сразу — отчёт нужен, чтобы показать её
+  // пункт (см. FOCUS_ITEM).
+  useEffect(() => {
+    let cancelled = false
+    const timer = setTimeout(() => {
+      void (async () => {
+        if (cancelled) return
+        const state = await loadAll()
+        if (cancelled || !focus || !state?.canManage) return
+        await runCheck()
+      })()
+    }, 0)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   /** Скачивание PDF отчёта (кнопка — только у администратора) */
   const downloadPdf = async () => {
@@ -424,6 +466,16 @@ export const LegalCheckBlock: FC<{ objectId: number; onClose: () => void }> = ({
       <div style={{ marginTop: 12, border: '1px solid #d9b98c', borderRadius: 8, background: '#fbf3e6', padding: '10px 14px', fontSize: 12, color: '#7a5a2e' }}>
         {LEGAL_REPORT_DISCLAIMER}. Отчёт закрытый: его видит только администратор, клиентам и на сайт он не показывается.
       </div>
+
+      {/* Фокусная проверка: кнопка карточки («Проверить обременения» /
+          «Проверить банкротство собственника») — что именно проверяется */}
+      {focus && (
+        <div style={{ marginTop: 10, border: '1px solid #dccdb6', borderRadius: 8, background: '#fff', padding: '12px 14px' }}>
+          <div style={{ fontSize: 10, color: '#8d6b40', textTransform: 'uppercase', letterSpacing: '.08em' }}>Проверка по кнопке</div>
+          <div style={{ marginTop: 4, fontWeight: 600, fontSize: 14, color: '#25241f' }}>{FOCUS_ITEM[focus].title}</div>
+          <p style={{ margin: '5px 0 0', fontSize: 11.5, color: '#716b62', lineHeight: 1.55 }}>{FOCUS_ITEM[focus].lead}</p>
+        </div>
+      )}
 
       {!loaded ? (
         <p style={{ color: '#817b70', fontSize: 12, marginTop: 14 }}>Загрузка…</p>
@@ -628,11 +680,23 @@ export const LegalCheckBlock: FC<{ objectId: number; onClose: () => void }> = ({
                   <div style={sectionTitle}>Результаты проверок</div>
                   {(report.items || []).map((it) => {
                     const st = STATUS_STYLE[it.status] || STATUS_STYLE.manual
+                    // Пункт фокусной проверки — тот, ради которого открыли блок
+                    const focused = focus != null && FOCUS_ITEM[focus].key === it.key
                     return (
-                      <div key={it.key} style={{ padding: '7px 0', borderTop: '1px solid #f0ebe2', fontSize: 12 }}>
+                      <div
+                        key={it.key}
+                        style={{
+                          padding: focused ? '9px 11px' : '7px 0',
+                          borderTop: '1px solid #f0ebe2',
+                          fontSize: 12,
+                          ...(focused ? { marginTop: 6, border: '1px solid #d9b98c', borderRadius: 8, background: '#fbf3e6' } : {}),
+                        }}>
                         <div style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
                           <span style={{ minWidth: 26, color: '#817b70' }}>{it.key}.</span>
-                          <span style={{ flex: 1, color: '#25241f' }}>{it.title}</span>
+                          <span style={{ flex: 1, color: '#25241f' }}>
+                            {it.title}
+                            {focused ? <span style={{ marginLeft: 8, fontSize: 9.5, color: '#8d6b40', textTransform: 'uppercase', letterSpacing: '.06em' }}>проверка по кнопке</span> : null}
+                          </span>
                           <span style={{ whiteSpace: 'nowrap', padding: '2px 8px', borderRadius: 999, background: st.bg, color: st.color, fontSize: 9.5 }}>
                             {LEGAL_ITEM_STATUS_LABELS[it.status as keyof typeof LEGAL_ITEM_STATUS_LABELS] || it.status}
                           </span>

@@ -30,6 +30,8 @@ export interface ValuationParams {
   category?: string | null
   price?: number | null
   area?: number | null
+  /** Земельный участок частного дома, м² (6 соток = 600 м²) */
+  plotArea?: number | null
   livingArea?: number | null
   kitchenArea?: number | null
   rooms?: number | null
@@ -374,6 +376,25 @@ function areaFactor(category: string | null, area?: number | null): number {
   return 1
 }
 
+/**
+ * Земельный участок частного дома (м², 6 соток = 600 м²). Ориентир Н15:
+ * обычный участок 3–8 соток — базовая ставка дома; маленький участок в
+ * черте города удешевляет лот, большой — добавляет к цене, но вклад затухает
+ * (цена растёт не пропорционально соткам). У квартир, коммерции и участков
+ * (там участок и есть объект — его площадь в «Площади») не применяется.
+ */
+function plotFactor(raw?: number | null): number {
+  const sqm = num(raw)
+  if (!sqm || sqm <= 0) return 1
+  const are = sqm / 100
+  if (are < 2) return 0.96
+  if (are < 3) return 0.98
+  if (are <= 8) return 1
+  if (are <= 15) return 1.04
+  if (are <= 25) return 1.07
+  return 1.09
+}
+
 /** Жилая площадь: доля жилой зоны в квартире */
 function layoutFactor(category: string | null, area?: number | null, livingArea?: number | null): number {
   const a = num(area)
@@ -689,7 +710,7 @@ function unitsOf(category: string, sale: boolean): ValuationUnit | null {
 function roundTo(v: number, unit: number): number {
   return Math.round(v / unit) * unit
 }
-function niceRound(v: number): number {
+export function niceRound(v: number): number {
   const unit = v >= 1e7 ? 1e5 : v >= 1e6 ? 5e4 : v >= 2e5 ? 1e4 : v >= 5e4 ? 5e3 : 1e3
   return roundTo(v, unit)
 }
@@ -816,6 +837,12 @@ export function evaluateValuation(
   apply(conditionFactor(p.condition), 'condition')
   apply(roomsFactor(category, p.rooms), 'rooms')
   apply(areaFactor(category, area), 'area-size')
+  // Земельный участок дома: у дома и таунхауса площадь участка — отдельный
+  // ценообразующий признак (у квартир и коммерции участка нет, у участка
+  // площадь участка — это сам объект, см. areaFactor)
+  if (category === 'house' || category === 'townhouse') {
+    apply(plotFactor(p.plotArea), 'plotArea')
+  }
   apply(layoutFactor(category, area, p.livingArea), 'livingArea')
   apply(utilitiesFactor(category, p), 'utilities')
   if (category === 'apartment' || category === 'commercial') {
@@ -847,6 +874,8 @@ export function evaluateValuation(
   if (isSet(p.builtYear)) score += 1
   if (isSet(p.condition)) score += 1
   if (hasAny(p, ['elevator', 'balcony', 'parking', 'yard', 'heating', 'gas', 'water', 'sewerage', 'livingArea'])) score += 1
+  // Частный дом: площадь земельного участка — значимый признак лота
+  if ((category === 'house' || category === 'townhouse') && isSet(p.plotArea)) score += 1
   // Участок с коммуникациями (свет/вода/газ) — точнее по стоимости
   if (category === 'land' && hasAny(p, ['electricity', 'gas', 'water', 'features'])) score += 1
   const th = confidenceThresholds(category)
@@ -868,6 +897,7 @@ export function evaluateValuation(
     pushWant('condition', isSet(p.condition))
     pushWant('elevator', isSet(p.elevator) || isSet(p.balcony) || isSet(p.parking) || isSet(p.yard))
   } else if (category === 'house' || category === 'townhouse') {
+    pushWant('plotArea', isSet(p.plotArea))
     pushWant('buildingType', isSet(p.buildingType))
     pushWant('builtYear', isSet(p.builtYear))
     pushWant('condition', isSet(p.condition))
@@ -946,6 +976,7 @@ export interface ValuationDocLike {
   category?: string | null
   price?: number | null
   area?: number | null
+  plotArea?: number | null
   livingArea?: number | null
   kitchenArea?: number | null
   rooms?: number | null
@@ -985,6 +1016,7 @@ export function paramsFromDoc(doc: ValuationDocLike): ValuationParams {
     category: doc.category ?? null,
     price: num(doc.price),
     area: num(doc.area),
+    plotArea: num(doc.plotArea),
     livingArea: num(doc.livingArea),
     kitchenArea: num(doc.kitchenArea),
     rooms: num(doc.rooms),

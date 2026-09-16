@@ -25,9 +25,14 @@ import { sortAgents } from '@/lib/agents-sort'
 import { areToSqm, areaNumberText, parseAreaNumber, sqmToAre } from '@/lib/area-format'
 // Подписи этажей дома: «1 этаж», «2 этаж» (см. также t.crm.objFloors)
 import { floorLabel } from '@/lib/floor-format'
-import { LegalCheckBlock } from '@/components/crm/LegalCheckBlock'
+import { LegalCheckBlock, type LegalFocus } from '@/components/crm/LegalCheckBlock'
 import { PlacementCheckBlock } from '@/components/crm/PlacementCheckBlock'
 import { HouseDataBlock } from '@/components/crm/HouseDataBlock'
+// «Оценка по рынку» — предварительный расчёт по фактическим объявлениям
+// (кнопка карточки, только администратор): диапазон, аналоги, дата расчёта
+import { MarketValuationBlock } from '@/components/crm/MarketValuationBlock'
+import { marketReportFromJson, type MarketValuationReport } from '@/lib/market-valuation'
+import { formatMoney } from '@/lib/valuation'
 // «Архив объекта»: причины переноса и группа archive документа
 // (серверные операции — /api/objects/archive-manage, см. src/lib/archive.ts)
 import { ARCHIVE_REASONS, archiveFromDoc, archiveReasonLabel, type ArchiveGroup } from '@/lib/archive'
@@ -277,6 +282,9 @@ const floorDescsFromDoc = (o: Record<string, unknown>): string[] => {
 
 const emptyForm = {
   title: '', type: 'sale', category: 'apartment', price: '', area: '', areaUnit: 'sqm', livingArea: '',
+  // Земельный участок частного дома (м², 6 соток = 600 м²) — отдельное поле
+  // дома и таунхауса, участвует в рыночной оценке (см. src/lib/valuation.ts)
+  plotArea: '',
   kitchenArea: '', rooms: '', floor: '', totalFloors: '', buildingType: '', condition: '',
   // Этажность дома (только дом и таунхаус, см. save): выбор из списка «1/2/3
   // этажа» либо своё число («другое значение»). У остальных категорий
@@ -544,6 +552,13 @@ const toNum = (v: string): number | null => {
   if (!v.trim()) return null
   const n = Number(v)
   return Number.isFinite(n) ? n : null
+}
+
+/** Дата расчёта (оценка по рынку) строкой: пустая строка, если даты нет */
+const shortDate = (iso?: string | null): string => {
+  if (!iso) return ''
+  const d = new Date(iso)
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('ru-RU')
 }
 
 const isLat = (v: number | null): v is number => v !== null && v >= -90 && v <= 90
@@ -883,8 +898,15 @@ export const CrmObjects: FC<{
   const [plLinks, setPlLinks] = useState<PlacementLink[]>([])
   const [plBusy, setPlBusy] = useState(false)
   const [plErr, setPlErr] = useState('')
-  // «Юридическая экспертиза объекта»: открытый блок документов и проверки
+  // «Юридическая экспертиза объекта»: открытый блок документов и проверки.
+  // focus — кнопки «Проверить обременения» / «Проверить банкротство
+  // собственника»: тот же блок, но с запуском проверки и подсветкой её пункта
   const [legalId, setLegalId] = useState<number | null>(null)
+  const [legalFocus, setLegalFocus] = useState<LegalFocus | null>(null)
+  // «Провести оценку по рынку»: открытый блок расчёта и последний сохранённый
+  // отчёт объекта (valuation.marketRun, заполняется сервером)
+  const [valuationId, setValuationId] = useState<number | null>(null)
+  const [marketReport, setMarketReport] = useState<MarketValuationReport | null>(null)
   // «Проверить размещение»: открытый блок поиска объекта на площадках
   const [placeId, setPlaceId] = useState<number | null>(null)
   // «Данные о доме»: открытый блок характеристик дома из официального реестра
@@ -916,6 +938,36 @@ export const CrmObjects: FC<{
   useEffect(() => {
     formRef.current = form
   }, [form])
+
+  // ── Несохранённые правки ─────────────────────────────────────────────
+  // Полоска сохранения внизу карточки показывает состояние: «есть
+  // несохранённые изменения» (в том числе загруженные, но ещё не привязанные
+  // к объекту фото) либо «объект сохранён». Первое изменение после открытия
+  // карточки или после сохранения пропускаем — иначе карточка выглядела бы
+  // изменённой сразу (см. openCardMark).
+  const [dirty, setDirty] = useState(false)
+  const skipNextDirty = useRef(true)
+  const openCardMark = useCallback(() => {
+    skipNextDirty.current = true
+    setDirty(false)
+    setSaved(false)
+  }, [])
+  useEffect(() => {
+    if (!modalOpen) return
+    if (skipNextDirty.current) {
+      skipNextDirty.current = false
+      return
+    }
+    setDirty(true)
+    setSaved(false)
+  }, [form, photos, features, floorDescs, uploads, modalOpen])
+
+  // Закрытие карточки: о несохранённых правках предупреждаем — иначе правки
+  // формы и ещё не привязанные к объекту фото пропадут молча
+  const closeCard = useCallback(() => {
+    if (dirty && !window.confirm(t.crm.objUnsavedConfirm)) return
+    setModalOpen(false)
+  }, [dirty, t])
 
   const load = useCallback(async () => {
     const [objectsRes, agentsRes] = await Promise.all([
@@ -999,6 +1051,8 @@ export const CrmObjects: FC<{
     setFloorDescs([])
     setSaveError('')
     setDuplicates(null)
+    // Карточка нового объекта только открылась — несохранённых правок нет
+    openCardMark()
     setAddrTouched(false)
     setPendingAddr(null)
     setPl(null)
@@ -1009,7 +1063,7 @@ export const CrmObjects: FC<{
     setArchReason('')
     setArchComment('')
     setArchErr('')
-  }, [myAgentId])
+  }, [myAgentId, openCardMark])
 
   // Кнопка «+ Добавить объект» со страницы «Обзор» ведёт сюда с ?add=1:
   // открываем форму нового объекта и убираем параметр из адреса, чтобы
@@ -1034,6 +1088,13 @@ export const CrmObjects: FC<{
     setSaveError('')
     setAddrTouched(false)
     setPendingAddr(null)
+    // Карточка открыта заново: сообщение о сохранении прошлого объекта не
+    // показываем, прежние правки к ней не относятся
+    openCardMark()
+    // Последний расчёт «оценки по рынку» — из группы valuation документа
+    // (поле видно только администратору: у остальных его в ответе нет)
+    const valGroup = o.valuation as { marketRun?: unknown } | undefined
+    setMarketReport(isAdmin ? marketReportFromJson(valGroup?.marketRun) : null)
     const addr = o.address as Record<string, unknown> | undefined
     const coords = o.coordinates as Record<string, unknown> | undefined
     const agentRel = o.agent as Record<string, unknown> | undefined
@@ -1060,6 +1121,7 @@ export const CrmObjects: FC<{
         : '',
       areaUnit,
       livingArea: o.livingArea != null ? String(o.livingArea) : '',
+      plotArea: o.plotArea != null ? String(o.plotArea) : '',
       kitchenArea: o.kitchenArea != null ? String(o.kitchenArea) : '',
       rooms: o.rooms != null ? String(o.rooms) : '',
       floor: o.floor != null ? String(o.floor) : '',
@@ -1124,7 +1186,7 @@ export const CrmObjects: FC<{
       .then((r) => (r.ok ? (r.json() as Promise<{ links?: PlacementLink[] }>) : null))
       .then((d) => setPlLinks(d?.links || []))
       .catch(() => setPlLinks([]))
-  }, [])
+  }, [isAdmin, openCardMark])
 
   // Кнопка «Редактировать» из профиля агента (раздел «Агенты») ведёт сюда
   // с ?edit=<id>: открываем карточку объекта и убираем параметр из адреса —
@@ -1427,6 +1489,9 @@ export const CrmObjects: FC<{
       area,
       areaUnit: form.category === 'land' ? (isAre ? 'are' : 'sqm') : undefined,
       livingArea: form.livingArea ? Number(form.livingArea) : undefined,
+      // Земельный участок дома — только у дома и таунхауса; у остальных
+      // категорий поле не отправляем, чтобы не затереть сохранённое значение
+      plotArea: isHouse && form.plotArea ? Number(form.plotArea) : undefined,
       kitchenArea: form.kitchenArea ? Number(form.kitchenArea) : undefined,
       rooms: form.rooms ? Number(form.rooms) : undefined,
       floor: form.floor ? Number(form.floor) : undefined,
@@ -1518,10 +1583,24 @@ export const CrmObjects: FC<{
     })
     setSaving(false)
     if (res.ok) {
+      // Карточка остаётся открытой, введённые данные не сбрасываются:
+      // сотрудник видит сообщение «Объект сохранён» и может продолжить
+      // работу (например, догрузить фото и сохранить ещё раз). Новый объект
+      // переключается в режим правки с его id — повторное сохранение
+      // обновляет тот же объект, а не создаёт второй.
+      const savedDoc = (await res.json().catch(() => null)) as { doc?: Record<string, unknown> } | null
+      if (!editId && savedDoc?.doc?.id) {
+        // Новый объект создан: открываем его же карточку в режиме правки
+        // (startEdit сам помечает карточку как только что открытую —
+        // несохранённых правок после сохранения нет)
+        startEdit(savedDoc.doc)
+      } else {
+        // Правка существующего объекта: форма остаётся как была — она ровно
+        // та, что ушла на сервер
+        skipNextDirty.current = false
+        setDirty(false)
+      }
       setSaved(true)
-      setTimeout(() => setSaved(false), 2000)
-      resetForm()
-      setModalOpen(false)
       await load()
       return true
     }
@@ -1774,14 +1853,14 @@ export const CrmObjects: FC<{
 
       {modalOpen && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(32,33,30,.55)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 16px', overflowY: 'auto' }}
-          onClick={() => setModalOpen(false)}>
+          onClick={closeCard}>
           <div style={{ background: '#faf8f4', border: '1px solid #ded5c7', borderRadius: 12, width: 'min(100%, 900px)', padding: 22 }}
             onClick={(e) => e.stopPropagation()}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
               <h2 style={{ margin: 0, fontFamily: "'New Standard', Georgia, serif", fontWeight: 400, fontSize: 22 }}>
                 {editId ? t.crm.objEdit : t.crm.objAdd}
               </h2>
-              <button type="button" onClick={() => setModalOpen(false)} style={{ border: '1px solid #e1d8ca', borderRadius: 7, background: '#fff', color: '#716b62', padding: '8px 12px', cursor: 'pointer', fontSize: 12 }}>
+              <button type="button" onClick={closeCard} style={{ border: '1px solid #e1d8ca', borderRadius: 7, background: '#fff', color: '#716b62', padding: '8px 12px', cursor: 'pointer', fontSize: 12 }}>
                 ✕
               </button>
             </div>
@@ -1800,6 +1879,32 @@ export const CrmObjects: FC<{
                 onChanged={applyPlacements}
                 onOpenSearch={() => setPlaceId(editId)}
               />
+            )}
+            {/* «Оценка по рынку» — администраторский расчёт по фактическим
+                объявлениям рынка. Здесь показываем последний сохранённый
+                расчёт объекта (valuation.marketRun, его кладёт в объект
+                сервер при расчёте): примерный диапазон и дату. Оценка
+                предварительная и не заменяет отчёт об оценке — об этом прямо
+                сказано и в блоке расчёта (см. MarketValuationBlock). */}
+            {editId && isAdmin && (
+              <div style={{ marginBottom: 14, padding: '12px 14px', background: '#fbf8f1', border: '1px solid #e8dfd0', borderRadius: 10, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                <div style={{ minWidth: 0 }}>
+                  <h3 style={{ margin: 0, fontFamily: "'New Standard', Georgia, serif", fontWeight: 400, fontSize: 16, color: '#25241f' }}>
+                    Оценка по рынку
+                  </h3>
+                  <p style={{ margin: '3px 0 0', fontSize: 10, color: '#8a857b', lineHeight: 1.5 }}>
+                    {!marketReport
+                      ? 'Расчёт ещё не проводился: он берёт фактические объявления рынка и параметры объекта'
+                      : marketReport.estimate != null
+                        ? `Последний расчёт: ≈ ${formatMoney(marketReport.estimate)}${shortDate(marketReport.checkedAt) ? ` от ${shortDate(marketReport.checkedAt)}` : ''} — предварительно, не отчёт об оценке`
+                        : 'Последний расчёт не сложился: данных и аналогов не хватило, откройте расчёт и проверьте параметры'}
+                  </p>
+                </div>
+                <button type="button" onClick={() => setValuationId(editId)}
+                  style={{ marginLeft: 'auto', border: '1px solid #dccdb6', borderRadius: 6, background: '#f6efe4', color: '#8d6b40', padding: '8px 12px', fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '.07em', cursor: 'pointer' }}>
+                  {marketReport ? 'Открыть расчёт' : 'Провести оценку по рынку'}
+                </button>
+              </div>
             )}
             <div className="crm-property-form">
           <Field label={t.crm.objTitle}><input value={form.title} onChange={(e) => set('title', e.target.value)} style={inputStyle} /></Field>
@@ -1845,6 +1950,14 @@ export const CrmObjects: FC<{
           )}
           <Field label={t.crm.objLivingArea}><input type="number" value={form.livingArea} onChange={(e) => set('livingArea', e.target.value)} style={inputStyle} /></Field>
           <Field label={t.crm.objKitchenArea}><input type="number" value={form.kitchenArea} onChange={(e) => set('kitchenArea', e.target.value)} style={inputStyle} /></Field>
+          {/* Земельный участок — только у дома и таунхауса (как и в коллекции
+              Objects); участвует в рыночной оценке: маленький участок
+              удешевляет лот, большой — добавляет к цене */}
+          {isHouse && (
+            <Field label={t.crm.objPlotArea}>
+              <input type="number" value={form.plotArea} onChange={(e) => set('plotArea', e.target.value)} style={inputStyle} />
+            </Field>
+          )}
           <Field label={t.crm.objRooms}><input type="number" value={form.rooms} onChange={(e) => set('rooms', e.target.value)} style={inputStyle} /></Field>
           {/* Этажность дома — только у дома и таунхауса: сразу видно, сколько
               этажей, и появляются поля описаний. Квартиры (этаж квартиры в
@@ -2120,6 +2233,7 @@ export const CrmObjects: FC<{
               </Field>
               <Field label={t.crm.objCadastral}>
                 <input value={form.cadastralNumber} onChange={(e) => set('cadastralNumber', e.target.value)} style={inputStyle} />
+                <p style={{ margin: '5px 0 0', fontSize: 10, color: '#8a857b', lineHeight: 1.5 }}>{t.crm.objCadastralHint}</p>
               </Field>
             </div>
           )}
@@ -2207,6 +2321,10 @@ export const CrmObjects: FC<{
                   <strong>{t.crm.objPhotos}</strong>
                   <small>{t.crm.objPhotosHint}</small>
                   <small style={{ display: 'block', marginTop: 4 }}>{t.crm.objPhotosOrder}</small>
+                  {/* Фото загружаются сразу, но к объекту прикрепляются при
+                      сохранении карточки — говорим об этом прямо, чтобы
+                      сотрудник не закрыл карточку до сохранения */}
+                  <small style={{ display: 'block', marginTop: 4, color: '#a1661f' }}>{t.crm.objPhotosNeedSave}</small>
                 </div>
                 <label className="crm-photo-picker" style={{ position: 'relative', display: 'grid', placeItems: 'center', textAlign: 'center', border: '1px dashed #cbbda9', borderRadius: 9, background: '#fcfaf7', cursor: 'pointer', padding: 16 }}>
                   <span>{t.crm.objPhotoPick}</span>
@@ -2307,12 +2425,31 @@ export const CrmObjects: FC<{
             </div>
           </div>
 
-          <div className="span-2 crm-form-actions" style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: 16 }}>
-            <button type="button" onClick={() => void save()} disabled={saving} style={{ border: 0, borderRadius: 7, background: '#a7814e', color: 'white', padding: '14px 22px', textTransform: 'uppercase', letterSpacing: '.1em', fontSize: 10, cursor: 'pointer' }}>
-              {saving ? t.crm.objSaving : editId ? t.crm.objEdit : t.crm.objAdd}
+          {/* Панель сохранения: кнопка внизу карточки видна всегда — у нового
+              объекта, при правке, после добавления фото и после заполнения
+              полей (панель липнет к низу окна, см. .crm-save-bar). Рядом —
+              состояние формы: «Объект сохранён», «Есть несохранённые
+              изменения» или текст ошибки. Неудачное сохранение карточку не
+              закрывает и ничего не теряет: введённые данные остаются в форме
+              (см. save) */}
+          <div className="span-2 crm-save-bar" style={{ gridColumn: '1 / -1' }}>
+            <div className="crm-save-state">
+              {saving ? (
+                <span className="crm-save-note">{t.crm.objSaving}</span>
+              ) : saved ? (
+                <span className="crm-save-ok">{t.crm.objSavedFull} ✓</span>
+              ) : saveError ? (
+                <span className="crm-save-err">{saveError}</span>
+              ) : (
+                <span className={dirty ? 'crm-save-dirty' : 'crm-save-note'}>
+                  {dirty ? t.crm.objUnsaved : t.crm.objAllSaved}
+                </span>
+              )}
+              {!saveError && <span className="crm-save-hint">{t.crm.objSaveHint}</span>}
+            </div>
+            <button type="button" className="crm-save-btn" onClick={() => void save()} disabled={saving}>
+              {saving ? t.crm.objSaving : t.crm.objSave}
             </button>
-            {saved && <p style={{ margin: 0, color: '#8b683f', fontSize: 11 }}>{t.crm.objSaved} ✓</p>}
-            {saveError && <p style={{ margin: 0, color: '#9b4e43', fontSize: 11 }}>{saveError}</p>}
           </div>
             </div>
 
@@ -2532,10 +2669,27 @@ export const CrmObjects: FC<{
           списком; содержимое зависит от прав сотрудника — см. LegalCheckBlock */}
       {legalId != null && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 110, background: 'rgba(32,33,30,.55)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '36px 16px', overflowY: 'auto' }}
-          onClick={() => setLegalId(null)}>
+          onClick={() => { setLegalId(null); setLegalFocus(null) }}>
           <div style={{ background: '#faf8f4', border: '1px solid #ded5c7', borderRadius: 12, width: 'min(100%, 780px)', padding: 22 }}
             onClick={(e) => e.stopPropagation()}>
-            <LegalCheckBlock objectId={legalId} onClose={() => setLegalId(null)} />
+            <LegalCheckBlock objectId={legalId} focus={legalFocus ?? undefined} onClose={() => { setLegalId(null); setLegalFocus(null) }} />
+          </div>
+        </div>
+      )}
+
+      {/* Блок «Оценка по рынку» — предварительный расчёт по фактическим
+          объявлениям рынка (только администратор): диапазон цены, найденные
+          аналоги, дата расчёта и предупреждение, что это не отчёт об оценке и
+          не официальное заключение — см. MarketValuationBlock */}
+      {valuationId != null && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 110, background: 'rgba(32,33,30,.55)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '36px 16px', overflowY: 'auto' }}
+          onClick={() => setValuationId(null)}>
+          <div style={{ background: '#faf8f4', border: '1px solid #ded5c7', borderRadius: 12, width: 'min(100%, 860px)', padding: 22 }}
+            onClick={(e) => e.stopPropagation()}>
+            {/* autoRun: расчёт запускается сразу, если сохранённого отчёта у
+                объекта ещё нет (кнопка «Провести оценку по рынку» из списка) —
+                иначе показываем последний расчёт и ждём «Обновить расчёт» */}
+            <MarketValuationBlock objectId={valuationId} initial={marketReport} autoRun={!marketReport} onClose={() => setValuationId(null)} />
           </div>
         </div>
       )}
@@ -2605,9 +2759,38 @@ export const CrmObjects: FC<{
                   показываем только администратору: остальным сотрудникам
                   экспертная часть карточки не отображается вовсе. */}
               {isAdmin && (
-                <button type="button" onClick={() => setLegalId(o.id)}
+                <button type="button" onClick={() => { setLegalFocus(null); setLegalId(o.id) }}
                   style={{ marginTop: 6, width: '100%', border: '1px solid #dccdb6', borderRadius: 6, background: '#f6efe4', color: '#8d6b40', padding: '7px 10px', fontSize: 9.5, cursor: 'pointer' }}>
                   Провести юридическую экспертизу
+                </button>
+              )}
+              {/* Две точечные проверки того же экспертного модуля: открывают
+                  отчёт сразу на нужном пункте и запускают пересчёт
+                  (focus='encumbrances' — обременения по ЕГРН, пункт 4;
+                  focus='bankruptcy' — собственник по реестру ЕФРСБ, пункт 6).
+                  Отчёт по-прежнему показывает всё, что проверено, — кнопка
+                  лишь выделяет нужную часть, см. LegalCheckBlock. */}
+              {isAdmin && (
+                <button type="button" onClick={() => { setLegalFocus('encumbrances'); setLegalId(o.id) }}
+                  style={{ marginTop: 6, width: '100%', border: '1px solid #dccdb6', borderRadius: 6, background: '#f6efe4', color: '#8d6b40', padding: '7px 10px', fontSize: 9.5, cursor: 'pointer' }}>
+                  Проверить обременения
+                </button>
+              )}
+              {isAdmin && (
+                <button type="button" onClick={() => { setLegalFocus('bankruptcy'); setLegalId(o.id) }}
+                  style={{ marginTop: 6, width: '100%', border: '1px solid #dccdb6', borderRadius: 6, background: '#f6efe4', color: '#8d6b40', padding: '7px 10px', fontSize: 9.5, cursor: 'pointer' }}>
+                  Проверить банкротство собственника
+                </button>
+              )}
+              {/* «Провести оценку по рынку» — администраторский расчёт по
+                  фактическим объявлениям «Парсера рынка»: диапазон цены,
+                  аналоги, дата расчёта и предупреждение, что это не отчёт об
+                  оценке (см. MarketValuationBlock). Расчёт запускается сразу,
+                  отчёт сохраняется в закрытой части карточки. */}
+              {isAdmin && (
+                <button type="button" onClick={() => { setMarketReport(null); setValuationId(o.id) }}
+                  style={{ marginTop: 6, width: '100%', border: '1px solid #dccdb6', borderRadius: 6, background: '#f6efe4', color: '#8d6b40', padding: '7px 10px', fontSize: 9.5, cursor: 'pointer' }}>
+                  Провести оценку по рынку
                 </button>
               )}
               {/* «Искать в открытых источниках» — характеристики дома по
