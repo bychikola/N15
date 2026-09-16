@@ -1,7 +1,8 @@
 'use client'
 
 import Link from 'next/link'
-import { useMemo, useState, type FC } from 'react'
+import { useRouter } from 'next/navigation'
+import { useMemo, useRef, useState, type FC } from 'react'
 import type { Dict } from '@/i18n/dictionaries'
 import type { AgentCard } from '@/lib/agents-service'
 
@@ -19,6 +20,8 @@ import type { AgentCard } from '@/lib/agents-service'
 interface Props {
   t: Dict
   agents: AgentCard[]
+  /** Кнопка «Добавить агента»: админ или сотрудник с разрешением (см. Users.ts) */
+  canManage: boolean
 }
 
 // Подстановка %d/%s в строку словаря (как в других разделах CRM)
@@ -50,8 +53,94 @@ const labelStyle: React.CSSProperties = {
   minWidth: 0,
 }
 
-export const CrmAgents: FC<Props> = ({ t, agents }) => {
+export const CrmAgents: FC<Props> = ({ t, agents, canManage }) => {
   const [q, setQ] = useState('')
+  const router = useRouter()
+
+  // Модальное окно «Добавить агента»
+  const [addOpen, setAddOpen] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [formError, setFormError] = useState('')
+  const [fields, setFields] = useState({
+    name: '', position: '', phone: '', email: '', telegram: '', whatsapp: '',
+  })
+  const [active, setActive] = useState(true)
+  const [photoId, setPhotoId] = useState<number | null>(null)
+  const [photoBusy, setPhotoBusy] = useState(false)
+  const [photoError, setPhotoError] = useState('')
+  const photoInputRef = useRef<HTMLInputElement>(null)
+
+  const setField = (key: keyof typeof fields, value: string) =>
+    setFields((prev) => ({ ...prev, [key]: value }))
+
+  const resetForm = () => {
+    setFields({ name: '', position: '', phone: '', email: '', telegram: '', whatsapp: '' })
+    setActive(true)
+    setPhotoId(null)
+    setPhotoError('')
+    setFormError('')
+  }
+
+  // Фото грузим сразу при выборе: к моменту сохранения у нас готовый id
+  const uploadPhoto = async (file: File) => {
+    setPhotoBusy(true)
+    setPhotoError('')
+    try {
+      const body = new FormData()
+      body.append('file', file)
+      const res = await fetch('/api/crm/upload', { method: 'POST', body, credentials: 'include' })
+      const data = await res.json().catch(() => null)
+      if (!res.ok) {
+        setPhotoError(data?.error || t.crm.agAddPhotoFailed)
+        return
+      }
+      setPhotoId(Number(data?.doc?.id) || null)
+    } catch {
+      setPhotoError(t.crm.agAddPhotoFailed)
+    } finally {
+      setPhotoBusy(false)
+    }
+  }
+
+  const submit = async () => {
+    if (saving) return
+    if (!fields.name.trim()) {
+      setFormError(t.crm.agAddNameRequired)
+      return
+    }
+    setSaving(true)
+    setFormError('')
+    try {
+      const res = await fetch('/api/agents/manage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          name: fields.name,
+          position: fields.position,
+          phone: fields.phone,
+          email: fields.email,
+          telegram: fields.telegram,
+          whatsapp: fields.whatsapp,
+          photoId,
+          isActive: active,
+        }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => null)
+        setFormError(data?.error || t.crm.agAddFailed)
+        return
+      }
+      setAddOpen(false)
+      resetForm()
+      // Список агентов собирается на сервере — обновляем страницу
+      router.refresh()
+    } catch {
+      setFormError(t.crm.agAddFailed)
+    } finally {
+      setSaving(false)
+    }
+  }
 
   // Фильтр по имени агента: ищем по имени и фамилии, должности и телефону
   const visible = useMemo(() => {
@@ -64,13 +153,24 @@ export const CrmAgents: FC<Props> = ({ t, agents }) => {
 
   return (
     <div>
-      <div style={{ marginBottom: 18 }}>
-        <h2 style={{ margin: 0, fontFamily: "'New Standard', Georgia, serif", fontWeight: 400, fontSize: 22 }}>
-          {t.crm.agTitle}
-        </h2>
-        <p style={{ margin: '6px 0 0', color: '#817b70', fontSize: 11, lineHeight: 1.55, maxWidth: 720 }}>
-          {t.crm.agSubtitle}
-        </p>
+      <div style={{ marginBottom: 18, display: 'flex', alignItems: 'flex-start', gap: 14, flexWrap: 'wrap' }}>
+        <div style={{ flex: '1 1 320px', minWidth: 0 }}>
+          <h2 style={{ margin: 0, fontFamily: "'New Standard', Georgia, serif", fontWeight: 400, fontSize: 22 }}>
+            {t.crm.agTitle}
+          </h2>
+          <p style={{ margin: '6px 0 0', color: '#817b70', fontSize: 11, lineHeight: 1.55, maxWidth: 720 }}>
+            {t.crm.agSubtitle}
+          </p>
+        </div>
+        {canManage && (
+          <button
+            type="button"
+            onClick={() => { resetForm(); setAddOpen(true) }}
+            style={{ border: 0, borderRadius: 8, background: '#a7814e', color: '#fff', padding: '11px 18px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', cursor: 'pointer', flex: 'none' }}
+          >
+            + {t.crm.agAddButton}
+          </button>
+        )}
       </div>
 
       {/* Поиск по имени агента */}
@@ -187,6 +287,112 @@ export const CrmAgents: FC<Props> = ({ t, agents }) => {
               </div>
             </Link>
           ))}
+        </div>
+      )}
+
+      {/* Модальное окно «Добавить агента» */}
+      {addOpen && (
+        <div
+          style={{ position: 'fixed', inset: 0, zIndex: 120, background: 'rgba(32,33,30,.55)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 16px', overflowY: 'auto' }}
+          onClick={() => !saving && setAddOpen(false)}
+        >
+          <div
+            style={{ background: '#faf8f4', border: '1px solid #ded5c7', borderRadius: 12, width: 'min(100%, 620px)', padding: 22 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <h2 style={{ margin: 0, fontFamily: "'New Standard', Georgia, serif", fontWeight: 400, fontSize: 20 }}>
+                {t.crm.agAddTitle}
+              </h2>
+              <button
+                type="button"
+                onClick={() => setAddOpen(false)}
+                style={{ border: '1px solid #e1d8ca', borderRadius: 7, background: '#fff', color: '#716b62', padding: '8px 12px', cursor: 'pointer', fontSize: 12 }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>
+              <label style={labelStyle}>
+                {t.crm.agAddName}
+                <input value={fields.name} onChange={(e) => setField('name', e.target.value)} style={inputStyle} />
+              </label>
+              <label style={labelStyle}>
+                {t.crm.agAddPosition}
+                <input value={fields.position} onChange={(e) => setField('position', e.target.value)} style={inputStyle} placeholder={t.crm.agAddPositionPh} />
+              </label>
+              <label style={labelStyle}>
+                {t.crm.agAddPhone}
+                <input inputMode="tel" value={fields.phone} onChange={(e) => setField('phone', e.target.value)} style={inputStyle} />
+              </label>
+              <label style={labelStyle}>
+                {t.crm.agAddEmail}
+                <input inputMode="email" value={fields.email} onChange={(e) => setField('email', e.target.value)} style={inputStyle} />
+              </label>
+              <label style={labelStyle}>
+                {t.crm.agAddTelegram}
+                <input value={fields.telegram} onChange={(e) => setField('telegram', e.target.value)} style={inputStyle} placeholder="@username" />
+              </label>
+              <label style={labelStyle}>
+                {t.crm.agAddWhatsapp}
+                <input value={fields.whatsapp} onChange={(e) => setField('whatsapp', e.target.value)} style={inputStyle} placeholder="https://wa.me/7…" />
+              </label>
+            </div>
+
+            {/* Фото: грузится сразу при выборе файла */}
+            <div style={{ marginTop: 14 }}>
+              <span style={{ ...labelStyle, display: 'block' }}>{t.crm.agAddPhoto}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 6, flexWrap: 'wrap' }}>
+                <input
+                  ref={photoInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0]
+                    if (file) void uploadPhoto(file)
+                  }}
+                  style={{ display: 'none' }}
+                />
+                <button
+                  type="button"
+                  onClick={() => photoInputRef.current?.click()}
+                  disabled={photoBusy}
+                  style={{ border: '1px solid #d9d1c4', borderRadius: 8, background: '#fff', color: '#716b62', padding: '9px 14px', fontSize: 11, cursor: 'pointer', opacity: photoBusy ? 0.6 : 1 }}
+                >
+                  {photoBusy ? t.crm.agAddPhotoUploading : t.crm.agAddPhotoPick}
+                </button>
+                {photoId && <span style={{ fontSize: 11, color: '#4e7a3a' }}>{t.crm.agAddPhotoReady}</span>}
+                {photoError && <span style={{ fontSize: 11, color: '#9b4e43' }}>{photoError}</span>}
+              </div>
+            </div>
+
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 14, fontSize: 12, color: '#25241f', cursor: 'pointer' }}>
+              <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />
+              {t.crm.agAddActive}
+            </label>
+
+            {formError && <p style={{ margin: '12px 0 0', color: '#9b4e43', fontSize: 11 }}>{formError}</p>}
+
+            <div style={{ display: 'flex', gap: 8, marginTop: 18 }}>
+              <button
+                type="button"
+                onClick={() => void submit()}
+                disabled={saving}
+                style={{ flex: 1, border: 0, borderRadius: 8, background: '#a7814e', color: '#fff', padding: '12px 18px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', cursor: 'pointer', opacity: saving ? 0.5 : 1 }}
+              >
+                {saving ? t.crm.agAddSaving : t.crm.agAddSave}
+              </button>
+              <button
+                type="button"
+                onClick={() => setAddOpen(false)}
+                disabled={saving}
+                style={{ border: '1px solid #e1d8ca', borderRadius: 8, background: '#fff', color: '#716b62', padding: '12px 18px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', cursor: 'pointer' }}
+              >
+                {t.crm.dupCancel}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

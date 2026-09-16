@@ -84,6 +84,7 @@ if [ -n "$DATABASE_URI" ]; then
       const ma = await c.query(\"SELECT to_regclass('public.mail_attachments') AS t\");
       const ag = await c.query(\"SELECT 1 FROM payload_globals WHERE slug = 'agent-settings' LIMIT 1\");
       const aa = await c.query(\"SELECT column_name FROM information_schema.columns WHERE table_name='users' AND column_name='agent_access'\");
+      const cma = await c.query(\"SELECT column_name FROM information_schema.columns WHERE table_name='users' AND column_name='can_manage_agents'\");
       // Новые разделы: новости (автосбор), реклама, юр-экспертиза, парсер рынка
       const nw = await c.query(\"SELECT to_regclass('public.news') AS t\");
       const ml = await c.query(\"SELECT to_regclass('public.market_listings') AS t\");
@@ -105,7 +106,7 @@ if [ -n "$DATABASE_URI" ]; then
       const ok = o.rows[0].t && t.rows[0].t && cu.rows[0].t && lr.rows.length > 0 && un.rows.length > 0 && own.rows.length > 0 && em.rows[0].t && ms.rows[0].t && loc.rows.length > 0 && at.rows[0].t && ma.rows[0].t && ag.rows.length > 0 && aa.rows.length > 0
         && nw.rows[0].t && ml.rows[0].t && ld.rows[0].t && lrp.rows[0].t && adv.rows[0].t && ads.rows[0].t && adr.rows[0].t && ns.rows.length > 0
         && rg.rows[0].t && st.rows[0].t && ps.rows.length > 0
-        && au.rows.length > 0 && cd.rows.length > 0 && sn.rows.length > 0;
+        && au.rows.length > 0 && cd.rows.length > 0 && sn.rows.length > 0 && cma.rows.length > 0;
       await c.end();
       process.exit(ok ? 0 : 1);
     })().catch(() => process.exit(1));

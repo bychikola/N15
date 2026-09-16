@@ -43,6 +43,7 @@ export const Users: CollectionConfig = {
             delete data.role
           }
           delete data.agentAccess
+          delete data.canManageAgents
         }
         // Первый созданный пользователь автоматически становится администратором,
         // иначе «Create First User» создаёт аккаунт с ролью 'user' и админка
@@ -148,6 +149,20 @@ export const Users: CollectionConfig = {
       },
       admin: {
         description: 'Открывает вкладку «ИИ-агент» в CRM: страница /crm/agent, задачи и настройки агента.',
+      },
+    },
+    {
+      name: 'canManageAgents',
+      type: 'checkbox',
+      label: 'Может добавлять агентов',
+      defaultValue: false,
+      access: {
+        // Как и доступ к ИИ-агенту: выставляет только администратор
+        create: ({ req }) => req.user?.role === 'admin',
+        update: ({ req }) => req.user?.role === 'admin',
+      },
+      admin: {
+        description: 'Разрешает кнопку «Добавить агента» в CRM (раздел «Агенты»).',
       },
     },
     {

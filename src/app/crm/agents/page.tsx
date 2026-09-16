@@ -30,7 +30,13 @@ export default async function CrmAgentsPage() {
 
   return (
     <CrmShell user={user} t={t} active="agents">
-      <CrmAgents t={t} agents={agents} />
+      {/* Добавлять агентов может админ или сотрудник с разрешением (галочка
+          «Может добавлять агентов» в админке, см. src/payload/collections/Users.ts) */}
+      <CrmAgents
+        t={t}
+        agents={agents}
+        canManage={user.role === 'admin' || user.canManageAgents}
+      />
     </CrmShell>
   )
 }
