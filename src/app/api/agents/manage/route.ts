@@ -49,10 +49,28 @@ export async function POST(req: NextRequest) {
       const s = String(v ?? '').trim().slice(0, max)
       return s || undefined
     }
-    const photoId = Number(body?.photoId)
-    const hasPhoto = Number.isInteger(photoId) && photoId > 0
-
     const payload = await getPayload({ config })
+
+    // Фото: принимаем только существующий файл-изображение. Сама коллекция
+    // media открыта на чтение (фото объектов и так публичны), поэтому проверяем
+    // не «чьё это фото», а что id настоящий и это картинка — иначе к агенту
+    // можно привязать произвольную запись (например, документ) или мусорный id.
+    let photo: number | undefined
+    const photoId = Number(body?.photoId)
+    if (Number.isInteger(photoId) && photoId > 0) {
+      const media = await payload.findByID({
+        collection: 'media',
+        id: photoId,
+        depth: 0,
+        overrideAccess: true,
+      }).catch(() => null)
+      const mime = String((media as { mimeType?: string } | null)?.mimeType || '')
+      if (!media || !mime.startsWith('image/')) {
+        return NextResponse.json({ error: 'Фото не найдено или это не изображение' }, { status: 400 })
+      }
+      photo = photoId
+    }
+
     const agent = await payload.create({
       collection: 'agents',
       data: {
@@ -62,7 +80,7 @@ export async function POST(req: NextRequest) {
         email: text(body?.email, 200),
         telegram: text(body?.telegram),
         whatsapp: text(body?.whatsapp, 200),
-        ...(hasPhoto ? { photo: photoId } : {}),
+        ...(photo ? { photo } : {}),
         isActive: body?.isActive !== false,
       },
       overrideAccess: true,
