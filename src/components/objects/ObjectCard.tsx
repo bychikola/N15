@@ -91,19 +91,21 @@ export default function ObjectCard({ obj, lang, t }: ObjectCardProps) {
         )}
         <span className="object-card__pill">{obj.type === 'sale' ? t.object.sale : t.object.rent}</span>
         <div className="object-card__overlay" />
-        <div className="absolute bottom-3 left-4 right-4 z-10">
+        <div className="object-card__price-wrap absolute bottom-3 left-4 right-4 z-10">
           <div className="object-card__price text-[30px] leading-tight font-[family-name:var(--font-display)] font-semibold text-[var(--card-price-fg)]">
             {obj.price?.toLocaleString(t.locale)} {obj.type === 'rent' ? t.catalog.perMonth : t.catalog.currency}
           </div>
         </div>
       </div>
 
-      {/* flex-1 + mt-auto: карточки в ряду одной высоты, блок агента прижат к низу */}
-      <div className="flex flex-1 flex-col px-4 pt-3 pb-3">
+      {/* flex-1 + mt-auto: карточки в ряду одной высоты, блок агента прижат к низу.
+          Классы-крючки (object-card__body и далее) — для компактного варианта
+          карточки в блоке «Актуальные объекты» на главной (см. globals.css) */}
+      <div className="object-card__body flex flex-1 flex-col px-4 pt-3 pb-3">
         <h3 className="text-lg font-[family-name:var(--font-display)] text-[var(--n15-white)] mb-1 group-hover:text-[var(--n15-gold)] transition-colors">
           {obj.title}
         </h3>
-        <p className="text-xs text-[var(--n15-muted)] mb-1.5">
+        <p className="object-card__addr text-xs text-[var(--n15-muted)] mb-1.5">
           {[
             obj.address?.snt,
             obj.address?.cityDistrict && `${obj.address.cityDistrict} район`,
@@ -111,17 +113,17 @@ export default function ObjectCard({ obj, lang, t }: ObjectCardProps) {
             obj.address?.house,
           ].filter(Boolean).join(', ')}
         </p>
-        {meta && <p className="text-[10px] tracking-[0.18em] uppercase text-[var(--n15-muted)] mb-2">{meta}</p>}
+        {meta && <p className="object-card__meta text-[10px] tracking-[0.18em] uppercase text-[var(--n15-muted)] mb-2">{meta}</p>}
         {obj.agent?.name && (
-          <div className="flex items-center gap-2 mt-auto pt-2">
+          <div className="object-card__agent flex items-center gap-2 mt-auto pt-2">
             {obj.agent.photo?.url ? (
               <img src={obj.agent.photo.sizes?.thumbnail?.url || obj.agent.photo.url} alt={obj.agent.name} style={focalPosition(obj.agent.photo.focalPoint)} className="w-7 h-7 rounded-full object-cover" />
             ) : (
-              <span className="w-7 h-7 rounded-full bg-[var(--n15-charcoal)] border border-[var(--n15-gold)]/20 flex items-center justify-center text-[10px] font-[family-name:var(--font-display)] text-[var(--n15-gold)]">
+              <span className="object-card__avatar w-7 h-7 rounded-full bg-[var(--n15-charcoal)] border border-[var(--n15-gold)]/20 flex items-center justify-center text-[10px] font-[family-name:var(--font-display)] text-[var(--n15-gold)]">
                 {agentInitials}
               </span>
             )}
-            <span className="text-xs text-[var(--n15-muted)]">{obj.agent.name}</span>
+            <span className="object-card__agent-name text-xs text-[var(--n15-muted)]">{obj.agent.name}</span>
           </div>
         )}
       </div>

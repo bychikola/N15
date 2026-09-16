@@ -33,9 +33,11 @@ function PlaceholderCard({
         <span className="object-card__pill">{t.object.sale}</span>
         <div className="object-card__overlay" />
       </div>
-      <div className="flex flex-1 flex-col px-4 pt-3 pb-3">
+      {/* Классы-крючки те же, что у ObjectCard: на главной карточки блока
+          уменьшены (см. .lp-featured в globals.css) */}
+      <div className="object-card__body flex flex-1 flex-col px-4 pt-3 pb-3">
         <h3 className="text-lg font-[family-name:var(--font-display)] text-[var(--n15-white)] mb-1">{title}</h3>
-        <p className="text-xs text-[var(--n15-muted)]">{address}</p>
+        <p className="object-card__addr text-xs text-[var(--n15-muted)]">{address}</p>
       </div>
     </a>
   )
@@ -107,7 +109,8 @@ export default function FeaturedObjects({ objects, t, lang, filterSummary, empty
         )}
       </div>
       {/* Сетка как в каталоге: телефон — 1, планшет — 2, ноутбук — 3,
-          компьютер (≥1280px) — 4 одинаковых карточки в ряд */}
+          компьютер (≥1280px) — 4 одинаковых карточки в ряд. Расстояния между
+          карточками уменьшены вместе со всем блоком главной */}
       {objects.length === 0 && emptyNote ? (
         <div className="lp-featured-empty">
           <p className="lp-featured-empty-text">{emptyNote}</p>
@@ -116,7 +119,7 @@ export default function FeaturedObjects({ objects, t, lang, filterSummary, empty
           </a>
         </div>
       ) : (
-        <div className="lp-cards grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-6 gap-y-8">
+        <div className="lp-cards grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-[20px] gap-y-[26px]">
           {cards}
         </div>
       )}
