@@ -1,10 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import type { Dict } from '@/i18n/dictionaries'
 // Садовые товарищества (СНТ/СНО/ДНТ) — те же справочники, что в подразделе
 // лендинга: категории из GARDENING_AREAS, всё внутри Владикавказского округа
-import { DISTRICT_OPTIONS, LOCALITIES_BY_DISTRICT, LOCALITY_OPTIONS, CITY_DISTRICT_OPTIONS, GARDENING_CATEGORY_ORDER, GARDENING_AREAS } from '@/lib/districts'
+import { DISTRICT_OPTIONS, LOCALITIES_BY_DISTRICT, LOCALITY_OPTIONS, CITY_DISTRICT_OPTIONS, GARDENING_CATEGORY_ORDER, GARDENING_AREAS, LAND_CITY_OPTIONS } from '@/lib/districts'
 import { SNT_AREAS } from '@/components/home/landing-data'
 // Города «Межрегиональной недвижимости» приходят готовыми группами из CRM
 // (см. src/lib/interregional-service.ts) — в клиентском компоненте списка нет
@@ -40,8 +40,10 @@ export interface FiltersState {
   cityDistrict: string
   locality: string
   snt: string
-  /** Город вне Северной Осетии (межрегиональные объекты). Взаимоисключается
-   *  с осетинскими адресными фильтрами: район/нас. пункт/товарищество. */
+  /** Город вне Северной Осетии (межрегиональные объекты) либо Владикавказ
+   *  у участков (межрегиональных направлений у земли нет). Взаимоисключается
+   *  с осетинскими адресными фильтрами: район/нас. пункт/товарищество —
+   *  кроме участков, где город — часть той же структуры поиска. */
   city: string
   /** id агента: показываем только его объекты. Постоянного поля в панели
    *  фильтров у него нет — фильтр приходит ссылкой с карточек команды,
@@ -64,6 +66,16 @@ const numOf = (v: string): number | null => parseAreaNumber(v)
  */
 export type CityGroup = { label: string; options: { value: string; label: string }[] }
 
+/**
+ * Допустимые значения фильтра «Город» для категории: у участков — только
+ * Владикавказ (земля Н15 вне межрегиональных направлений, см. districts.ts),
+ * у остальных категорий — города межрегионального справочника из CRM.
+ * Чужое значение отбрасываем: where по несуществующему городу молча даёт
+ * пустую выдачу, а ссылка с ним живёт в закладках.
+ */
+export const cityValuesFor = (category: string, knownCities: readonly string[]): readonly string[] =>
+  category === 'land' ? LAND_CITY_OPTIONS : knownCities
+
 export function buildWhere(f: FiltersState, q: string, knownCities: readonly string[]): Record<string, unknown> {
   const conds: Record<string, unknown>[] = []
   // На сайте показываем только опубликованные (черновики и архив скрыты)
@@ -75,7 +87,10 @@ export function buildWhere(f: FiltersState, q: string, knownCities: readonly str
   if (f.cityDistrict && isKnown(f.cityDistrict, CITY_DISTRICT_OPTIONS)) conds.push({ 'address.cityDistrict': { equals: f.cityDistrict } })
   if (f.locality) conds.push({ 'address.locality': { equals: f.locality } })
   if (f.snt && isKnown(f.snt, SNT_AREAS)) conds.push({ 'address.snt': { equals: f.snt } })
-  if (f.city && isKnown(f.city, knownCities)) conds.push({ 'address.city': { equals: f.city } })
+  // Города: у участков список свой (только Владикавказ), у остальных — CRM
+  if (f.city && isKnown(f.city, cityValuesFor(f.category, knownCities))) {
+    conds.push({ 'address.city': { equals: f.city } })
+  }
   if (isKnown(f.rooms, OBJECT_ROOMS)) {
     conds.push(f.rooms === '4'
       ? { rooms: { greater_than_equal: 4 } }
@@ -177,7 +192,8 @@ interface CatalogFiltersProps {
   state: FiltersState
   onChange: (patch: Partial<FiltersState>) => void
   t: Dict
-  /** Группы фильтра «Город» — населённые пункты межрегионального справочника из CRM */
+  /** Группы фильтра «Город» — населённые пункты межрегионального справочника
+   *  из CRM. У участков не используются: там города — LAND_CITY_OPTIONS */
   cityGroups: CityGroup[]
 }
 
@@ -192,6 +208,16 @@ export default function CatalogFilters({ state, onChange, t, cityGroups }: Catal
   const isLand = state.category === 'land'
   const areaUnit = isLand && state.areaUnit === 'are' ? 'are' : 'sqm'
   const hasFilters = state.type || state.category || state.rooms || state.priceMin || state.priceMax || state.areaMin || state.areaMax || state.district || state.cityDistrict || state.locality || state.snt || state.city
+  // Города фильтра «Город» для текущей категории: у участков — только
+  // Владикавказ, у остальных — справочник CRM (см. cityValuesFor)
+  const knownCities = useMemo(() => cityGroups.flatMap((g) => g.options.map((o) => o.value)), [cityGroups])
+
+  // Межрегиональный город (Москва, Химки…) и осетинские адресные фильтры
+  // взаимоисключающие: выбран один — снимается другой. У участков город один —
+  // Владикавказ, и он не спорит с районом, населённым пунктом и товариществом
+  // (структура поиска участков: Владикавказ → населённые пункты →
+  // товарищества) — такие фильтры рядом с ним остаются
+  const dropInterregionalCity = (v: string): Partial<FiltersState> => (v && !isLand ? { city: '' } : {})
 
   /**
    * Смена единицы площади (кнопки «м²/сотки»): числа в полях «от/до»
@@ -217,6 +243,14 @@ export default function CatalogFilters({ state, onChange, t, cityGroups }: Catal
       out.areaMin = state.areaMin ? convertArea(state.areaMin, 'are', 'sqm') : state.areaMin
       out.areaMax = state.areaMax ? convertArea(state.areaMax, 'are', 'sqm') : state.areaMax
       out.areaUnit = 'sqm'
+    }
+    // Категория сменилась: у новой категории свой список городов (у участков —
+    // только Владикавказ), и город из прежнего в нём может не значиться.
+    // Сбрасываем его, иначе в поле остаётся чужое значение, а фильтр по нему
+    // молча ничего не находит
+    if (patch.category !== undefined && patch.category !== state.category && state.city
+      && !cityValuesFor(patch.category, knownCities).includes(state.city)) {
+      out.city = ''
     }
     onChange(out)
   }
@@ -244,11 +278,17 @@ export default function CatalogFilters({ state, onChange, t, cityGroups }: Catal
       <div className="w-48">
         {/* «Город» — объекты за пределами Северной Осетии (межрегиональные
             направления Н15): города сгруппированы по регионам справочника.
-            Выбор города снимает осетинские адресные фильтры — и наоборот */}
-        <Dropdown label={t.catalog.cityLabel} value={state.city} groups={cityGroups} compactLabel
-          onSelect={(v) => apply(v
+            Выбор города снимает осетинские адресные фильтры — и наоборот.
+            У участков межрегиональных направлений нет: в поле только «Любой»
+            и «Владикавказ» (см. districts.ts), рядом с ним район, населённые
+            пункты и товарищества остаются — это и есть структура поиска
+            участков */}
+        <Dropdown label={t.catalog.cityLabel} value={state.city} compactLabel
+          options={isLand ? LAND_CITY_OPTIONS.map((c) => ({ value: c, label: c })) : undefined}
+          groups={isLand ? undefined : cityGroups}
+          onSelect={(v) => apply(v && !isLand
             ? { city: v, district: '', cityDistrict: '', locality: '', snt: '' }
-            : { city: '' })} />
+            : { city: v })} />
       </div>
       <div className="w-48">
         <Dropdown label={t.catalog.districtLabel} value={state.district}
@@ -259,19 +299,19 @@ export default function CatalogFilters({ state, onChange, t, cityGroups }: Catal
             if (v && state.locality && !(LOCALITIES_BY_DISTRICT[v] || []).includes(state.locality)) {
               patch.locality = ''
             }
-            apply(v ? { ...patch, city: '' } : patch)
+            apply({ ...patch, ...dropInterregionalCity(v) })
           }} />
       </div>
       <div className="w-48">
         <Dropdown label={t.catalog.cityDistrictLabel} value={state.cityDistrict}
           options={CITY_DISTRICT_OPTIONS.map((d) => ({ value: d, label: d }))}
-          onSelect={(v) => apply(v ? { cityDistrict: v, city: '' } : { cityDistrict: v })} />
+          onSelect={(v) => apply({ cityDistrict: v, ...dropInterregionalCity(v) })} />
       </div>
       <div className="w-48">
         {/* «Населённый пункт» — длинная подпись: компактный шрифт, чтобы помещалась в одну строку */}
         <Dropdown label={t.catalog.localityLabel} value={state.locality}
           options={localityOptions} compactLabel
-          onSelect={(v) => apply(v ? { locality: v, city: '' } : { locality: v })} />
+          onSelect={(v) => apply({ locality: v, ...dropInterregionalCity(v) })} />
       </div>
       <div className="w-56">
         {/* Садоводческие товарищества: список сгруппирован по категориям
@@ -281,7 +321,7 @@ export default function CatalogFilters({ state, onChange, t, cityGroups }: Catal
           groups={GARDENING_CATEGORY_ORDER
             .filter((c) => GARDENING_AREAS[c].length > 0)
             .map((c) => ({ label: c, options: GARDENING_AREAS[c].map((s) => ({ value: s, label: s })) }))}
-          onSelect={(v) => apply(v ? { snt: v, city: '' } : { snt: v })} />
+          onSelect={(v) => apply({ snt: v, ...dropInterregionalCity(v) })} />
       </div>
       <div className="w-48">
         <div className={labelCls() + ' mb-1'}>{t.catalog.priceLabel}</div>

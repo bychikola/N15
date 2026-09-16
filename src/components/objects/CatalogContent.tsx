@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useI18n } from '@/i18n/i18n-provider'
 import ObjectCard, { type ObjectListItem } from '@/components/objects/ObjectCard'
-import CatalogFilters, { buildWhere, emptyFilters, AGENT_URL_PARAM, OBJECT_TYPES, OBJECT_CATEGORIES, OBJECT_ROOMS, type CityGroup, type FiltersState } from '@/components/objects/CatalogFilters'
+import CatalogFilters, { buildWhere, cityValuesFor, emptyFilters, AGENT_URL_PARAM, OBJECT_TYPES, OBJECT_CATEGORIES, OBJECT_ROOMS, type CityGroup, type FiltersState } from '@/components/objects/CatalogFilters'
 // Справочники допустимых значений локаций — те же, что в фильтрах каталога
 import { DISTRICT_OPTIONS, CITY_DISTRICT_OPTIONS } from '@/lib/districts'
 import { SNT_AREAS } from '@/components/home/landing-data'
@@ -34,7 +34,8 @@ const URL_PARAM: Record<keyof FiltersState, string> = {
 
 // Значения select-фильтров сверяем с опциями полей (списки и зачем — см.
 // CatalogFilters): чужие значения устаревших ссылок отбрасываем при чтении.
-// Города межрегионального справочника приходят из CRM (knownCities).
+// Города межрегионального справочника приходят из CRM (knownCities);
+// у участков список городов свой — только Владикавказ (cityValuesFor).
 const isKnown = (v: string, options: readonly string[]) => options.includes(v)
 
 function filtersFromParams(sp: URLSearchParams, knownCities: readonly string[]): FiltersState {
@@ -43,9 +44,12 @@ function filtersFromParams(sp: URLSearchParams, knownCities: readonly string[]):
   const districtParam = sp.get('district') ?? ''
   const cityDistrictParam = sp.get('cityDistrict') ?? ''
   const legacyCityDistrict = !cityDistrictParam && isKnown(districtParam, CITY_DISTRICT_OPTIONS)
+  // Категория нужна раньше города: её список городов зависит от категории
+  const category = isKnown(sp.get('category') ?? '', OBJECT_CATEGORIES) ? (sp.get('category') as string) : ''
+  const cityParam = sp.get('city') ?? ''
   return {
     type: isKnown(sp.get('type') ?? '', OBJECT_TYPES) ? (sp.get('type') as string) : '',
-    category: isKnown(sp.get('category') ?? '', OBJECT_CATEGORIES) ? (sp.get('category') as string) : '',
+    category,
     rooms: isKnown(sp.get('rooms') ?? '', OBJECT_ROOMS) ? (sp.get('rooms') as string) : '',
     priceMin: sp.get('price_min') ?? '',
     priceMax: sp.get('price_max') ?? '',
@@ -60,7 +64,7 @@ function filtersFromParams(sp: URLSearchParams, knownCities: readonly string[]):
         : '',
     locality: sp.get('locality') ?? '',
     snt: isKnown(sp.get('snt') ?? '', SNT_AREAS) ? (sp.get('snt') as string) : '',
-    city: isKnown(sp.get('city') ?? '', knownCities) ? (sp.get('city') as string) : '',
+    city: isKnown(cityParam, cityValuesFor(category, knownCities)) ? cityParam : '',
     // Фильтр «Объекты агента» приходит только ссылкой (карточки команды,
     // страница агентства) — допустимость id проверяет buildWhere
     agent: sp.get(AGENT_URL_PARAM) ?? '',
