@@ -1,6 +1,6 @@
 'use client'
 
-import type { ReactNode } from 'react'
+import { useEffect, type ReactNode } from 'react'
 import Link from 'next/link'
 import type { Dict } from '@/i18n/dictionaries'
 import type { CrmUser } from '@/app/crm/auth'
@@ -41,6 +41,21 @@ export function CrmShell({ user, t, active, children }: Props) {
     ...(isAdmin ? [{ id: 'integrations', href: '/crm/integrations', label: t.crm.intTitle }] : []),
     ...(user.agentAccess ? [{ id: 'agent', href: '/crm/agent', label: t.crm.navAgent }] : []),
   ]
+
+  // Сессия Payload живёт 2 часа (auth.tokenExpiration) и продлевается только
+  // запросом refresh-token. Пока CRM открыта, продлеваем её сами: иначе
+  // сотрудник, заполняющий карточку объекта, в середине работы оказывается
+  // «выброшенным» — обновление страницы уводит на форму входа, а загрузка
+  // фото молча перестаёт работать. Ошибку не показываем: если продлить не
+  // удалось (сессия уже кончилась), карточка сама предложит войти, не теряя
+  // заполненные данные (см. CrmObjects).
+  useEffect(() => {
+    const keepAlive = () => {
+      void fetch('/api/users/refresh-token', { method: 'POST', credentials: 'include' }).catch(() => {})
+    }
+    const timer = setInterval(keepAlive, 20 * 60 * 1000)
+    return () => clearInterval(timer)
+  }, [])
 
   const signOut = async () => {
     await fetch('/api/users/logout', { method: 'POST', credentials: 'include' })

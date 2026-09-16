@@ -44,6 +44,9 @@ import { NewsSettings } from './globals/NewsSettings'
 // «Интеграции площадок»: доступы к официальным каналам Авито/ЦИАН/Домклика
 // и результаты проверок соединения (см. src/lib/platform-integration-service.ts)
 import { PlatformSettings } from './globals/PlatformSettings'
+// Форматы и предел размера фото — общие для браузера и сервера
+// (см. src/lib/photo-rules.ts)
+import { PHOTO_FORMATS_LABEL, PHOTO_MAX_BYTES, PHOTO_MAX_LABEL } from '@/lib/photo-rules'
 
 export default buildConfig({
   secret: process.env.PAYLOAD_SECRET || 'n15-dev-secret-change-in-production',
@@ -64,6 +67,20 @@ export default buildConfig({
   // Секретный маршрут админки (задаётся в .env на сервере; локально — /admin)
   routes: {
     admin: process.env.ADMIN_ROUTE || '/admin',
+  },
+  // Предел размера загружаемого файла: у коллекции в Payload v3 такого
+  // параметра нет — разбор multipart настраивается здесь (limits — опции
+  // busboy, abortOnLimit — что делать при превышении). Без abortOnLimit
+  // разбор молча отдаёт усечённый файл (truncated), а без лимита запрос на
+  // сотни мегабайт съедает память контейнера на VPS (~2 ГБ). Предел общий
+  // для приложения, но коллекция с загрузкой файлов одна — media
+  // (см. src/payload/collections/Media.ts, лимиты — src/lib/photo-rules.ts).
+  bodyParser: {
+    limits: { fileSize: PHOTO_MAX_BYTES },
+  },
+  upload: {
+    abortOnLimit: true,
+    responseOnLimit: `Файл больше ${PHOTO_MAX_LABEL} — допустимы ${PHOTO_FORMATS_LABEL} до ${PHOTO_MAX_LABEL}`,
   },
   collections: [Users, Media, Objects, Agents, Applications, Tasks, Messages, Blog, News, Pages, Customers, Emails, MailAttachments, AgentTasks, MarketListings, LegalDocuments, LegalReports, Advertisers, Advertisements, AdvertisingRequests, Regions, Settlements],
   globals: [SiteSettings, MailSettings, AgentSettings, NewsSettings, PlatformSettings],

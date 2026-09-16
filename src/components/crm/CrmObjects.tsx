@@ -18,6 +18,15 @@ import { HouseDataBlock } from '@/components/crm/HouseDataBlock'
 // «Архив объекта»: причины переноса и группа archive документа
 // (серверные операции — /api/objects/archive-manage, см. src/lib/archive.ts)
 import { ARCHIVE_REASONS, archiveFromDoc, archiveReasonLabel, type ArchiveGroup } from '@/lib/archive'
+// Правила загрузки фото (форматы и лимит) — общие с сервером:
+// проверяем файл до отправки, чтобы ошибка была видна сразу (src/lib/photo-rules.ts)
+import {
+  PHOTO_FORMATS_LABEL,
+  PHOTO_MAX_BYTES,
+  PHOTO_MAX_LABEL,
+  isAllowedPhoto,
+  photoSizeLabel,
+} from '@/lib/photo-rules'
 
 interface ObjectRow {
   id: number
@@ -35,6 +44,35 @@ interface ObjectRow {
 interface PhotoItem {
   id: number | null
   url?: string
+}
+
+/**
+ * Фото в процессе загрузки. Строка живёт от выбора файла до ответа сервера:
+ * показывает прогресс, ошибку и кнопку повтора — раньше неудачная загрузка
+ * молча пропадала, и сотрудник видел только «фото не появилось».
+ */
+interface PhotoUpload {
+  /** Ключ строки: файл с тем же именем можно выбрать второй раз */
+  key: string
+  name: string
+  size: number
+  /** 0–100 */
+  progress: number
+  status: 'waiting' | 'uploading' | 'error'
+  error?: string
+  /** Исходный файл — храним, чтобы повторить отправку без выбора заново */
+  source: File
+  /** Сессия истекла: строку не убираем, ждём вход и повторяем */
+  needsLogin?: boolean
+  /** Повтор бессмысленен (формат или размер забракованы до отправки) */
+  retryable?: boolean
+}
+
+/** Ответ /api/crm/upload: документ media либо код ошибки (см. маршрут) */
+interface UploadResponse {
+  doc?: { id?: number; url?: string }
+  error?: string
+  code?: string
 }
 
 interface DuplicateInfo {
@@ -151,6 +189,66 @@ const rowPlacementSummary = (o: Record<string, unknown>): { checked: boolean; fo
 // помещений. У квартиры один этаж — этаж квартиры в доме (поля «Этаж» и
 // «Всего этажей»), у участка и коммерческого объекта этажей нет вовсе.
 const isHouseCategory = (category: string) => category === 'house' || category === 'townhouse'
+
+/**
+ * Водяной знак на фото: рисуем кадр на canvas и поверх — watermark.png по
+ * центру, размером ~28% ширины. Функция модульная (не состояние компонента):
+ * ею пользуется очередь загрузки, а результат — готовый к отправке файл.
+ *
+ * null — кадр не читается браузером (HEIC с iPhone, битый файл): вызывающий
+ * показывает ошибку, а не пропускает фото молча, как было раньше.
+ */
+const watermarkPhoto = (file: File): Promise<{ blob: Blob; name: string } | null> => {
+  return new Promise((resolve) => {
+    const img = new Image()
+    img.onload = () => {
+      const wm = new Image()
+      wm.onload = () => {
+        const canvas = document.createElement('canvas')
+        canvas.width = img.naturalWidth
+        canvas.height = img.naturalHeight
+        const ctx = canvas.getContext('2d')
+        if (!ctx) {
+          resolve(null)
+          return
+        }
+        ctx.drawImage(img, 0, 0)
+        const wmW = Math.round(canvas.width * 0.28)
+        const wmH = Math.round(wmW * (wm.naturalHeight / wm.naturalWidth))
+        // По центру фото
+        const wmX = Math.round((canvas.width - wmW) / 2)
+        const wmY = Math.round((canvas.height - wmH) / 2)
+        // Знак в исходнике очень прозрачный (alpha ~0.1) — рисуем его несколько
+        // раз: каждый проход накапливает непрозрачность (1-(1-a)^n)
+        for (let pass = 0; pass < 4; pass++) {
+          ctx.drawImage(wm, wmX, wmY, wmW, wmH)
+        }
+        // Формат сохраняем исходный (JPG/PNG/WEBP), а имя файла получает
+        // правильное расширение: canvas перекодирует кадр, и «.webp» рядом с
+        // JPEG-содержимым сбило бы проверку типа на сервере
+        const outType = file.type === 'image/png'
+          ? 'image/png'
+          : file.type === 'image/webp' ? 'image/webp' : 'image/jpeg'
+        const ext = outType === 'image/png' ? 'png' : outType === 'image/webp' ? 'webp' : 'jpg'
+        canvas.toBlob(
+          (blob) => {
+            if (!blob) {
+              resolve(null)
+              return
+            }
+            resolve({ blob, name: `${file.name.replace(/\.[^.]+$/, '') || 'photo'}.${ext}` })
+          },
+          outType,
+          0.95,
+        )
+      }
+      wm.onerror = () => resolve(null)
+      wm.src = '/img/watermark.png'
+    }
+    img.onerror = () => resolve(null)
+    img.src = URL.createObjectURL(file)
+  })
+}
 
 // Поэтажные описания из документа объекта: место в массиве — номер этажа
 // минус один (floorNumber), а не порядок строк в базе. Так «3 этаж» останется
@@ -463,6 +561,19 @@ export const CrmObjects: FC<{
   const [form, setForm] = useState<FormState>(emptyForm)
   const [editId, setEditId] = useState<number | null>(null)
   const [photos, setPhotos] = useState<PhotoItem[]>([])
+  // Очередь загрузок фото: строки с прогрессом и ошибками, отправка идёт по
+  // одной (см. pumpUploads) — пачка тяжёлых фото с телефона роняет слабый VPS
+  const [uploads, setUploads] = useState<PhotoUpload[]>([])
+  const uploadQueueRef = useRef<PhotoUpload[]>([])
+  const pumpingRef = useRef(false)
+  // Сессия Payload живёт 2 часа (auth.tokenExpiration): когда она кончилась,
+  // карточку не покидаем — показываем вход прямо в форме, данные объекта
+  // остаются на месте, после входа загрузки повторяются
+  const [sessionExpired, setSessionExpired] = useState(false)
+  const [loginEmail, setLoginEmail] = useState('')
+  const [loginPassword, setLoginPassword] = useState('')
+  const [loginBusy, setLoginBusy] = useState(false)
+  const [loginError, setLoginError] = useState('')
   const [features, setFeatures] = useState<string[]>([])
   const [featureInput, setFeatureInput] = useState('')
   // Описания помещений по этажам дома: индекс массива — номер этажа минус
@@ -744,65 +855,207 @@ export const CrmObjects: FC<{
     return () => clearTimeout(timer)
   }, [autoEdit, loading, isAdmin, ownObjectIds, startEdit])
 
-  const onPhotoPick = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files
-    if (!files) return
-    for (const file of Array.from(files)) {
-      // Накладываем водяной знак (левый верхний угол с отступом) до загрузки
-      const watermarked = await applyWatermark(file)
-      if (!watermarked) continue
-      const fd = new FormData()
-      fd.append('file', watermarked, file.name)
-      const res = await fetch('/api/media', { method: 'POST', credentials: 'include', body: fd })
-      if (!res.ok) continue
-      const data = await res.json()
-      const doc = data.doc as { id?: number; url?: string } | undefined
-      if (doc?.id) {
-        setPhotos((prev) => [...prev, { id: doc.id as number, url: doc.url }])
+  // ── Загрузка фотографий ─────────────────────────────────────────────
+  // Фото уходят на /api/crm/upload (не в REST Payload): маршрут проверяет
+  // сессию до чтения файла и отвечает понятным кодом ошибки — в том числе
+  // 401 «сессия истекла», на который Payload сам отвечал 403 «нет права».
+  const patchUpload = useCallback((key: string, patch: Partial<PhotoUpload>) => {
+    setUploads((prev) => prev.map((u) => (u.key === key ? { ...u, ...patch } : u)))
+  }, [])
+
+  // Отправка одного файла: водяной знак в браузере (на сервере нет ни
+  // ffmpeg, ни headless-браузера) и прогресс через XHR — fetch не умеет
+  // показывать, сколько уже улетело. watermarkPhoto объявлена на уровне
+  // модуля, в зависимостях её нет — список вычисляется во время рендера.
+  const sendPhoto = useCallback(async (
+    item: PhotoUpload,
+  ): Promise<{ ok: true; id: number; url?: string } | { ok: false; session?: boolean; message: string }> => {
+    const prepared = await watermarkPhoto(item.source)
+    if (!prepared) {
+      // Кадр не читается браузером (HEIC с iPhone) — раньше такой файл молча
+      // пропадал, теперь сотрудник видит причину
+      return { ok: false, message: t.crm.objUploadUnreadable }
+    }
+    // Размер проверяем по тому файлу, который реально уходит: canvas
+    // перекодирует кадр, и после водяного знака он весит иначе
+    if (prepared.blob.size > PHOTO_MAX_BYTES) {
+      return {
+        ok: false,
+        message: `${t.crm.objUploadTooBig} ${photoSizeLabel(prepared.blob.size)} — ${t.crm.objUploadMax} ${PHOTO_MAX_LABEL}`,
       }
     }
+    const fd = new FormData()
+    fd.append('file', prepared.blob, prepared.name)
+
+    return new Promise((resolve) => {
+      const xhr = new XMLHttpRequest()
+      xhr.open('POST', '/api/crm/upload')
+      // Кука сессии уходит вместе с запросом (тот же origin) — без неё сервер
+      // отвечает 401, и это видно как «сессия истекла», а не «ничего не вышло»
+      xhr.withCredentials = true
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) {
+          patchUpload(item.key, { progress: Math.round((e.loaded / e.total) * 100) })
+        }
+      }
+      xhr.onload = () => {
+        let data: UploadResponse | null = null
+        try {
+          data = JSON.parse(xhr.responseText) as UploadResponse
+        } catch {
+          // Не-JSON в ответе (обрыв связи, страница ошибки Caddy) — считаем,
+          // что сервер не ответил, и показываем общую причину
+          data = null
+        }
+        if (xhr.status >= 200 && xhr.status < 300 && data?.doc?.id) {
+          resolve({ ok: true, id: data.doc.id, url: data.doc.url })
+          return
+        }
+        if (xhr.status === 401 || data?.code === 'session_expired') {
+          resolve({ ok: false, session: true, message: t.crm.objUploadSession })
+          return
+        }
+        resolve({ ok: false, message: data?.error || t.crm.objUploadFailed })
+      }
+      xhr.onerror = () => resolve({ ok: false, message: t.crm.objUploadNet })
+      xhr.send(fd)
+    })
+  }, [patchUpload, t])
+
+  // Очередь идёт по одной загрузке: десяток фото с телефона, отправленных
+  // разом, съедает память контейнера (на VPS ~2 ГБ) и роняет сайт
+  const pumpUploads = useCallback(async () => {
+    if (pumpingRef.current) return
+    pumpingRef.current = true
+    try {
+      for (;;) {
+        const item = uploadQueueRef.current.shift()
+        if (!item) break
+        patchUpload(item.key, { status: 'uploading', progress: 0, error: undefined })
+        const result = await sendPhoto(item)
+        if (result.ok) {
+          // Фото сразу видно в галерее карточки; в объекте оно окажется при
+          // сохранении (primaryImage/images — см. save)
+          setUploads((prev) => prev.filter((u) => u.key !== item.key))
+          setPhotos((prev) => [...prev, { id: result.id, url: result.url }])
+          continue
+        }
+        if (result.session) {
+          // Сессия кончилась: файл не теряем — ждём вход и повторяем
+          patchUpload(item.key, { status: 'error', error: result.message, needsLogin: true, retryable: true })
+          setSessionExpired(true)
+          break
+        }
+        patchUpload(item.key, { status: 'error', error: result.message, retryable: true })
+      }
+    } finally {
+      pumpingRef.current = false
+      // Пока шла загрузка, могли выбрать ещё фото — подхватываем их
+      if (uploadQueueRef.current.length) void pumpUploads()
+    }
+  }, [patchUpload, sendPhoto])
+
+  // Выбор фото: формат и размер проверяем до отправки, чтобы сотрудник сразу
+  // видел причину отказа (сервер проверяет то же самое ещё раз — см.
+  // src/lib/photo-rules.ts)
+  const onPhotoPick = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || [])
     e.target.value = ''
+    if (!files.length) return
+    const accepted: PhotoUpload[] = []
+    const rejected: PhotoUpload[] = []
+    files.forEach((file, i) => {
+      const row: PhotoUpload = {
+        key: `${Date.now()}-${i}-${file.name}`,
+        name: file.name,
+        size: file.size,
+        progress: 0,
+        status: 'waiting',
+        source: file,
+      }
+      if (!isAllowedPhoto({ name: file.name, type: file.type })) {
+        rejected.push({ ...row, status: 'error', retryable: false, error: t.crm.objUploadBadType })
+        return
+      }
+      if (file.size > PHOTO_MAX_BYTES) {
+        rejected.push({
+          ...row,
+          status: 'error',
+          retryable: false,
+          error: `${t.crm.objUploadTooBig} ${photoSizeLabel(file.size)} — ${t.crm.objUploadMax} ${PHOTO_MAX_LABEL}`,
+        })
+        return
+      }
+      accepted.push(row)
+    })
+    if (accepted.length || rejected.length) setUploads((prev) => [...prev, ...accepted, ...rejected])
+    if (accepted.length) {
+      uploadQueueRef.current.push(...accepted)
+      void pumpUploads()
+    }
   }
 
-  // Водяной знак: рисуем фото на canvas и поверх — watermark.png по центру
-  // фото; размер знака ~28% ширины
-  const applyWatermark = (file: File): Promise<Blob | null> => {
-    return new Promise((resolve) => {
-      const img = new Image()
-      img.onload = () => {
-        const wm = new Image()
-        wm.onload = () => {
-          const canvas = document.createElement('canvas')
-          canvas.width = img.naturalWidth
-          canvas.height = img.naturalHeight
-          const ctx = canvas.getContext('2d')
-          if (!ctx) {
-            resolve(null)
-            return
-          }
-          ctx.drawImage(img, 0, 0)
-          const wmW = Math.round(canvas.width * 0.28)
-          const wmH = Math.round(wmW * (wm.naturalHeight / wm.naturalWidth))
-          // По центру фото
-          const wmX = Math.round((canvas.width - wmW) / 2)
-          const wmY = Math.round((canvas.height - wmH) / 2)
-          // Знак в исходнике очень прозрачный (alpha ~0.1) — рисуем его несколько
-          // раз: каждый проход накапливает непрозрачность (1-(1-a)^n)
-          for (let pass = 0; pass < 4; pass++) {
-            ctx.drawImage(wm, wmX, wmY, wmW, wmH)
-          }
-          canvas.toBlob(
-            (blob) => resolve(blob),
-            file.type === 'image/png' ? 'image/png' : 'image/jpeg',
-            0.95,
-          )
-        }
-        wm.onerror = () => resolve(null)
-        wm.src = '/img/watermark.png'
+  const retryUploads = (keys: string[]) => {
+    const rows = uploads.filter((u) => keys.includes(u.key) && (u.status === 'error') && u.retryable !== false)
+    if (!rows.length) return
+    setUploads((prev) => prev.map((u) => (rows.some((r) => r.key === u.key)
+      ? { ...u, status: 'waiting', progress: 0, error: undefined, needsLogin: false }
+      : u)))
+    uploadQueueRef.current.push(...rows.map((r) => ({ ...r, status: 'waiting' as const, progress: 0, error: undefined, needsLogin: false })))
+    void pumpUploads()
+  }
+
+  const removeUpload = (key: string) => {
+    uploadQueueRef.current = uploadQueueRef.current.filter((u) => u.key !== key)
+    setUploads((prev) => prev.filter((u) => u.key !== key))
+  }
+
+  // Payload на истёкшую сессию отвечает 403 «нет права на действие»
+  // (пользователь в запросе анонимный) — отличить это от настоящего запрета
+  // по коду нельзя, поэтому причину уточняем у сервера: /api/users/me отдаёт
+  // user: null, когда сессия кончилась
+  const sessionGone = async (): Promise<boolean> => {
+    try {
+      const res = await fetch('/api/users/me', { credentials: 'include', cache: 'no-store' })
+      if (!res.ok) return false
+      const data = (await res.json()) as { user?: unknown }
+      return !data?.user
+    } catch {
+      return false
+    }
+  }
+
+  // Вход прямо в карточке: страницу не перезагружаем, форма объекта остаётся
+  // заполненной, после входа неудавшиеся загрузки повторяются сами
+  const relogin = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (loginBusy) return
+    setLoginBusy(true)
+    setLoginError('')
+    try {
+      const res = await fetch('/api/users/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ email: loginEmail, password: loginPassword }),
+      })
+      const data = (await res.json().catch(() => null)) as { user?: { role?: string } } | null
+      if (!res.ok || !data?.user) {
+        setLoginError(t.crm.objLoginFailed)
+        return
       }
-      img.onerror = () => resolve(null)
-      img.src = URL.createObjectURL(file)
-    })
+      if (data.user.role !== 'agent' && data.user.role !== 'admin') {
+        setLoginError(t.crm.objLoginNoAccess)
+        return
+      }
+      setSessionExpired(false)
+      setLoginPassword('')
+      retryUploads(uploads.filter((u) => u.status === 'error').map((u) => u.key))
+    } catch {
+      setLoginError(t.crm.objLoginFailed)
+    } finally {
+      setLoginBusy(false)
+    }
   }
 
   const makeCover = (idx: number) => {
@@ -968,6 +1221,13 @@ export const CrmObjects: FC<{
       setModalOpen(false)
       await load()
       return true
+    }
+    // Истёкшая сессия выглядит как «нет права на действие» — показываем вход
+    // прямо в карточке, чтобы заполненная форма не пропала
+    if ((res.status === 401 || res.status === 403) && await sessionGone()) {
+      setSessionExpired(true)
+      setSaveError(t.crm.objSessionExpiredSave)
+      return false
     }
     // Показываем причину ошибки — раньше неудача была безмолвной
     const errData = await res.json().catch(() => null) as { errors?: { message?: string }[] } | null
@@ -1510,6 +1770,32 @@ export const CrmObjects: FC<{
 
           <div className="span-2" style={{ gridColumn: '1 / -1' }}>
             <div className="crm-gallery-field">
+              {/* Сессия истекла: вход прямо в карточке — страницу не
+                  перезагружаем, поэтому заполненные поля и выбранные фото
+                  остаются на месте, а неудавшиеся загрузки повторяются
+                  после входа (см. relogin) */}
+              {sessionExpired && (
+                <div style={{ padding: '12px 14px', border: '1px solid #e3cfc7', borderRadius: 10, background: '#fdf7f5' }}>
+                  <strong style={{ display: 'block', color: '#9b4e43', fontSize: 12 }}>{t.crm.objSessionTitle}</strong>
+                  <p style={{ margin: '4px 0 9px', fontSize: 10.5, color: '#6f6a61', lineHeight: 1.5 }}>{t.crm.objSessionText}</p>
+                  <form onSubmit={(e) => void relogin(e)} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                    <input
+                      type="email" required value={loginEmail} placeholder={t.crm.loginEmail}
+                      onChange={(e) => setLoginEmail(e.target.value)}
+                      style={{ ...inputStyle, flex: '1 1 190px', width: 'auto', padding: '9px 11px' }}
+                    />
+                    <input
+                      type="password" required value={loginPassword} placeholder={t.crm.loginPassword}
+                      onChange={(e) => setLoginPassword(e.target.value)}
+                      style={{ ...inputStyle, flex: '1 1 150px', width: 'auto', padding: '9px 11px' }}
+                    />
+                    <button type="submit" disabled={loginBusy} style={{ border: 0, borderRadius: 7, background: '#a7814e', color: 'white', padding: '10px 16px', fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '.08em', cursor: 'pointer', opacity: loginBusy ? 0.7 : 1 }}>
+                      {loginBusy ? '…' : t.crm.loginButton}
+                    </button>
+                  </form>
+                  {loginError && <p style={{ margin: '7px 0 0', fontSize: 10, color: '#9b4e43' }}>{loginError}</p>}
+                </div>
+              )}
               <div className="crm-gallery-heading">
                 <div>
                   <strong>{t.crm.objPhotos}</strong>
@@ -1518,9 +1804,54 @@ export const CrmObjects: FC<{
                 </div>
                 <label className="crm-photo-picker" style={{ position: 'relative', display: 'grid', placeItems: 'center', textAlign: 'center', border: '1px dashed #cbbda9', borderRadius: 9, background: '#fcfaf7', cursor: 'pointer', padding: 16 }}>
                   <span>{t.crm.objPhotoPick}</span>
-                  <input type="file" accept="image/*" multiple onChange={(e) => void onPhotoPick(e)} style={{ position: 'absolute', width: 1, height: 1, opacity: 0, pointerEvents: 'none' }} />
+                  <small style={{ display: 'block', marginTop: 4 }}>
+                    {`${PHOTO_FORMATS_LABEL} — ${t.crm.objPhotoLimit} ${PHOTO_MAX_LABEL}`}
+                  </small>
+                  <input type="file" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" multiple onChange={(e) => onPhotoPick(e)} style={{ position: 'absolute', width: 1, height: 1, opacity: 0, pointerEvents: 'none' }} />
                 </label>
               </div>
+              {/* Загрузки: у каждой строки свой прогресс, ошибка и повтор —
+                  видно, что происходит с фото, и ничего не пропадает молча */}
+              {uploads.length > 0 && (
+                <div style={{ display: 'grid', gap: 6 }}>
+                  {uploads.map((u) => (
+                    <div
+                      key={u.key}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+                        padding: '7px 9px', border: '1px solid #e6ded1', borderRadius: 8,
+                        background: u.status === 'error' ? '#fdf6f4' : '#fbf8f2',
+                      }}
+                    >
+                      <span style={{ flex: '1 1 140px', minWidth: 0, fontSize: 10.5, color: '#4a453d', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={u.name}>
+                        {u.name}
+                      </span>
+                      {u.status === 'error' ? (
+                        <span style={{ flex: '2 1 180px', fontSize: 10, color: '#9b4e43' }}>{u.error}</span>
+                      ) : (
+                        <>
+                          <span style={{ flex: '2 1 120px', height: 6, borderRadius: 999, background: '#eee6da', overflow: 'hidden' }}>
+                            <span style={{ display: 'block', width: `${u.progress}%`, height: '100%', background: '#a7814e', transition: 'width .15s' }} />
+                          </span>
+                          <span style={{ flex: '0 0 auto', fontSize: 10, color: '#8b683f', minWidth: 30, textAlign: 'right' }}>
+                            {u.status === 'waiting' ? t.crm.objUploadWaiting : `${u.progress}%`}
+                          </span>
+                        </>
+                      )}
+                      <span style={{ display: 'flex', gap: 6, flex: '0 0 auto' }}>
+                        {u.status === 'error' && u.retryable !== false && (
+                          <button type="button" onClick={() => retryUploads([u.key])} style={{ border: '1px solid #e1d8ca', borderRadius: 5, background: '#faf7f2', color: '#8b683f', padding: '6px 9px', fontSize: 9, cursor: 'pointer' }}>
+                            {t.crm.objUploadRetry}
+                          </button>
+                        )}
+                        <button type="button" onClick={() => removeUpload(u.key)} aria-label={t.crm.objPhotoRemove} style={{ border: '1px solid #e1d8ca', borderRadius: 5, background: '#faf7f2', color: '#9b4e43', padding: '6px 9px', fontSize: 9, cursor: 'pointer' }}>
+                          ✕
+                        </button>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
               {photos.length ? (
                 <div className="crm-photo-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(145px, 1fr))', gap: 10 }}>
                   {photos.map((p, i) => (

@@ -1,4 +1,5 @@
 import type { CollectionConfig } from 'payload'
+import { PHOTO_MIME_TYPES } from '@/lib/photo-rules'
 
 export const Media: CollectionConfig = {
   slug: 'media',
@@ -37,7 +38,10 @@ export const Media: CollectionConfig = {
       },
     ],
     adminThumbnail: 'thumbnail',
-    mimeTypes: ['image/*'],
+    // Разрешены только форматы, которые читает sharp и показывает любой
+    // браузер: JPG, PNG и WEBP (см. src/lib/photo-rules.ts). Раньше стояло
+    // image/*, и HEIC с iPhone попадал в хранилище нечитаемым файлом.
+    mimeTypes: [...PHOTO_MIME_TYPES],
     // Размеры (thumbnail/card/hero) генерируются в WebP: весит на 30–40%
     // меньше JPEG при том же визуальном качестве (quality 86 ≈ jpeg 92).
     // Оригинал хранится как загружен — не пережимается.
