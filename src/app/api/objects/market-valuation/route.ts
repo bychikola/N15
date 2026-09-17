@@ -70,6 +70,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, report })
   } catch (error) {
     console.error('Market valuation POST error:', error)
-    return NextResponse.json({ error: String(error) }, { status: 500 })
+    // Детали ошибки — только в серверный лог, клиенту общее сообщение
+    // (внутренние пути и текст исключений наружу не отдаём)
+    return NextResponse.json({ error: 'Не удалось выполнить оценку' }, { status: 500 })
   }
 }

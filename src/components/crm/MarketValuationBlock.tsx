@@ -19,6 +19,7 @@
 import { useCallback, useEffect, useRef, useState, type FC } from 'react'
 import { MARKET_WARNING, type MarketValuationReport } from '@/lib/market-valuation'
 import { formatMoney } from '@/lib/valuation'
+import { safeHttpUrl } from '@/lib/safe-url'
 
 const fmtDateTime = (iso?: string | null): string => {
   if (!iso) return '—'
@@ -246,8 +247,10 @@ export const MarketValuationBlock: FC<{
                       {a.diffPct == null ? '—' : `${a.diffPct > 0 ? '+' : ''}${a.diffPct}%`}
                     </span>
                     <span style={{ width: 74, textAlign: 'right', color: '#716b62', whiteSpace: 'nowrap' }}>{a.match}%</span>
-                    {a.url ? (
-                      <a href={a.url} target="_blank" rel="noopener" style={{ border: '1px solid #e1d8ca', borderRadius: 6, background: '#fff', color: '#716b62', padding: '5px 8px', fontSize: 10, textDecoration: 'none', whiteSpace: 'nowrap' }}>
+                    {safeHttpUrl(a.url) ? (
+                      // Ссылка приходит из объявлений площадок (внешние данные) —
+                      // пропускаем только http/https, иначе javascript: был бы XSS
+                      <a href={safeHttpUrl(a.url)!} target="_blank" rel="noopener noreferrer" style={{ border: '1px solid #e1d8ca', borderRadius: 6, background: '#fff', color: '#716b62', padding: '5px 8px', fontSize: 10, textDecoration: 'none', whiteSpace: 'nowrap' }}>
                         Открыть
                       </a>
                     ) : null}
