@@ -68,6 +68,9 @@ export default async function CrmAgentProfilePage({ params }: PageProps) {
           rows={profile.rows}
           isAdmin={user.role === 'admin'}
           ownObjectIds={ownObjectIds}
+          /* Правка самого профиля — то же право, что у «Добавить агента»
+             в списке: админ или сотрудник с галочкой «Может добавлять агентов» */
+          canManage={user.role === 'admin' || user.canManageAgents}
         />
       ) : (
         <div style={{ background: '#fff', border: '1px solid #e5dfd3', borderRadius: 12, padding: 30, textAlign: 'center' }}>

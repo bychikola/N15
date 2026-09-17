@@ -154,7 +154,7 @@ export const Users: CollectionConfig = {
     {
       name: 'canManageAgents',
       type: 'checkbox',
-      label: 'Может добавлять агентов',
+      label: 'Может добавлять и редактировать агентов',
       defaultValue: false,
       access: {
         // Как и доступ к ИИ-агенту: выставляет только администратор
@@ -162,7 +162,8 @@ export const Users: CollectionConfig = {
         update: ({ req }) => req.user?.role === 'admin',
       },
       admin: {
-        description: 'Разрешает кнопку «Добавить агента» в CRM (раздел «Агенты»).',
+        description:
+          'Разрешает кнопки «Добавить агента» и «Редактировать» в CRM (раздел «Агенты»): профиль агента — имя, должность, контакты, фото, активность.',
       },
     },
     {

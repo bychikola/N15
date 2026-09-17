@@ -49,7 +49,13 @@ export interface AgentCard {
   name: string
   position: string
   phone: string
+  /** Контакты для формы правки профиля (кнопка «Редактировать») */
+  email: string
+  telegram: string
+  whatsapp: string
   photo?: string
+  /** id фото в media — по нему карточка правит агента, не трогая снимок */
+  photoId?: number
   /** Инициалы для карточки без фото — «Ибрагим Дзгоев» → «ИД» */
   initials: string
   isActive: boolean
@@ -122,7 +128,7 @@ export const emptyAgentCounts = (): Record<AgentObjectBucket, number> => ({
 /** Карточка агента из документа коллекции agents */
 function cardOf(doc: Record<string, unknown>, counts: Record<AgentObjectBucket, number>): AgentCard {
   const name = str(doc.name)
-  const photo = doc.photo as { url?: string } | undefined
+  const photo = doc.photo as { id?: number; url?: string } | undefined
   return {
     id: doc.id as number,
     name,
@@ -130,7 +136,13 @@ function cardOf(doc: Record<string, unknown>, counts: Record<AgentObjectBucket, 
     // Телефон агента читают только сотрудники (access поля в Agents.ts):
     // посетителям и клиентам раздел не отдаётся вовсе
     phone: str(doc.phone),
+    // Контакты заполняем для формы правки: раздел «Агенты» открыт только
+    // команде Н15, тем же людям, кто видит эти поля в админке
+    email: str(doc.email),
+    telegram: str(doc.telegram),
+    whatsapp: str(doc.whatsapp),
     photo: photo?.url,
+    photoId: typeof photo?.id === 'number' ? photo.id : undefined,
     initials: agentInitials(name),
     isActive: doc.isActive !== false,
     counts,

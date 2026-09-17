@@ -1,11 +1,13 @@
 'use client'
 
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useMemo, useState, type FC } from 'react'
 import type { Dict } from '@/i18n/dictionaries'
 import type { AgentCard, AgentObjectBucket, AgentObjectRow } from '@/lib/agents-service'
 import { archiveReasonLabel } from '@/lib/archive'
 import { CITY_DISTRICT_OPTIONS, DISTRICT_OPTIONS } from '@/lib/districts'
+import { AgentFormModal } from '@/components/crm/AgentFormModal'
 
 /**
  * Профиль агента в разделе CRM «Агенты»: контакты агента и его объекты по
@@ -30,6 +32,8 @@ interface Props {
   isAdmin: boolean
   /** id «своих» объектов сотрудника — их он может редактировать */
   ownObjectIds: number[]
+  /** Право править сам профиль агента: админ или сотрудник с разрешением */
+  canManage: boolean
 }
 
 // Категории объектов в профиле — в порядке показа (см. objectBucket)
@@ -105,13 +109,16 @@ const btnGhost: React.CSSProperties = {
   cursor: 'pointer',
 }
 
-export const CrmAgentProfile: FC<Props> = ({ t, agent, rows, isAdmin, ownObjectIds }) => {
+export const CrmAgentProfile: FC<Props> = ({ t, agent, rows, isAdmin, ownObjectIds, canManage }) => {
+  const router = useRouter()
   const [q, setQ] = useState('')
   const [bucket, setBucket] = useState('')
   const [category, setCategory] = useState('')
   const [dealType, setDealType] = useState('')
   const [district, setDistrict] = useState('')
   const [city, setCity] = useState('')
+  // Окно правки профиля агента (то же, что «Добавить агента» в списке)
+  const [editOpen, setEditOpen] = useState(false)
 
   const bucketLabels: Record<AgentObjectBucket, string> = {
     active: t.crm.agBucketActive,
@@ -176,9 +183,17 @@ export const CrmAgentProfile: FC<Props> = ({ t, agent, rows, isAdmin, ownObjectI
 
   return (
     <div>
-      <Link href="/crm/agents" style={{ display: 'inline-block', marginBottom: 14, color: '#927046', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em' }}>
-        {t.crm.agBack}
-      </Link>
+      {/* Строка навигации: возврат к списку слева, правка профиля справа */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 14 }}>
+        <Link href="/crm/agents" style={{ display: 'inline-block', color: '#927046', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em' }}>
+          {t.crm.agBack}
+        </Link>
+        {canManage && (
+          <button type="button" onClick={() => setEditOpen(true)} style={btnGhost}>
+            {t.crm.agEditProfile}
+          </button>
+        )}
+      </div>
 
       {/* Шапка профиля: фото или инициалы, контакты и сводка по объектам */}
       <div style={{ background: '#fff', border: '1px solid #e5dfd3', borderRadius: 12, padding: 20, marginBottom: 16 }}>
@@ -384,6 +399,20 @@ export const CrmAgentProfile: FC<Props> = ({ t, agent, rows, isAdmin, ownObjectI
             </div>
           </section>
         ))
+      )}
+
+      {/* Правка профиля: контакты, фото и активность агента — окном из списка */}
+      {editOpen && (
+        <AgentFormModal
+          t={t}
+          agent={agent}
+          onClose={() => setEditOpen(false)}
+          onSaved={() => {
+            setEditOpen(false)
+            // Карточка агента и шапка профиля собираются на сервере
+            router.refresh()
+          }}
+        />
       )}
     </div>
   )

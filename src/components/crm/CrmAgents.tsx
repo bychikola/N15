@@ -2,9 +2,10 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useMemo, useRef, useState, type FC } from 'react'
+import { useMemo, useState, type FC } from 'react'
 import type { Dict } from '@/i18n/dictionaries'
 import type { AgentCard } from '@/lib/agents-service'
+import { AgentFormModal } from '@/components/crm/AgentFormModal'
 
 /**
  * Раздел CRM «Агенты»: риелторы агентства карточками — фото (или инициалы),
@@ -15,12 +16,16 @@ import type { AgentCard } from '@/lib/agents-service'
  * виден — страница проверяет доступ до отдачи данных (см. src/app/crm/agents).
  * Персональные данные собственников и закрытые документы в раздел не
  * попадают (см. src/lib/agents-service.ts).
+ *
+ * Профиль агента заводят кнопкой «Добавить агента», правят — «Редактировать»
+ * на карточке (окно одно и то же, см. CrmAgentFormModal). Кнопки видны только
+ * тем, кто вправе менять профили (canManage).
  */
 
 interface Props {
   t: Dict
   agents: AgentCard[]
-  /** Кнопка «Добавить агента»: админ или сотрудник с разрешением (см. Users.ts) */
+  /** Право заводить и править профили: админ или сотрудник с разрешением (см. Users.ts) */
   canManage: boolean
 }
 
@@ -53,94 +58,29 @@ const labelStyle: React.CSSProperties = {
   minWidth: 0,
 }
 
+// Кнопка правки на карточке — та же, что у карточек объектов в профиле агента
+const editBtnStyle: React.CSSProperties = {
+  marginTop: 12,
+  width: '100%',
+  border: '1px solid #e1d8ca',
+  borderRadius: 6,
+  background: '#faf7f2',
+  color: '#716b62',
+  padding: '9px 10px',
+  fontSize: 9,
+  textTransform: 'uppercase',
+  letterSpacing: '.07em',
+  cursor: 'pointer',
+}
+
 export const CrmAgents: FC<Props> = ({ t, agents, canManage }) => {
   const [q, setQ] = useState('')
   const router = useRouter()
 
-  // Модальное окно «Добавить агента»
-  const [addOpen, setAddOpen] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [formError, setFormError] = useState('')
-  const [fields, setFields] = useState({
-    name: '', position: '', phone: '', email: '', telegram: '', whatsapp: '',
-  })
-  const [active, setActive] = useState(true)
-  const [photoId, setPhotoId] = useState<number | null>(null)
-  const [photoBusy, setPhotoBusy] = useState(false)
-  const [photoError, setPhotoError] = useState('')
-  const photoInputRef = useRef<HTMLInputElement>(null)
-
-  const setField = (key: keyof typeof fields, value: string) =>
-    setFields((prev) => ({ ...prev, [key]: value }))
-
-  const resetForm = () => {
-    setFields({ name: '', position: '', phone: '', email: '', telegram: '', whatsapp: '' })
-    setActive(true)
-    setPhotoId(null)
-    setPhotoError('')
-    setFormError('')
-  }
-
-  // Фото грузим сразу при выборе: к моменту сохранения у нас готовый id
-  const uploadPhoto = async (file: File) => {
-    setPhotoBusy(true)
-    setPhotoError('')
-    try {
-      const body = new FormData()
-      body.append('file', file)
-      const res = await fetch('/api/crm/upload', { method: 'POST', body, credentials: 'include' })
-      const data = await res.json().catch(() => null)
-      if (!res.ok) {
-        setPhotoError(data?.error || t.crm.agAddPhotoFailed)
-        return
-      }
-      setPhotoId(Number(data?.doc?.id) || null)
-    } catch {
-      setPhotoError(t.crm.agAddPhotoFailed)
-    } finally {
-      setPhotoBusy(false)
-    }
-  }
-
-  const submit = async () => {
-    if (saving) return
-    if (!fields.name.trim()) {
-      setFormError(t.crm.agAddNameRequired)
-      return
-    }
-    setSaving(true)
-    setFormError('')
-    try {
-      const res = await fetch('/api/agents/manage', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          name: fields.name,
-          position: fields.position,
-          phone: fields.phone,
-          email: fields.email,
-          telegram: fields.telegram,
-          whatsapp: fields.whatsapp,
-          photoId,
-          isActive: active,
-        }),
-      })
-      if (!res.ok) {
-        const data = await res.json().catch(() => null)
-        setFormError(data?.error || t.crm.agAddFailed)
-        return
-      }
-      setAddOpen(false)
-      resetForm()
-      // Список агентов собирается на сервере — обновляем страницу
-      router.refresh()
-    } catch {
-      setFormError(t.crm.agAddFailed)
-    } finally {
-      setSaving(false)
-    }
-  }
+  // Окно профиля: null — закрыто, { agent: null } — новый агент,
+  // { agent } — правка выбранного. Состояние одним объектом, чтобы окно
+  // не могло открыться сразу в двух режимах
+  const [modal, setModal] = useState<{ agent: AgentCard | null } | null>(null)
 
   // Фильтр по имени агента: ищем по имени и фамилии, должности и телефону
   const visible = useMemo(() => {
@@ -165,7 +105,7 @@ export const CrmAgents: FC<Props> = ({ t, agents, canManage }) => {
         {canManage && (
           <button
             type="button"
-            onClick={() => { resetForm(); setAddOpen(true) }}
+            onClick={() => setModal({ agent: null })}
             style={{ border: 0, borderRadius: 8, background: '#a7814e', color: '#fff', padding: '11px 18px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', cursor: 'pointer', flex: 'none' }}
           >
             + {t.crm.agAddButton}
@@ -213,187 +153,109 @@ export const CrmAgents: FC<Props> = ({ t, agents, canManage }) => {
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }}>
           {visible.map((agent) => (
-            <Link
+            // Карточка-ссылка и кнопка правки — соседи, а не вложены друг в
+            // друга: клик по кнопке внутри <a> открывал бы профиль вместо
+            // окна правки (и это была бы вложенная интерактивность)
+            <div
               key={agent.id}
-              href={`/crm/agents/${agent.id}`}
               style={{
-                display: 'block',
+                display: 'flex',
+                flexDirection: 'column',
                 background: '#fff',
                 border: '1px solid #e5dfd3',
                 borderRadius: 12,
                 padding: 16,
-                color: 'inherit',
-                textDecoration: 'none',
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                {/* Фото агента, а без него — инициалы (как на сайте) */}
-                {agent.photo ? (
-                  <img
-                    src={agent.photo}
-                    alt=""
-                    style={{ width: 54, height: 54, borderRadius: '50%', objectFit: 'cover', flex: 'none' }}
-                  />
-                ) : (
-                  <span
-                    style={{
-                      width: 54,
-                      height: 54,
-                      borderRadius: '50%',
-                      background: '#b38a52',
-                      color: '#fff',
-                      display: 'grid',
-                      placeItems: 'center',
-                      fontFamily: "'New Standard', Georgia, serif",
-                      fontSize: 19,
-                      flex: 'none',
-                    }}
-                  >
-                    {agent.initials || '—'}
-                  </span>
-                )}
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontFamily: "'New Standard', Georgia, serif", fontSize: 16, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {agent.name || `Агент #${agent.id}`}
-                  </div>
-                  <div style={{ marginTop: 3, fontSize: 10, color: '#817b70' }}>
-                    {agent.position || t.crm.agNoPosition}
+              <Link
+                href={`/crm/agents/${agent.id}`}
+                style={{ display: 'block', flex: 1, color: 'inherit', textDecoration: 'none' }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  {/* Фото агента, а без него — инициалы (как на сайте) */}
+                  {agent.photo ? (
+                    <img
+                      src={agent.photo}
+                      alt=""
+                      style={{ width: 54, height: 54, borderRadius: '50%', objectFit: 'cover', flex: 'none' }}
+                    />
+                  ) : (
+                    <span
+                      style={{
+                        width: 54,
+                        height: 54,
+                        borderRadius: '50%',
+                        background: '#b38a52',
+                        color: '#fff',
+                        display: 'grid',
+                        placeItems: 'center',
+                        fontFamily: "'New Standard', Georgia, serif",
+                        fontSize: 19,
+                        flex: 'none',
+                      }}
+                    >
+                      {agent.initials || '—'}
+                    </span>
+                  )}
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontFamily: "'New Standard', Georgia, serif", fontSize: 16, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {agent.name || `Агент #${agent.id}`}
+                    </div>
+                    <div style={{ marginTop: 3, fontSize: 10, color: '#817b70' }}>
+                      {agent.position || t.crm.agNoPosition}
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid #eee9e1', display: 'flex', flexDirection: 'column', gap: 7 }}>
-                <span style={{ fontSize: 11, color: agent.phone ? '#25241f' : '#9b958a' }}>
-                  {agent.phone || t.crm.agNoPhone}
-                </span>
-                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
-                  <span style={{ fontSize: 9, color: '#817b70', textTransform: 'uppercase', letterSpacing: '.07em' }}>
-                    {t.crm.agActiveObjects}
+                <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid #eee9e1', display: 'flex', flexDirection: 'column', gap: 7 }}>
+                  <span style={{ fontSize: 11, color: agent.phone ? '#25241f' : '#9b958a' }}>
+                    {agent.phone || t.crm.agNoPhone}
                   </span>
-                  <strong style={{ fontFamily: "'New Standard', Georgia, serif", fontWeight: 400, fontSize: 20, color: '#25241f' }}>
-                    {agent.counts.active}
-                  </strong>
+                  <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
+                    <span style={{ fontSize: 9, color: '#817b70', textTransform: 'uppercase', letterSpacing: '.07em' }}>
+                      {t.crm.agActiveObjects}
+                    </span>
+                    <strong style={{ fontFamily: "'New Standard', Georgia, serif", fontWeight: 400, fontSize: 20, color: '#25241f' }}>
+                      {agent.counts.active}
+                    </strong>
+                  </div>
+                  {/* Неактивного агента показываем в списке (за ним остались
+                      объекты), но помечаем — новых сделок он не ведёт */}
+                  {!agent.isActive && (
+                    <span style={{ alignSelf: 'flex-start', padding: '3px 9px', borderRadius: 999, background: '#efeadf', color: '#817b70', fontSize: 9, textTransform: 'uppercase', letterSpacing: '.06em' }}>
+                      {t.crm.agInactive}
+                    </span>
+                  )}
+                  <span style={{ fontSize: 9, color: '#927046', textTransform: 'uppercase', letterSpacing: '.07em' }}>
+                    {t.crm.agOpenProfile} →
+                  </span>
                 </div>
-                {/* Неактивного агента показываем в списке (за ним остались
-                    объекты), но помечаем — новых сделок он не ведёт */}
-                {!agent.isActive && (
-                  <span style={{ alignSelf: 'flex-start', padding: '3px 9px', borderRadius: 999, background: '#efeadf', color: '#817b70', fontSize: 9, textTransform: 'uppercase', letterSpacing: '.06em' }}>
-                    {t.crm.agInactive}
-                  </span>
-                )}
-                <span style={{ fontSize: 9, color: '#927046', textTransform: 'uppercase', letterSpacing: '.07em' }}>
-                  {t.crm.agOpenProfile} →
-                </span>
-              </div>
-            </Link>
+              </Link>
+
+              {/* Правка профиля — тем же окном, что и «Добавить агента» */}
+              {canManage && (
+                <button type="button" onClick={() => setModal({ agent })} style={editBtnStyle}>
+                  {t.crm.agEdit}
+                </button>
+              )}
+            </div>
           ))}
         </div>
       )}
 
-      {/* Модальное окно «Добавить агента» */}
-      {addOpen && (
-        <div
-          style={{ position: 'fixed', inset: 0, zIndex: 120, background: 'rgba(32,33,30,.55)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 16px', overflowY: 'auto' }}
-          onClick={() => !saving && setAddOpen(false)}
-        >
-          <div
-            style={{ background: '#faf8f4', border: '1px solid #ded5c7', borderRadius: 12, width: 'min(100%, 620px)', padding: 22 }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-              <h2 style={{ margin: 0, fontFamily: "'New Standard', Georgia, serif", fontWeight: 400, fontSize: 20 }}>
-                {t.crm.agAddTitle}
-              </h2>
-              <button
-                type="button"
-                onClick={() => setAddOpen(false)}
-                style={{ border: '1px solid #e1d8ca', borderRadius: 7, background: '#fff', color: '#716b62', padding: '8px 12px', cursor: 'pointer', fontSize: 12 }}
-              >
-                ✕
-              </button>
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>
-              <label style={labelStyle}>
-                {t.crm.agAddName}
-                <input value={fields.name} onChange={(e) => setField('name', e.target.value)} style={inputStyle} />
-              </label>
-              <label style={labelStyle}>
-                {t.crm.agAddPosition}
-                <input value={fields.position} onChange={(e) => setField('position', e.target.value)} style={inputStyle} placeholder={t.crm.agAddPositionPh} />
-              </label>
-              <label style={labelStyle}>
-                {t.crm.agAddPhone}
-                <input inputMode="tel" value={fields.phone} onChange={(e) => setField('phone', e.target.value)} style={inputStyle} />
-              </label>
-              <label style={labelStyle}>
-                {t.crm.agAddEmail}
-                <input inputMode="email" value={fields.email} onChange={(e) => setField('email', e.target.value)} style={inputStyle} />
-              </label>
-              <label style={labelStyle}>
-                {t.crm.agAddTelegram}
-                <input value={fields.telegram} onChange={(e) => setField('telegram', e.target.value)} style={inputStyle} placeholder="@username" />
-              </label>
-              <label style={labelStyle}>
-                {t.crm.agAddWhatsapp}
-                <input value={fields.whatsapp} onChange={(e) => setField('whatsapp', e.target.value)} style={inputStyle} placeholder="https://wa.me/7…" />
-              </label>
-            </div>
-
-            {/* Фото: грузится сразу при выборе файла */}
-            <div style={{ marginTop: 14 }}>
-              <span style={{ ...labelStyle, display: 'block' }}>{t.crm.agAddPhoto}</span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 6, flexWrap: 'wrap' }}>
-                <input
-                  ref={photoInputRef}
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0]
-                    if (file) void uploadPhoto(file)
-                  }}
-                  style={{ display: 'none' }}
-                />
-                <button
-                  type="button"
-                  onClick={() => photoInputRef.current?.click()}
-                  disabled={photoBusy}
-                  style={{ border: '1px solid #d9d1c4', borderRadius: 8, background: '#fff', color: '#716b62', padding: '9px 14px', fontSize: 11, cursor: 'pointer', opacity: photoBusy ? 0.6 : 1 }}
-                >
-                  {photoBusy ? t.crm.agAddPhotoUploading : t.crm.agAddPhotoPick}
-                </button>
-                {photoId && <span style={{ fontSize: 11, color: '#4e7a3a' }}>{t.crm.agAddPhotoReady}</span>}
-                {photoError && <span style={{ fontSize: 11, color: '#9b4e43' }}>{photoError}</span>}
-              </div>
-            </div>
-
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 14, fontSize: 12, color: '#25241f', cursor: 'pointer' }}>
-              <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />
-              {t.crm.agAddActive}
-            </label>
-
-            {formError && <p style={{ margin: '12px 0 0', color: '#9b4e43', fontSize: 11 }}>{formError}</p>}
-
-            <div style={{ display: 'flex', gap: 8, marginTop: 18 }}>
-              <button
-                type="button"
-                onClick={() => void submit()}
-                disabled={saving}
-                style={{ flex: 1, border: 0, borderRadius: 8, background: '#a7814e', color: '#fff', padding: '12px 18px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', cursor: 'pointer', opacity: saving ? 0.5 : 1 }}
-              >
-                {saving ? t.crm.agAddSaving : t.crm.agAddSave}
-              </button>
-              <button
-                type="button"
-                onClick={() => setAddOpen(false)}
-                disabled={saving}
-                style={{ border: '1px solid #e1d8ca', borderRadius: 8, background: '#fff', color: '#716b62', padding: '12px 18px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', cursor: 'pointer' }}
-              >
-                {t.crm.dupCancel}
-              </button>
-            </div>
-          </div>
-        </div>
+      {/* Окно профиля: для нового агента — пустая форма, для существующего —
+          с его данными (см. AgentFormModal). После сохранения список
+          собирается на сервере заново, поэтому обновляем страницу */}
+      {modal && (
+        <AgentFormModal
+          t={t}
+          agent={modal.agent}
+          onClose={() => setModal(null)}
+          onSaved={() => {
+            setModal(null)
+            router.refresh()
+          }}
+        />
       )}
     </div>
   )

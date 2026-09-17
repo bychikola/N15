@@ -1348,6 +1348,15 @@ export const ru = {
     agAddFailed: 'Не удалось создать агента — попробуйте ещё раз',
     agAddSave: 'Добавить агента',
     agAddSaving: 'Сохраняю…',
+    // Правка профиля агента (окно то же, что и при добавлении)
+    agEditTitle: 'Редактировать агента',
+    agEditProfile: 'Редактировать профиль',
+    agEditProfileLabel: 'Профиль',
+    agEditSave: 'Сохранить',
+    agEditFailed: 'Не удалось сохранить изменения — попробуйте ещё раз',
+    agEditPhotoReplace: 'Заменить фото',
+    agEditPhotoRemove: 'Убрать фото',
+    agEditPhotoRemoved: 'Фото уберётся после сохранения',
     // Профиль агента со списком объектов
     agBack: '← Все агенты',
     agObjectsTitle: 'Объекты агента',
@@ -2893,6 +2902,15 @@ const os: Dict = {
     agAddFailed: 'Не удалось создать агента — попробуйте ещё раз',
     agAddSave: 'Добавить агента',
     agAddSaving: 'Сохраняю…',
+    // Правка профиля агента (окно то же, что и при добавлении)
+    agEditTitle: 'Редактировать агента',
+    agEditProfile: 'Редактировать профиль',
+    agEditProfileLabel: 'Профиль',
+    agEditSave: 'Сохранить',
+    agEditFailed: 'Не удалось сохранить изменения — попробуйте ещё раз',
+    agEditPhotoReplace: 'Заменить фото',
+    agEditPhotoRemove: 'Убрать фото',
+    agEditPhotoRemoved: 'Фото уберётся после сохранения',
     // Профиль агента со списком объектов
     agBack: '← Все агенты',
     agObjectsTitle: 'Объекты агента',
