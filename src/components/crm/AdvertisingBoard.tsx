@@ -11,13 +11,15 @@ import {
   type AdStatus,
   type AdvertiserStatus,
 } from '@/lib/advertising'
+import { AdRequestsBoard } from '@/components/crm/AdRequestsBoard'
 import type { AdBoardRow, AdRequestRow } from '@/lib/advertising-service'
 
 /**
  * Раздел CRM «Реклама»: рекламные материалы со сроком, стоимостью, статусом
  * оплаты и датами — и кнопки «Опубликовать» / «Снять с публикации»
  * (маршрут /api/advertising/publish-manage, правила — src/lib/advertising.ts).
- * Ниже — заявки с формы страницы /advertising с отметкой согласия.
+ * Ниже — заявки с формы страницы /advertising: их карточки с проверкой,
+ * оплатой, договором и публикацией живут в AdRequestsBoard.
  *
  * Кнопка публикации заблокирована, пока не выполнены условия размещения:
  * подтверждение рекламодателя, проверка содержания, оплата, срок и erid.
@@ -252,36 +254,10 @@ export const AdvertisingBoard: FC<Props> = ({ t, ads, requests }) => {
           <h2>{t.crm.adBoardRequests}</h2>
           <span>{requests.length}</span>
         </div>
-
-        {requests.length === 0 ? (
-          <div className="crm-empty">
-            <strong>{t.crm.adBoardRequestsEmpty}</strong>
-          </div>
-        ) : (
-          <div className="crm-list">
-            {requests.map((r) => (
-              <div className="crm-row" key={r.id}>
-                <div style={{ minWidth: 0 }}>
-                  <h3>
-                    {r.name}
-                    {r.company ? ` · ${r.company}` : ''}
-                  </h3>
-                  <p>
-                    {[r.phone, r.email].filter(Boolean).join(' · ')}
-                  </p>
-                  {r.message && <p style={{ marginTop: 6, whiteSpace: 'pre-wrap' }}>{r.message}</p>}
-                  <p className="crm-muted" style={{ marginTop: 6 }}>
-                    {r.consentAt
-                      ? fmt(t.crm.adConsent, fmtMoment(r.consentAt))
-                      : t.crm.adConsentNone}
-                    {r.createdAt ? ` · ${fmt(t.crm.adCreated, fmtMoment(r.createdAt))}` : ''}
-                  </p>
-                </div>
-                <span className="crm-status">{r.status}</span>
-              </div>
-            ))}
-          </div>
-        )}
+        <p className="crm-team-note" style={{ marginBottom: 18 }}>
+          {t.crm.adBoardRequestsNote}
+        </p>
+        <AdRequestsBoard t={t} requests={requests} />
       </div>
     </>
   )

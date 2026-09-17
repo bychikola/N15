@@ -1,15 +1,16 @@
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import type { Metadata } from 'next'
+import Link from 'next/link'
 import { Header } from '@/components/layout/Header'
 import { Footer } from '@/components/layout/Footer'
 import { SectionWrapper } from '@/components/ui/SectionWrapper'
-import { OrnamentBorder } from '@/components/ui/OrnamentBorder'
 import { Button } from '@/components/ui/Button'
 import { AdRequestForm } from '@/components/advertising/AdRequestForm'
 import { AdCard } from '@/components/advertising/AdCard'
 import { getDictionary } from '@/i18n/dictionaries'
-import { visibleAdvertisements, type SiteAdCard } from '@/lib/advertising-service'
+import { AD_OFFER, AD_RULES, adDocHref } from '@/lib/advertising-legal'
+import { visibleAdRequestCards, visibleAdvertisements, type SiteAdCard } from '@/lib/advertising-service'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,26 +25,33 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 }
 
 /**
- * Страница /advertising — обращение к рекламодателям, кнопки связи (звонок
- * и переход к форме), форма «Обсудить размещение рекламы» (имя, компания,
- * телефон, почта, сообщение) с согласием на обработку персональных данных
- * и ссылкой на политику конфиденциальности, а также материалы, размещённые
- * сейчас — всегда с маркировкой «Реклама».
+ * Страница /advertising — платное размещение объектов: первый экран на
+ * зелёном, «как это работает» и форматы одинаковыми прямоугольными блоками,
+ * форма заявки с тремя отдельными согласиями и ссылками на документы.
  *
- * Рекламный блок на главной не раскрывается: на главной только кнопка
- * «Ваша реклама» в герое, вся информация о размещении — здесь.
+ * Правовые документы модуля (договор-оферта и правила размещения) живут
+ * в коде — src/lib/advertising-legal.ts — и открываются отдельными
+ * страницами: /[lang]/advertising/offer и /[lang]/advertising/rules.
+ *
+ * Блок «Размещаем сейчас» показывается только когда есть что показать:
+ * опубликованные рекламные материалы и оплаченные размещения из заявок
+ * (у заявок фотографии попадают в media только при публикации, поэтому
+ * непроверенные файлы на сайт не выходят). Пустого блока на странице нет.
  */
 export default async function AdvertisingPage({ params }: PageProps) {
   const { lang } = await params
   const t = getDictionary(lang)
 
-  let ads: SiteAdCard[] = []
+  let cards: SiteAdCard[] = []
   let phone = ''
   try {
     const payload = await getPayload({ config })
-    // limit 12: на отдельной странице помещается больше материалов, чем
-    // в блоке на главной
-    ads = await visibleAdvertisements(payload, 12)
+    // Материалы раздела и оплаченные размещения из заявок — одной лентой
+    const [ads, placements] = await Promise.all([
+      visibleAdvertisements(payload, 12),
+      visibleAdRequestCards(payload, 12),
+    ])
+    cards = [...ads, ...placements].slice(0, 12)
     // Телефон из глобала — для кнопки «Позвонить» (fallback — номер прототипа)
     const site = await payload.findGlobal({ slug: 'site-settings', depth: 0 })
     const sitePhones = ((site as Record<string, unknown>).phones as { phone?: string }[] | undefined) || []
@@ -53,71 +61,155 @@ export default async function AdvertisingPage({ params }: PageProps) {
   }
   const phoneHref = phone ? `tel:${phone.replace(/\s+/g, '')}` : 'tel:+79581161515'
 
+  const docs = [
+    { href: adDocHref(lang, AD_OFFER.path), title: t.advertising.consentOfferDoc },
+    { href: adDocHref(lang, AD_RULES.path), title: t.advertising.consentRulesDoc },
+    { href: adDocHref(lang, '/privacy'), title: t.advertising.consentPrivacyDoc },
+  ]
+
   return (
     <>
       <Header />
       <main className="pt-20">
-        <SectionWrapper variant="dark" ornament="solar">
-          <p className="text-xs tracking-[0.2em] uppercase text-[var(--n15-gold)] mb-4">
-            {t.advertising.eyebrow}
-          </p>
-          <h1 className="text-4xl md:text-5xl font-[family-name:var(--font-display)] text-[var(--n15-white)] mb-6">
-            {t.advertising.title}
-          </h1>
-          <div className="max-w-2xl space-y-3 text-[var(--n15-silver)] leading-relaxed">
-            <p>{t.advertising.lead1}</p>
-            <p>{t.advertising.lead2}</p>
-            <p>{t.advertising.lead3}</p>
-          </div>
+        {/* Первый экран — зелёный, компактный: заголовок без «плакатного» кегля */}
+        <section className="n15-green-block n15-section">
+          <div className="n15-container">
+            <p className="text-[11px] tracking-[0.2em] uppercase text-[var(--n15-gold)] mb-3">
+              {t.advertising.eyebrow}
+            </p>
+            <h1 className="text-2xl md:text-3xl font-[family-name:var(--font-display)] text-[var(--n15-white)] mb-4 max-w-2xl">
+              {t.advertising.title}
+            </h1>
+            <div className="max-w-2xl space-y-2 text-sm md:text-[15px] leading-relaxed text-[var(--n15-silver)]">
+              <p>{t.advertising.lead1}</p>
+              <p>{t.advertising.lead2}</p>
+            </div>
 
-          {/* Кнопки связи для обсуждения размещения: «Обсудить размещение» —
-              к форме заявки (первая форма страницы), «Позвонить» — tel:-ссылка
-              на общий номер агентства (как в шапке сайта) */}
-          <div className="mt-8 flex flex-wrap gap-4">
-            <Button variant="primary" size="md" href="#ad-request">
-              {t.advertising.discussCta} <span aria-hidden="true">→</span>
-            </Button>
-            <Button variant="outline" size="md" href={phoneHref}>
-              {t.advertising.callCta}
-            </Button>
-          </div>
-        </SectionWrapper>
-
-        {/* id="ad-request" — цель кнопки «Обсудить размещение» из первого экрана */}
-        <SectionWrapper variant="charcoal" id="ad-request">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-            {/* Форма обращения к рекламодателю */}
-            <OrnamentBorder cornerOrnament>
-              <div className="p-8">
-                <h2 className="text-xl font-[family-name:var(--font-display)] text-[var(--n15-white)] mb-3">
-                  {t.advertising.formTitle}
-                </h2>
-                <p className="text-sm text-[var(--n15-muted)] leading-relaxed mb-6">
-                  {t.advertising.formHint}
-                </p>
-                <AdRequestForm lang={lang} />
-              </div>
-            </OrnamentBorder>
-
-            {/* Материалы, размещённые сейчас (маркируются автоматически) */}
-            <div className="p-8 bg-[var(--n15-charcoal)] border border-[var(--n15-gold)]/10">
-              <h2 className="text-xl font-[family-name:var(--font-display)] text-[var(--n15-white)] mb-6">
-                {t.advertising.partnersTitle}
-              </h2>
-              {ads.length === 0 ? (
-                <p className="text-sm text-[var(--n15-muted)] leading-relaxed">
-                  {t.advertising.partnersEmpty}
-                </p>
-              ) : (
-                <div className="flex flex-col gap-5">
-                  {ads.map((ad) => (
-                    <AdCard key={ad.id} ad={ad} t={t} />
-                  ))}
-                </div>
-              )}
+            {/* Кнопки связи: заявка (к форме ниже) и звонок в агентство */}
+            <div className="mt-7 flex flex-wrap gap-3">
+              <Button variant="primary" size="md" href="#ad-request">
+                {t.advertising.discussCta} <span aria-hidden="true">→</span>
+              </Button>
+              <Button variant="outline" size="md" href={phoneHref}>
+                {t.advertising.callCta}
+              </Button>
             </div>
           </div>
+        </section>
+
+        {/* Как это работает — три одинаковых прямоугольных блока */}
+        <SectionWrapper variant="dark">
+          <h2 className="text-lg md:text-xl font-[family-name:var(--font-display)] text-[var(--n15-white)] mb-6">
+            {t.advertising.stepsTitle}
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {t.advertising.steps.map((step, index) => (
+              <article
+                key={step.title}
+                className="h-full p-5 bg-[var(--n15-charcoal)] border border-[var(--n15-gold)]/15"
+              >
+                <span className="text-[11px] tracking-[0.2em] uppercase text-[var(--n15-gold)]">
+                  {String(index + 1).padStart(2, '0')}
+                </span>
+                <h3 className="mt-3 mb-2 text-base font-[family-name:var(--font-display)] text-[var(--n15-white)]">
+                  {step.title}
+                </h3>
+                <p className="text-sm leading-relaxed text-[var(--n15-muted)]">{step.text}</p>
+              </article>
+            ))}
+          </div>
         </SectionWrapper>
+
+        {/* Форматы размещения — четыре одинаковых прямоугольных блока */}
+        <SectionWrapper variant="charcoal">
+          <h2 className="text-lg md:text-xl font-[family-name:var(--font-display)] text-[var(--n15-white)] mb-6">
+            {t.advertising.formatsTitle}
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {t.advertising.formats.map((format) => (
+              <article
+                key={format.title}
+                className="h-full p-5 bg-[var(--n15-black)] border border-[var(--n15-gold)]/15"
+              >
+                <h3 className="mb-2 text-base font-[family-name:var(--font-display)] text-[var(--n15-white)]">
+                  {format.title}
+                </h3>
+                <p className="text-sm leading-relaxed text-[var(--n15-muted)]">{format.text}</p>
+              </article>
+            ))}
+          </div>
+        </SectionWrapper>
+
+        {/* id="ad-request" — цель кнопок «Заполнить заявку» */}
+        <SectionWrapper variant="dark" id="ad-request">
+          <div className="grid grid-cols-1 lg:grid-cols-[1.7fr_1fr] gap-6">
+            <div className="p-6 md:p-8 bg-[var(--n15-charcoal)] border border-[var(--n15-gold)]/15">
+              <h2 className="text-lg md:text-xl font-[family-name:var(--font-display)] text-[var(--n15-white)] mb-2">
+                {t.advertising.formTitle}
+              </h2>
+              <p className="text-sm text-[var(--n15-muted)] leading-relaxed mb-6">{t.advertising.formHint}</p>
+              <AdRequestForm lang={lang} />
+            </div>
+
+            {/* Сбоку — связь и документы: те же три документа, что и в согласиях */}
+            <aside className="flex flex-col gap-4">
+              <div className="p-5 bg-[var(--n15-charcoal)] border border-[var(--n15-gold)]/15">
+                <h3 className="mb-2 text-base font-[family-name:var(--font-display)] text-[var(--n15-white)]">
+                  {t.advertising.helpTitle}
+                </h3>
+                <p className="text-sm leading-relaxed text-[var(--n15-muted)] mb-4">{t.advertising.helpText}</p>
+                <p className="flex flex-col gap-2 text-sm">
+                  <a href={phoneHref} className="text-[var(--n15-gold)] hover:text-[var(--n15-gold-light)]">
+                    {phone || '+7 958 116-15-15'}
+                  </a>
+                  <a
+                    href="mailto:info@n15-realty.ru"
+                    className="text-[var(--n15-gold)] hover:text-[var(--n15-gold-light)]"
+                  >
+                    info@n15-realty.ru
+                  </a>
+                </p>
+              </div>
+
+              <div className="p-5 bg-[var(--n15-charcoal)] border border-[var(--n15-gold)]/15">
+                <h3 className="mb-3 text-base font-[family-name:var(--font-display)] text-[var(--n15-white)]">
+                  {t.advertising.consentsTitle}
+                </h3>
+                <ul className="flex flex-col gap-2">
+                  {docs.map((doc) => (
+                    <li key={doc.href}>
+                      <Link
+                        href={doc.href}
+                        className="text-sm text-[var(--n15-gold)] hover:text-[var(--n15-gold-light)] underline underline-offset-4"
+                      >
+                        {doc.title}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-4 text-[11px] leading-relaxed text-[var(--n15-muted)]">
+                  {t.advertising.legalNote}
+                </p>
+              </div>
+            </aside>
+          </div>
+        </SectionWrapper>
+
+        {/* Размещённые материалы — блок только при наличии публикаций */}
+        {cards.length > 0 && (
+          <SectionWrapper variant="charcoal">
+            <h2 className="text-lg md:text-xl font-[family-name:var(--font-display)] text-[var(--n15-white)] mb-6">
+              {t.advertising.partnersTitle}
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {/* Ключ с индексом: id материалов и заявок нумеруются в своих
+                  коллекциях и могут совпасть */}
+              {cards.map((ad, index) => (
+                <AdCard key={`${index}-${ad.id}`} ad={ad} t={t} />
+              ))}
+            </div>
+          </SectionWrapper>
+        )}
       </main>
       <Footer />
     </>

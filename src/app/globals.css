@@ -273,6 +273,25 @@ a:hover {
   border-top-color: color-mix(in srgb, var(--n15-green-gold) 30%, transparent);
 }
 
+/* Зелёный блок внутри страницы (первый экран /advertising): тот же приём,
+   что у шапки и футера — токены переопределяются на элементе, поэтому
+   заголовки, текст и кнопки внутри блока сразу читаются на зелёном. */
+.n15-green-block {
+  background: var(--n15-green);
+  --n15-black:      var(--n15-green);
+  --n15-charcoal:   var(--n15-green-dark);
+  --n15-white:      var(--n15-on-green);
+  --n15-silver:     #EAE4D6;
+  --n15-muted:      var(--n15-on-green-muted);
+  --n15-gold:       var(--n15-green-gold);
+  --n15-gold-light: #EBD9B4;
+  --n15-gold-dim:   #C0A574;
+  --on-accent:      #16301F;
+  --heading:        var(--n15-white);
+  --accent:         var(--n15-gold);
+  --accent-hover:   var(--n15-gold-light);
+}
+
 /* Выпадающие панели меню — на тон темнее шапки, чтобы читалась граница */
 .n15-header .n15-menu-panel {
   background: var(--n15-green-dark);

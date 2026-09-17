@@ -21,10 +21,12 @@ import { Users } from './collections/Users'
 import { Media } from './collections/Media'
 import { MarketListings } from './collections/MarketListings'
 // «Реклама на сайте»: рекламодатели, рекламные материалы (с маркировкой
-// «Реклама») и заявки с формы страницы /advertising (см. src/lib/advertising.ts)
+// «Реклама»), заявки с формы страницы /advertising и закрытое хранилище
+// материалов заявок (см. src/lib/advertising.ts, src/lib/advertising-legal.ts)
 import { Advertisers } from './collections/Advertisers'
 import { Advertisements } from './collections/Advertisements'
 import { AdvertisingRequests } from './collections/AdvertisingRequests'
+import { AdvertisingMaterials } from './collections/AdvertisingMaterials'
 // «Юридическая экспертиза объекта»: закрытые хранилища документов и отчётов —
 // доступ только через маршруты /api/objects/legal/* (см. src/lib/legal-service.ts)
 import { LegalDocuments } from './collections/LegalDocuments'
@@ -82,7 +84,7 @@ export default buildConfig({
     abortOnLimit: true,
     responseOnLimit: `Файл больше ${PHOTO_MAX_LABEL} — допустимы ${PHOTO_FORMATS_LABEL} до ${PHOTO_MAX_LABEL}`,
   },
-  collections: [Users, Media, Objects, Agents, Applications, Tasks, Messages, Blog, News, Pages, Customers, Emails, MailAttachments, AgentTasks, MarketListings, LegalDocuments, LegalReports, Advertisers, Advertisements, AdvertisingRequests, Regions, Settlements],
+  collections: [Users, Media, Objects, Agents, Applications, Tasks, Messages, Blog, News, Pages, Customers, Emails, MailAttachments, AgentTasks, MarketListings, LegalDocuments, LegalReports, Advertisers, Advertisements, AdvertisingRequests, AdvertisingMaterials, Regions, Settlements],
   globals: [SiteSettings, MailSettings, AgentSettings, NewsSettings, PlatformSettings],
   editor: lexicalEditor(),
   i18n: {
