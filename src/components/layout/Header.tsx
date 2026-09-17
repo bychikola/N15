@@ -321,8 +321,16 @@ export const Header: FC = () => {
           />
         </Link>
 
-        {/* Desktop nav */}
-        <nav className="hidden lg:flex items-center gap-6">
+        {/* Desktop nav: только пункты меню — кнопки, переключатели языка и
+            темы, музыка вынесены в отдельный блок у правого края (см. ниже).
+
+            Отступ слева фиксированный (42px, с xl — 56px): логотип больше не
+            «липнет» к первому пункту, но и на широких экранах зазор не растёт
+            сам по себе — меню читается как продолжение логотипа. Свободное
+            место целиком забирает ml-auto правого блока (auto-отступы
+            разбирают его раньше, чем justify-between контейнера), поэтому
+            шапка остаётся спокойной, а не забитой от края до края */}
+        <nav className="hidden lg:flex items-center gap-6 xl:gap-7 ml-12 xl:ml-16">
           {/* «Недвижимость»: выпадающий список подразделов по наведению и клику */}
           <div
             className="relative"
@@ -463,57 +471,67 @@ export const Header: FC = () => {
               {link.label}
             </Link>
           ))}
-          {/* Правая группа: калькулятор, звонок и «Личный кабинет». Звонок —
-              честная tel:-ссылка на общий номер 8-958-116-15-15 (открывает
-              набор номера на телефоне, системную программу звонков — на
-              компьютере); сам номер текстом не выводится. До xl подпись
-              скрыта, чтобы не теснить меню на нешироких экранах. У самого
-              длинного пункта — «Ипотечного калькулятора» — подпись
-              появляется только с 2xl: на экранах до 2xl это компактная
-              иконка (как «Позвонить нам» до xl), полный текст пункта
-              доступен в мобильном меню */}
-          <div className="ml-4 flex items-center gap-2">
-            <a
-              href={SITE_PHONE_TEL}
-              aria-label={t.nav.callUs}
-              title={t.nav.callUs}
-              className="n15-cta-green inline-flex items-center gap-2 px-2.5 py-2.5 xl:px-4 xl:py-2 text-sm tracking-wider uppercase border border-[var(--n15-gold)]/40 transition-all duration-300"
-            >
-              {phoneIcon}
-              <span className="hidden xl:inline">{t.nav.callUs}</span>
-            </a>
-            <button
-              type="button"
-              onClick={() => setCalcOpen(true)}
-              aria-label={t.nav.calc}
-              title={t.nav.calc}
-              className="inline-flex items-center gap-2 px-2.5 py-2.5 2xl:px-4 2xl:py-2 text-sm tracking-wider uppercase border border-[var(--n15-gold)]/30 text-[var(--n15-gold)] hover:bg-[var(--n15-gold)]/8 transition-all duration-300"
-            >
-              {calculatorIcon}
-              <span className="hidden 2xl:inline">{t.nav.calc}</span>
-            </button>
-            {/* «Личный кабинет» — компактная иконка (как «Позвонить нам»
-                и «Ипотечный калькулятор» на нешироких экранах): подписи
-                в шапке нет, поэтому кнопка не теснит меню. Переход тот же
-                — /{lang}/lk; назначение кнопки остаётся и текстом подсказки
-                (title), и для скринридеров (aria-label). Родитель relative:
-                бейдж непрочитанных сообщений выносится в угол кнопки */}
-            <Link
-              href={`/${lang}/lk`}
-              aria-label={t.nav.cabinet}
-              title={t.nav.cabinet}
-              className="relative inline-flex items-center px-2.5 py-2.5 border border-[var(--n15-gold)]/30 text-[var(--n15-gold)] hover:bg-[var(--n15-gold)]/8 transition-all duration-300"
-            >
-              {cabinetIcon}
-              <CabinetBadge />
-            </Link>
-          </div>
-          <LangSwitcher className="ml-3" />
-          <ThemeSwitcher className="ml-3" />
+        </nav>
+
+        {/* Правый блок: звонок, калькулятор, кабинет и переключатели языка,
+            темы, музыки — одна группа с единым зазором 10.5px (gap-3), без
+            вложенных подгрупп: кнопки стоят в одном ритме с переключателями.
+            ml-auto прижимает блок к правому краю и забирает всё свободное
+            место шапки (auto-отступы разбирают его раньше justify-between),
+            поэтому меню остаётся у логотипа, а не уезжает к середине.
+
+            Звонок — честная tel:-ссылка на общий номер 8-958-116-15-15
+            (открывает набор номера на телефоне, системную программу звонков —
+            на компьютере); сам номер текстом не выводится. До xl подпись
+            скрыта, чтобы не теснить меню на нешироких экранах */}
+        <div className="hidden lg:flex items-center gap-3 ml-auto">
+          <a
+            href={SITE_PHONE_TEL}
+            aria-label={t.nav.callUs}
+            title={t.nav.callUs}
+            className="n15-cta-green inline-flex items-center gap-2 px-2.5 py-2.5 xl:px-4 xl:py-2 text-sm tracking-wider uppercase border border-[var(--n15-gold)]/40 transition-all duration-300"
+          >
+            {phoneIcon}
+            <span className="hidden xl:inline">{t.nav.callUs}</span>
+          </a>
+
+          {/* «Ипотечный калькулятор» — компактная иконка, как «Личный
+              кабинет»: подпись занимала 238px (больше четырёх пунктов меню
+              вместе) и распирала шапку, из-за чего меню прижималось к
+              логотипу вплотную. Иконка узнаваема, а полный текст остаётся
+              в подсказке (title), у скринридеров (aria-label) и в мобильном
+              меню */}
+          <button
+            type="button"
+            onClick={() => setCalcOpen(true)}
+            aria-label={t.nav.calc}
+            title={t.nav.calc}
+            className="inline-flex items-center px-2.5 py-2.5 border border-[var(--n15-gold)]/30 text-[var(--n15-gold)] hover:bg-[var(--n15-gold)]/8 transition-all duration-300"
+          >
+            {calculatorIcon}
+          </button>
+
+          {/* «Личный кабинет» — компактная иконка (как и калькулятор):
+              подписи в шапке нет, поэтому кнопка не теснит меню. Переход
+              тот же — /{lang}/lk; назначение кнопки остаётся и текстом
+              подсказки (title), и для скринридеров (aria-label). Родитель
+              relative: бейдж непрочитанных сообщений выносится в угол
+              кнопки */}
+          <Link
+            href={`/${lang}/lk`}
+            aria-label={t.nav.cabinet}
+            title={t.nav.cabinet}
+            className="relative inline-flex items-center px-2.5 py-2.5 border border-[var(--n15-gold)]/30 text-[var(--n15-gold)] hover:bg-[var(--n15-gold)]/8 transition-all duration-300"
+          >
+            {cabinetIcon}
+            <CabinetBadge />
+          </Link>
+          <LangSwitcher />
+          <ThemeSwitcher />
           {/* Фоновая музыка: трек зависит от языка сайта, автозапуска нет.
               Ползунок громкости и подпись о лицензии — при наведении на кнопку */}
           <MusicPlayer />
-        </nav>
+        </div>
 
         {/* Mobile hamburger: точный inline-стиль, чтобы крест всегда был ровно по центру кнопки */}
         <button

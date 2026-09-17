@@ -82,7 +82,9 @@ export const MusicPlayer: FC<{ variant?: 'desktop' | 'mobile' }> = ({ variant = 
 
   return (
     // group: ползунок и подпись о лицензии раскрываются при наведении на кнопку
-    <div className="group relative ml-3">
+    // Отступ слева задаёт родитель (шапка — через gap), свой ml-3 здесь
+    // ломал бы равномерность зазоров правого блока
+    <div className="group relative">
       <button
         type="button"
         onClick={() => void toggleMusic()}
