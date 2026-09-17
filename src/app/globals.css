@@ -449,7 +449,18 @@ html[data-theme='dark'] span.theme-icon-moon { display: block; }
    правил ниже, поэтому пропорции блоков и ровная сетка сохранены; сами
    тексты и названия не меняются. */
 
-.lp-section { background: #F6F2E9; color: #24231f; }
+/* Единый размер «прямоугольных» блоков главной — карточек категорий,
+   регионов «Межрегиональной недвижимости» и направлений услуг: одна высота,
+   одни отступы, один кегль названия. Значения заданы переменными в одном
+   месте, поэтому новый регион из CRM и новое направление в разметке
+   получают ровно такой же блок без правок стилей. */
+.lp-section {
+  background: #F6F2E9; color: #24231f;
+  --lp-tile-h: 132px;
+  --lp-tile-pad-y: 20px;
+  --lp-tile-pad-x: 21px;
+  --lp-tile-font: clamp(16px, 1.7vw, 20px);
+}
 .lp-container { width: min(90%, 1050px); margin: 0 auto; }
 .lp-eyebrow {
   margin: 0 0 16px; color: #a87c3f; text-transform: uppercase;
@@ -493,20 +504,47 @@ html[data-theme='dark'] span.theme-icon-moon { display: block; }
 /* «Подберите недвижимость» */
 .lp-objects { width: min(90%, 1050px); margin: 86px auto; }
 .lp-objects-heading { margin-bottom: 36px; }
-/* Сетка 2×2: светлые карточки категорий с тонкими рамками; каждая — ссылка
-   на каталог с фильтром по категории, стрелка справа указывает переход */
-.lp-categories { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
-.lp-category-card {
-  display: grid; grid-template-columns: 33px 1fr 29px; align-items: center; gap: 15px;
-  min-height: 108px; padding: 23px 21px; background: rgba(255, 255, 255, .58);
-  border: 1px solid #d8d1c4; transition: background .25s, border-color .25s;
+/* ── Прямоугольные блоки главной — один размер ───────────────────────
+   Карточки категорий («Подберите недвижимость»), регионов
+   («Межрегиональная недвижимость») и направлений услуг («Дизайн и ремонт
+   под ключ», «Юридические услуги») — блоки одного размера: одна ширина
+   (колонка сетки), одна высота, одни отступы, один кегль названия
+   (--lp-tile-* у .lp-section). Слева — номер или название, справа —
+   стрелка перехода (у карточек-гармошек услуг — «плюс» раскрытия).
+   Сетка ровная, в 2 колонки: блок занимает свою колонку и на всю ширину
+   не растягивается; ряд заданной высоты (grid-auto-rows), поэтому блоки
+   одной высоты, а перечень внутри карточки услуг раскрывается в её же
+   габаритах и соседей не двигает. */
+.lp-categories, .lp-services-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 15px;
+  grid-auto-rows: var(--lp-tile-h);
 }
-.lp-category-card h3 { margin: 0; font-family: 'New Standard', Georgia, serif; font-weight: 400; font-size: clamp(17px, 1.9vw, 23px); color: inherit; transition: color .25s; }
+.lp-category-card, .lp-services-card {
+  box-sizing: border-box; height: var(--lp-tile-h);
+  background: rgba(255, 255, 255, .58); border: 1px solid #d8d1c4;
+  transition: background .25s, border-color .25s;
+}
+.lp-category-card {
+  display: grid; grid-template-columns: 33px 1fr 29px; align-items: center;
+  gap: 15px; padding: var(--lp-tile-pad-y) var(--lp-tile-pad-x);
+}
+.lp-category-card h3, .lp-services-title {
+  margin: 0; min-width: 0; overflow-wrap: break-word;
+  font-family: 'New Standard', Georgia, serif; font-weight: 400;
+  font-size: var(--lp-tile-font); line-height: 1.15; letter-spacing: -.01em;
+  color: inherit; transition: color .25s;
+}
 .lp-category-num { font-size: 8px; color: #a87c3f; letter-spacing: .15em; }
-.lp-category-card i { justify-self: end; color: #a87c3f; font: normal 300 18px Arial; transition: transform .25s, color .25s; }
-.lp-category-card:hover, .lp-category-card:focus-visible { background: #fff; border-color: #b9a98c; }
-.lp-category-card:hover h3, .lp-category-card:focus-visible h3 { color: var(--n15-green); }
-.lp-category-card:hover i, .lp-category-card:focus-visible i { color: var(--n15-green); transform: translateX(4px); }
+/* Стрелка перехода и «плюс» раскрытия — одного размера и цвета */
+.lp-category-card i, .lp-services-arrow { color: #a87c3f; font: normal 300 18px Arial; transition: transform .25s, color .25s; }
+.lp-category-card i { justify-self: end; }
+.lp-category-card:hover, .lp-category-card:focus-visible,
+.lp-services-card:hover, .lp-services-card[open] { background: #fff; border-color: #b9a98c; }
+.lp-category-card:hover h3, .lp-category-card:focus-visible h3,
+.lp-services-card:hover .lp-services-title, .lp-services-card[open] .lp-services-title { color: var(--n15-green); }
+.lp-category-card:hover i, .lp-category-card:focus-visible i,
+.lp-services-card:hover .lp-services-arrow, .lp-services-card[open] .lp-services-arrow { color: var(--n15-green); }
+.lp-category-card:hover i, .lp-category-card:focus-visible i { transform: translateX(4px); }
 
 /* Избранные объекты — карточки и сетка «как в каталоге» (ObjectCard).
    Колонки (телефон 1 / планшет 2 / ноутбук 3 / компьютер 4) заданы
@@ -677,25 +715,37 @@ html[data-theme='dark'] .lp-featured .object-card { border: 0; }
 .lp-snt-cat[open] summary i { transform: rotate(45deg); }
 .lp-snt-cat .lp-places { margin: 0; padding: 4px 0 16px; }
 
-/* Услуги: две компактные карточки-гармошки рядом — «Дизайн и ремонт под
-   ключ» и «Юридические услуги». Блок уже остальных секций (900px), карточки
-   не растягиваются на всю ширину экрана; каждая — внешний прямоугольник,
-   перечень услуг — внутренние строки-ссылки. Перечень раскрывается нажатием
-   на заголовок: <details>, поэтому без клиентского JS. Карточка раскрывается
-   сама по себе — соседняя не тянется за ней по высоте (align-items: start) */
-.lp-services { width: min(90%, 740px); margin: 86px auto; }
-.lp-services-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; align-items: start; }
-.lp-services-card { background: rgba(255, 255, 255, .58); border: 1px solid #d8d1c4; transition: background .25s, border-color .25s; }
-.lp-services-card:hover, .lp-services-card[open] { background: #fff; border-color: #b9a98c; }
-.lp-services-head { display: flex; align-items: center; justify-content: space-between; gap: 13px; min-height: 64px; padding: 16px 18px; cursor: pointer; list-style: none; }
+/* Услуги: карточки-гармошки рядом — «Дизайн и ремонт под ключ» и
+   «Юридические услуги». Размер блока — общий для главной (см.
+   «Прямоугольные блоки главной»): та же ширина колонки, высота, отступы и
+   кегль, что у карточек категорий и регионов. Перечень услуг раскрывается
+   нажатием на заголовок: <details>, поэтому без клиентского JS, — и
+   прокручивается внутри карточки. Карточка не растягивается на всю ширину
+   и не меняет габаритов при раскрытии: соседняя остаётся того же размера. */
+.lp-services { width: min(90%, 1050px); margin: 86px auto; }
+.lp-services-card { display: flex; flex-direction: column; overflow: hidden; }
+.lp-services-head { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 15px; padding: var(--lp-tile-pad-y) var(--lp-tile-pad-x); cursor: pointer; list-style: none; }
 .lp-services-head::-webkit-details-marker { display: none; }
-.lp-services-title { margin: 0; font-family: 'New Standard', Georgia, serif; font-weight: 400; font-size: clamp(15px, 1.5vw, 18px); letter-spacing: -.01em; line-height: 1.15; color: inherit; transition: color .25s; }
-.lp-services-card:hover .lp-services-title, .lp-services-card[open] .lp-services-title { color: var(--n15-green); }
-/* Стрелка раскрытия — тонкий шеврон из двух граней; в открытой карточке
-   разворачивается вверх */
-.lp-services-arrow { flex: none; width: 6px; height: 6px; margin-right: 2px; border-right: 1px solid #a87c3f; border-bottom: 1px solid #a87c3f; transform: rotate(45deg); transition: transform .25s; }
-.lp-services-card[open] .lp-services-arrow { transform: rotate(-135deg); }
-.lp-services-list { list-style: none; margin: 0; padding: 0 15px 15px; display: grid; gap: 7px; }
+/* Рамка фокуса — внутрь карточки: её габарит обрезает внешние рамки
+   (overflow: hidden), а с клавиатуры заголовок должен быть виден */
+.lp-services-head:focus-visible { outline: 2px solid var(--n15-green); outline-offset: -2px; }
+/* «Плюс» раскрытия в открытой карточке разворачивается в «×» — как у
+   списков «Ближний пригород» и регионов «Межрегиональной недвижимости» */
+.lp-services-arrow { flex: none; }
+.lp-services-card[open] .lp-services-arrow { transform: rotate(45deg); }
+/* Перечень занимает остаток карточки и прокручивается внутри неё — высота
+   самой карточки при раскрытии не меняется */
+.lp-services-list {
+  flex: 1; min-height: 0; overflow-y: auto; align-content: start;
+  list-style: none; margin: 0; padding: 0 var(--lp-tile-pad-x) var(--lp-tile-pad-y);
+  display: grid; gap: 7px;
+  /* Полоса прокрутки перечня — светлая в любой теме: лендинг всегда
+     кремовый, а общая полоса сайта в тёмной теме тёмная */
+  scrollbar-width: thin; scrollbar-color: #b9a98c #EFE8D9;
+}
+.lp-services-list::-webkit-scrollbar { width: 5px; }
+.lp-services-list::-webkit-scrollbar-track { background: #EFE8D9; }
+.lp-services-list::-webkit-scrollbar-thumb { background: #b9a98c; border-radius: 3px; }
 .lp-services-row { display: flex; align-items: center; justify-content: space-between; gap: 11px; padding: 10px 11px; background: rgba(255, 255, 255, .66); border: 1px solid #e2dbcd; color: #24231f; font-size: 12px; line-height: 1.35; transition: background .25s, border-color .25s, color .25s; }
 .lp-services-row i { color: #a87c3f; font: normal 300 12px Arial; transition: transform .25s, color .25s; }
 .lp-services-row:hover, .lp-services-row:focus-visible { background: #fff; border-color: #b9a98c; color: var(--n15-green); }
@@ -796,17 +846,16 @@ html[data-theme='dark'] .lp-featured .object-card { border: 0; }
   .lp-objects { width: auto; margin: 59px 18px; }
   .lp-objects-heading { margin-bottom: 23px; }
   .lp-objects-heading h2 { font-size: 34px; }
-  /* На телефоне карточки категорий — компактный вертикальный список:
-     одна колонка, узкие отступы */
-  .lp-categories { grid-template-columns: 1fr; gap: 10px; }
-  .lp-category-card { grid-template-columns: 23px 1fr 21px; gap: 8px; min-height: 74px; padding: 16px 15px; }
-  .lp-category-card h3 { font-size: 20px; }
-  /* На телефоне карточки услуг — в один столбик, компактнее */
+  /* На телефоне сетка блоков остаётся ровной, в 2 колонки: блоки не
+     растягиваются на всю ширину, единый размер сохраняется — компактнее
+     только высота, отступы и кегль (--lp-tile-* у .lp-section) */
+  .lp-section { --lp-tile-h: 122px; --lp-tile-pad-y: 14px; --lp-tile-pad-x: 15px; --lp-tile-font: clamp(13px, 2.5vw, 16px); }
+  .lp-categories, .lp-services-grid { gap: 10px; }
+  .lp-category-card { grid-template-columns: 18px 1fr 16px; gap: 7px; }
+  .lp-category-card i, .lp-services-arrow { font-size: 15px; }
+  .lp-services-head { gap: 10px; }
   .lp-services { width: auto; margin: 59px 18px; }
-  .lp-services-grid { grid-template-columns: 1fr; gap: 10px; }
-  .lp-services-head { min-height: 56px; padding: 13px 15px; }
-  .lp-services-title { font-size: 16px; }
-  .lp-services-list { padding: 0 12px 12px; gap: 5px; }
+  .lp-services-list { gap: 5px; }
   .lp-services-row { padding: 9px 10px; font-size: 11px; }
   .lp-cards { width: auto; margin: 0 18px; }
   /* «Показать все →» на телефоне — под заголовком, слева (в одну строку
@@ -840,6 +889,10 @@ html[data-theme='dark'] .lp-featured .object-card { border: 0; }
   .lp-hero h1 { font-size: 36px; }
   .lp-eyebrow { letter-spacing: .22em; }
   .lp-hero-copy { font-size: 13px; }
+  /* Узкий телефон: колонка номера отдана названию — иначе длинные слова
+     («Коммерческая», «недвижимость») не помещаются в половину экрана */
+  .lp-category-card { grid-template-columns: 1fr 16px; }
+  .lp-category-num { display: none; }
 }
 
 /* ── Межрегиональная недвижимость: регионы и населённые пункты ──
