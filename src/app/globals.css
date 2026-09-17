@@ -475,15 +475,43 @@ html[data-theme='dark'] span.theme-icon-moon { display: block; }
 .lp-muted { color: #777267; }
 
 /* Hero */
-.lp-hero { min-height: 490px; position: relative; display: flex; align-items: center; overflow: hidden; color: #fff; }
+/* Первый экран начинается под фиксированной шапкой: отступ сверху равен её
+   высоте (h-20 = 5rem; на десктопе корневой кегль 87.5% → 70px, на телефоне
+   100% → 80px) плюс воздух. Подпись «Владикавказ · Северная Осетия — Алания»
+   не заходит под шапку и не прилипает к ней на любой ширине экрана.
+   Отступ снизу больше высоты плашки в правом нижнем углу (.lp-hero-note) —
+   надписи не накладываются друг на друга. */
+.lp-hero {
+  --lp-hero-head: 5rem;   /* высота фиксированной шапки .n15-header (h-20) */
+  --lp-hero-air-top: 48px;   /* воздух между шапкой и верхней подписью */
+  --lp-hero-air-bottom: 52px; /* воздух под кнопками (больше плашки снизу) */
+  min-height: 490px; position: relative; display: flex; align-items: center;
+  overflow: hidden; color: #fff; box-sizing: border-box;
+  padding-top: calc(var(--lp-hero-head) + var(--lp-hero-air-top));
+  padding-bottom: var(--lp-hero-air-bottom);
+}
 .lp-hero-visual { position: absolute; inset: 0; background: url('/img/hero.png') center/cover; transform: scale(1.02); }
 .lp-hero-overlay { position: absolute; inset: 0; background: linear-gradient(90deg, rgba(20,20,18,.82), rgba(20,20,18,.4) 50%, rgba(20,20,18,.1)); }
-.lp-hero-content { width: min(90%, 1050px); margin: 0 auto; position: relative; z-index: 2; }
-.lp-hero h1 { margin: 0; max-width: 615px; font-family: 'New Standard', Georgia, serif; font-weight: 400; letter-spacing: -.03em; font-size: clamp(50px, 6.3vw, 96px); line-height: .92; color: #fff; }
-.lp-hero-copy { max-width: 375px; margin: 21px 0 25px; color: rgba(255,255,255,.78); font-size: 15px; line-height: 1.7; }
-/* Кнопки героя в одном ряду: «Выбрать объект» и «Ваша реклама» — одного
-   размера и оформления (.lp-button); на узких экранах встают друг под друга */
-.lp-hero-actions { display: flex; flex-wrap: wrap; gap: 12px; }
+/* Контент — одна левая колонка: подпись, заголовок, описание и кнопки
+   выровнены по левому краю друг друга. Длинные слова переносятся, а не
+   вылезают за экран (overflow-wrap наследуется детьми) */
+.lp-hero-content {
+  width: min(90%, 1050px); max-width: 100%; margin: 0 auto;
+  position: relative; z-index: 2; box-sizing: border-box; overflow-wrap: break-word;
+}
+/* Заголовок героя — прежний крупный кегль (не уменьшается): ширина ограничена
+   экраном (max-width: min(615px, 100%)), поэтому строка не обрезается */
+.lp-hero h1 { margin: 0; max-width: min(615px, 100%); font-family: 'New Standard', Georgia, serif; font-weight: 400; letter-spacing: -.03em; font-size: clamp(50px, 6.3vw, 96px); line-height: .92; color: #fff; }
+/* Описание — по левому краю заголовка (оба блока начинаются от одной левой
+   границы), комфортная ширина строки и межстрочный интервал; шире экрана
+   колонка не становится — на телефоне текст переносится, а не обрезается */
+.lp-hero-copy { max-width: min(560px, 100%); margin: 21px 0 26px; color: rgba(255,255,255,.78); font-size: 15px; line-height: 1.75; text-align: left; }
+/* Кнопки героя — одной линией под описанием: «Выбрать объект» и «Ваша реклама»
+   одного оформления (.lp-button) и одной высоты (растягиваются по строке);
+   не помещаются в строку — переносятся, а на узком телефоне встают в столбик
+   во всю ширину (см. медиазапросы) */
+.lp-hero-actions { display: flex; flex-wrap: wrap; align-items: stretch; gap: 12px; }
+.lp-hero-actions .lp-button { min-height: 44px; line-height: 1.6; }
 .lp-hero-note { position: absolute; z-index: 2; right: 5.2vw; bottom: 27px; margin: 0; text-transform: uppercase; letter-spacing: .28em; font-size: 9px; color: rgba(255,255,255,.7); }
 
 /* Кнопки-CTA («Выбрать объект», «Ваша реклама», «Позвонить» в контактах) —
@@ -848,7 +876,9 @@ html[data-theme='dark'] .lp-featured .object-card { border: 0; }
   .lp-hero { min-height: 480px; align-items: flex-end; padding-bottom: 57px; }
   .lp-hero-content { width: calc(100% - 36px); margin: 0 18px; box-sizing: border-box; }
   .lp-hero h1 { font-size: 54px; }
-  .lp-hero-copy { max-width: 300px; font-size: 15px; margin: 18px 0 21px; }
+  /* Описание на планшете и телефоне — та же колонка, что на компьютере
+     (прежняя узкая была вдвое уже заголовка и выглядела «прижатой») */
+  .lp-hero-copy { max-width: min(560px, 100%); font-size: 15px; margin: 18px 0 24px; }
   .lp-hero-note { display: none; }
   .lp-objects { width: auto; margin: 59px 18px; }
   .lp-objects-heading { margin-bottom: 23px; }
@@ -888,9 +918,6 @@ html[data-theme='dark'] .lp-featured .object-card { border: 0; }
   .lp-about-copy { padding: 44px 18px; }
   .lp-fatima-card { left: 12px; right: 12px; bottom: 12px; width: auto; max-width: 300px; font-size: 13px; }
   .lp-fatima-card-title { font-size: 18px; }
-  /* Кнопки героя на телефоне — в столбик во всю ширину: в одну строку
-     с текстом они не помещаются */
-  .lp-hero-actions { flex-direction: column; align-items: stretch; gap: 10px; }
   .lp-contact { grid-template-columns: 1fr; gap: 21px; padding: 56px 18px; }
   .lp-footer { flex-wrap: wrap; gap: 13px; padding: 30px 18px; }
 }
@@ -901,6 +928,10 @@ html[data-theme='dark'] .lp-featured .object-card { border: 0; }
   .lp-hero h1 { font-size: 46px; }
   .lp-eyebrow { letter-spacing: .22em; }
   .lp-hero-copy { font-size: 15px; }
+  /* Узкий телефон: пара кнопок героя в одну строку не помещается — встают
+     в столбик во всю ширину, одной высоты (на планшете и компьютере —
+     одной линией) */
+  .lp-hero-actions { flex-direction: column; align-items: stretch; gap: 10px; }
   /* Узкий телефон: колонка номера отдана названию — иначе длинные слова
      («Коммерческая», «недвижимость») не помещаются в половину экрана */
   .lp-category-card { grid-template-columns: 1fr 16px; }
