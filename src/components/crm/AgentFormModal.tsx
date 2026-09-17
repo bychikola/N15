@@ -3,6 +3,7 @@
 import { useRef, useState, type FC } from 'react'
 import type { Dict } from '@/i18n/dictionaries'
 import type { AgentCard } from '@/lib/agents-service'
+import { maskRuPhoneInput } from '@/lib/phone'
 
 /**
  * Модальное окно профиля агента — одно на создание и правку:
@@ -198,9 +199,12 @@ export const AgentFormModal: FC<Props> = ({ t, agent, onClose, onSaved }) => {
             {t.crm.agAddPosition}
             <input value={fields.position} onChange={(e) => setField('position', e.target.value)} style={inputStyle} placeholder={t.crm.agAddPositionPh} />
           </label>
+          {/* Телефон и WhatsApp — с маской: номер сразу виден в том же виде,
+              в каком попадёт в карточку («+7 (918) 828-40-88»). Ссылку wa.me
+              маска не трогает — значения с буквами пропускает как есть */}
           <label style={labelStyle}>
             {t.crm.agAddPhone}
-            <input inputMode="tel" value={fields.phone} onChange={(e) => setField('phone', e.target.value)} style={inputStyle} />
+            <input inputMode="tel" value={fields.phone} onChange={(e) => setField('phone', maskRuPhoneInput(e.target.value))} style={inputStyle} placeholder="+7 (___) ___-__-__" />
           </label>
           <label style={labelStyle}>
             {t.crm.agAddEmail}
@@ -212,7 +216,7 @@ export const AgentFormModal: FC<Props> = ({ t, agent, onClose, onSaved }) => {
           </label>
           <label style={labelStyle}>
             {t.crm.agAddWhatsapp}
-            <input value={fields.whatsapp} onChange={(e) => setField('whatsapp', e.target.value)} style={inputStyle} placeholder="https://wa.me/7…" />
+            <input value={fields.whatsapp} onChange={(e) => setField('whatsapp', maskRuPhoneInput(e.target.value))} style={inputStyle} placeholder="+7 (___) ___-__-__ или https://wa.me/7…" />
           </label>
         </div>
 

@@ -1,4 +1,5 @@
 import type { CollectionConfig } from 'payload'
+import { formatRuPhone } from '@/lib/phone'
 
 export const Agents: CollectionConfig = {
   slug: 'agents',
@@ -13,6 +14,36 @@ export const Agents: CollectionConfig = {
     create: ({ req: { user } }) => !!user,
     update: ({ req: { user } }) => !!user,
     delete: ({ req: { user } }) => user?.role === 'admin',
+  },
+  hooks: {
+    /**
+     * Телефоны приводим к одному виду («+7 (918) 828-40-88») при сохранении.
+     * Хук стоит на коллекции, а не в маршруте CRM: тогда одинаково
+     * нормализуются и правка из админки, и запись из CRM, и запрос через API.
+     *
+     * WhatsApp хранит и ссылку wa.me: её formatRuPhone не трогает (значение
+     * с буквами возвращается как есть), а номер приводит к тому же виду.
+     */
+    beforeChange: [
+      ({ data }) => {
+        if (typeof data?.phone === 'string') data.phone = formatRuPhone(data.phone)
+        if (typeof data?.whatsapp === 'string') data.whatsapp = formatRuPhone(data.whatsapp)
+        return data
+      },
+    ],
+    /**
+     * То же на чтении: записи, сохранённые до нормализации (например,
+     * «+79188255353»), показываются ровным номером без разовой правки базы,
+     * а после первого же сохранения карточки значение станет каноничным
+     * уже в самой записи.
+     */
+    afterRead: [
+      ({ doc }) => {
+        if (typeof doc?.phone === 'string') doc.phone = formatRuPhone(doc.phone)
+        if (typeof doc?.whatsapp === 'string') doc.whatsapp = formatRuPhone(doc.whatsapp)
+        return doc
+      },
+    ],
   },
   fields: [
     {
