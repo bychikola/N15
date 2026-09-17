@@ -123,10 +123,14 @@ function agentId(v: string): number | null {
   return Number.isInteger(n) && n > 0 ? n : null
 }
 
-// Подписи фильтров всегда в одну строку (whitespace-nowrap), чтобы все фильтры были одинаковой высоты.
-// Для длинных подписей (например «Населённый пункт») — компактный вариант с меньшим шрифтом.
+// Подписи фильтров — до двух строк: длинная подпись («Садоводческие
+// товарищества») переносится на вторую строку, а не выходит за рамку кнопки.
+// Слот подписи у всех фильтров одинаковый — высота двух строк (min-height),
+// поэтому прямоугольники остаются одного размера, а подписи и строки значений
+// («Любой») стоят на одних линиях. Для длинных подписей (например «Населённый
+// пункт» и «Садоводческие товарищества») — компактный вариант с меньшим кеглем.
 const labelCls = (compact = false) =>
-  `${compact ? 'text-[9px] tracking-[0.15em]' : 'text-[10px] tracking-[0.2em]'} uppercase text-[var(--n15-muted)] whitespace-nowrap`
+  `${compact ? 'text-[9px] tracking-[0.15em]' : 'text-[10px] tracking-[0.2em]'} uppercase leading-[1.5] min-h-[30px] text-[var(--n15-muted)]`
 const ddBtnCls = 'flex items-center justify-between gap-3 w-full px-4 py-2.5 text-sm text-[var(--n15-silver)] border border-[var(--n15-gold)]/20 bg-[var(--n15-black)]/40 hover:border-[var(--n15-gold)]/40 transition-colors'
 
 /** Одна строка раскрытого списка: заголовок группы (СНТ/СНО/ДНТ — не
@@ -157,9 +161,11 @@ function Dropdown({ label, value, options, groups, onSelect, compactLabel }: {
   return (
     <div className="relative">
       <button type="button" onClick={() => setOpen(!open)} className={ddBtnCls} aria-expanded={open}>
-        <span className="flex flex-col items-start">
-          <span className={labelCls(compactLabel)}>{label}</span>
-          <span>{current?.label ?? 'Любой'}</span>
+        {/* min-w-0 — колонка подписи сжимается под ширину кнопки, подпись и
+            значение переносятся по словам (break-words) и не выходят за рамку */}
+        <span className="flex flex-col items-start min-w-0">
+          <span className={labelCls(compactLabel) + ' break-words'}>{label}</span>
+          <span className="break-words">{current?.label ?? 'Любой'}</span>
         </span>
         <span className={`text-[10px] transition-transform ${open ? 'rotate-180' : ''}`}>▼</span>
       </button>
