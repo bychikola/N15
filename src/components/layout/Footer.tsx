@@ -59,9 +59,13 @@ export const Footer: FC = () => {
             </p>
           </div>
 
-          {/* Колонка «Компания» */}
+          {/* Колонка «Компания». Цвет заголовка не задаём классом: h1–h6
+              берут его из токена --heading (в футере это кремовый
+              var(--n15-on-green)), а правила Tailwind лежат в @layer utilities
+              и всё равно проигрывают обычному правилу h1–h6 из globals.css —
+              класс text-[...] здесь был бы мёртвым */}
           <div className="min-w-0">
-            <h4 className="text-sm tracking-[0.2em] uppercase text-[var(--n15-gold)] mb-6">
+            <h4 className="text-sm tracking-[0.2em] uppercase mb-6">
               {t.footer.company}
             </h4>
             <ul className="flex flex-col gap-4">
