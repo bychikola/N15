@@ -445,31 +445,31 @@ html[data-theme='dark'] span.theme-icon-moon { display: block; }
 
 /* Главная собрана компактно: прямоугольные блоки (карточки, панели, строки,
    кнопки), их внутренние отступы и расстояния между блоками уменьшены
-   примерно на 18%, заголовки и подписи — на 22%. Коэффициент единый для всех
-   правил ниже, поэтому пропорции блоков и ровная сетка сохранены; сами
+   примерно на 18%. Кегль заголовков и подписей — прежний, крупный: мельче
+   остальных только заголовки секций-сеток «Подберите недвижимость» и
+   «Межрегиональная недвижимость» (см. .lp-objects-heading h2 ниже). Сами
    тексты и названия не меняются. */
 
 /* Единый размер «прямоугольных» блоков главной — карточек категорий,
-   регионов «Межрегиональной недвижимости» и направлений услуг: одна высота,
-   одни отступы, один кегль названия. Значения заданы переменными в одном
-   месте, поэтому новый регион из CRM и новое направление в разметке
-   получают ровно такой же блок без правок стилей. */
+   регионов «Межрегиональной недвижимости» и направлений услуг: одна высота и
+   одни отступы. Значения заданы переменными в одном месте, поэтому новый
+   регион из CRM и новое направление в разметке получают ровно такой же блок
+   без правок стилей; кегль названия у категорий и услуг свой (см. ниже). */
 .lp-section {
   background: #F6F2E9; color: #24231f;
   --lp-tile-h: 132px;
   --lp-tile-pad-y: 20px;
   --lp-tile-pad-x: 21px;
-  --lp-tile-font: clamp(16px, 1.7vw, 20px);
 }
 .lp-container { width: min(90%, 1050px); margin: 0 auto; }
 .lp-eyebrow {
   margin: 0 0 16px; color: #a87c3f; text-transform: uppercase;
-  letter-spacing: .32em; font-size: 8px;
+  letter-spacing: .32em; font-size: 10px;
 }
 .lp-eyebrow-light { color: #d7ba8b; }
 .lp-h2 {
   margin: 0; font-family: 'New Standard', Georgia, serif; font-weight: 400;
-  letter-spacing: -.03em; font-size: clamp(30px, 3.7vw, 51px); line-height: 1.02;
+  letter-spacing: -.03em; font-size: clamp(38px, 4.8vw, 66px); line-height: 1.02;
   color: inherit;
 }
 .lp-muted { color: #777267; }
@@ -479,12 +479,12 @@ html[data-theme='dark'] span.theme-icon-moon { display: block; }
 .lp-hero-visual { position: absolute; inset: 0; background: url('/img/hero.png') center/cover; transform: scale(1.02); }
 .lp-hero-overlay { position: absolute; inset: 0; background: linear-gradient(90deg, rgba(20,20,18,.82), rgba(20,20,18,.4) 50%, rgba(20,20,18,.1)); }
 .lp-hero-content { width: min(90%, 1050px); margin: 0 auto; position: relative; z-index: 2; }
-.lp-hero h1 { margin: 0; max-width: 615px; font-family: 'New Standard', Georgia, serif; font-weight: 400; letter-spacing: -.03em; font-size: clamp(39px, 4.9vw, 75px); line-height: .92; color: #fff; }
-.lp-hero-copy { max-width: 375px; margin: 21px 0 25px; color: rgba(255,255,255,.78); font-size: 12px; line-height: 1.7; }
+.lp-hero h1 { margin: 0; max-width: 615px; font-family: 'New Standard', Georgia, serif; font-weight: 400; letter-spacing: -.03em; font-size: clamp(50px, 6.3vw, 96px); line-height: .92; color: #fff; }
+.lp-hero-copy { max-width: 375px; margin: 21px 0 25px; color: rgba(255,255,255,.78); font-size: 15px; line-height: 1.7; }
 /* Кнопки героя в одном ряду: «Выбрать объект» и «Ваша реклама» — одного
    размера и оформления (.lp-button); на узких экранах встают друг под друга */
 .lp-hero-actions { display: flex; flex-wrap: wrap; gap: 12px; }
-.lp-hero-note { position: absolute; z-index: 2; right: 5.2vw; bottom: 27px; margin: 0; text-transform: uppercase; letter-spacing: .28em; font-size: 8px; color: rgba(255,255,255,.7); }
+.lp-hero-note { position: absolute; z-index: 2; right: 5.2vw; bottom: 27px; margin: 0; text-transform: uppercase; letter-spacing: .28em; font-size: 9px; color: rgba(255,255,255,.7); }
 
 /* Кнопки-CTA («Выбрать объект», «Ваша реклама», «Позвонить» в контактах) —
    глубокий зелёный с кремовой надписью; на тёмном фото и тёмной секции
@@ -493,7 +493,7 @@ html[data-theme='dark'] span.theme-icon-moon { display: block; }
   display: inline-flex; align-items: center; justify-content: space-between; gap: 23px;
   min-width: 160px; padding: 13px 16px; background: var(--n15-green); color: #F6F2E9;
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--n15-green-gold) 42%, transparent);
-  font-size: 9px; text-transform: uppercase; letter-spacing: .13em;
+  font-size: 11px; text-transform: uppercase; letter-spacing: .13em;
   transition: background .2s, box-shadow .2s;
 }
 .lp-button:hover {
@@ -504,12 +504,16 @@ html[data-theme='dark'] span.theme-icon-moon { display: block; }
 /* «Подберите недвижимость» */
 .lp-objects { width: min(90%, 1050px); margin: 86px auto; }
 .lp-objects-heading { margin-bottom: 36px; }
+/* «Подберите недвижимость» и «Межрегиональная недвижимость» — заголовки
+   секций-сеток: намеренно компактнее остальных h2 главной, чтобы не спорить
+   с крупным заголовком героя */
+.lp-objects-heading h2 { font-size: clamp(30px, 3.7vw, 51px); }
 /* ── Прямоугольные блоки главной — один размер ───────────────────────
    Карточки категорий («Подберите недвижимость»), регионов
    («Межрегиональная недвижимость») и направлений услуг («Дизайн и ремонт
    под ключ», «Юридические услуги») — блоки одного размера: одна ширина
-   (колонка сетки), одна высота, одни отступы, один кегль названия
-   (--lp-tile-* у .lp-section). Слева — номер или название, справа —
+   (колонка сетки), одна высота, одни отступы (--lp-tile-* у .lp-section).
+   Слева — номер или название, справа —
    стрелка перехода (у карточек-гармошек услуг — «плюс» раскрытия).
    Сетка ровная, в 2 колонки: блок занимает свою колонку и на всю ширину
    не растягивается; ряд заданной высоты (grid-auto-rows), поэтому блоки
@@ -531,10 +535,14 @@ html[data-theme='dark'] span.theme-icon-moon { display: block; }
 .lp-category-card h3, .lp-services-title {
   margin: 0; min-width: 0; overflow-wrap: break-word;
   font-family: 'New Standard', Georgia, serif; font-weight: 400;
-  font-size: var(--lp-tile-font); line-height: 1.15; letter-spacing: -.01em;
+  line-height: 1.15; letter-spacing: -.01em;
   color: inherit; transition: color .25s;
 }
-.lp-category-num { font-size: 8px; color: #a87c3f; letter-spacing: .15em; }
+/* Кегль названий — прежний, крупный: у коротких названий категорий и
+   регионов он больше, у длинных названий услуг — меньше */
+.lp-category-card h3 { font-size: clamp(22px, 2.4vw, 30px); }
+.lp-services-title { font-size: clamp(19px, 1.9vw, 23px); }
+.lp-category-num { font-size: 9px; color: #a87c3f; letter-spacing: .15em; }
 /* Стрелка перехода и «плюс» раскрытия — одного размера и цвета */
 .lp-category-card i, .lp-services-arrow { color: #a87c3f; font: normal 300 18px Arial; transition: transform .25s, color .25s; }
 .lp-category-card i { justify-self: end; }
@@ -568,20 +576,19 @@ html[data-theme='dark'] span.theme-icon-moon { display: block; }
 /* В лендинге секция всегда светлая — золотая рамка карточек «тёмной темы» не нужна */
 html[data-theme='dark'] .lp-featured .object-card { border: 0; }
 /* Карточки блока «Актуальные объекты» — те же карточки каталога, но на
-   главной они компактнее: внутренние отступы, цена и подписи уменьшены
-   вместе со всем блоком (классы-крючки заданы в ObjectCard) */
+   главной компактнее сам блок: внутренние отступы, цена на фото и
+   расстояния меньше. Кегль подписей карточки — прежний, как в каталоге
+   (размеры заданы классами ObjectCard), здесь только отступы
+   (классы-крючки заданы в ObjectCard) */
 .lp-featured .object-card__body { padding: 10px 13px; }
 .lp-featured .object-card__price-wrap { bottom: 10px; left: 13px; right: 13px; }
-.lp-featured .object-card__price { font-size: 23px; }
-.lp-featured .object-card h3 { font-size: 14px; margin-bottom: 3px; }
-.lp-featured .object-card__addr { font-size: 10px; margin-bottom: 5px; }
-.lp-featured .object-card__meta { font-size: 8px; margin-bottom: 6px; }
+.lp-featured .object-card h3 { margin-bottom: 3px; }
+.lp-featured .object-card__addr { margin-bottom: 5px; }
+.lp-featured .object-card__meta { margin-bottom: 6px; }
 .lp-featured .object-card__agent { gap: 6px; padding-top: 6px; }
 .lp-featured .object-card__agent img,
 .lp-featured .object-card__avatar { width: 24px; height: 24px; }
-.lp-featured .object-card__avatar { font-size: 8px; }
-.lp-featured .object-card__agent-name { font-size: 10px; }
-.lp-featured .object-card__pill { top: .45rem; left: .45rem; padding: .25rem .55rem; font-size: 7px; }
+.lp-featured .object-card__pill { top: .45rem; left: .45rem; padding: .25rem .55rem; }
 /* Шапка блока «Актуальные объекты»: слева заголовок (eyebrow + h2), справа —
    кнопка-ссылка «Показать все →» на каталог (там все опубликованные объекты
    всех категорий и фильтры). flex-wrap страхует узкие экраны; на телефоне
@@ -589,15 +596,15 @@ html[data-theme='dark'] .lp-featured .object-card { border: 0; }
 .lp-featured-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 36px; width: min(90%, 1050px); margin: 0 auto 19px; }
 .lp-featured-title { margin: 0; }
 /* Контурная зелёная кнопка; при наведении заливается, как .lp-button */
-.lp-featured-all { display: inline-flex; align-items: center; gap: 7px; padding: 10px 14px; border: 1px solid var(--n15-green); color: var(--n15-green); font-size: 9px; text-transform: uppercase; letter-spacing: .13em; white-space: nowrap; transition: background .2s, color .2s; }
+.lp-featured-all { display: inline-flex; align-items: center; gap: 7px; padding: 10px 14px; border: 1px solid var(--n15-green); color: var(--n15-green); font-size: 11px; text-transform: uppercase; letter-spacing: .13em; white-space: nowrap; transition: background .2s, color .2s; }
 .lp-featured-all:hover, .lp-featured-all:focus-visible { background: var(--n15-green); color: #F6F2E9; }
 .lp-featured-filter { display: flex; flex-wrap: wrap; align-items: baseline; gap: 13px; margin-top: 10px; }
-.lp-featured-filter-summary { font-size: 9px; color: #777267; }
-.lp-featured-filter-reset { font-size: 8px; text-transform: uppercase; letter-spacing: .13em; color: var(--n15-green); text-decoration: underline; }
+.lp-featured-filter-summary { font-size: 12px; color: #777267; }
+.lp-featured-filter-reset { font-size: 10px; text-transform: uppercase; letter-spacing: .13em; color: var(--n15-green); text-decoration: underline; }
 .lp-cards { width: min(90%, 1050px); margin: 0 auto; }
 /* Подбор по нас. пункту пуст — сообщение вместо карточек-заглушек */
 .lp-featured-empty { display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; }
-.lp-featured-empty-text { margin: 0; font-size: 12px; color: #6f6758; }
+.lp-featured-empty-text { margin: 0; font-size: 15px; color: #6f6758; }
 
 /* Модальное окно «Ипотечный калькулятор» — открывается кнопкой в шапке
    вместо прежнего большого блока-аккордеона на главной. Тёмная карточка
@@ -746,12 +753,12 @@ html[data-theme='dark'] .lp-featured .object-card { border: 0; }
 .lp-services-list::-webkit-scrollbar { width: 5px; }
 .lp-services-list::-webkit-scrollbar-track { background: #EFE8D9; }
 .lp-services-list::-webkit-scrollbar-thumb { background: #b9a98c; border-radius: 3px; }
-.lp-services-row { display: flex; align-items: center; justify-content: space-between; gap: 11px; padding: 10px 11px; background: rgba(255, 255, 255, .66); border: 1px solid #e2dbcd; color: #24231f; font-size: 12px; line-height: 1.35; transition: background .25s, border-color .25s, color .25s; }
+.lp-services-row { display: flex; align-items: center; justify-content: space-between; gap: 11px; padding: 10px 11px; background: rgba(255, 255, 255, .66); border: 1px solid #e2dbcd; color: #24231f; font-size: 14px; line-height: 1.35; transition: background .25s, border-color .25s, color .25s; }
 .lp-services-row i { color: #a87c3f; font: normal 300 12px Arial; transition: transform .25s, color .25s; }
 .lp-services-row:hover, .lp-services-row:focus-visible { background: #fff; border-color: #b9a98c; color: var(--n15-green); }
 .lp-services-row:hover i, .lp-services-row:focus-visible i { color: var(--n15-green); transform: translateX(3px); }
 /* Призыв к консультации — последняя строка юр-карточки, золотом */
-.lp-services-row-cta { color: #a87c3f; text-transform: uppercase; letter-spacing: .14em; font-size: 8px; }
+.lp-services-row-cta { color: #a87c3f; text-transform: uppercase; letter-spacing: .14em; font-size: 10px; }
 
 /* About — кремовая секция (компактная) */
 .lp-about { background: #f3eee3; grid-template-columns: 1fr 1fr; min-height: 345px; display: grid; }
@@ -768,7 +775,7 @@ html[data-theme='dark'] .lp-featured .object-card { border: 0; }
   color: #45423c; background: #f5f0e6;
   border: 1px solid rgba(168, 124, 63, .5); border-radius: 10px;
   box-shadow: 0 22px 44px -20px rgba(13, 12, 8, .55);
-  font-size: 10px; line-height: 1.62;
+  font-size: 12px; line-height: 1.62;
   opacity: 0; visibility: hidden; pointer-events: none;
   transform: translateY(12px);
   transition: opacity .3s ease, transform .3s ease, visibility 0s linear .3s;
@@ -778,7 +785,7 @@ html[data-theme='dark'] .lp-featured .object-card { border: 0; }
 .lp-fatima-card-title {
   margin: 0 0 7px; padding-right: 18px;
   font-family: 'New Standard', Georgia, serif; font-weight: 400;
-  font-size: 13px; line-height: 1.32; letter-spacing: -.01em; color: #24231f;
+  font-size: 17px; line-height: 1.32; letter-spacing: -.01em; color: #24231f;
 }
 .lp-fatima-card--open {
   opacity: 1; visibility: visible; pointer-events: auto; transform: none;
@@ -795,7 +802,7 @@ html[data-theme='dark'] .lp-featured .object-card { border: 0; }
   display: grid; place-items: center; cursor: pointer;
   color: #97692d; background: transparent;
   border: 1px solid rgba(151, 105, 45, .4); border-radius: 50%;
-  font-size: 12px; line-height: 1;
+  font-size: 15px; line-height: 1;
 }
 .lp-fatima-card-close:hover { background: rgba(151, 105, 45, .12); }
 @media (prefers-reduced-motion: reduce) {
@@ -803,34 +810,34 @@ html[data-theme='dark'] .lp-featured .object-card { border: 0; }
 }
 .lp-about-copy { flex-direction: column; justify-content: center; padding: 43px max(3.6vw, 29px); display: flex; }
 .lp-about-copy h2 { margin: 0 0 18px; color: inherit; }
-.lp-about-copy > p { color: #777267; line-height: 1.8; max-width: 450px; font-size: 13px; }
+.lp-about-copy > p { color: #777267; line-height: 1.8; max-width: 450px; }
 /* Тонкие зелёные линии вокруг девиза и направлений */
 .lp-signature { border-top: 1px solid color-mix(in srgb, var(--n15-green) 28%, transparent); border-bottom: 1px solid color-mix(in srgb, var(--n15-green) 28%, transparent); margin: 20px 0 4px; padding: 14px 0; }
-.lp-signature span { color: #a87c3f; text-transform: uppercase; letter-spacing: .18em; margin-bottom: 7px; font-size: 8px; display: block; }
-.lp-signature p { color: #24231f !important; margin: 0 !important; font-family: 'New Standard', Georgia, serif; font-weight: 400; font-size: 12px; line-height: 1.5; }
+.lp-signature span { color: #a87c3f; text-transform: uppercase; letter-spacing: .18em; margin-bottom: 7px; font-size: 9px; display: block; }
+.lp-signature p { color: #24231f !important; margin: 0 !important; font-family: 'New Standard', Georgia, serif; font-weight: 400; font-size: 16px; line-height: 1.5; }
 .lp-directions { border-top: 1px solid color-mix(in srgb, var(--n15-green) 28%, transparent); border-bottom: 1px solid color-mix(in srgb, var(--n15-green) 28%, transparent); margin-top: 21px; }
-.lp-directions summary { padding: 13px 0; display: flex; justify-content: space-between; cursor: pointer; list-style: none; font-family: 'New Standard', Georgia, serif; font-size: 12px; }
+.lp-directions summary { padding: 13px 0; display: flex; justify-content: space-between; cursor: pointer; list-style: none; font-family: 'New Standard', Georgia, serif; font-size: 15px; }
 .lp-directions summary::-webkit-details-marker { display: none; }
 .lp-directions i { font: normal 13px Arial; color: #a87c3f; }
 .lp-directions details[open] i { transform: rotate(45deg); }
-.lp-directions p { margin: 0 0 13px; font-size: 9px; line-height: 1.8; color: #777267; }
+.lp-directions p { margin: 0 0 13px; font-size: 11px; line-height: 1.8; color: #777267; }
 
 /* Контакты — тёмная секция (как на живом прототипе) */
 .lp-contact { color: #fff; background: #282823; grid-template-columns: 1.1fr .9fr; align-items: end; gap: 57px; padding: 72px 7vw; display: grid; }
-.lp-contact h2 { letter-spacing: -.04em; margin: 0 0 20px; font-family: 'New Standard', Georgia, serif; font-weight: 400; font-size: clamp(29px, 3.4vw, 48px); line-height: 1.03; color: #fff; }
-.lp-contact-copy p { color: rgba(255,255,255,.66); max-width: 335px; margin: 0 0 16px; line-height: 1.8; font-size: 13px; }
-.lp-contact-phone { color: #e0c79e; letter-spacing: -.02em; width: max-content; margin: 0 0 17px; font-family: 'New Standard', Georgia, serif; font-weight: 400; font-size: clamp(19px, 2vw, 29px); display: block; }
+.lp-contact h2 { letter-spacing: -.04em; margin: 0 0 20px; font-family: 'New Standard', Georgia, serif; font-weight: 400; font-size: clamp(37px, 4.4vw, 61px); line-height: 1.03; color: #fff; }
+.lp-contact-copy p { color: rgba(255,255,255,.66); max-width: 335px; margin: 0 0 16px; line-height: 1.8; }
+.lp-contact-phone { color: #e0c79e; letter-spacing: -.02em; width: max-content; margin: 0 0 17px; font-family: 'New Standard', Georgia, serif; font-weight: 400; font-size: clamp(24px, 2.6vw, 37px); display: block; }
 .lp-contact-copy small { color: rgba(255,255,255,.45); text-transform: uppercase; letter-spacing: .15em; margin-top: 27px; display: block; }
 .lp-contact .lp-eyebrow { color: #d7ba8b; }
 
 /* Футер лендинга — глубокий зелёный (как шапка сайта) */
-.lp-footer { color: rgba(244, 240, 229, .58); text-transform: uppercase; letter-spacing: .14em; background: var(--n15-green); border-top: 1px solid color-mix(in srgb, var(--n15-green-gold) 30%, transparent); justify-content: space-between; align-items: center; padding: 30px 5vw; font-size: 8px; display: flex; }
+.lp-footer { color: rgba(244, 240, 229, .58); text-transform: uppercase; letter-spacing: .14em; background: var(--n15-green); border-top: 1px solid color-mix(in srgb, var(--n15-green-gold) 30%, transparent); justify-content: space-between; align-items: center; padding: 30px 5vw; font-size: 9px; display: flex; }
 .lp-footer p { margin: 0; line-height: 1.7; }
 .lp-footer .lp-brand { flex-direction: column; display: flex; }
 .lp-footer .lp-brand img { object-fit: contain; object-position: left center; width: 43px; max-height: 31px; display: block; filter: brightness(1.32); }
 .lp-footer .lp-brand-caption { text-transform: uppercase; letter-spacing: .32em; margin-top: 5px; font-size: 8px; color: #fff; }
-.lp-footer .lp-footer-phone { color: #d7ba8b; white-space: nowrap; font-family: 'New Standard', Georgia, serif; font-weight: 400; font-size: 12px; letter-spacing: .035em; }
-.lp-footer .lp-team-login { color: rgba(244, 240, 229, .55); text-transform: uppercase; letter-spacing: .12em; border-bottom: 1px solid color-mix(in srgb, var(--n15-green-gold) 38%, transparent); padding-bottom: 3px; font-size: 8px; }
+.lp-footer .lp-footer-phone { color: #d7ba8b; white-space: nowrap; font-family: 'New Standard', Georgia, serif; font-weight: 400; font-size: 15px; letter-spacing: .035em; }
+.lp-footer .lp-team-login { color: rgba(244, 240, 229, .55); text-transform: uppercase; letter-spacing: .12em; border-bottom: 1px solid color-mix(in srgb, var(--n15-green-gold) 38%, transparent); padding-bottom: 3px; font-size: 9px; }
 /* Ссылки футера на зелёном: при наведении — светлое золото (фирменное
    золото #97692D на глубоком зелёном читается плохо) */
 .lp-footer .lp-footer-phone:hover { color: #EFE3C9; }
@@ -840,23 +847,28 @@ html[data-theme='dark'] .lp-featured .object-card { border: 0; }
 @media (max-width: 820px) {
   .lp-hero { min-height: 480px; align-items: flex-end; padding-bottom: 57px; }
   .lp-hero-content { width: calc(100% - 36px); margin: 0 18px; box-sizing: border-box; }
-  .lp-hero h1 { font-size: 42px; }
-  .lp-hero-copy { max-width: 300px; font-size: 13px; margin: 18px 0 21px; }
+  .lp-hero h1 { font-size: 54px; }
+  .lp-hero-copy { max-width: 300px; font-size: 15px; margin: 18px 0 21px; }
   .lp-hero-note { display: none; }
   .lp-objects { width: auto; margin: 59px 18px; }
   .lp-objects-heading { margin-bottom: 23px; }
   .lp-objects-heading h2 { font-size: 34px; }
   /* На телефоне сетка блоков остаётся ровной, в 2 колонки: блоки не
      растягиваются на всю ширину, единый размер сохраняется — компактнее
-     только высота, отступы и кегль (--lp-tile-* у .lp-section) */
-  .lp-section { --lp-tile-h: 122px; --lp-tile-pad-y: 14px; --lp-tile-pad-x: 15px; --lp-tile-font: clamp(13px, 2.5vw, 16px); }
+     только высота и отступы (--lp-tile-* у .lp-section) */
+  .lp-section { --lp-tile-h: 122px; --lp-tile-pad-y: 14px; --lp-tile-pad-x: 15px; }
   .lp-categories, .lp-services-grid { gap: 10px; }
   .lp-category-card { grid-template-columns: 18px 1fr 16px; gap: 7px; }
   .lp-category-card i, .lp-services-arrow { font-size: 15px; }
+  /* Названия в 2 колонки: на планшете — прежний крупный кегль, на узком
+     телефоне он ужимается по ширине колонки, иначе длинные слова
+     («Коммерция», «Юридические») рвутся переносом */
+  .lp-category-card h3 { font-size: clamp(16px, 4.4vw, 25px); }
+  .lp-services-title { font-size: clamp(15px, 3.6vw, 21px); }
   .lp-services-head { gap: 10px; }
   .lp-services { width: auto; margin: 59px 18px; }
   .lp-services-list { gap: 5px; }
-  .lp-services-row { padding: 9px 10px; font-size: 11px; }
+  .lp-services-row { padding: 9px 10px; font-size: 13px; }
   .lp-cards { width: auto; margin: 0 18px; }
   /* «Показать все →» на телефоне — под заголовком, слева (в одну строку
      с заголовком не помещается без сжатия) */
@@ -874,8 +886,8 @@ html[data-theme='dark'] .lp-featured .object-card { border: 0; }
      чтобы образ был виден и карточку можно было открыть нажатием */
   .lp-about-image { aspect-ratio: 4 / 5; max-height: 525px; touch-action: manipulation; }
   .lp-about-copy { padding: 44px 18px; }
-  .lp-fatima-card { left: 12px; right: 12px; bottom: 12px; width: auto; max-width: 300px; font-size: 11px; }
-  .lp-fatima-card-title { font-size: 14px; }
+  .lp-fatima-card { left: 12px; right: 12px; bottom: 12px; width: auto; max-width: 300px; font-size: 13px; }
+  .lp-fatima-card-title { font-size: 18px; }
   /* Кнопки героя на телефоне — в столбик во всю ширину: в одну строку
      с текстом они не помещаются */
   .lp-hero-actions { flex-direction: column; align-items: stretch; gap: 10px; }
@@ -886,9 +898,9 @@ html[data-theme='dark'] .lp-featured .object-card { border: 0; }
 @media (max-width: 480px) {
   .lp-mortgage-fields { grid-template-columns: 1fr; }
   .lp-mortgage-panel { padding: 16px; }
-  .lp-hero h1 { font-size: 36px; }
+  .lp-hero h1 { font-size: 46px; }
   .lp-eyebrow { letter-spacing: .22em; }
-  .lp-hero-copy { font-size: 13px; }
+  .lp-hero-copy { font-size: 15px; }
   /* Узкий телефон: колонка номера отдана названию — иначе длинные слова
      («Коммерческая», «недвижимость») не помещаются в половину экрана */
   .lp-category-card { grid-template-columns: 1fr 16px; }
