@@ -1559,7 +1559,7 @@ export const ru = {
     footerTeam: 'Вход для команды',
     contactEyebrow: 'Персональная консультация',
     contactTitle1: 'Найдём объект',
-    contactTitle2: 'в Осетии',
+    contactTitle2: 'в Осетии вместе',
     contactText: 'Позвоните в Н15 — уточним задачу и подготовим индивидуальную подборку.',
     contactCall: 'Позвонить в Н15',
     contactNote: 'Владикавказ · Северная Осетия — Алания',
