@@ -4,10 +4,12 @@ import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useI18n } from '@/i18n/i18n-provider'
 import ObjectCard, { type ObjectListItem } from '@/components/objects/ObjectCard'
-import CatalogFilters, { buildWhere, cityValuesFor, emptyFilters, AGENT_URL_PARAM, OBJECT_TYPES, OBJECT_CATEGORIES, OBJECT_ROOMS, type CityGroup, type FiltersState } from '@/components/objects/CatalogFilters'
+import CatalogFilters, { buildWhere, cityValuesFor, regionValuesFor, emptyFilters, AGENT_URL_PARAM, OBJECT_TYPES, OBJECT_CATEGORIES, OBJECT_ROOMS, type FiltersState } from '@/components/objects/CatalogFilters'
 // Справочники допустимых значений локаций — те же, что в фильтрах каталога
 import { DISTRICT_OPTIONS, CITY_DISTRICT_OPTIONS } from '@/lib/districts'
 import { SNT_AREAS } from '@/components/home/landing-data'
+// Иерархия фильтра «Город»: регионы с населёнными пунктами (см. city-filter.ts)
+import type { CityFilterRegion } from '@/lib/city-filter'
 import { objectToListItem } from '@/lib/object-list-item'
 
 const PAGE_SIZE = 12
@@ -29,6 +31,7 @@ const URL_PARAM: Record<keyof FiltersState, string> = {
   locality: 'locality',
   snt: 'snt',
   city: 'city',
+  cityRegion: 'city_region',
   agent: AGENT_URL_PARAM,
 }
 
@@ -41,7 +44,7 @@ const isKnown = (v: string, options: readonly string[]) => options.includes(v)
 /** Единицы площади фильтра участков: м², сотки, гектары (см. area-format) */
 const AREA_UNITS = ['sqm', 'are', 'ha'] as const
 
-function filtersFromParams(sp: URLSearchParams, knownCities: readonly string[]): FiltersState {
+function filtersFromParams(sp: URLSearchParams, cityRegions: readonly CityFilterRegion[], knownCities: readonly string[]): FiltersState {
   // Район города (Иристонский и др.) старые ссылки могли передавать
   // в параметре district — такой параметр направляем в cityDistrict
   const districtParam = sp.get('district') ?? ''
@@ -50,6 +53,9 @@ function filtersFromParams(sp: URLSearchParams, knownCities: readonly string[]):
   // Категория нужна раньше города: её список городов зависит от категории
   const category = isKnown(sp.get('category') ?? '', OBJECT_CATEGORIES) ? (sp.get('category') as string) : ''
   const cityParam = sp.get('city') ?? ''
+  // Регион фильтра «Город» («все населённые пункты региона») — отдельный
+  // параметр: в city лежит город или населённый пункт, здесь — ключ региона
+  const cityRegionParam = sp.get(URL_PARAM.cityRegion) ?? ''
   return {
     type: isKnown(sp.get('type') ?? '', OBJECT_TYPES) ? (sp.get('type') as string) : '',
     category,
@@ -70,6 +76,9 @@ function filtersFromParams(sp: URLSearchParams, knownCities: readonly string[]):
     locality: sp.get('locality') ?? '',
     snt: isKnown(sp.get('snt') ?? '', SNT_AREAS) ? (sp.get('snt') as string) : '',
     city: isKnown(cityParam, cityValuesFor(category, knownCities)) ? cityParam : '',
+    // Регион фильтра «Город» («все населённые пункты»): ключ сверяем со списком
+    // регионов для категории — у участков регионов, кроме Осетии, нет
+    cityRegion: isKnown(cityRegionParam, regionValuesFor(category, cityRegions)) ? cityRegionParam : '',
     // Фильтр «Объекты агента» приходит только ссылкой (карточки команды,
     // страница агентства) — допустимость id проверяет buildWhere
     agent: sp.get(AGENT_URL_PARAM) ?? '',
@@ -77,8 +86,9 @@ function filtersFromParams(sp: URLSearchParams, knownCities: readonly string[]):
 }
 
 interface CatalogContentProps {
-  /** Группы фильтра «Город» — населённые пункты межрегионального справочника (CRM) */
-  cityGroups: CityGroup[]
+  /** Регионы фильтра «Город» — иерархия регион → населённые пункты со
+   *  счётчиками объектов (см. loadCatalogCityFilter) */
+  cityRegions: CityFilterRegion[]
   /** Допустимые значения фильтра «Город» — для сверки ссылок */
   knownCities: string[]
   /** Имя агента для чипа «Объекты агента» (читает серверная страница
@@ -89,7 +99,7 @@ interface CatalogContentProps {
 /** Выдача каталога: поиск, фильтры, карточки объектов и подгрузка следующих
  *  страниц. Данные — клиентские запросы к /api/objects; справочник фильтра
  *  «Город» приходит с сервера (см. страницу каталога) */
-export default function CatalogContent({ cityGroups, knownCities, agentName }: CatalogContentProps) {
+export default function CatalogContent({ cityRegions, knownCities, agentName }: CatalogContentProps) {
   const searchParams = useSearchParams()
   const router = useRouter()
   const { lang, t } = useI18n()
@@ -101,9 +111,9 @@ export default function CatalogContent({ cityGroups, knownCities, agentName }: C
   const [loadingMore, setLoadingMore] = useState(false)
   const [q, setQ] = useState(searchParams.get('q') ?? '')
   const [sort, setSort] = useState(searchParams.get('sort') ?? '')
-  const [filters, setFilters] = useState<FiltersState>(() => filtersFromParams(searchParams, knownCities))
+  const [filters, setFilters] = useState<FiltersState>(() => filtersFromParams(searchParams, cityRegions, knownCities))
 
-  const where = useMemo(() => buildWhere(filters, q, knownCities), [filters, q, knownCities])
+  const where = useMemo(() => buildWhere(filters, q, cityRegions, knownCities), [filters, q, cityRegions, knownCities])
   const sortParam = sort || '-createdAt'
 
   // Debounced search: write q to URL after 300ms (only q — filters/sort handled below)
@@ -150,7 +160,7 @@ export default function CatalogContent({ cityGroups, knownCities, agentName }: C
   const [prevSearchParams, setPrevSearchParams] = useState(searchParams)
   if (prevSearchParams !== searchParams) {
     setPrevSearchParams(searchParams)
-    const next: FiltersState = filtersFromParams(searchParams, knownCities)
+    const next: FiltersState = filtersFromParams(searchParams, cityRegions, knownCities)
     setFilters((prev) =>
       Object.entries(next).every(([k, v]) => prev[k as keyof FiltersState] === v)
         ? prev
@@ -243,7 +253,8 @@ export default function CatalogContent({ cityGroups, knownCities, agentName }: C
         />
       </div>
 
-      <CatalogFilters state={filters} onChange={onChangeFilters} t={t} cityGroups={cityGroups} />
+      <CatalogFilters state={filters} onChange={onChangeFilters} t={t}
+        cityRegions={cityRegions} knownCities={knownCities} />
 
       {/* Фильтр, пришедший ссылкой с карточек команды (страница агентства):
           у остальных фильтров есть поля в панели, у этого — только чип */}
@@ -310,13 +321,13 @@ export default function CatalogContent({ cityGroups, knownCities, agentName }: C
         </>
       ) : (
         <div className="text-center py-20">
-          {/* Подбор по конкретному нас. пункту или межрегиональному городу
-              пуст — сообщение понятнее общего «ничего не найдено» */}
+          {/* Подбор по конкретному нас. пункту, региону или межрегиональному
+              городу пуст — сообщение понятнее общего «ничего не найдено» */}
           <p className="text-[var(--n15-muted)] text-lg mb-4">
-            {filters.locality
-              ? t.catalog.nothingInLocality
-              : filters.city
-                ? t.catalog.nothingInCity
+            {filters.city || filters.cityRegion
+              ? t.catalog.nothingInCity
+              : filters.locality
+                ? t.catalog.nothingInLocality
                 : t.catalog.nothingFound}
           </p>
           <button onClick={clearAll}

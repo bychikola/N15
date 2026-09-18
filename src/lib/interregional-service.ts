@@ -24,6 +24,21 @@ import {
   type InterregionalRegion,
   type InterregionalSettlement,
 } from './interregional'
+import {
+  CITY_FILTER_REGIONS,
+  OTHER_REGIONS_KEY,
+  OTHER_REGIONS_LABEL,
+  OSSETIA_CITY,
+  OSSETIA_TOWNS,
+  type CityFilterField,
+  type CityFilterMatch,
+  type CityFilterPlace,
+  type CityFilterRegion,
+} from './city-filter'
+// Населённые пункты республики — тот же справочник, что в фильтре каталога и
+// форме CRM (см. src/lib/districts.ts): в списке Осетии показываем те из них,
+// где уже есть опубликованные объекты
+import { LOCALITY_OPTIONS } from './districts'
 import { translitSlug } from './slug'
 
 /** Сколько объектов показываем на странице населённого пункта (остальные — в каталоге) */
@@ -32,7 +47,10 @@ export const SETTLEMENT_OBJECTS_LIMIT = 24
 /** Строка индекса опубликованных объектов: минимум полей для подбора по фильтру */
 interface PublishedObjectRow {
   id: number
+  /** Город (address.city): межрегиональные города и «Владикавказ» у объектов Осетии */
   city: string
+  /** Населённый пункт (address.locality): так записан адрес в Осетии */
+  locality: string
   category: string
   type: string
 }
@@ -46,28 +64,32 @@ export interface InterregionalDirectory {
 const str = (v: unknown): string => (typeof v === 'string' ? v : '')
 
 /**
- * Индекс опубликованных объектов по городам — один запрос на страницу.
- * Полей немного (адрес, категория, сделка), поэтому выгружаем весь список
- * опубликованных: объекты каталога Н15 в базу пишутся по одному, и на таких
- * объёмах это дешевле, чем запрос на каждый населённый пункт.
+ * Индекс опубликованных объектов по городам и населённым пунктам — один запрос
+ * на страницу. Полей немного (адрес, категория, сделка), поэтому выгружаем
+ * весь список опубликованных: объекты каталога Н15 в базу пишутся по одному, и
+ * на таких объёмах это дешевле, чем запрос на каждый населённый пункт.
  */
 async function publishedObjectRows(payload: Payload): Promise<PublishedObjectRow[]> {
   const { docs } = await payload.find({
     collection: 'objects',
     where: { status: { equals: 'published' } },
-    select: { address: { city: true }, category: true, type: true },
+    select: { address: { city: true, locality: true }, category: true, type: true },
     depth: 0,
     pagination: false,
     overrideAccess: true,
   })
-  return (docs as unknown as { id: number; address?: { city?: string }; category?: string; type?: string }[]).map(
-    (doc) => ({
-      id: typeof doc.id === 'number' ? doc.id : Number(doc.id),
-      city: str(doc.address?.city),
-      category: str(doc.category),
-      type: str(doc.type),
-    }),
-  )
+  return (docs as unknown as {
+    id: number
+    address?: { city?: string; locality?: string }
+    category?: string
+    type?: string
+  }[]).map((doc) => ({
+    id: typeof doc.id === 'number' ? doc.id : Number(doc.id),
+    city: str(doc.address?.city),
+    locality: str(doc.address?.locality),
+    category: str(doc.category),
+    type: str(doc.type),
+  }))
 }
 
 /** Подходит ли объект фильтру населённого пункта (город, категория, тип сделки) */
@@ -293,36 +315,206 @@ export async function loadInterregionalRegions(payload: Payload): Promise<Interr
   return regions
 }
 
+/** Ключ названия (cityKey) → написания, встреченные в адресах объектов */
+type PlaceSpellings = Map<string, Map<string, number>>
+
 /**
- * Населённые пункты для фильтра «Город» каталога: группы по регионам и общий
- * список значений для сверки параметров ссылок. Отдаём весь справочник,
- * включая скрытые населённые пункты: со страницы такого пункта в каталог
- * ведёт ссылка с его городом, и фильтр не должен её отбрасывать.
+ * Разбор названий из адресов объектов. Ключ — cityKey: регистр, «ё» и лишние
+ * пробелы не мешают, поэтому «Химки», «химки» и «Химки » — одно название, а
+ * написания из базы становятся значениями фильтра (см. spellingValues) — так
+ * объект находится, как бы агент ни записал адрес.
  */
-export async function loadInterregionalCityOptions(payload: Payload): Promise<{
-  groups: { label: string; options: { value: string; label: string }[] }[]
-  cities: string[]
-}> {
-  const { regions, settlements } = await directoryRows(payload)
-  const groups: { label: string; options: { value: string; label: string }[] }[] = []
-  const cities: string[] = []
-  for (const region of regions) {
-    const own = settlements
-      .filter((row) => row.regionId === region.id)
-      .sort((a, b) => a.order - b.order)
-    for (const row of own) {
-      const label = row.group || region.title
-      let group = groups.find((g) => g.label === label)
-      if (!group) {
-        group = { label, options: [] }
-        groups.push(group)
-      }
-      const value = row.city || row.name
-      group.options.push({ value, label: row.name })
-      cities.push(value)
-    }
+function spellingIndex(names: string[]): PlaceSpellings {
+  const index: PlaceSpellings = new Map()
+  for (const name of names) {
+    if (!name) continue
+    const key = cityKey(name)
+    const spellings = index.get(key) ?? new Map<string, number>()
+    spellings.set(name, (spellings.get(name) ?? 0) + 1)
+    index.set(key, spellings)
   }
-  return { groups, cities }
+  return index
+}
+
+/** Сколько опубликованных объектов записано таким названием */
+function spellingsCount(index: PlaceSpellings, name: string): number {
+  let count = 0
+  for (const own of index.get(cityKey(name))?.values() ?? []) count += own
+  return count
+}
+
+/** Значения фильтра для названия: каноническое (из справочника) и написания из базы */
+function spellingValues(index: PlaceSpellings, name: string): string[] {
+  const values = [name.trim()]
+  for (const spelling of index.get(cityKey(name))?.keys() ?? []) {
+    if (!values.includes(spelling)) values.push(spelling)
+  }
+  return values
+}
+
+/** Условие фильтра по готовым значениям: поле адреса → значения. Пусто — не из чего строить */
+const matchValues = (field: CityFilterField, values: string[]): CityFilterMatch[] => {
+  const unique = [...new Set(values.filter(Boolean))]
+  return unique.length ? [{ field, values: unique }] : []
+}
+
+/** Адрес объекта, приведённый к ключам сравнения, — для счётчиков */
+interface PlaceKeyRow {
+  city: string
+  locality: string
+}
+
+/** Сколько объектов подходит под условия фильтра (условия складываются «или») */
+function countByMatch(rows: PlaceKeyRow[], match: CityFilterMatch[]): number {
+  const fields = match.map((m) => ({ field: m.field, keys: new Set(m.values.map(cityKey)) }))
+  return rows.filter((row) => fields.some((f) => f.keys.has(row[f.field]))).length
+}
+
+export interface CatalogCityFilter {
+  /** Регионы фильтра «Город» в порядке показа (см. src/lib/city-filter.ts) */
+  regions: CityFilterRegion[]
+  /** Допустимые значения фильтра — города справочника и «других регионов»:
+   *  по ним сверяются города из ссылок (в том числе на скрытые населённые
+   *  пункты: со страницы такого пункта в каталог ведёт ссылка с его городом) */
+  cities: string[]
+}
+
+/**
+ * Иерархия фильтра «Город» каталога: регионы с населёнными пунктами и
+ * счётчиками опубликованных объектов. Регионы и их порядок — по списку
+ * заданий (CITY_FILTER_REGIONS в src/lib/city-filter.ts), населённые пункты —
+ * из справочника CRM, счётчики — по адресам опубликованных объектов. Счётчики
+ * считаются по тем же значениям, что уходят в фильтр, поэтому число рядом с
+ * пунктом совпадает с выдачей каталога, когда больше ничего не выбрано.
+ *
+ * Регион справочника, которого нет в списке заданий, показывается после
+ * заданных строк — заведённый сотрудником регион не теряется. Города с
+ * объектами вне справочника собираются в последнюю строку «Другие регионы».
+ */
+export async function loadCatalogCityFilter(payload: Payload): Promise<CatalogCityFilter> {
+  const [{ regions: regionRows, settlements: settlementRows }, objects] = await Promise.all([
+    directoryRows(payload),
+    publishedObjectRows(payload),
+  ])
+
+  const cityIndex = spellingIndex(objects.map((o) => o.city))
+  const localityIndex = spellingIndex(objects.map((o) => o.locality))
+  const rows: PlaceKeyRow[] = objects.map((o) => ({ city: cityKey(o.city), locality: cityKey(o.locality) }))
+  const indexOf = (field: CityFilterField): PlaceSpellings => (field === 'city' ? cityIndex : localityIndex)
+
+  /** Населенный пункт справочника как строка фильтра */
+  const placeOf = (value: string, label: string, field: CityFilterField): CityFilterPlace => ({
+    value,
+    label,
+    field,
+    count: spellingsCount(indexOf(field), value),
+    values: spellingValues(indexOf(field), value),
+  })
+
+  const usedCrmRegions = new Set<number>()
+
+  /** Строка региона из справочника CRM — целиком или по подгруппе («Москва») */
+  const crmRegion = (
+    key: string,
+    label: string,
+    source: { crmRegion: string; crmGroup?: string },
+  ): CityFilterRegion | null => {
+    const crm = regionRows.find((row) => row.title === source.crmRegion)
+    if (!crm) return null
+    usedCrmRegions.add(crm.id)
+    const own = settlementRows
+      .filter((row) => row.regionId === crm.id && (!source.crmGroup || row.group === source.crmGroup))
+      .sort((a, b) => a.order - b.order)
+    // Условие региона собираем по всему справочнику, включая скрытые пункты:
+    // объект в них — всё равно объект региона
+    const match = matchValues('city', own.flatMap((row) => spellingValues(cityIndex, row.city || row.name)))
+    // Строки списка: ключевые населённые пункты («показывать всегда») и те,
+    // где уже есть опубликованные объекты
+    const places = own
+      .filter((row) => row.alwaysVisible || spellingsCount(cityIndex, row.city || row.name) > 0)
+      .map((row) => placeOf(row.city || row.name, row.name, 'city'))
+    return { key, label, ossetian: false, count: countByMatch(rows, match), match, places }
+  }
+
+  /**
+   * Осетия — регион без справочника CRM: населённые пункты республики лежат в
+   * address.locality. В списке — ключевые города (видны всегда) и остальные
+   * населённые пункты с опубликованными объектами. Строка «весь регион» ищет
+   * и по ним, и по городу Владикавказ (OSSETIA_CITY) — так находятся объекты
+   * республики с незаполненным населённым пунктом.
+   */
+  const ossetiaRegion = (key: string, label: string): CityFilterRegion => {
+    const places: CityFilterPlace[] = []
+    const added = new Set<string>()
+    for (const town of OSSETIA_TOWNS) {
+      places.push(placeOf(town, town, 'locality'))
+      added.add(cityKey(town))
+    }
+    for (const name of LOCALITY_OPTIONS) {
+      if (added.has(cityKey(name)) || spellingsCount(localityIndex, name) === 0) continue
+      places.push(placeOf(name, name, 'locality'))
+      added.add(cityKey(name))
+    }
+    const match = [
+      ...matchValues('city', spellingValues(cityIndex, OSSETIA_CITY)),
+      ...matchValues('locality', places.flatMap((item) => item.values)),
+    ]
+    return { key, label, ossetian: true, count: countByMatch(rows, match), match, places }
+  }
+
+  const regions: CityFilterRegion[] = []
+  for (const source of CITY_FILTER_REGIONS) {
+    const region = source.crmRegion
+      ? crmRegion(source.key, source.label, { crmRegion: source.crmRegion, crmGroup: source.crmGroup })
+      : ossetiaRegion(source.key, source.label)
+    if (region) regions.push(region)
+  }
+
+  // Регионы справочника, которых нет в списке заданий: показываем как есть,
+  // после заданных строк — новый регион в CRM не теряется
+  for (const crm of regionRows) {
+    if (usedCrmRegions.has(crm.id)) continue
+    const region = crmRegion(`crm-${crm.slug || crm.id}`, crm.title, { crmRegion: crm.title })
+    if (region) regions.push(region)
+  }
+
+  // «Другие регионы» — города с объектами, которых нет в справочнике. Строка
+  // есть всегда, даже пустая: она последняя в списке регионов
+  const knownCityKeys = new Set([
+    ...settlementRows.map((row) => cityKey(row.city || row.name)),
+    cityKey(OSSETIA_CITY),
+  ])
+  const otherPlaces: CityFilterPlace[] = []
+  for (const [key, spellings] of cityIndex) {
+    if (!key || knownCityKeys.has(key)) continue
+    // Подпись строки — самое частое написание названия в адресах объектов
+    const label = [...spellings.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'ru'))[0][0]
+    otherPlaces.push({
+      value: label,
+      label,
+      field: 'city',
+      count: spellingsCount(cityIndex, label),
+      values: [...spellings.keys()],
+    })
+  }
+  otherPlaces.sort((a, b) => b.count - a.count || a.label.localeCompare(b.label, 'ru'))
+  const otherMatch = matchValues('city', otherPlaces.flatMap((item) => item.values))
+  regions.push({
+    key: OTHER_REGIONS_KEY,
+    label: OTHER_REGIONS_LABEL,
+    ossetian: false,
+    count: countByMatch(rows, otherMatch),
+    match: otherMatch,
+    places: otherPlaces,
+  })
+
+  return {
+    regions,
+    cities: [...new Set([
+      ...settlementRows.map((row) => row.city || row.name),
+      ...otherPlaces.map((place) => place.label),
+    ])],
+  }
 }
 
 export interface SettlementPageData {
