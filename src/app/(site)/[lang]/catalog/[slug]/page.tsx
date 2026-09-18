@@ -130,13 +130,18 @@ export default async function ObjectPage({ params }: PageProps) {
   const areaFmt = (n: number) => n.toLocaleString(t.locale, { maximumFractionDigits: 3 })
   const areaWords = { are: t.catalog.areaUnits, ha: t.catalog.hectareUnits }
   const areaHumanLabel = areaHuman(obj.area, obj.areaUnit, areaWords, areaFmt)
-  // Земельный участок частного дома — отдельной строкой от площади дома
+  // Земельный участок — отдельной строкой от площади объекта: у дома это
+  // участок вокруг дома, у базы отдыха, гостиницы или туристического объекта
+  // — площадь земли под комплексом
   const plotAreaHumanLabel = areaHuman(obj.plotArea, obj.plotAreaUnit, areaWords, areaFmt)
   // Дом и таунхаус — этажность дома («2 этажа») и описания помещений по
   // этажам («1 этаж: кухня-гостиная, санузел…», заполняются в CRM); у
   // остальных категорий — как раньше: «этаж / всего этажей»
   const isHouse = obj.category === 'house' || obj.category === 'townhouse'
   const isLand = obj.category === 'land'
+  // Коммерция: в «Площади» — здание или комплекс, участок идёт отдельной
+  // строкой «Площадь участка»
+  const isCommercial = obj.category === 'commercial'
   const floorSpecs = isHouse
     ? [
         { label: t.object.floors, value: floorHuman(obj.totalFloors, t.object.floorUnits, areaFmt) },
@@ -263,10 +268,11 @@ export default async function ObjectPage({ params }: PageProps) {
                 <dl className="grid grid-cols-1 md:grid-cols-2 border-t border-[var(--n15-gold)]/15">
                   {[
                     { label: t.object.objectType, value: obj.category ? t.categoryLabels[obj.category as keyof typeof t.categoryLabels] : null },
-                    // Площадь участка и площадь дома — раздельно: у земельного
+                    // Площадь объекта и площадь земли — раздельно: у земельного
                     // участка «Площадь» и есть площадь участка, у дома —
-                    // площадь дома, а участок идёт отдельной строкой
-                    { label: isLand ? t.object.plotArea : isHouse ? t.object.houseArea : t.object.area, value: areaHumanLabel },
+                    // площадь дома, у коммерции — площадь здания или комплекса,
+                    // а участок идёт отдельной строкой
+                    { label: isLand ? t.object.plotArea : isHouse ? t.object.houseArea : isCommercial ? t.object.objectArea : t.object.area, value: areaHumanLabel },
                     { label: t.object.plotArea, value: plotAreaHumanLabel },
                     // У земли «Жилая» — это площадь строения на участке
                     { label: isLand ? t.object.houseArea : t.object.living, value: obj.livingArea ? `${obj.livingArea} ${t.catalog.sqm}` : null },

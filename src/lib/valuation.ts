@@ -30,7 +30,10 @@ export interface ValuationParams {
   category?: string | null
   price?: number | null
   area?: number | null
-  /** Земельный участок частного дома, м² (6 соток = 600 м²) */
+  /**
+   * Земельный участок, м² (6 соток = 600 м²): у дома и таунхауса — вокруг
+   * дома, у коммерции — земля под базой отдыха, гостиницей, рестораном
+   */
   plotArea?: number | null
   livingArea?: number | null
   kitchenArea?: number | null
@@ -837,10 +840,11 @@ export function evaluateValuation(
   apply(conditionFactor(p.condition), 'condition')
   apply(roomsFactor(category, p.rooms), 'rooms')
   apply(areaFactor(category, area), 'area-size')
-  // Земельный участок дома: у дома и таунхауса площадь участка — отдельный
-  // ценообразующий признак (у квартир и коммерции участка нет, у участка
+  // Земельный участок: у дома, таунхауса и коммерции площадь участка —
+  // отдельный ценообразующий признак (у базы отдыха земля входит в лот
+  // отдельно от площади здания; у квартир участка нет, у земельных участков
   // площадь участка — это сам объект, см. areaFactor)
-  if (category === 'house' || category === 'townhouse') {
+  if (category === 'house' || category === 'townhouse' || category === 'commercial') {
     apply(plotFactor(p.plotArea), 'plotArea')
   }
   apply(layoutFactor(category, area, p.livingArea), 'livingArea')
@@ -874,8 +878,9 @@ export function evaluateValuation(
   if (isSet(p.builtYear)) score += 1
   if (isSet(p.condition)) score += 1
   if (hasAny(p, ['elevator', 'balcony', 'parking', 'yard', 'heating', 'gas', 'water', 'sewerage', 'livingArea'])) score += 1
-  // Частный дом: площадь земельного участка — значимый признак лота
-  if ((category === 'house' || category === 'townhouse') && isSet(p.plotArea)) score += 1
+  // Дом, таунхаус и коммерция: площадь земельного участка — значимый
+  // признак лота (у базы отдыха земля входит в стоимость отдельно от здания)
+  if ((category === 'house' || category === 'townhouse' || category === 'commercial') && isSet(p.plotArea)) score += 1
   // Участок с коммуникациями (свет/вода/газ) — точнее по стоимости
   if (category === 'land' && hasAny(p, ['electricity', 'gas', 'water', 'features'])) score += 1
   const th = confidenceThresholds(category)
@@ -904,6 +909,9 @@ export function evaluateValuation(
     pushWant('utilities', hasAny(p, ['heating', 'gas', 'water', 'sewerage', 'electricity']))
   } else if (category === 'commercial') {
     pushWant('floor', isSet(p.floor) || isSet(p.totalFloors))
+    // Земля под объектом (база отдыха, гостиница, ресторан, туристический
+    // объект): без неё оценка комплекса считается только по зданию
+    pushWant('plotArea', isSet(p.plotArea))
     pushWant('buildingType', isSet(p.buildingType))
     pushWant('condition', isSet(p.condition))
     pushWant('parking', isSet(p.parking) || isSet(p.yard))

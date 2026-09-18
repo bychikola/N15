@@ -286,7 +286,9 @@ export function evaluateMarketValuation(
     num(params.floor) != null && num(params.totalFloors) != null,
   )
   pushInput('condition', 'Состояние', (params.condition || '').trim(), Boolean((params.condition || '').trim()))
-  if (category === 'house' || category === 'townhouse') {
+  // Земля — отдельный вход расчёта у дома, таунхауса и коммерции
+  // (у базы отдыха комплекс и участок оцениваются вместе)
+  if (category === 'house' || category === 'townhouse' || category === 'commercial') {
     const plot = num(params.plotArea)
     pushInput(
       'plotArea',
