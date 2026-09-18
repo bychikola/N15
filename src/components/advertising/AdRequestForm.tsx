@@ -4,6 +4,7 @@ import { useRef, useState, type FC } from 'react'
 import Link from 'next/link'
 import { useI18n } from '@/i18n/i18n-provider'
 import { Button } from '@/components/ui/Button'
+import { ConsentCheckbox } from '@/components/ui/ConsentCheckbox'
 import { AD_CONTACT_KIND_LABELS, AD_OBJECT_TYPE_LABELS } from '@/lib/advertising'
 import { AD_OFFER, AD_RULES, adDocHref } from '@/lib/advertising-legal'
 
@@ -15,7 +16,9 @@ import { AD_OFFER, AD_RULES, adDocHref } from '@/lib/advertising-legal'
  * документом (оферта, правила размещения, политика обработки персональных
  * данных). Объединять их нельзя: это самостоятельные юридически значимые
  * действия. Ту же проверку повторяет маршрут /api/advertising/request и
- * коллекция advertising-requests.
+ * коллекция advertising-requests. Галочка обработки персональных данных —
+ * общая для всех публичных форм сайта (src/components/ui/ConsentCheckbox.tsx).
+ * Пока согласия не отмечены, кнопка отправки неактивна.
  *
  * Заявка уходит multipart-запросом (вместе с фотографиями) на
  * /api/advertising/request: сервер сохраняет дату и время отправки, IP-адрес,
@@ -346,18 +349,25 @@ export const AdRequestForm: FC<{ lang: string }> = ({ lang }) => {
           links={[{ href: adDocHref(lang, AD_RULES.path), title: t.advertising.consentRulesDoc }]}
           docsLabel={t.advertising.consentDocs}
         />
-        <Consent
+        {/* Обработка персональных данных — та же обязательная галочка со
+            ссылкой на политику, что и в остальных публичных формах сайта */}
+        <ConsentCheckbox
           checked={consents.data}
           onChange={(v) => setConsents((prev) => ({ ...prev, data: v }))}
-          text={t.advertising.consentDataText}
-          links={[{ href: adDocHref(lang, '/privacy'), title: t.advertising.consentPrivacyDoc }]}
-          docsLabel={t.advertising.consentDocs}
         />
       </fieldset>
 
+      {(!consents.offer || !consents.rights || !consents.data) && (
+        <p className="text-[11px] leading-relaxed text-[var(--n15-muted)]">{t.advertising.consentRequired}</p>
+      )}
       {error && <p className="text-xs text-[var(--n15-burgundy)]">{error}</p>}
 
-      <Button variant="primary" size="md" className="w-full sm:w-auto" disabled={sending}>
+      <Button
+        variant="primary"
+        size="md"
+        className="w-full sm:w-auto"
+        disabled={sending || !consents.offer || !consents.rights || !consents.data}
+      >
         {sending ? t.advertising.sending : t.advertising.submit}
       </Button>
     </form>

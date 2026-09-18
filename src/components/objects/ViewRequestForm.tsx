@@ -3,6 +3,7 @@
 import { useState, type FC } from 'react'
 import { useI18n } from '@/i18n/i18n-provider'
 import { Button } from '@/components/ui/Button'
+import { ConsentCheckbox, MarketingConsent } from '@/components/ui/ConsentCheckbox'
 import Link from 'next/link'
 
 interface Props {
@@ -15,6 +16,8 @@ export const ViewRequestForm: FC<Props> = ({ objectId, lang }) => {
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
   const [message, setMessage] = useState('')
+  const [agreed, setAgreed] = useState(false)
+  const [marketing, setMarketing] = useState(false)
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
   const [sentAsUser, setSentAsUser] = useState(false)
@@ -23,6 +26,11 @@ export const ViewRequestForm: FC<Props> = ({ objectId, lang }) => {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (sending) return
+    // Та же проверка, что и у неактивной кнопки: отправка по Enter без отметки
+    if (!agreed) {
+      setError(t.consent.required)
+      return
+    }
     setSending(true)
     setError('')
     try {
@@ -48,6 +56,7 @@ export const ViewRequestForm: FC<Props> = ({ objectId, lang }) => {
           clientName: name,
           clientPhone: phone,
           message,
+          marketingConsent: marketing,
           status: 'unsorted',
           source: 'site',
           ...(userId ? { user: userId } : {}),
@@ -109,9 +118,14 @@ export const ViewRequestForm: FC<Props> = ({ objectId, lang }) => {
       <input type="text" required value={name} onChange={(e) => setName(e.target.value)} placeholder={t.object.namePlaceholder} className={inputCls} />
       <input type="tel" required value={phone} onChange={(e) => setPhone(e.target.value)} placeholder={t.object.phonePlaceholder} className={inputCls} />
       <textarea value={message} onChange={(e) => setMessage(e.target.value)} placeholder={t.object.messagePlaceholder} rows={3} className={`${inputCls} resize-none`} />
+      {/* Согласие на обработку данных обязательно, рекламная рассылка —
+          отдельная необязательная галочка (см. ConsentCheckbox) */}
+      <ConsentCheckbox checked={agreed} onChange={setAgreed} />
+      <MarketingConsent checked={marketing} onChange={setMarketing} />
+      {!agreed && <p className="text-[11px] leading-relaxed text-[var(--n15-muted)]">{t.consent.hint}</p>}
       {error && <p className="text-xs text-red-400">{error}</p>}
       {/* цвет текста как у кнопки «Позвонить» — светлый на золотом */}
-      <Button variant="primary" size="md" className="w-full" disabled={sending}
+      <Button variant="primary" size="md" className="w-full" disabled={sending || !agreed}
         style={{ color: 'var(--card-price-fg)' }}>
         {sending ? t.lkChat.sending : t.object.submit}
       </Button>

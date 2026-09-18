@@ -133,6 +133,15 @@ export const Applications: CollectionConfig = {
       label: 'Сообщение',
     },
     {
+      name: 'marketingConsent',
+      type: 'checkbox',
+      label: 'Согласие на рекламные сообщения',
+      admin: {
+        description:
+          'Отдельная необязательная галочка с формы на сайте: согласие на обработку персональных данных её не заменяет и наоборот',
+      },
+    },
+    {
       name: 'status',
       type: 'select',
       label: 'Статус',

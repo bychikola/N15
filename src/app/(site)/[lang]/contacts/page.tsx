@@ -4,7 +4,7 @@ import { Header } from '@/components/layout/Header'
 import { Footer } from '@/components/layout/Footer'
 import { SectionWrapper } from '@/components/ui/SectionWrapper'
 import { OrnamentBorder } from '@/components/ui/OrnamentBorder'
-import { Button } from '@/components/ui/Button'
+import { ContactForm } from '@/components/contacts/ContactForm'
 import { getDictionary, type Dict } from '@/i18n/dictionaries'
 
 export const dynamic = 'force-dynamic'
@@ -132,26 +132,9 @@ export default async function ContactsPage({ params }: PageProps) {
               <h2 className="text-xl font-[family-name:var(--font-display)] text-[var(--n15-white)] mb-6">
                 {t.contacts.writeUs}
               </h2>
-              <form className="flex flex-col gap-4">
-                <input
-                  type="text"
-                  placeholder={t.contacts.namePlaceholder}
-                  className="bg-[var(--n15-black)] border border-[var(--n15-gold)]/20 px-4 py-3 text-sm text-[var(--n15-silver)] placeholder:text-[var(--n15-muted)] focus:outline-none focus:border-[var(--n15-gold)]/50"
-                />
-                <input
-                  type="tel"
-                  placeholder={t.contacts.phonePlaceholder}
-                  className="bg-[var(--n15-black)] border border-[var(--n15-gold)]/20 px-4 py-3 text-sm text-[var(--n15-silver)] placeholder:text-[var(--n15-muted)] focus:outline-none focus:border-[var(--n15-gold)]/50"
-                />
-                <textarea
-                  placeholder={t.contacts.messagePlaceholder}
-                  rows={4}
-                  className="bg-[var(--n15-black)] border border-[var(--n15-gold)]/20 px-4 py-3 text-sm text-[var(--n15-silver)] placeholder:text-[var(--n15-muted)] focus:outline-none focus:border-[var(--n15-gold)]/50 resize-none"
-                />
-                <Button variant="primary" size="md">
-                  {t.contacts.send}
-                </Button>
-              </form>
+              {/* Форма отправляет заявку в CRM и требует согласия на
+                  обработку данных — клиентский компонент (см. ContactForm) */}
+              <ContactForm />
             </div>
           </div>
         </SectionWrapper>
