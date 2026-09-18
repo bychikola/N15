@@ -27,6 +27,7 @@
 // ---------------------------------------------------------------------------
 
 import type { EgrnExtract } from './legal-egrn'
+import { cleanCadastral, isCadastralFormat } from './cadastral'
 
 // Аккаунт юриста, ответственного за ручные проверки: Лана Козырева (см.
 // память agent-accounts: users.id=2, svetkozyr@gmail.com). Сам отчёт и
@@ -183,14 +184,12 @@ export function sanitizeManualMarks(input: unknown): LegalManualMarks {
   return out
 }
 
-/** Кадастровый номер из ручного ввода: только цифры, двоеточия и пробелы */
+/** Кадастровый номер из ручного ввода: только цифры и двоеточия */
 export function sanitizeCadastral(input: unknown): string {
   if (typeof input !== 'string') return ''
-  const s = input.trim().replace(/[^\d:]/g, '').slice(0, 40)
-  return /^\d{2}:\d{2}:\d{6,7}:\d{1,10}$/.test(s) ? s : ''
+  const s = cleanCadastral(input)
+  return isCadastralFormat(s) ? s : ''
 }
-
-const CADASTRAL_FORMAT = /^\d{2}:\d{2}:\d{6,7}:\d{1,10}$/
 
 // --- Официальные источники --------------------------------------------------
 
@@ -447,7 +446,7 @@ export function runLegalExpertise(opts: {
   {
     const notes: string[] = []
     const problems: string[] = []
-    if (cadastral && !CADASTRAL_FORMAT.test(cadastral)) {
+    if (cadastral && !isCadastralFormat(cadastral)) {
       addFinding('warn', '1', `Кадастровый номер «${cadastral}» не похож на формат ЕГРН — проверьте запись`)
       problems.push('кадастровый номер записан с ошибкой')
     }

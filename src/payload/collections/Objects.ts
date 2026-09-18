@@ -1,4 +1,4 @@
-import type { CollectionBeforeChangeHook, CollectionConfig, Payload, Where } from 'payload'
+import type { CollectionBeforeChangeHook, CollectionConfig, Payload, TextFieldSingleValidation, Where } from 'payload'
 import { DISTRICT_OPTIONS, CITY_DISTRICT_OPTIONS } from '@/lib/districts'
 // Садовые товарищества — тот же справочник, что в разделах СТ/СНТ/СНО
 // на главной, в каталоге и форме CRM (landing-data.ts)
@@ -14,9 +14,13 @@ import { ARCHIVE_LOG_LIMIT, ARCHIVE_REASONS, archiveFromDoc, isArchiveReason, ty
 // обновляем опубликованные посты, при снятии с продажи (archived) — снимаем
 // объявления (см. src/lib/publish-service.ts)
 import { objectsAfterChange, objectsAfterDelete } from '@/lib/publish-service'
-
-const normPhone = (v?: string) => (v || '').replace(/[^\d+]/g, '')
-const normCadastral = (v?: string) => (v || '').toLowerCase().replace(/\s+/g, '')
+// Телефон собственника — к одному виду «+7 (918) 828-40-88»: те же функции,
+// что у телефонов агентов (см. src/lib/phone.ts), иначе один и тот же номер,
+// набранный как «8 918…» и как «+7 918…», не считался бы дублем
+import { formatRuPhone } from '@/lib/phone'
+// Кадастровый номер — общий формат с формой CRM и юрэкспертизой
+// (см. src/lib/cadastral.ts)
+import { cleanCadastral, isCadastralFormat } from '@/lib/cadastral'
 
 /**
  * Чтение булева флага из query-параметра запроса. В разных окружениях
@@ -39,6 +43,29 @@ function flagFromReq(req: unknown, name: string): boolean {
     if (v === 'true' || v === '1') return true
   }
   return false
+}
+
+/**
+ * Проверка кадастрового номера: формат ЕГРН и обязательность у участка.
+ *
+ * Стоит полем в коллекции, а не только в форме CRM: номер приходит и из
+ * админки, и через API. Пробелы и дефисы не мешают (их снимает
+ * cleanCadastral), а «12345» записать нельзя — по такому номеру потом не
+ * ищется ни выписка ЕГРН, ни карточка в реестре.
+ *
+ * У земельного участка номер обязателен при создании карточки: это главный
+ * признак участка. Уже сохранённые участки без номера правятся как раньше —
+ * иначе агент не смог бы поправить цену, пока собственник не назовёт номер.
+ */
+const validateCadastralNumber: TextFieldSingleValidation = (value, { data, operation }) => {
+  const number = cleanCadastral(typeof value === 'string' ? value : '')
+  if (number && !isCadastralFormat(number)) {
+    return 'Кадастровый номер — в формате 15:07:0030021:123 (только цифры и двоеточия)'
+  }
+  if (!number && operation === 'create' && (data as { category?: string } | undefined)?.category === 'land') {
+    return 'Для земельного участка укажите кадастровый номер'
+  }
+  return true
 }
 
 /** Запрос внутри access-функций коллекции (payload + текущий пользователь) */
@@ -409,10 +436,10 @@ export const Objects: CollectionConfig = {
       async ({ data, req, originalDoc }) => {
         if (!data) return data
         if (data.ownerPhone) {
-          data.ownerPhone = normPhone(data.ownerPhone)
+          data.ownerPhone = formatRuPhone(data.ownerPhone)
         }
         if (data.cadastralNumber) {
-          data.cadastralNumber = normCadastral(data.cadastralNumber)
+          data.cadastralNumber = cleanCadastral(data.cadastralNumber)
         }
         // Единица площади участка: подсказка показа («6 соток» / «1,2 га» у
         // участка, «600 м²» у квартиры). Сама площадь ВСЕГДА хранится в м² —
@@ -482,6 +509,18 @@ export const Objects: CollectionConfig = {
     // (status=archived) — снимаем их; при удалении — снимаем объявления.
     // Сами хуки тяжёлых сетевых вызовов не ждут: синхронизация уходит
     // в фоновые задачи (статусы площадок обновятся следом).
+    /**
+     * Телефон собственника на чтении — в том же виде, что в поле ввода
+     * («+7 (918) 828-40-88»). Записи, сохранённые до нормализации
+     * («89188284088»), показываются ровным номером без разовой правки базы —
+     * так же, как телефоны агентов (см. src/lib/phone.ts).
+     */
+    afterRead: [
+      ({ doc }) => {
+        if (typeof doc?.ownerPhone === 'string') doc.ownerPhone = formatRuPhone(doc.ownerPhone)
+        return doc
+      },
+    ],
     afterChange: [objectsAfterChange],
     afterDelete: [objectsAfterDelete],
   },
@@ -878,13 +917,16 @@ export const Objects: CollectionConfig = {
     {
       name: 'ownerName',
       type: 'text',
-      label: 'Собственник (имя)',
-      // Данные и контакты собственника — персональные данные: их видит только
-      // администратор (у любого объекта). Агентам, клиентам и посетителям
-      // поле не отдаётся вовсе — оно просто исчезает из выдачи REST, а в
-      // карточке CRM раздел собственника не показывается (см. CrmObjects).
+      label: 'Имя собственника',
+      // Данные и контакты собственника — персональные данные: их видит и
+      // правит только администратор (у любого объекта). Агентам, клиентам и
+      // посетителям поле не отдаётся вовсе — оно просто исчезает из выдачи
+      // REST, а в карточке CRM блок «Собственник» не показывается (см.
+      // CrmObjects). Правку тоже закрываем: сотрудник, который поля не
+      // видит, не должен затирать его запросом мимо формы.
       access: {
         read: ({ req: { user } }) => user?.role === 'admin',
+        update: ({ req: { user } }) => user?.role === 'admin',
       },
       admin: {
         description: 'По имени и телефону собственника система находит дубли объекта',
@@ -893,13 +935,15 @@ export const Objects: CollectionConfig = {
     {
       name: 'ownerPhone',
       type: 'text',
-      label: 'Собственник (телефон)',
-      // Как и имя собственника — персональные данные, только администратор
+      label: 'Телефон собственника',
+      // Как и имя собственника — персональные данные: читает и меняет
+      // только администратор
       access: {
         read: ({ req: { user } }) => user?.role === 'admin',
+        update: ({ req: { user } }) => user?.role === 'admin',
       },
       admin: {
-        description: 'Хранится нормализованно: только цифры и +',
+        description: 'Хранится в одном виде: +7 (918) 828-40-88',
       },
     },
     {
@@ -916,6 +960,8 @@ export const Objects: CollectionConfig = {
       admin: {
         description: 'Например: 15:07:0030021:123. Виден только администратору',
       },
+      // Формат номера и обязательность у участка — см. validateCadastralNumber
+      validate: validateCadastralNumber,
     },
     {
       name: 'isPremium',

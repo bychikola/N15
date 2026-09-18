@@ -24,6 +24,12 @@ import { sortAgents } from '@/lib/agents-sort'
 // Площадь участков: м² ↔ сотки ↔ гектары (1 сотка = 100 м², 1 га = 10000 м²),
 // чтение «11,5» с запятой — дробные значения разрешены
 import { areaNumberText, areaUnitOf, parseAreaNumber, sqmToUnit, unitToSqm, type AreaUnit } from '@/lib/area-format'
+// Телефон собственника: маска «+7 (918) 828-40-88» прямо при наборе — тот же
+// вид, в каком номер хранит коллекция (см. src/lib/phone.ts)
+import { formatRuPhone, maskRuPhoneInput } from '@/lib/phone'
+// Кадастровый номер: формат ЕГРН проверяется до отправки — та же проверка
+// стоит в коллекции Objects (см. src/lib/cadastral.ts)
+import { isCadastralFormat } from '@/lib/cadastral'
 // Подписи этажей дома: «1 этаж», «2 этаж» (см. также t.crm.objFloors)
 import { floorLabel } from '@/lib/floor-format'
 import { LegalCheckBlock, type LegalFocus } from '@/components/crm/LegalCheckBlock'
@@ -1166,7 +1172,10 @@ export const CrmObjects: FC<{
       status: (o.status as string) || 'draft',
       agent: agentRel?.id != null ? String(agentRel.id) : '',
       ownerName: (o.ownerName as string) || '',
-      ownerPhone: (o.ownerPhone as string) || '',
+      // Номер показываем в том же виде, что и маска ввода («+7 (918) …»):
+      // хук коллекции отдаёт его уже приведённым, повторное приведение
+      // идемпотентно и подстраховывает старые записи
+      ownerPhone: o.ownerPhone ? formatRuPhone(o.ownerPhone as string) : '',
       cadastralNumber: (o.cadastralNumber as string) || '',
     })
     const img = o.primaryImage as { id?: number; url?: string } | undefined
@@ -1466,6 +1475,22 @@ export const CrmObjects: FC<{
       setSaveError(t.crm.objAgentRequired)
       return false
     }
+    // Блоки «Собственник» и «Кадастровый номер»: проверяем до отправки, чтобы
+    // сотрудник увидел причину сразу и не потерял введённое (сервер проверяет
+    // то же самое — см. validate поля в коллекции Objects)
+    if (isAdmin) {
+      const cadastral = form.cadastralNumber.trim()
+      if (cadastral && !isCadastralFormat(cadastral)) {
+        setSaveError(t.crm.objCadastralBad)
+        return false
+      }
+      // Участок без кадастрового номера не создаём: у участка это главный
+      // признак. Уже сохранённые участки без номера правятся как раньше
+      if (!cadastral && !editId && form.category === 'land') {
+        setSaveError(t.crm.objCadastralLand)
+        return false
+      }
+    }
     setSaveError('')
     // Площадь в БД всегда хранится в м²: участок «6 соток» сохраняется как
     // 600 м² (а «1,2 га» — как 12000 м²) + единица для показа; техрасчёты
@@ -1551,10 +1576,15 @@ export const CrmObjects: FC<{
       images: mediaIds.slice(1),
       // Поля собственника и кадастровый номер правят только администраторы:
       // у сотрудников их нет в форме, отправлять их не нужно (undefined —
-      // поле не участвует в запросе и данные администратора не затираются)
-      ownerName: isAdmin ? form.ownerName.trim() || undefined : undefined,
-      ownerPhone: isAdmin ? form.ownerPhone.trim() || undefined : undefined,
-      cadastralNumber: isAdmin ? form.cadastralNumber.trim() || undefined : undefined,
+      // поле не участвует в запросе и данные администратора не затираются).
+      // Пустое поле у администратора уходит как null, а не пропускается:
+      // иначе стёртое значение (очистка телефона или кадастрового) не
+      // сохранялось бы — Payload считает пропущенное поле неизменённым.
+      // Телефон уходит в том же виде, в каком его хранит коллекция
+      // («+7 (918) 828-40-88»), чтобы дубли искались по одному написанию.
+      ownerName: isAdmin ? form.ownerName.trim() || null : undefined,
+      ownerPhone: isAdmin ? formatRuPhone(form.ownerPhone.trim()) || null : undefined,
+      cadastralNumber: isAdmin ? form.cadastralNumber.trim() || null : undefined,
       // Перенос в архив добавляет статус и данные архива (см. runArchive)
       ...extra,
     }
@@ -2270,22 +2300,56 @@ export const CrmObjects: FC<{
             />
           </div>
 
-          {/* Данные собственника: ФИО и телефон собственника и кадастровый номер —
-              закрытые сведения, их видит и правит только администратор (поля
-              скрыты у сотрудников вовсе, а не заблокированы: см. access полей
-              в коллекции Objects). На телефоне поля становятся во всю ширину */}
+          {/* Блок «Собственник»: имя и телефон — закрытые сведения, их видит и
+              правит только администратор (у сотрудников полей нет вовсе, а не
+              «заблокированы»: см. access полей в коллекции Objects и память
+              agent-accounts — так требует владелец). Стоит перед блоком
+              «Кадастровый номер»: сначала собственник объекта, потом номер.
+              Разметка: блок = подпись + сетка полей (crm.css), на телефоне
+              поля становятся в одну колонку */}
           {isAdmin && (
-            <div className="crm-owner span-2" style={{ gridColumn: '1 / -1' }}>
-              <Field label={t.crm.objOwnerName}>
-                <input value={form.ownerName} onChange={(e) => set('ownerName', e.target.value)} style={inputStyle} />
-              </Field>
-              <Field label={t.crm.objOwnerPhone}>
-                <input inputMode="tel" value={form.ownerPhone} onChange={(e) => set('ownerPhone', e.target.value)} style={inputStyle} />
-              </Field>
+            <div className="crm-fields-block span-2" style={{ gridColumn: '1 / -1' }}>
+              <div className="crm-block-head">
+                <strong>{t.crm.objOwnerBlock}</strong>
+                <span>{t.crm.objOwnerNote}</span>
+              </div>
+              <div className="crm-owner-grid">
+                <Field label={t.crm.objOwnerName}>
+                  <input value={form.ownerName} onChange={(e) => set('ownerName', e.target.value)} style={inputStyle} />
+                </Field>
+                <Field label={t.crm.objOwnerPhone}>
+                  {/* Маска +7 подставляется прямо при наборе: «8918…» →
+                      «+7 (918) …». Значения с буквами (заметка) маска не
+                      трогает — см. src/lib/phone.ts */}
+                  <input
+                    type="tel"
+                    inputMode="tel"
+                    autoComplete="off"
+                    value={form.ownerPhone}
+                    onChange={(e) => set('ownerPhone', maskRuPhoneInput(e.target.value))}
+                    style={inputStyle}
+                    placeholder="+7 (___) ___-__-__"
+                  />
+                </Field>
+              </div>
+            </div>
+          )}
+
+          {/* Блок «Кадастровый номер»: номер объекта — отдельным полем.
+              Формат проверяется до отправки (и на сервере), у участка номер
+              обязателен при создании карточки */}
+          {isAdmin && (
+            <div className="crm-fields-block span-2" style={{ gridColumn: '1 / -1' }}>
+              <div className="crm-block-head">
+                <strong>{t.crm.objCadastralBlock}</strong>
+                <span>{t.crm.objCadastralHint}</span>
+              </div>
               <Field label={t.crm.objCadastral}>
-                <input value={form.cadastralNumber} onChange={(e) => set('cadastralNumber', e.target.value)} style={inputStyle} />
-                <p style={{ margin: '5px 0 0', fontSize: 10, color: '#8a857b', lineHeight: 1.5 }}>{t.crm.objCadastralHint}</p>
+                <input value={form.cadastralNumber} onChange={(e) => set('cadastralNumber', e.target.value)} style={inputStyle} placeholder="15:07:0030021:123" />
               </Field>
+              {form.category === 'land' && !editId && (
+                <p className="crm-field-note">{t.crm.objCadastralLandNote}</p>
+              )}
             </div>
           )}
 

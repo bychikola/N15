@@ -67,8 +67,15 @@ body{margin:0}.crm-sidebar{box-sizing:border-box}.crm-chat-panel{box-sizing:bord
 .crm-map-status{margin:8px 0 0;color:#8a857b;font-size:10px;line-height:1.55;text-transform:none;letter-spacing:0}
 .crm-map-status.err{color:#9b4e43}
 .crm-map-canvas{height:300px;border:1px solid #d9d1c4;border-radius:10px;overflow:hidden;background:#e9e2d5}
-.crm-owner{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
-@media(max-width:640px){.crm-property-form input,.crm-property-form select,.crm-property-form textarea{font-size:16px}.crm-suggest-item{font-size:16px;padding:13px 12px}.crm-owner{grid-template-columns:1fr}.crm-map-canvas{height:250px}.crm-map-bar{flex-wrap:wrap;gap:10px}}
+/* Блоки «Собственник» и «Кадастровый номер» формы объекта: закрытые сведения
+   (видны только администратору). Каждый блок — подпись сверху и поля ниже,
+   поэтому блоки идут друг за другом отдельными рамками */
+.crm-fields-block{padding:14px;border:1px solid #e8dfd0;border-radius:10px;background:#fbf8f1}
+.crm-block-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:10px;margin-bottom:12px}
+.crm-block-head strong{color:#8b683f;font-size:10px;text-transform:uppercase;letter-spacing:.1em}
+.crm-block-head span{margin:0;color:#9b958a;font-size:10px;line-height:1.5;text-transform:none;letter-spacing:0}
+.crm-owner-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+@media(max-width:640px){.crm-property-form input,.crm-property-form select,.crm-property-form textarea{font-size:16px}.crm-suggest-item{font-size:16px;padding:13px 12px}.crm-owner-grid{grid-template-columns:1fr}.crm-map-canvas{height:250px}.crm-map-bar{flex-wrap:wrap;gap:10px}}
 
 /* ── Google Material Symbols (иконки) ──────────── */
 .material-symbols-outlined{font-family:'Material Symbols Outlined';font-weight:normal;font-style:normal;line-height:1;letter-spacing:normal;text-transform:none;display:inline-block;white-space:nowrap;word-wrap:normal;direction:ltr;font-feature-settings:'liga';-webkit-font-smoothing:antialiased}

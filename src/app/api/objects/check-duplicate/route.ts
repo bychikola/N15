@@ -3,9 +3,14 @@ import type { Where } from 'payload'
 import config from '@payload-config'
 import { NextRequest, NextResponse } from 'next/server'
 import { canAccessCrm, getCrmUser } from '@/app/crm/auth'
+import { formatRuPhone } from '@/lib/phone'
+import { cleanCadastral } from '@/lib/cadastral'
 
-const normPhone = (v?: string) => (v || '').replace(/[^\d+]/g, '')
-const normCadastral = (v?: string) => (v || '').toLowerCase().replace(/\s+/g, '')
+// Телефон и кадастровый — в том же виде, в каком они лежат в объекте:
+// иначе поиск по базе (равенство значений) не найдёт уже сохранённую карточку
+// с тем же номером: см. beforeChange коллекции Objects
+const normPhone = (v?: string) => formatRuPhone(v || '')
+const normCadastral = (v?: string) => cleanCadastral(v)
 const normName = (v?: string) => (v || '').trim().toLowerCase()
 const normAddress = (a?: { city?: string; street?: string; house?: string; apartment?: string } | null) => {
   // Город сам по себе слишком общий — совпадение адреса считаем только
