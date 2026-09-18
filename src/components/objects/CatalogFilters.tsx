@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Dict } from '@/i18n/dictionaries'
 // Садовые товарищества (СНТ/СНО/ДНТ) — те же справочники, что в подразделе
 // лендинга: категории из GARDENING_AREAS, всё внутри Владикавказского округа
@@ -180,7 +180,28 @@ type DropdownEntry =
   | { kind: 'header'; label: string }
   | { kind: 'option'; value: string; label: string }
 
-function Dropdown({ label, value, options, groups, onSelect, compactLabel }: {
+/** Стрелка выпадающего списка: у открытого — вверх, у закрытого — вниз.
+ *  Все списки панели (сделка, тип, город, район…) и строки регионов внутри
+ *  фильтра «Город» показывают её одинаково (кегль и цвет задаёт className) */
+function DdArrow({ open, className = 'text-[10px]' }: { open: boolean; className?: string }) {
+  return (
+    <span className={`shrink-0 transition-transform ${className} ${open ? 'rotate-180' : ''}`} aria-hidden="true">▼</span>
+  )
+}
+
+/** Счётчик объектов в строке списка. Ноль не показываем: в справочнике
+ *  регионов населённые пункты видны и без объектов (см. placesOf в
+ *  src/lib/interregional-service.ts), и ноль рядом с каждым названием читался
+ *  бы как пустой список */
+function PlaceCount({ n }: { n: number }) {
+  if (n <= 0) return null
+  return <span className="shrink-0 text-xs tabular-nums text-[var(--n15-muted)]">{n}</span>
+}
+
+/** Выпадающий список панели фильтров. Открытым его держит родитель (см.
+ *  openId в CatalogFilters): одновременно открыт ровно один список, поэтому
+ *  состояние «открыт» приходит пропом, а не живёт внутри */
+function Dropdown({ label, value, options, groups, onSelect, compactLabel, open, onToggle, onClose }: {
   label: string
   value: string
   /** Простые пункты без групп (сделка, тип, район…) */
@@ -190,8 +211,13 @@ function Dropdown({ label, value, options, groups, onSelect, compactLabel }: {
   groups?: { label: string; options: { value: string; label: string }[] }[]
   onSelect: (v: string) => void
   compactLabel?: boolean
+  /** Открыт ли список (открытым держит панель фильтров) */
+  open: boolean
+  /** Нажатие на кнопку: открыть список или свернуть открытый */
+  onToggle: () => void
+  /** Закрыть список: выбор пункта, Escape, клик вне панели */
+  onClose: () => void
 }) {
-  const [open, setOpen] = useState(false)
   const entries: DropdownEntry[] = groups
     ? groups.flatMap((g) => [
         { kind: 'header', label: g.label },
@@ -201,18 +227,18 @@ function Dropdown({ label, value, options, groups, onSelect, compactLabel }: {
   const current = entries.find((e): e is Extract<DropdownEntry, { kind: 'option' }> => e.kind === 'option' && e.value === value)
   return (
     <div className="relative">
-      <button type="button" onClick={() => setOpen(!open)} className={ddBtnCls} aria-expanded={open}>
+      <button type="button" onClick={onToggle} className={ddBtnCls} aria-expanded={open} aria-haspopup="listbox">
         {/* min-w-0 — колонка подписи сжимается под ширину кнопки, подпись и
             значение переносятся по словам (break-words) и не выходят за рамку */}
         <span className="flex flex-col items-start min-w-0">
           <span className={labelCls(compactLabel) + ' break-words'}>{label}</span>
           <span className="break-words">{current?.label ?? 'Любой'}</span>
         </span>
-        <span className={`text-[10px] transition-transform ${open ? 'rotate-180' : ''}`}>▼</span>
+        <DdArrow open={open} />
       </button>
       {open && (
         <div className="absolute z-30 top-full left-0 right-0 mt-1 py-1 bg-[var(--n15-charcoal)] border border-[var(--n15-gold)]/20 shadow-lg">
-          <button type="button" onClick={() => { onSelect(''); setOpen(false) }}
+          <button type="button" onClick={() => { onSelect(''); onClose() }}
             className={`w-full text-left px-4 py-2 text-sm hover:bg-[var(--n15-gold)]/8 ${value === '' ? 'text-[var(--n15-gold)]' : 'text-[var(--n15-silver)]'}`}>
             Любой
           </button>
@@ -223,7 +249,7 @@ function Dropdown({ label, value, options, groups, onSelect, compactLabel }: {
                 {e.label}
               </div>
             ) : (
-              <button key={e.value} type="button" onClick={() => { onSelect(e.value); setOpen(false) }}
+              <button key={e.value} type="button" onClick={() => { onSelect(e.value); onClose() }}
                 className={`w-full text-left px-4 py-2 text-sm hover:bg-[var(--n15-gold)]/8 ${value === e.value ? 'text-[var(--n15-gold)]' : 'text-[var(--n15-silver)]'}`}>
                 {e.label}
               </button>
@@ -251,17 +277,20 @@ const cityRowSub = `${cityRowCls} pl-9`
 
 /**
  * Фильтр «Город»: иерархия регион → населённые пункты. При открытии — только
- * регионы; населённые пункты региона показываются по стрелке (раскрывается и
- * сворачивается), у каждой строки — счётчик опубликованных объектов. Последняя
- * строка раскрытого региона — «Все населённые пункты региона»: фильтр по
- * региону целиком. Поиск ищет населённые пункты во всех регионах сразу и
- * подписывает, из какого они региона — плоский список городов при этом не
- * возвращается: без запроса в списке только регионы.
+ * регионы; населённые пункты региона показываются по стрелке: раскрыт может
+ * быть только один регион, повторное нажатие на открытый его сворачивает.
+ * У строки — счётчик опубликованных объектов (у пунктов без объектов счётчика
+ * нет). Последняя строка раскрытого региона — «Все населённые пункты региона»:
+ * фильтр по региону целиком. Поиск ищет населённые пункты во всех регионах
+ * сразу и подписывает, из какого они региона — плоский список городов при этом
+ * не возвращается: без запроса в списке только регионы.
  *
  * Список прокручивается внутри себя (max-h): на телефоне, где фильтры стоят
  * столбцом, он не растягивает страницу и не уходит за пределы экрана.
+ * Открытым фильтр держит панель (см. openId в CatalogFilters): нажатие на
+ * другой фильтр, клик вне панели и Escape закрывают список.
  */
-function CityDropdown({ label, regions, place, regionKey, onPlace, onRegion, onClear, t }: {
+function CityDropdown({ label, regions, place, regionKey, onPlace, onRegion, onClear, t, open, onToggle, onClose }: {
   label: string
   /** Регионы фильтра в порядке показа (см. CityFilterRegion) */
   regions: CityFilterRegion[]
@@ -273,12 +302,57 @@ function CityDropdown({ label, regions, place, regionKey, onPlace, onRegion, onC
   onRegion: (region: CityFilterRegion) => void
   onClear: () => void
   t: Dict
+  /** Открыт ли список (открытым держит панель фильтров) */
+  open: boolean
+  /** Нажатие на кнопку: открыть список или свернуть открытый */
+  onToggle: () => void
+  /** Закрыть список: выбор пункта, Escape, клик вне панели */
+  onClose: () => void
 }) {
-  const [open, setOpen] = useState(false)
+  const currentPlace = place ? regions.flatMap((r) => r.places).find((p) => p.value === place) : undefined
+  const currentRegion = regionKey ? regions.find((r) => r.key === regionKey) : undefined
+  // Значение фильтра может быть и не из списка (ссылка на скрытый населённый
+  // пункт) — показываем его как есть, чтобы выбор не выглядел потерянным
+  const currentLabel = currentPlace?.label || currentRegion?.label || place || 'Любой'
+
+  return (
+    <div className="relative">
+      <button type="button" onClick={onToggle} className={ddBtnCls} aria-expanded={open}
+        aria-haspopup="listbox">
+        <span className="flex flex-col items-start min-w-0">
+          <span className={labelCls(true) + ' break-words'}>{label}</span>
+          <span className="break-words">{currentLabel}</span>
+        </span>
+        <DdArrow open={open} />
+      </button>
+      {/* Список живёт, пока открыт: закрытие (выбор пункта, повторное нажатие,
+          Escape, клик вне панели) размонтирует его, и раскрытый регион вместе
+          с поиском сбрасываются сами — фильтр открывается списком регионов */}
+      {open && (
+        <CityList label={label} regions={regions} place={place} regionKey={regionKey}
+          onPlace={onPlace} onRegion={onRegion} onClear={onClear} onClose={onClose} t={t} />
+      )}
+    </div>
+  )
+}
+
+/** Раскрытый список фильтра «Город»: поиск и регионы. Запрос и раскрытый
+ *  регион живут здесь и пропадают вместе со списком (см. CityDropdown) */
+function CityList({ label, regions, place, regionKey, onPlace, onRegion, onClear, onClose, t }: {
+  label: string
+  regions: CityFilterRegion[]
+  place: string
+  regionKey: string
+  onPlace: (place: CityFilterPlace) => void
+  onRegion: (region: CityFilterRegion) => void
+  onClear: () => void
+  onClose: () => void
+  t: Dict
+}) {
   const [query, setQuery] = useState('')
-  // Раскрытые регионы списком, а не одним: населённые пункты двух регионов
-  // можно сравнивать, не сворачивая предыдущий
-  const [expanded, setExpanded] = useState<string[]>([])
+  // Раскрыт один регион, а не список: открытие другого сворачивает прежний,
+  // повторное нажатие на открытый — сворачивает его самого
+  const [expanded, setExpanded] = useState<string | null>(null)
   const q = nameKey(query)
   const matches = useMemo(
     () => (q
@@ -288,99 +362,80 @@ function CityDropdown({ label, regions, place, regionKey, onPlace, onRegion, onC
       : []),
     [q, regions],
   )
-  const currentPlace = place ? regions.flatMap((r) => r.places).find((p) => p.value === place) : undefined
-  const currentRegion = regionKey ? regions.find((r) => r.key === regionKey) : undefined
-  // Значение фильтра может быть и не из списка (ссылка на скрытый населённый
-  // пункт) — показываем его как есть, чтобы выбор не выглядел потерянным
-  const currentLabel = currentPlace?.label || currentRegion?.label || place || 'Любой'
 
-  const toggle = (key: string) =>
-    setExpanded((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]))
-  // Закрытие сбрасывает раскрытие и поиск: фильтр открывается списком регионов
-  const close = () => { setOpen(false); setQuery(''); setExpanded([]) }
-  const pick = (p: CityFilterPlace) => { onPlace(p); close() }
-  const pickRegion = (r: CityFilterRegion) => { onRegion(r); close() }
-  const clear = () => { onClear(); close() }
+  const toggle = (key: string) => setExpanded((prev) => (prev === key ? null : key))
+  const pick = (p: CityFilterPlace) => { onPlace(p); onClose() }
+  const pickRegion = (r: CityFilterRegion) => { onRegion(r); onClose() }
+  const clear = () => { onClear(); onClose() }
 
   return (
-    <div className="relative">
-      <button type="button" onClick={() => (open ? close() : setOpen(true))} className={ddBtnCls} aria-expanded={open}
-        aria-haspopup="listbox">
-        <span className="flex flex-col items-start min-w-0">
-          <span className={labelCls(true) + ' break-words'}>{label}</span>
-          <span className="break-words">{currentLabel}</span>
-        </span>
-        <span className={`text-[10px] transition-transform ${open ? 'rotate-180' : ''}`}>▼</span>
+    <div
+      className="absolute z-30 top-full left-0 right-0 mt-1 bg-[var(--n15-charcoal)] border border-[var(--n15-gold)]/20 shadow-lg max-h-[min(70vh,24rem)] overflow-y-auto overscroll-contain"
+      role="group" aria-label={label}
+    >
+      {/* Поиск по названию населённого пункта: sticky — список под полем
+          прокручивается, а поле остаётся на виду */}
+      <div className="sticky top-0 z-10 p-2 bg-[var(--n15-charcoal)] border-b border-[var(--n15-gold)]/10">
+        <input type="search" value={query} onChange={(e) => setQuery(e.target.value)}
+          placeholder={t.catalog.citySearch} aria-label={t.catalog.citySearch}
+          className="w-full px-3 py-2 text-sm bg-[var(--n15-black)]/40 border border-[var(--n15-gold)]/20 text-[var(--n15-silver)] placeholder:text-[var(--n15-muted)] focus:outline-none focus:border-[var(--n15-gold)]/50" />
+      </div>
+      <button type="button" onClick={clear}
+        className={`${cityRowTop} hover:bg-[var(--n15-gold)]/8 ${!place && !regionKey ? 'text-[var(--n15-gold)]' : 'text-[var(--n15-silver)]'}`}>
+        Любой
       </button>
-      {open && (
-        <div
-          className="absolute z-30 top-full left-0 right-0 mt-1 bg-[var(--n15-charcoal)] border border-[var(--n15-gold)]/20 shadow-lg max-h-[min(70vh,24rem)] overflow-y-auto overscroll-contain"
-          role="group" aria-label={label}
-        >
-          {/* Поиск по названию населённого пункта: sticky — список под полем
-              прокручивается, а поле остаётся на виду */}
-          <div className="sticky top-0 z-10 p-2 bg-[var(--n15-charcoal)] border-b border-[var(--n15-gold)]/10">
-            <input type="search" value={query} onChange={(e) => setQuery(e.target.value)}
-              placeholder={t.catalog.citySearch} aria-label={t.catalog.citySearch}
-              className="w-full px-3 py-2 text-sm bg-[var(--n15-black)]/40 border border-[var(--n15-gold)]/20 text-[var(--n15-silver)] placeholder:text-[var(--n15-muted)] focus:outline-none focus:border-[var(--n15-gold)]/50" />
-          </div>
-          <button type="button" onClick={clear}
-            className={`${cityRowTop} hover:bg-[var(--n15-gold)]/8 ${!place && !regionKey ? 'text-[var(--n15-gold)]' : 'text-[var(--n15-silver)]'}`}>
-            Любой
-          </button>
-          {q ? (
-            /* Поиск: найденные населённые пункты всех регионов, с подписью региона */
-            matches.length ? (
-              matches.map(({ region, place: found }) => (
-                <button key={`${region.key}-${found.value}`} type="button" onClick={() => pick(found)}
-                  className={`${cityRowTop} hover:bg-[var(--n15-gold)]/8 ${found.value === place ? 'text-[var(--n15-gold)]' : 'text-[var(--n15-silver)]'}`}>
-                  <span className="min-w-0 flex-1">
-                    <span className="block break-words">{found.label}</span>
-                    <span className="block text-[10px] text-[var(--n15-muted)]">{region.label}</span>
-                  </span>
-                  <span className="shrink-0 text-xs tabular-nums text-[var(--n15-muted)]">{found.count}</span>
-                </button>
-              ))
-            ) : (
-              <p className="px-4 py-3 text-sm text-[var(--n15-muted)]">{t.catalog.nothingFound}</p>
-            )
-          ) : (
-            regions.map((region) => {
-              const isOpen = expanded.includes(region.key)
-              return (
-                <div key={region.key}>
-                  {/* Регион: нажатие раскрывает вложенный список населённых пунктов */}
-                  <button type="button" onClick={() => toggle(region.key)} aria-expanded={isOpen}
-                    className={`${cityRowTop} hover:bg-[var(--n15-gold)]/8 ${regionKey === region.key ? 'text-[var(--n15-gold)]' : 'text-[var(--n15-silver)]'}`}>
-                    <span className={`shrink-0 text-[9px] text-[var(--n15-gold)] transition-transform ${isOpen ? 'rotate-90' : ''}`} aria-hidden="true">▶</span>
-                    <span className="min-w-0 flex-1 break-words">{region.label}</span>
-                    <span className="shrink-0 text-xs tabular-nums text-[var(--n15-muted)]">{region.count}</span>
-                  </button>
-                  {isOpen && (
-                    <div className="pb-1">
-                      {region.places.map((p) => (
-                        <button key={p.value} type="button" onClick={() => pick(p)}
-                          className={`${cityRowSub} hover:bg-[var(--n15-gold)]/8 ${p.value === place ? 'text-[var(--n15-gold)]' : 'text-[var(--n15-silver)]'}`}>
-                          <span className="min-w-0 flex-1 break-words">{p.label}</span>
-                          <span className="shrink-0 text-xs tabular-nums text-[var(--n15-muted)]">{p.count}</span>
-                        </button>
-                      ))}
-                      {/* Региона без населённых пунктов (пустые «Другие регионы»)
-                          эта строка не касается: фильтровать не по чему */}
-                      {region.match.length > 0 && (
-                        <button type="button" onClick={() => pickRegion(region)}
-                          className={`${cityRowSub} hover:bg-[var(--n15-gold)]/8 ${regionKey === region.key ? 'text-[var(--n15-gold)]' : 'text-[var(--n15-gold)]/80'}`}>
-                          <span className="min-w-0 flex-1 break-words">{t.catalog.allRegionPlaces}</span>
-                          <span className="shrink-0 text-xs tabular-nums text-[var(--n15-muted)]">{region.count}</span>
-                        </button>
-                      )}
-                    </div>
+      {q ? (
+        /* Поиск: найденные населённые пункты всех регионов, с подписью региона */
+        matches.length ? (
+          matches.map(({ region, place: found }) => (
+            <button key={`${region.key}-${found.value}`} type="button" onClick={() => pick(found)}
+              className={`${cityRowTop} hover:bg-[var(--n15-gold)]/8 ${found.value === place ? 'text-[var(--n15-gold)]' : 'text-[var(--n15-silver)]'}`}>
+              <span className="min-w-0 flex-1">
+                <span className="block break-words">{found.label}</span>
+                <span className="block text-[10px] text-[var(--n15-muted)]">{region.label}</span>
+              </span>
+              <PlaceCount n={found.count} />
+            </button>
+          ))
+        ) : (
+          <p className="px-4 py-3 text-sm text-[var(--n15-muted)]">{t.catalog.nothingFound}</p>
+        )
+      ) : (
+        regions.map((region) => {
+          const isOpen = expanded === region.key
+          return (
+            <div key={region.key}>
+              {/* Регион: нажатие раскрывает вложенный список населённых пунктов,
+                  повторное — сворачивает его */}
+              <button type="button" onClick={() => toggle(region.key)} aria-expanded={isOpen}
+                className={`${cityRowTop} hover:bg-[var(--n15-gold)]/8 ${regionKey === region.key ? 'text-[var(--n15-gold)]' : 'text-[var(--n15-silver)]'}`}>
+                <DdArrow open={isOpen} className="text-[9px] text-[var(--n15-gold)]" />
+                <span className="min-w-0 flex-1 break-words">{region.label}</span>
+                <PlaceCount n={region.count} />
+              </button>
+              {isOpen && (
+                <div className="pb-1">
+                  {region.places.map((p) => (
+                    <button key={p.value} type="button" onClick={() => pick(p)}
+                      className={`${cityRowSub} hover:bg-[var(--n15-gold)]/8 ${p.value === place ? 'text-[var(--n15-gold)]' : 'text-[var(--n15-silver)]'}`}>
+                      <span className="min-w-0 flex-1 break-words">{p.label}</span>
+                      <PlaceCount n={p.count} />
+                    </button>
+                  ))}
+                  {/* Региона без населённых пунктов (пустые «Другие регионы»)
+                      эта строка не касается: фильтровать не по чему */}
+                  {region.match.length > 0 && (
+                    <button type="button" onClick={() => pickRegion(region)}
+                      className={`${cityRowSub} hover:bg-[var(--n15-gold)]/8 ${regionKey === region.key ? 'text-[var(--n15-gold)]' : 'text-[var(--n15-gold)]/80'}`}>
+                      <span className="min-w-0 flex-1 break-words">{t.catalog.allRegionPlaces}</span>
+                      <PlaceCount n={region.count} />
+                    </button>
                   )}
                 </div>
-              )
-            })
-          )}
-        </div>
+              )}
+            </div>
+          )
+        })
       )}
     </div>
   )
@@ -397,7 +452,41 @@ interface CatalogFiltersProps {
   knownCities: readonly string[]
 }
 
+/** Ключи выпадающих списков панели — по одному на фильтр. Открытым может быть
+ *  только один: ключ лежит в openId, остальные списки закрыты */
+type DropdownId = 'type' | 'category' | 'city' | 'district' | 'cityDistrict' | 'locality' | 'snt'
+
 export default function CatalogFilters({ state, onChange, t, cityRegions, knownCities }: CatalogFiltersProps) {
+  // Открытый выпадающий список панели. Один на все фильтры: открытие нового
+  // закрывает прежний, повторное нажатие на кнопку — закрывает открытый.
+  // Списки рисуются поверх друг друга, и несколько открытых окон сразу
+  // перекрывали бы фильтры под ними
+  const [openId, setOpenId] = useState<DropdownId | null>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
+  const toggle = (id: DropdownId) => setOpenId((prev) => (prev === id ? null : id))
+  const close = () => setOpenId(null)
+
+  // Закрытие открытого списка по Escape и по клику вне панели фильтров:
+  // слушатели висят на документе, пока список открыт (клик по элементам
+  // самого списка и по кнопкам фильтров панель считает своими)
+  useEffect(() => {
+    if (!openId) return
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpenId(null)
+    }
+    const onPointerDown = (e: PointerEvent) => {
+      const panel = panelRef.current
+      if (panel && e.target instanceof Node && panel.contains(e.target)) return
+      setOpenId(null)
+    }
+    document.addEventListener('keydown', onKeyDown)
+    document.addEventListener('pointerdown', onPointerDown)
+    return () => {
+      document.removeEventListener('keydown', onKeyDown)
+      document.removeEventListener('pointerdown', onPointerDown)
+    }
+  }, [openId])
+
   const typeOptions = Object.entries(t.typeLabels).map(([value, label]) => ({ value, label }))
   const categoryOptions = Object.entries(t.categoryLabels).map(([value, label]) => ({ value, label }))
   // Пункты зависят от выбранного района: показываем только его нас. пункты
@@ -525,13 +614,15 @@ export default function CatalogFilters({ state, onChange, t, cityRegions, knownC
     }`
 
   return (
-    <div className="flex flex-wrap items-end gap-3 p-4 border border-[var(--n15-gold)]/10 bg-[var(--n15-black)]/30">
+    <div ref={panelRef} className="flex flex-wrap items-end gap-3 p-4 border border-[var(--n15-gold)]/10 bg-[var(--n15-black)]/30">
       <div className="w-48">
         <Dropdown label={t.catalog.dealLabel} value={state.type} options={typeOptions}
+          open={openId === 'type'} onToggle={() => toggle('type')} onClose={close}
           onSelect={(v) => apply({ type: v })} />
       </div>
       <div className="w-48">
         <Dropdown label={t.catalog.typeLabel} value={state.category} options={categoryOptions}
+          open={openId === 'category'} onToggle={() => toggle('category')} onClose={close}
           onSelect={(v) => apply({ category: v })} />
       </div>
       {/* «Город» — иерархия регионов: Осетия и межрегиональные направления Н15
@@ -544,11 +635,13 @@ export default function CatalogFilters({ state, onChange, t, cityRegions, knownC
           ней остаются — это и есть структура поиска участков */}
       <div className="w-full sm:w-64">
         <CityDropdown label={t.catalog.cityLabel} regions={shownRegions} place={cityPlace}
-          regionKey={state.cityRegion} onPlace={pickPlace} onRegion={pickRegion} onClear={clearCity} t={t} />
+          regionKey={state.cityRegion} onPlace={pickPlace} onRegion={pickRegion} onClear={clearCity} t={t}
+          open={openId === 'city'} onToggle={() => toggle('city')} onClose={close} />
       </div>
       <div className="w-48">
         <Dropdown label={t.catalog.districtLabel} value={state.district}
           options={DISTRICT_OPTIONS.map((d) => ({ value: d, label: d }))}
+          open={openId === 'district'} onToggle={() => toggle('district')} onClose={close}
           onSelect={(v) => {
             const patch: Partial<FiltersState> = { district: v }
             // Если выбранный пункт не входит в новый район — сбрасываем его
@@ -561,12 +654,14 @@ export default function CatalogFilters({ state, onChange, t, cityRegions, knownC
       <div className="w-48">
         <Dropdown label={t.catalog.cityDistrictLabel} value={state.cityDistrict}
           options={CITY_DISTRICT_OPTIONS.map((d) => ({ value: d, label: d }))}
+          open={openId === 'cityDistrict'} onToggle={() => toggle('cityDistrict')} onClose={close}
           onSelect={(v) => apply({ cityDistrict: v, ...dropInterregionalCity(v) })} />
       </div>
       <div className="w-48">
         {/* «Населённый пункт» — длинная подпись: компактный шрифт, чтобы помещалась в одну строку */}
         <Dropdown label={t.catalog.localityLabel} value={state.locality}
           options={localityOptions} compactLabel
+          open={openId === 'locality'} onToggle={() => toggle('locality')} onClose={close}
           onSelect={(v) => apply({ locality: v, ...dropInterregionalCity(v) })} />
       </div>
       <div className="w-56">
@@ -577,6 +672,7 @@ export default function CatalogFilters({ state, onChange, t, cityRegions, knownC
           groups={GARDENING_CATEGORY_ORDER
             .filter((c) => GARDENING_AREAS[c].length > 0)
             .map((c) => ({ label: c, options: GARDENING_AREAS[c].map((s) => ({ value: s, label: s })) }))}
+          open={openId === 'snt'} onToggle={() => toggle('snt')} onClose={close}
           onSelect={(v) => apply({ snt: v, ...dropInterregionalCity(v) })} />
       </div>
       <div className="w-48">

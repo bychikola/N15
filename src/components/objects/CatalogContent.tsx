@@ -322,10 +322,12 @@ export default function CatalogContent({ cityRegions, knownCities, agentName }: 
       ) : (
         <div className="text-center py-20">
           {/* Подбор по конкретному нас. пункту, региону или межрегиональному
-              городу пуст — сообщение понятнее общего «ничего не найдено» */}
+              городу пуст — сообщение понятнее общего «ничего не найдено».
+              Регион и город без объектов — это «пока подбираются»: вместо
+              пустого списка предлагаем оставить заявку (см. nothingInRegion) */}
           <p className="text-[var(--n15-muted)] text-lg mb-4">
             {filters.city || filters.cityRegion
-              ? t.catalog.nothingInCity
+              ? t.catalog.nothingInRegion
               : filters.locality
                 ? t.catalog.nothingInLocality
                 : t.catalog.nothingFound}

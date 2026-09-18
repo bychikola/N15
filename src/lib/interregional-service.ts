@@ -390,6 +390,13 @@ export interface CatalogCityFilter {
  * Регион справочника, которого нет в списке заданий, показывается после
  * заданных строк — заведённый сотрудником регион не теряется. Города с
  * объектами вне справочника собираются в последнюю строку «Другие регионы».
+ *
+ * Строки списка — весь справочник региона: населённый пункт виден и без
+ * опубликованных объектов (счётчика у него тогда нет), чтобы справочник
+ * фильтра совпадал со справочником CRM, а не пустел до первых объектов.
+ * Счётчик строки «все населённые пункты региона» при этом считается по всему
+ * справочнику, включая пункты, которых в списке нет (у Осетии — по всем
+ * населённым пунктам республики из src/lib/districts.ts).
  */
 export async function loadCatalogCityFilter(payload: Payload): Promise<CatalogCityFilter> {
   const [{ regions: regionRows, settlements: settlementRows }, objects] = await Promise.all([
@@ -428,11 +435,11 @@ export async function loadCatalogCityFilter(payload: Payload): Promise<CatalogCi
     // Условие региона собираем по всему справочнику, включая скрытые пункты:
     // объект в них — всё равно объект региона
     const match = matchValues('city', own.flatMap((row) => spellingValues(cityIndex, row.city || row.name)))
-    // Строки списка: ключевые населённые пункты («показывать всегда») и те,
-    // где уже есть опубликованные объекты
-    const places = own
-      .filter((row) => row.alwaysVisible || spellingsCount(cityIndex, row.city || row.name) > 0)
-      .map((row) => placeOf(row.city || row.name, row.name, 'city'))
+    // Строки списка — весь справочник региона, а не только ключевые населённые
+    // пункты и те, где уже есть объекты: справочник и есть список мест, где
+    // работает Н15, поэтому заведённый в CRM населённый пункт виден в фильтре
+    // сразу. У пункта без опубликованных объектов счётчика нет (см. PlaceCount)
+    const places = own.map((row) => placeOf(row.city || row.name, row.name, 'city'))
     return { key, label, ossetian: false, count: countByMatch(rows, match), match, places }
   }
 
@@ -455,9 +462,15 @@ export async function loadCatalogCityFilter(payload: Payload): Promise<CatalogCi
       places.push(placeOf(name, name, 'locality'))
       added.add(cityKey(name))
     }
+    // Условие региона — весь справочник населённых пунктов республики, а не
+    // только строки списка: выбранная Осетия находит все свои объекты, в том
+    // числе в населённых пунктах, которых в списке нет. Написания берём из
+    // базы (spellingValues): адрес агент вводит руками, и объект находится,
+    // как бы он ни был записан
+    const knownLocalities = [...new Set([...OSSETIA_TOWNS, ...LOCALITY_OPTIONS])]
     const match = [
       ...matchValues('city', spellingValues(cityIndex, OSSETIA_CITY)),
-      ...matchValues('locality', places.flatMap((item) => item.values)),
+      ...matchValues('locality', knownLocalities.flatMap((name) => spellingValues(localityIndex, name))),
     ]
     return { key, label, ossetian: true, count: countByMatch(rows, match), match, places }
   }

@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "check:city-filter": "node scripts/check-city-filter.mjs"
   },
   "dependencies": {
     "@payloadcms/db-postgres": "3.86.0",
