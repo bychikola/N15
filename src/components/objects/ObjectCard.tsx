@@ -10,8 +10,12 @@ export interface ObjectListItem {
   category: string
   price: number
   area?: number
-  /** Единица, в которой агент вводил площадь участка (are — «6 соток») */
+  /** Единица, в которой агент вводил площадь участка (are — «6 соток»,
+   *  ha — «1,2 га»; у участка площадь объекта и есть площадь участка) */
   areaUnit?: AreaUnit
+  /** Земельный участок частного дома, м² — в своей единице (plotAreaUnit) */
+  plotArea?: number
+  plotAreaUnit?: AreaUnit
   rooms?: number
   floor?: number
   totalFloors?: number
@@ -43,18 +47,22 @@ interface ObjectCardProps {
 }
 
 export default function ObjectCard({ obj, lang, t }: ObjectCardProps) {
-  // Участок, сохранённый в сотках, показываем «6 соток» (как ввёл агент);
-  // м² и остальные категории — как раньше: «600 м²»
-  const areaLabel = areaHuman(obj.area, obj.areaUnit, t.catalog.areaUnits, (n) =>
-    n.toLocaleString(t.locale, { maximumFractionDigits: 3 }))
+  // Участок, сохранённый в сотках или гектарах, показываем «6 соток» / «1,2 га»
+  // (как ввёл агент); м² и остальные категории — как раньше: «600 м²»
+  const areaFmt = (n: number) => n.toLocaleString(t.locale, { maximumFractionDigits: 3 })
+  const areaWords = { are: t.catalog.areaUnits, ha: t.catalog.hectareUnits }
+  const areaLabel = areaHuman(obj.area, obj.areaUnit, areaWords, areaFmt)
+  // Дом и таунхаус: площадь дома и площадь участка — разные строки меты
+  const isHouse = obj.category === 'house' || obj.category === 'townhouse'
+  const plotAreaLabel = areaHuman(obj.plotArea, obj.plotAreaUnit, areaWords, areaFmt)
   // Дом и таунхаус — этажность дома («2 этажа»); у остальных категорий —
   // как раньше: «этаж / всего этажей» (этаж квартиры в доме)
-  const isHouse = obj.category === 'house' || obj.category === 'townhouse'
   const floorsLabel = isHouse
     ? floorHuman(obj.totalFloors, t.object.floorUnits, (n) => n.toLocaleString(t.locale))
     : (obj.floor || obj.totalFloors) && `${obj.floor || '?'}/${obj.totalFloors || '?'} ${t.object.floor.toLowerCase()}`
   const meta = [
     areaLabel,
+    plotAreaLabel,
     obj.rooms && `${obj.rooms} ${t.catalog.rooms}`,
     floorsLabel,
   ].filter(Boolean).join(' • ')

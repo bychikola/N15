@@ -38,6 +38,9 @@ const URL_PARAM: Record<keyof FiltersState, string> = {
 // у участков список городов свой — только Владикавказ (cityValuesFor).
 const isKnown = (v: string, options: readonly string[]) => options.includes(v)
 
+/** Единицы площади фильтра участков: м², сотки, гектары (см. area-format) */
+const AREA_UNITS = ['sqm', 'are', 'ha'] as const
+
 function filtersFromParams(sp: URLSearchParams, knownCities: readonly string[]): FiltersState {
   // Район города (Иристонский и др.) старые ссылки могли передавать
   // в параметре district — такой параметр направляем в cityDistrict
@@ -55,7 +58,9 @@ function filtersFromParams(sp: URLSearchParams, knownCities: readonly string[]):
     priceMax: sp.get('price_max') ?? '',
     areaMin: sp.get('area_min') ?? '',
     areaMax: sp.get('area_max') ?? '',
-    areaUnit: sp.get('area_unit') === 'are' ? 'are' : sp.get('area_unit') === 'sqm' ? 'sqm' : '',
+    // Единица площади участка: '' — не выбрана (м²), иначе м²/сотки/га;
+    // чужие значения устаревших ссылок отбрасываем, как у прочих select-фильтров
+    areaUnit: isKnown(sp.get('area_unit') ?? '', AREA_UNITS) ? (sp.get('area_unit') as FiltersState['areaUnit']) : '',
     district: !legacyCityDistrict && isKnown(districtParam, DISTRICT_OPTIONS) ? districtParam : '',
     cityDistrict: legacyCityDistrict
       ? districtParam

@@ -17,6 +17,8 @@ export function objectToListItem(doc: Record<string, unknown>): ObjectListItem {
     slug: doc.slug as string | undefined,
     area: doc.area as number | undefined,
     areaUnit: doc.areaUnit as ObjectListItem['areaUnit'],
+    plotArea: doc.plotArea as number | undefined,
+    plotAreaUnit: doc.plotAreaUnit as ObjectListItem['plotAreaUnit'],
     rooms: doc.rooms as number | undefined,
     floor: doc.floor as number | undefined,
     totalFloors: doc.totalFloors as number | undefined,

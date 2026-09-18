@@ -4,6 +4,9 @@ import { DISTRICT_OPTIONS, CITY_DISTRICT_OPTIONS } from '@/lib/districts'
 // на главной, в каталоге и форме CRM (landing-data.ts)
 import { SNT_AREAS } from '@/components/home/landing-data'
 import { evaluateValuation, paramsFromDoc, type ValuationDocLike } from '@/lib/valuation'
+// Единицы площади участков (м² / сотки / га) — общий хелпер показа и разбора,
+// см. src/lib/area-format.ts
+import { areaUnitOf } from '@/lib/area-format'
 // «Архив объектов»: причины переноса, журнал и группа archive документа —
 // см. src/lib/archive.ts и раздел CRM /crm/archive
 import { ARCHIVE_LOG_LIMIT, ARCHIVE_REASONS, archiveFromDoc, isArchiveReason, type ArchiveGroup } from '@/lib/archive'
@@ -411,17 +414,27 @@ export const Objects: CollectionConfig = {
         if (data.cadastralNumber) {
           data.cadastralNumber = normCadastral(data.cadastralNumber)
         }
-        // Единица площади участка: подсказка показа («6 соток» у участка,
-        // «600 м²» у квартиры). Сама площадь ВСЕГДА хранится в м² — конвертацию
-        // (1 сотка = 100 м²) делает форма CRM, движок оценки и фильтры.
-        // У не-участков и у присланных значений поле приводим к м².
+        // Единица площади участка: подсказка показа («6 соток» / «1,2 га» у
+        // участка, «600 м²» у квартиры). Сама площадь ВСЕГДА хранится в м² —
+        // конвертацию (1 сотка = 100 м², 1 га = 10000 м²) делает форма CRM,
+        // движок оценки и фильтры. У не-участков и у присланных мусорных
+        // значений поле приводим к м².
+        const prevDoc = originalDoc as { category?: string } | undefined
+        const category = data.category !== undefined ? data.category : prevDoc?.category
         if (data.areaUnit !== undefined || data.category !== undefined) {
-          const prev = originalDoc as { category?: string } | undefined
-          const category = data.category !== undefined ? data.category : prev?.category
           if (category !== 'land') {
             data.areaUnit = 'sqm'
           } else if (data.areaUnit !== undefined) {
-            data.areaUnit = data.areaUnit === 'are' ? 'are' : 'sqm'
+            data.areaUnit = areaUnitOf(data.areaUnit)
+          }
+        }
+        // То же для площади участка частного дома (plotAreaUnit): поле живёт
+        // только у дома и таунхауса, у остальных категорий хранится м²
+        if (data.plotAreaUnit !== undefined || data.category !== undefined) {
+          if (category !== 'house' && category !== 'townhouse') {
+            data.plotAreaUnit = 'sqm'
+          } else if (data.plotAreaUnit !== undefined) {
+            data.plotAreaUnit = areaUnitOf(data.plotAreaUnit)
           }
         }
         // force=true приходит query-параметром (см. flagFromReq)
@@ -537,7 +550,7 @@ export const Objects: CollectionConfig = {
       type: 'number',
       label: 'Площадь (м²)',
       admin: {
-        description: 'Всегда в м² (у участков 6 соток = 600 м²). Какую единицу показывать на сайте — см. «Единица площади»',
+        description: 'Всегда в м² (у участков 6 соток = 600 м², 1,2 га = 12000 м²). Какую единицу показывать на сайте — см. «Единица площади»',
       },
     },
     {
@@ -547,12 +560,13 @@ export const Objects: CollectionConfig = {
       options: [
         { label: 'м²', value: 'sqm' },
         { label: 'сотки', value: 'are' },
+        { label: 'гектары', value: 'ha' },
       ],
       defaultValue: 'sqm',
       // Поле только для участков: квартиры, дома и коммерция — всегда м²
       admin: {
         condition: (_data, siblingData) => (siblingData as { category?: string } | undefined)?.category === 'land',
-        description: 'Для земельных участков: в каких единицах агент вводил площадь. На сайте показывается «6 соток»; в базе площадь хранится в м² (1 сотка = 100 м²)',
+        description: 'Для земельных участков: в каких единицах агент вводил площадь (дробные значения — «5,5 сотки», «1,2 га»). На сайте показывается «6 соток»; в базе площадь хранится в м² (1 сотка = 100 м², 1 га = 10000 м²)',
       },
     },
     {
@@ -577,7 +591,27 @@ export const Objects: CollectionConfig = {
           const category = (siblingData as { category?: string } | undefined)?.category
           return category === 'house' || category === 'townhouse'
         },
-        description: 'Площадь участка частного дома в м² (6 соток = 600 м²). Участвует в рыночной оценке: маленький участок удешевляет лот, большой — добавляет к цене',
+        description: 'Площадь участка частного дома в м² (6 соток = 600 м², 1,2 га = 12000 м²). Какую единицу показывать на сайте — см. «Единица площади участка»',
+      },
+    },
+    {
+      // Единица показа площади участка дома: 6 соток = 600 м², 1,2 га = 12000 м².
+      // Хранится рядом с plotArea — как areaUnit у земельных участков
+      name: 'plotAreaUnit',
+      type: 'select',
+      label: 'Единица площади участка',
+      options: [
+        { label: 'м²', value: 'sqm' },
+        { label: 'сотки', value: 'are' },
+        { label: 'гектары', value: 'ha' },
+      ],
+      defaultValue: 'sqm',
+      admin: {
+        condition: (_data, siblingData) => {
+          const category = (siblingData as { category?: string } | undefined)?.category
+          return category === 'house' || category === 'townhouse'
+        },
+        description: 'В каких единицах агент вводил площадь участка дома (дробные значения — «5,5 сотки», «1,2 га»). В базе площадь хранится в м²',
       },
     },
     {

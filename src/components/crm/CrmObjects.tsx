@@ -21,8 +21,9 @@ import {
 // написание адреса на карточке, в реестре и в фильтрах
 import { normalizeHouseAddress } from '@/lib/house-info'
 import { sortAgents } from '@/lib/agents-sort'
-// Площадь участков: сотки ↔ м² (1 сотка = 100 м²), чтение «11,5» с запятой
-import { areToSqm, areaNumberText, parseAreaNumber, sqmToAre } from '@/lib/area-format'
+// Площадь участков: м² ↔ сотки ↔ гектары (1 сотка = 100 м², 1 га = 10000 м²),
+// чтение «11,5» с запятой — дробные значения разрешены
+import { areaNumberText, areaUnitOf, parseAreaNumber, sqmToUnit, unitToSqm, type AreaUnit } from '@/lib/area-format'
 // Подписи этажей дома: «1 этаж», «2 этаж» (см. также t.crm.objFloors)
 import { floorLabel } from '@/lib/floor-format'
 import { LegalCheckBlock, type LegalFocus } from '@/components/crm/LegalCheckBlock'
@@ -283,8 +284,9 @@ const floorDescsFromDoc = (o: Record<string, unknown>): string[] => {
 const emptyForm = {
   title: '', type: 'sale', category: 'apartment', price: '', area: '', areaUnit: 'sqm', livingArea: '',
   // Земельный участок частного дома (м², 6 соток = 600 м²) — отдельное поле
-  // дома и таунхауса, участвует в рыночной оценке (см. src/lib/valuation.ts)
-  plotArea: '',
+  // дома и таунхауса, участвует в рыночной оценке (см. src/lib/valuation.ts).
+  // plotAreaUnit — единица показа (м² / сотки / га), как areaUnit у участка
+  plotArea: '', plotAreaUnit: 'sqm',
   kitchenArea: '', rooms: '', floor: '', totalFloors: '', buildingType: '', condition: '',
   // Этажность дома (только дом и таунхаус, см. save): выбор из списка «1/2/3
   // этажа» либо своё число («другое значение»). У остальных категорий
@@ -1100,10 +1102,14 @@ export const CrmObjects: FC<{
     const agentRel = o.agent as Record<string, unknown> | undefined
     setEditId(o.id as number)
     // Площадь участка показываем в той единице, в которой её вводили
-    // (сотки — «6», а не «600»); у остальных категорий и старых объектов
-    // без единицы — как раньше, в м².
-    const areaUnit: 'sqm' | 'are' =
-      o.category === 'land' && (o.areaUnit as string | undefined) === 'are' ? 'are' : 'sqm'
+    // (сотки — «6», гектары — «1,2», а не «600»/«12000»); у остальных
+    // категорий и старых объектов без единицы — как раньше, в м².
+    const areaUnit: AreaUnit = o.category === 'land' ? areaUnitOf(o.areaUnit) : 'sqm'
+    // Площадь участка частного дома — своя единица (plotAreaUnit), у
+    // старых объектов её нет — считаем м²
+    const plotAreaUnit: AreaUnit = isHouseCategory(String(o.category ?? ''))
+      ? areaUnitOf(o.plotAreaUnit)
+      : 'sqm'
     // Этажность дома: 1/2/3 — выбранный пункт списка, любое другое число
     // (например, 4) — пункт «другое значение» с числом в отдельном поле
     const floorsTotal = o.totalFloors != null ? String(o.totalFloors) : ''
@@ -1115,13 +1121,18 @@ export const CrmObjects: FC<{
       category: (o.category as string) || 'apartment',
       price: o.price != null ? String(o.price) : '',
       area: o.area != null
-        ? areaUnit === 'are'
-          ? areaNumberText(sqmToAre(o.area as number))
-          : String(o.area)
+        ? areaUnit === 'sqm'
+          ? String(o.area)
+          : areaNumberText(sqmToUnit(o.area as number, areaUnit))
         : '',
       areaUnit,
       livingArea: o.livingArea != null ? String(o.livingArea) : '',
-      plotArea: o.plotArea != null ? String(o.plotArea) : '',
+      plotArea: o.plotArea != null
+        ? plotAreaUnit === 'sqm'
+          ? String(o.plotArea)
+          : areaNumberText(sqmToUnit(o.plotArea as number, plotAreaUnit))
+        : '',
+      plotAreaUnit,
       kitchenArea: o.kitchenArea != null ? String(o.kitchenArea) : '',
       rooms: o.rooms != null ? String(o.rooms) : '',
       floor: o.floor != null ? String(o.floor) : '',
@@ -1457,14 +1468,16 @@ export const CrmObjects: FC<{
     }
     setSaveError('')
     // Площадь в БД всегда хранится в м²: участок «6 соток» сохраняется как
-    // 600 м² + единица «сотки» для показа; техрасчёты (оценка, фильтры) —
-    // только по м², конвертацию больше никто не повторяет
+    // 600 м² (а «1,2 га» — как 12000 м²) + единица для показа; техрасчёты
+    // (оценка, фильтры) — только по м², конвертацию больше никто не повторяет
+    const areaUnit: AreaUnit = form.category === 'land' ? areaUnitOf(form.areaUnit) : 'sqm'
     const areaNum = form.area.trim() ? parseAreaNumber(form.area) : null
-    const isAre = form.category === 'land' && form.areaUnit === 'are'
-    const area = areaNum != null && areaNum > 0
-      ? isAre
-        ? Math.round(areToSqm(areaNum) * 100) / 100
-        : areaNum
+    const area = areaNum != null && areaNum > 0 ? unitToSqm(areaNum, areaUnit) : undefined
+    // Площадь участка частного дома — та же логика со своей единицей
+    const plotAreaUnit: AreaUnit = isHouse ? areaUnitOf(form.plotAreaUnit) : 'sqm'
+    const plotAreaNum = form.plotArea.trim() ? parseAreaNumber(form.plotArea) : null
+    const plotArea = plotAreaNum != null && plotAreaNum > 0
+      ? unitToSqm(plotAreaNum, plotAreaUnit)
       : undefined
     const mediaIds = photos.map((p) => p.id).filter((id): id is number => id !== null)
     // Этажность дома (дом и таунхаус): выбранное число этажей из списка или
@@ -1487,11 +1500,12 @@ export const CrmObjects: FC<{
       category: form.category,
       price: form.price ? Number(form.price) : undefined,
       area,
-      areaUnit: form.category === 'land' ? (isAre ? 'are' : 'sqm') : undefined,
+      areaUnit: form.category === 'land' ? areaUnit : undefined,
       livingArea: form.livingArea ? Number(form.livingArea) : undefined,
       // Земельный участок дома — только у дома и таунхауса; у остальных
-      // категорий поле не отправляем, чтобы не затереть сохранённое значение
-      plotArea: isHouse && form.plotArea ? Number(form.plotArea) : undefined,
+      // категорий поля не отправляем, чтобы не затереть сохранённое значение
+      plotArea,
+      plotAreaUnit: isHouse ? plotAreaUnit : undefined,
       kitchenArea: form.kitchenArea ? Number(form.kitchenArea) : undefined,
       rooms: form.rooms ? Number(form.rooms) : undefined,
       floor: form.floor ? Number(form.floor) : undefined,
@@ -1682,7 +1696,8 @@ export const CrmObjects: FC<{
 
   const set = (k: keyof FormState, v: string) => setForm((prev) => ({ ...prev, [k]: v }))
 
-  // Категория: единица «сотки» доступна только участкам. При смене категории
+  // Категория: единица «сотки»/«га» доступна только участкам, единица
+  // площади участка дома — только дому и таунхаусу. При смене категории
   // площадь снова читается в м² — число в поле не трогаем (его вводили под
   // старую категорию), единица молча возвращается к м².
   const setCategory = (v: string) => {
@@ -1690,25 +1705,39 @@ export const CrmObjects: FC<{
       ...prev,
       category: v,
       areaUnit: v === 'land' ? prev.areaUnit : 'sqm',
+      plotAreaUnit: isHouseCategory(v) ? prev.plotAreaUnit : 'sqm',
     }))
   }
 
-  // Смена единицы площади участка: переводим введённое число, чтобы площадь
-  // не изменилась — «600» м² становятся «6» соток, «11,5» соток — «1150» м²
-  const setAreaUnit = (v: string) => {
-    const next = v === 'are' ? 'are' : 'sqm'
+  /**
+   * Смена единицы площади (м² / сотки / га): число в поле пересчитывается,
+   * чтобы площадь не изменилась — «600» м² становятся «6» соток, «12000» м² —
+   * «1,2» га. field — чья единица меняется: площадь участка (areaUnit) или
+   * площадь участка дома (plotAreaUnit).
+   */
+  const changeAreaUnit = (field: 'areaUnit' | 'plotAreaUnit', text: string, v: string) => {
+    const next = areaUnitOf(v)
     setForm((prev) => {
-      if (prev.areaUnit === next) return prev
-      const n = prev.area.trim() ? parseAreaNumber(prev.area) : null
-      return {
-        ...prev,
-        areaUnit: next,
-        area: n != null
-          ? areaNumberText(next === 'are' ? sqmToAre(n) : areToSqm(n))
-          : prev.area,
-      }
+      const from = areaUnitOf(prev[field])
+      if (from === next) return prev
+      const n = text.trim() ? parseAreaNumber(text) : null
+      const value = n != null ? areaNumberText(sqmToUnit(unitToSqm(n, from), next)) : text
+      return field === 'areaUnit'
+        ? { ...prev, areaUnit: next, area: value }
+        : { ...prev, plotAreaUnit: next, plotArea: value }
     })
   }
+
+  /** Название единицы площади для подписи поля: «сотки», «га», «м²» */
+  const unitName = (u: string): string =>
+    areaUnitOf(u) === 'are' ? t.catalog.areName : areaUnitOf(u) === 'ha' ? t.catalog.hectareName : t.catalog.sqm
+
+  /** Подпись площади участка дома — по единице показа (как areaUnit у участка) */
+  const plotAreaLabel = areaUnitOf(form.plotAreaUnit) === 'are'
+    ? t.crm.objPlotAreaAre
+    : areaUnitOf(form.plotAreaUnit) === 'ha'
+      ? t.crm.objPlotAreaHa
+      : t.crm.objPlotArea
 
   // Выбор садоводческого товарищества: СНТ/СНО/ДНТ живут только внутри
   // Владикавказского городского округа — район проставляется сам (если был
@@ -1919,29 +1948,31 @@ export const CrmObjects: FC<{
             </select>
           </Field>
           <Field label={t.crm.objPrice}><input type="number" value={form.price} onChange={(e) => set('price', e.target.value)} style={inputStyle} /></Field>
-          {/* Площадь: у земельного участка агент выбирает единицу (м² или сотки,
-              пример «6 соток» = 600 м²); у квартир/домов/коммерции — только м².
-              В БД значение всегда сохраняется в м² (см. save), сотки запоминаем
-              отдельным полем areaUnit и показываем так же на сайте. */}
+          {/* Площадь: у земельного участка агент выбирает единицу (м², сотки
+              или гектары; «6 соток» = 600 м², «1,2 га» = 12000 м², дробные
+              значения разрешены); у квартир/домов/коммерции — только м².
+              В БД значение всегда сохраняется в м² (см. save), единицу
+              запоминаем отдельным полем areaUnit и показываем так же на сайте. */}
           {form.category === 'land' ? (
-            <Field label={form.areaUnit === 'are' ? t.crm.objAreaAre : t.crm.objArea}>
+            <Field label={`${t.crm.objAreaLand}, ${unitName(form.areaUnit)}`}>
               <div style={{ display: 'flex', gap: 8 }}>
                 <input
-                  type={form.areaUnit === 'are' ? 'text' : 'number'}
-                  inputMode={form.areaUnit === 'are' ? 'decimal' : undefined}
+                  type={form.areaUnit === 'sqm' ? 'number' : 'text'}
+                  inputMode={form.areaUnit === 'sqm' ? undefined : 'decimal'}
                   value={form.area}
                   onChange={(e) => set('area', e.target.value)}
-                  placeholder={form.areaUnit === 'are' ? 'Например: 6 или 11,5' : undefined}
+                  placeholder={form.areaUnit === 'are' ? 'Например: 6 или 11,5' : form.areaUnit === 'ha' ? 'Например: 1,2' : undefined}
                   style={{ ...inputStyle, flex: 1, minWidth: 0 }}
                 />
                 <select
                   value={form.areaUnit}
-                  onChange={(e) => setAreaUnit(e.target.value)}
-                  aria-label="Единица площади"
+                  onChange={(e) => changeAreaUnit('areaUnit', form.area, e.target.value)}
+                  aria-label={t.crm.objAreaUnit}
                   style={{ ...inputStyle, width: 96, flexShrink: 0 }}
                 >
-                  <option value="sqm">м²</option>
-                  <option value="are">сотки</option>
+                  <option value="sqm">{t.catalog.sqm}</option>
+                  <option value="are">{t.catalog.areName}</option>
+                  <option value="ha">{t.catalog.hectareName}</option>
                 </select>
               </div>
             </Field>
@@ -1951,11 +1982,31 @@ export const CrmObjects: FC<{
           <Field label={t.crm.objLivingArea}><input type="number" value={form.livingArea} onChange={(e) => set('livingArea', e.target.value)} style={inputStyle} /></Field>
           <Field label={t.crm.objKitchenArea}><input type="number" value={form.kitchenArea} onChange={(e) => set('kitchenArea', e.target.value)} style={inputStyle} /></Field>
           {/* Земельный участок — только у дома и таунхауса (как и в коллекции
-              Objects); участвует в рыночной оценке: маленький участок
-              удешевляет лот, большой — добавляет к цене */}
+              Objects); единица показа (м² / сотки / га) своя — как у участка;
+              участвует в рыночной оценке: маленький участок удешевляет лот,
+              большой — добавляет к цене */}
           {isHouse && (
-            <Field label={t.crm.objPlotArea}>
-              <input type="number" value={form.plotArea} onChange={(e) => set('plotArea', e.target.value)} style={inputStyle} />
+            <Field label={plotAreaLabel}>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  type={form.plotAreaUnit === 'sqm' ? 'number' : 'text'}
+                  inputMode={form.plotAreaUnit === 'sqm' ? undefined : 'decimal'}
+                  value={form.plotArea}
+                  onChange={(e) => set('plotArea', e.target.value)}
+                  placeholder={form.plotAreaUnit === 'are' ? 'Например: 6 или 11,5' : form.plotAreaUnit === 'ha' ? 'Например: 1,2' : undefined}
+                  style={{ ...inputStyle, flex: 1, minWidth: 0 }}
+                />
+                <select
+                  value={form.plotAreaUnit}
+                  onChange={(e) => changeAreaUnit('plotAreaUnit', form.plotArea, e.target.value)}
+                  aria-label={t.crm.objAreaUnit}
+                  style={{ ...inputStyle, width: 96, flexShrink: 0 }}
+                >
+                  <option value="sqm">{t.catalog.sqm}</option>
+                  <option value="are">{t.catalog.areName}</option>
+                  <option value="ha">{t.catalog.hectareName}</option>
+                </select>
+              </div>
             </Field>
           )}
           <Field label={t.crm.objRooms}><input type="number" value={form.rooms} onChange={(e) => set('rooms', e.target.value)} style={inputStyle} /></Field>

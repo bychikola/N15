@@ -160,7 +160,7 @@ export interface PublishObjectLike {
   category?: string | null // apartment | house | townhouse | commercial | land
   price?: number | null
   area?: number | null
-  areaUnit?: string | null // sqm | are
+  areaUnit?: string | null // sqm | are | ha (единица показа площади участка)
   rooms?: number | null
   floor?: number | null
   totalFloors?: number | null
@@ -246,12 +246,18 @@ export function validateForPublish(o: PublishObjectLike): ValidationIssue[] {
 export const formatPrice = (v: number): string =>
   new Intl.NumberFormat('ru-RU').format(Math.round(v))
 
-/** Площадь с единицей: квартира — «45 м²», участок в сотках — «6 сот.» */
+/**
+ * Площадь с единицей: квартира — «45 м²», участок в сотках — «6 сот.»,
+ * в гектарах — «1,2 га». Файл без импортов, поэтому коэффициенты те же, что
+ * в src/lib/area-format.ts: 1 сотка = 100 м², 1 га = 10000 м².
+ */
 export const formatArea = (o: PublishObjectLike): string => {
   if (typeof o.area !== 'number' || !Number.isFinite(o.area) || o.area <= 0) return ''
-  if (o.category === 'land' && o.areaUnit === 'are') {
-    const сотки = o.area / 100
-    return `${new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 1 }).format(сотки)} сот.`
+  if (o.category === 'land' && (o.areaUnit === 'are' || o.areaUnit === 'ha')) {
+    const perUnit = o.areaUnit === 'ha' ? 10_000 : 100
+    const value = o.area / perUnit
+    const text = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 }).format(value)
+    return `${text} ${o.areaUnit === 'ha' ? 'га' : 'сот.'}`
   }
   return `${formatPrice(o.area)} м²`
 }

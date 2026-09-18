@@ -7,6 +7,8 @@ import type { Dict } from '@/i18n/dictionaries'
 import type { AgentCard, AgentObjectBucket, AgentObjectRow } from '@/lib/agents-service'
 import { archiveReasonLabel } from '@/lib/archive'
 import { CITY_DISTRICT_OPTIONS, DISTRICT_OPTIONS } from '@/lib/districts'
+// Единицы площади участка: сотки и гектары (см. src/lib/area-format.ts)
+import { areaUnitOf, sqmToUnit } from '@/lib/area-format'
 import { AgentFormModal } from '@/components/crm/AgentFormModal'
 
 /**
@@ -64,11 +66,12 @@ const dateText = (iso?: string | null): string => {
 /** Площадь участка показываем в той единице, в которой её вводил агент */
 const areaText = (row: AgentObjectRow): string => {
   if (row.area == null) return ''
-  if (row.category === 'land' && row.areaUnit === 'are') {
-    const are = row.area / 100
-    return `${new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 }).format(are)} соток`
-  }
-  return `${new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 }).format(row.area)} м²`
+  const num = (v: number) => new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 }).format(v)
+  // Сотки и гектары — как ввёл агент (1 сотка = 100 м², 1 га = 10000 м²)
+  const unit = row.category === 'land' ? areaUnitOf(row.areaUnit) : 'sqm'
+  if (unit === 'are') return `${num(sqmToUnit(row.area, 'are'))} соток`
+  if (unit === 'ha') return `${num(sqmToUnit(row.area, 'ha'))} га`
+  return `${num(row.area)} м²`
 }
 
 /** Подпись района в фильтре: у внутригородских добавляем город */

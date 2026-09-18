@@ -8,8 +8,9 @@ import { DISTRICT_OPTIONS, LOCALITIES_BY_DISTRICT, LOCALITY_OPTIONS, CITY_DISTRI
 import { SNT_AREAS } from '@/components/home/landing-data'
 // Города «Межрегиональной недвижимости» приходят готовыми группами из CRM
 // (см. src/lib/interregional-service.ts) — в клиентском компоненте списка нет
-// Конвертация площади участков: 1 сотка = 100 м² (см. также хелперы ввода)
-import { SQM_PER_ARE, areaNumberText, parseAreaNumber } from '@/lib/area-format'
+// Конвертация площади участков: 1 сотка = 100 м², 1 га = 10000 м²
+// (те же хелперы, что в форме CRM, — см. src/lib/area-format.ts)
+import { SQM_PER_UNIT, areaNumberText, areaUnitOf, parseAreaNumber, sqmToUnit, unitToSqm, type AreaUnit } from '@/lib/area-format'
 
 // Допустимые значения select-фильтров — опции одноимённых полей объекта
 // (src/payload/collections/Objects.ts). Где-запрос к /api/objects с чужим
@@ -32,10 +33,10 @@ export interface FiltersState {
   priceMax: string
   areaMin: string
   areaMax: string
-  /** Единица площади в фильтре: '' — не выбрана (= м²), 'are' — сотки.
-   *  Имеет смысл только для категории «участок»; у остальных категорий
-   *  площадь всегда в м². */
-  areaUnit: '' | 'sqm' | 'are'
+  /** Единица площади в фильтре: '' — не выбрана (= м²), 'are' — сотки,
+   *  'ha' — гектары. Имеет смысл только для категории «участок»; у остальных
+   *  категорий площадь всегда в м². */
+  areaUnit: '' | AreaUnit
   district: string
   cityDistrict: string
   locality: string
@@ -100,8 +101,9 @@ export function buildWhere(f: FiltersState, q: string, knownCities: readonly str
   if (f.priceMin && Number.isFinite(priceMin)) conds.push({ price: { greater_than_equal: priceMin } })
   const priceMax = parseInt(f.priceMax, 10)
   if (f.priceMax && Number.isFinite(priceMax)) conds.push({ price: { less_than_equal: priceMax } })
-  // Площадь в базе всегда в м²; «сотки» выбраны — переводим (1 сотка = 100 м²)
-  const areaMul = f.category === 'land' && f.areaUnit === 'are' ? SQM_PER_ARE : 1
+  // Площадь в базе всегда в м²; выбраны сотки/гектары — переводим
+  // (1 сотка = 100 м², 1 га = 10000 м²). У не-участков единица не действует
+  const areaMul = f.category === 'land' ? SQM_PER_UNIT[areaUnitOf(f.areaUnit)] : 1
   if (f.areaMin) {
     const min = numOf(f.areaMin)
     if (min != null && Number.isFinite(min)) conds.push({ area: { greater_than_equal: Math.round(min * areaMul * 100) / 100 } })
@@ -212,7 +214,7 @@ export default function CatalogFilters({ state, onChange, t, cityGroups }: Catal
     : LOCALITY_OPTIONS.map((l) => ({ value: l, label: l }))
   // Единица площади действует только для участков; не выбрана — подразумеваются м²
   const isLand = state.category === 'land'
-  const areaUnit = isLand && state.areaUnit === 'are' ? 'are' : 'sqm'
+  const areaUnit: AreaUnit = isLand ? areaUnitOf(state.areaUnit) : 'sqm'
   const hasFilters = state.type || state.category || state.rooms || state.priceMin || state.priceMax || state.areaMin || state.areaMax || state.district || state.cityDistrict || state.locality || state.snt || state.city
   // Города фильтра «Город» для текущей категории: у участков — только
   // Владикавказ, у остальных — справочник CRM (см. cityValuesFor)
@@ -226,14 +228,15 @@ export default function CatalogFilters({ state, onChange, t, cityGroups }: Catal
   const dropInterregionalCity = (v: string): Partial<FiltersState> => (v && !isLand ? { city: '' } : {})
 
   /**
-   * Смена единицы площади (кнопки «м²/сотки»): числа в полях «от/до»
+   * Смена единицы площади (кнопки «м²/сотки/га»): числа в полях «от/до»
    * пересчитываются, чтобы фильтр сохранял тот же диапазон площади —
-   * 600 м² становятся 6, и наоборот. Вне участков единица всегда м².
+   * 600 м² становятся 6 соток или 0,06 га, и наоборот. Вне участков
+   * единица всегда м². Дробные значения — норма («5,5», «1,2»).
    */
-  const convertArea = (text: string, from: 'sqm' | 'are', to: 'sqm' | 'are'): string => {
+  const convertArea = (text: string, from: AreaUnit, to: AreaUnit): string => {
     const v = parseAreaNumber(text)
     if (v == null) return text
-    return areaNumberText(from === to ? v : to === 'are' ? v / SQM_PER_ARE : v * SQM_PER_ARE)
+    return areaNumberText(from === to ? v : sqmToUnit(unitToSqm(v, from), to))
   }
 
   const apply = (patch: Partial<FiltersState>) => {
@@ -243,11 +246,11 @@ export default function CatalogFilters({ state, onChange, t, cityGroups }: Catal
       out.areaMin = state.areaMin ? convertArea(state.areaMin, areaUnit, patch.areaUnit) : state.areaMin
       out.areaMax = state.areaMax ? convertArea(state.areaMax, areaUnit, patch.areaUnit) : state.areaMax
     }
-    // Категория сменилась с участков: числа были в сотках — вернём в м²,
-    // чтобы при следующем входе в «участки» они читались однозначно
-    if (patch.category !== undefined && patch.category !== 'land' && areaUnit === 'are') {
-      out.areaMin = state.areaMin ? convertArea(state.areaMin, 'are', 'sqm') : state.areaMin
-      out.areaMax = state.areaMax ? convertArea(state.areaMax, 'are', 'sqm') : state.areaMax
+    // Категория сменилась с участков: числа были в сотках/гектарах — вернём
+    // в м², чтобы при следующем входе в «участки» они читались однозначно
+    if (patch.category !== undefined && patch.category !== 'land' && areaUnit !== 'sqm') {
+      out.areaMin = state.areaMin ? convertArea(state.areaMin, areaUnit, 'sqm') : state.areaMin
+      out.areaMax = state.areaMax ? convertArea(state.areaMax, areaUnit, 'sqm') : state.areaMax
       out.areaUnit = 'sqm'
     }
     // Категория сменилась: у новой категории свой список городов (у участков —
@@ -261,10 +264,13 @@ export default function CatalogFilters({ state, onChange, t, cityGroups }: Catal
     onChange(out)
   }
 
-  const areaPh = (edge: 'от' | 'до') =>
-    `${edge}, ${areaUnit === 'are' ? t.catalog.areName : t.catalog.sqm}`
-  const areaLabel = areaUnit === 'are' ? t.catalog.areaLabelAre : t.catalog.areaLabel
-  const unitBtn = (u: 'sqm' | 'are') =>
+  /** Название единицы площади: подписи полей и плейсхолдеры «от, сотки» */
+  const unitName = areaUnit === 'are' ? t.catalog.areName : areaUnit === 'ha' ? t.catalog.hectareName : t.catalog.sqm
+  const areaPh = (edge: 'от' | 'до') => `${edge}, ${unitName}`
+  // Участок: площадь объекта — это и есть площадь участка, поэтому подпись
+  // «Площадь участка, сотки/га/м²» (у остальных категорий — просто «Площадь»)
+  const areaLabel = isLand ? `${t.catalog.plotAreaLabel}, ${unitName}` : t.catalog.areaLabel
+  const unitBtn = (u: AreaUnit) =>
     `px-3 py-1.5 text-[10px] tracking-wider uppercase border transition-all duration-300 cursor-pointer ${
       areaUnit === u
         ? 'border-[var(--n15-gold)] text-[var(--n15-gold)] bg-[var(--n15-gold)]/8'
@@ -341,9 +347,10 @@ export default function CatalogFilters({ state, onChange, t, cityGroups }: Catal
         </div>
       </div>
       <div className="w-52">
-        {/* Площадь: диапазон «от/до». У участков единицу можно переключить
-            на сотки (в базе площадь всё равно в м² — пересчитывает buildWhere).
-            У остальных категорий — всегда м², кнопок нет. */}
+        {/* Площадь: диапазон «от/до». У участков это «Площадь участка» и
+            единицу можно переключить на сотки или гектары (в базе площадь
+            всё равно в м² — пересчитывает buildWhere), дробные значения
+            разрешены. У остальных категорий — всегда м², кнопок нет. */}
         <div className={labelCls() + ' mb-1'}>{areaLabel}</div>
         <div className="flex gap-2">
           <input type="number" min="0" step="any" placeholder={areaPh('от')} value={state.areaMin}
@@ -360,6 +367,9 @@ export default function CatalogFilters({ state, onChange, t, cityGroups }: Catal
             </button>
             <button type="button" onClick={() => apply({ areaUnit: 'are' })} className={unitBtn('are')}>
               {t.catalog.areName}
+            </button>
+            <button type="button" onClick={() => apply({ areaUnit: 'ha' })} className={unitBtn('ha')}>
+              {t.catalog.hectareName}
             </button>
           </div>
         )}

@@ -110,6 +110,8 @@ export default async function HomePage({ params, searchParams }: PageProps) {
       price: o.price as number,
       area: o.area as number | undefined,
       areaUnit: o.areaUnit as ObjectListItem['areaUnit'],
+      plotArea: o.plotArea as number | undefined,
+      plotAreaUnit: o.plotAreaUnit as ObjectListItem['plotAreaUnit'],
       rooms: o.rooms as number | undefined,
       floor: o.floor as number | undefined,
       totalFloors: o.totalFloors as number | undefined,
