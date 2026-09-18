@@ -3,10 +3,12 @@ import { type ButtonHTMLAttributes, type FC } from 'react'
 type ButtonVariant = 'primary' | 'secondary' | 'outline' | 'ghost'
 type ButtonSize = 'sm' | 'md' | 'lg'
 
-interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+interface ButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'onClick'> {
   variant?: ButtonVariant
   size?: ButtonSize
   href?: string
+  /** Обработчик клика: у кнопки-ссылки вешается на <a> (цели Метрики, GoalLink) */
+  onClick?: React.MouseEventHandler<HTMLElement>
 }
 
 const variantStyles: Record<ButtonVariant, React.CSSProperties> = {
@@ -54,8 +56,17 @@ export const Button: FC<ButtonProps> = ({
   const classes = `${baseClasses} btn-${variant} ${sizeClasses[size]} ${className}`.trim()
 
   if (href) {
+    // Ссылка-кнопка: пробрасываем onClick (цели Метрики, см. GoalLink) и
+    // aria-подписи; атрибуты <button> на якоре смысла не имеют
     return (
-      <a href={href} className={classes} style={mergedStyle}>
+      <a
+        href={href}
+        className={classes}
+        style={mergedStyle}
+        onClick={props.onClick}
+        aria-label={props['aria-label']}
+        title={props.title}
+      >
         {children}
       </a>
     )

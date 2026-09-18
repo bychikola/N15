@@ -15,6 +15,7 @@ import ObjectCard, { focalPosition, type ObjectListItem } from '@/components/obj
 import { ObjectActions } from '@/components/objects/ObjectActions'
 import { ViewRequestForm } from '@/components/objects/ViewRequestForm'
 import { AgentContactButtons } from '@/components/ui/AgentContactButtons'
+import { GoalOnMount } from '@/components/analytics/GoalOnMount'
 import { getDictionary, type Dict } from '@/i18n/dictionaries'
 import { areaHuman, type AreaUnit } from '@/lib/area-format'
 import { floorHuman, floorLabel } from '@/lib/floor-format'
@@ -208,6 +209,9 @@ export default async function ObjectPage({ params }: PageProps) {
   return (
     <>
       <Header />
+      {/* Цель Метрики «открытие карточки объекта» — один раз на открытие
+          страницы: предзагрузка соседних ссылок Next'ом компонент не монтирует */}
+      <GoalOnMount goal="object_open" />
       <main className="pt-20">
         <SectionWrapper variant="dark">
           {/* Image slider */}

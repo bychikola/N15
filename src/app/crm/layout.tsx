@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { YandexMetrika } from '@/components/analytics/YandexMetrika'
 import './vars.css'
 import './crm.css'
 
@@ -7,7 +8,7 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 }
 
-export default function CrmLayout({ children }: { children: React.ReactNode }) {
+export default async function CrmLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ru" className="h-full antialiased">
       {/* Google Material Symbols: в CRM пока нужен только глиф sync (кнопка
@@ -19,7 +20,13 @@ export default function CrmLayout({ children }: { children: React.ReactNode }) {
         href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&icon_names=sync"
         precedence="default"
       />
-      <body className="min-h-full bg-[#f5f2eb]">{children}</body>
+      <body className="min-h-full bg-[#f5f2eb]">
+        {children}
+        {/* Счётчик Яндекс.Метрики — как на публичном сайте: тот же номер
+            из настроек сайта, вебвизор выключен (в формах CRM бывают
+            персональные данные клиентов) */}
+        <YandexMetrika />
+      </body>
     </html>
   )
 }

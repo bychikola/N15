@@ -4,6 +4,7 @@ import { useState, type FC } from 'react'
 import { useI18n } from '@/i18n/i18n-provider'
 import { Button } from '@/components/ui/Button'
 import { ConsentCheckbox, MarketingConsent } from '@/components/ui/ConsentCheckbox'
+import { reachGoal } from '@/lib/metrika'
 import Link from 'next/link'
 
 interface Props {
@@ -80,6 +81,8 @@ export const ViewRequestForm: FC<Props> = ({ objectId, lang }) => {
           })
         }
       }
+      // Заявка принята — цель Метрики (без персональных данных из формы)
+      reachGoal('lead_form')
       setSentAsUser(!!userId)
       setSent(true)
     } finally {

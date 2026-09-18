@@ -6,6 +6,7 @@ import { useI18n } from '@/i18n/i18n-provider'
 import { Button } from '@/components/ui/Button'
 import { ConsentCheckbox } from '@/components/ui/ConsentCheckbox'
 import { AD_CONTACT_KIND_LABELS, AD_OBJECT_TYPE_LABELS } from '@/lib/advertising'
+import { reachGoal } from '@/lib/metrika'
 import { AD_OFFER, AD_RULES, adDocHref } from '@/lib/advertising-legal'
 
 /**
@@ -121,6 +122,10 @@ export const AdRequestForm: FC<{ lang: string }> = ({ lang }) => {
         setError(data?.error || t.advertising.errorSend)
         return
       }
+      // Цели Метрики: общая «отправка формы заявки» и отдельная цель модуля
+      // рекламы. Данные заявки (имя, телефон, описание) в Метрику не уходят
+      reachGoal('lead_form')
+      reachGoal('ad_request')
       setSent(true)
     } catch {
       setError(t.advertising.errorSend)

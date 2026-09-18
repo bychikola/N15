@@ -8,6 +8,8 @@ import { SectionWrapper } from '@/components/ui/SectionWrapper'
 import { Button } from '@/components/ui/Button'
 import { AdRequestForm } from '@/components/advertising/AdRequestForm'
 import { AdCard } from '@/components/advertising/AdCard'
+import { GoalButton, GoalLink } from '@/components/analytics/GoalLink'
+import { GoalOnMount } from '@/components/analytics/GoalOnMount'
 import { getDictionary } from '@/i18n/dictionaries'
 import { AD_OFFER, AD_RULES, adDocHref } from '@/lib/advertising-legal'
 import { visibleAdRequestCards, visibleAdvertisements, type SiteAdCard } from '@/lib/advertising-service'
@@ -70,6 +72,8 @@ export default async function AdvertisingPage({ params }: PageProps) {
   return (
     <>
       <Header />
+      {/* Цель Метрики «просмотр страницы рекламы» — один раз на открытие */}
+      <GoalOnMount goal="advertising_view" />
       <main className="pt-20">
         {/* Первый экран — зелёный, компактный: заголовок без «плакатного» кегля */}
         <section className="n15-green-block n15-section">
@@ -90,9 +94,10 @@ export default async function AdvertisingPage({ params }: PageProps) {
               <Button variant="primary" size="md" href="#ad-request">
                 {t.advertising.discussCta} <span aria-hidden="true">→</span>
               </Button>
-              <Button variant="outline" size="md" href={phoneHref}>
+              {/* «Позвонить» — ссылка с целью Метрики (номер в аналитику не уходит) */}
+              <GoalButton variant="outline" size="md" href={phoneHref} goal="call_click">
                 {t.advertising.callCta}
-              </Button>
+              </GoalButton>
             </div>
           </div>
         </section>
@@ -159,9 +164,13 @@ export default async function AdvertisingPage({ params }: PageProps) {
                 </h3>
                 <p className="text-sm leading-relaxed text-[var(--n15-muted)] mb-4">{t.advertising.helpText}</p>
                 <p className="flex flex-col gap-2 text-sm">
-                  <a href={phoneHref} className="text-[var(--n15-gold)] hover:text-[var(--n15-gold-light)]">
+                  <GoalLink
+                    href={phoneHref}
+                    goal="call_click"
+                    className="text-[var(--n15-gold)] hover:text-[var(--n15-gold-light)]"
+                  >
                     {phone || '+7 958 116-15-15'}
-                  </a>
+                  </GoalLink>
                   <a
                     href="mailto:info@n15-realty.ru"
                     className="text-[var(--n15-gold)] hover:text-[var(--n15-gold-light)]"

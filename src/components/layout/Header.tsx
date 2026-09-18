@@ -9,6 +9,7 @@ import { ThemeSwitcher } from '@/components/ui/ThemeSwitcher'
 import { MusicPlayer } from '@/components/layout/MusicPlayer'
 import CabinetBadge from '@/components/layout/CabinetBadge'
 import MortgageCalculator from '@/components/layout/MortgageCalculator'
+import { reachGoal } from '@/lib/metrika'
 
 // Иконка телефона — контурная, цвет берёт из currentColor (золотой акцент),
 // чтобы кнопка «Позвонить нам» выглядела в едином стиле с остальной шапкой.
@@ -489,6 +490,8 @@ export const Header: FC = () => {
             href={SITE_PHONE_TEL}
             aria-label={t.nav.callUs}
             title={t.nav.callUs}
+            // Цель Метрики «нажатие Позвонить» — сам номер в аналитику не уходит
+            onClick={() => reachGoal('call_click')}
             className="n15-cta-green inline-flex items-center gap-2 px-2.5 py-2.5 xl:px-4 xl:py-2 text-sm tracking-wider uppercase border border-[var(--n15-gold)]/40 transition-all duration-300"
           >
             {phoneIcon}
@@ -700,7 +703,10 @@ export const Header: FC = () => {
             <a
               href={SITE_PHONE_TEL}
               className="n15-cta-green flex items-center justify-center gap-2 px-5 py-3 text-sm tracking-wider uppercase border border-[var(--n15-gold)]/40 transition-colors"
-              onClick={() => setIsOpen(false)}
+              onClick={() => {
+                reachGoal('call_click')
+                setIsOpen(false)
+              }}
             >
               {phoneIcon}
               {t.nav.callUs}

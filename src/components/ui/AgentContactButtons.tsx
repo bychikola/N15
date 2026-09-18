@@ -8,6 +8,7 @@
 // показывается ни до, ни после нажатия.
 import { useState } from 'react'
 import { Button } from '@/components/ui/Button'
+import { reachGoal } from '@/lib/metrika'
 
 interface AgentContacts {
   tel?: string
@@ -79,8 +80,12 @@ export function AgentContactButtons({
           : null
     // Навигация текущей вкладки: работает на всех платформах (в отличие от
     // window.open после асинхронного запроса, который iPhone Safari может
-    // заблокировать как всплывающее окно)
-    if (url) window.location.href = url
+    // заблокировать как всплывающее окно).
+    // Цель — только когда контакт реально нашёлся и переход состоялся
+    if (url) {
+      reachGoal(channel === 'tel' ? 'call_click' : 'whatsapp_click')
+      window.location.href = url
+    }
   }
 
   // Ответ получен, а контактов у агента нет — кнопки не показываем;

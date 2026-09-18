@@ -5,6 +5,8 @@ import { Footer } from '@/components/layout/Footer'
 import { SectionWrapper } from '@/components/ui/SectionWrapper'
 import { OrnamentBorder } from '@/components/ui/OrnamentBorder'
 import { ContactForm } from '@/components/contacts/ContactForm'
+import { GoalLink } from '@/components/analytics/GoalLink'
+import { linkGoal } from '@/lib/metrika'
 import { getDictionary, type Dict } from '@/i18n/dictionaries'
 
 export const dynamic = 'force-dynamic'
@@ -109,12 +111,24 @@ export default async function ContactsPage({ params }: PageProps) {
                 </h2>
 
                 <div className="space-y-6">
-                  {contacts.map((c) => (
+                  {contacts.map((c) => {
+                    // Телефон и WhatsApp — ссылки с целями Метрики
+                    // («Позвонить» / «WhatsApp»), остальные — обычные
+                    const goal = c.href ? linkGoal(c.href) : null
+                    return (
                     <div key={c.label}>
                       <div className="text-xs tracking-wider uppercase text-[var(--n15-muted)] mb-1">
                         {c.label}
                       </div>
-                      {c.href ? (
+                      {c.href && goal ? (
+                        <GoalLink
+                          href={c.href}
+                          goal={goal}
+                          className="text-sm text-[var(--n15-white)] hover:text-[var(--n15-gold)] transition-colors"
+                        >
+                          {c.value}
+                        </GoalLink>
+                      ) : c.href ? (
                         <a href={c.href} className="text-sm text-[var(--n15-white)] hover:text-[var(--n15-gold)] transition-colors">
                           {c.value}
                         </a>
@@ -122,7 +136,8 @@ export default async function ContactsPage({ params }: PageProps) {
                         <span className="text-sm text-[var(--n15-white)]">{c.value}</span>
                       )}
                     </div>
-                  ))}
+                    )
+                  })}
                 </div>
               </div>
             </OrnamentBorder>

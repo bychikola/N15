@@ -64,6 +64,19 @@ export const SiteSettings: GlobalConfig = {
       label: 'Текст в футере',
     },
     {
+      name: 'metrikaId',
+      type: 'text',
+      label: 'Аналитика: номер счётчика Яндекс.Метрики',
+      validate: (value?: string | null) =>
+        value == null || value === '' || /^\d+$/.test(value.trim())
+          ? true
+          : 'Номер счётчика — только цифры, например 12345678',
+      admin: {
+        description:
+          'Номер счётчика из Яндекс.Метрики (только цифры). Код счётчика и цели подключаются на всех страницах сайта и в CRM автоматически. Пусто — аналитика не подключена',
+      },
+    },
+    {
       name: 'aboutPage',
       type: 'group',
       label: 'Страница «Об агентстве»',

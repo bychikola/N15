@@ -1,3 +1,4 @@
+import { GoalLink } from '@/components/analytics/GoalLink'
 import type { Dict } from '@/i18n/dictionaries'
 
 interface Props {
@@ -21,10 +22,12 @@ export default function ContactSection({ t, phone }: Props) {
       </div>
       <div className="lp-contact-copy">
         <p>{t.landing.contactText}</p>
-        <a className="lp-contact-phone" href={phoneHref}>{phoneLabel}</a>
-        <a className="lp-button" href={phoneHref}>
+        {/* Обе ссылки ведут на общий номер: переход не задерживается,
+            цель «нажатие Позвонить» уходит в Метрику (номер — нет) */}
+        <GoalLink className="lp-contact-phone" href={phoneHref} goal="call_click">{phoneLabel}</GoalLink>
+        <GoalLink className="lp-button" href={phoneHref} goal="call_click">
           {t.landing.contactCall} <span aria-hidden="true">→</span>
-        </a>
+        </GoalLink>
         <small>{t.landing.contactNote}</small>
       </div>
     </section>

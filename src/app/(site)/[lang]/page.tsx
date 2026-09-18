@@ -12,6 +12,7 @@ import InterregionalGuide from '@/components/home/InterregionalGuide'
 import ServicesAccordion from '@/components/home/ServicesAccordion'
 import AboutSection from '@/components/home/AboutSection'
 import ContactSection from '@/components/home/ContactSection'
+import { GoalLink } from '@/components/analytics/GoalLink'
 // Справочники допустимых значений фильтров: where-запрос по select-полю
 // принимает только значения из его опций — чужое значение роняет страницу
 // серверной ошибкой («This page couldn't load»)
@@ -182,9 +183,15 @@ export default async function HomePage({ params, searchParams }: PageProps) {
             <br />
             {t.landing.footerText2}
           </p>
-          <a className="lp-footer-phone" href={phone ? `tel:${phone.replace(/\s+/g, '')}` : 'tel:+79581161515'}>
+          {/* Звонок в подвале лендинга — с целью Метрики, как в шапке и
+              на странице контактов */}
+          <GoalLink
+            className="lp-footer-phone"
+            href={phone ? `tel:${phone.replace(/\s+/g, '')}` : 'tel:+79581161515'}
+            goal="call_click"
+          >
             {phone || '8 958 116-15-15'}
-          </a>
+          </GoalLink>
           <Link className="lp-team-login" href="/crm">{t.landing.footerTeam}</Link>
           <p>© {new Date().getFullYear()} Н15</p>
         </footer>
