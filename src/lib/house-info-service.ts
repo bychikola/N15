@@ -327,6 +327,12 @@ export interface HouseLookupInput {
   address: HouseQueryAddress
   /** Кадастровый номер объекта — для перекрёстной сверки с реестром */
   cadastralNumber?: string | null
+  /**
+   * Кадастровый номер земельного участка — отдельное поле карточки частного
+   * дома (у дома и участка номера разные). В паспорте дома реестр указывает
+   * номер участка, поэтому для сверки берём оба номера карточки
+   */
+  plotCadastralNumber?: string | null
   /** Вид объекта: apartment, house, land, commercial — влияет на порядок поиска */
   category?: string | null
   /** Момент проверки (ISO); по умолчанию — сейчас */
@@ -432,9 +438,15 @@ export async function lookupHouseInfo(
       const plotCadastral =
         passport.rows.find((r) => /^кадастровый номер земельного участка/i.test(r.label))?.value || null
       let match = mkd.best.match
-      if (!isConfirmedMatch(match) && input.cadastralNumber && plotCadastral &&
-        normCadastral(input.cadastralNumber) === normCadastral(plotCadastral)) {
-        // Кадастровый номер участка совпал с номером объекта — адрес
+      // Номер участка из паспорта дома сверяем с обоими номерами карточки:
+      // у дома и участка кадастровые номера разные, и в карточке может быть
+      // заполнен только номер участка (или только номер дома)
+      const cardCadastrals = [input.cadastralNumber, input.plotCadastralNumber]
+        .map((n) => normCadastral(n))
+        .filter(Boolean)
+      if (!isConfirmedMatch(match) && plotCadastral &&
+        cardCadastrals.includes(normCadastral(plotCadastral))) {
+        // Кадастровый номер участка совпал с номером из карточки — адрес
         // подтверждён документально
         match = matchAddress(mkd.best.hit.address, address, { cadastralConfirmed: true })
         matchedBy = 'cadastral'

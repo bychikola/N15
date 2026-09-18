@@ -287,12 +287,28 @@ const floorDescsFromDoc = (o: Record<string, unknown>): string[] => {
   return Array.from(byFloor, (d) => d || '')
 }
 
+/**
+ * Есть ли у объекта данные земельного участка — площадь или кадастровые
+ * сведения. По ним открывается блок «Кадастровые данные участка»: если у
+ * дома ничего из этого не заполнено, блок скрыт (галочку «Есть земельный
+ * участок» в форме можно поставить вручную — см. hasPlot).
+ */
+const hasPlotInfo = (o: Record<string, unknown>): boolean =>
+  o.plotArea != null
+  || Boolean((o.plotCadastralNumber as string | undefined)?.trim())
+  || Boolean((o.plotLandCategory as string | undefined)?.trim())
+  || Boolean((o.plotPermittedUse as string | undefined)?.trim())
+
 const emptyForm = {
   title: '', type: 'sale', category: 'apartment', price: '', area: '', areaUnit: 'sqm', livingArea: '',
   // Земельный участок частного дома (м², 6 соток = 600 м²) — отдельное поле
   // дома и таунхауса, участвует в рыночной оценке (см. src/lib/valuation.ts).
   // plotAreaUnit — единица показа (м² / сотки / га), как areaUnit у участка
   plotArea: '', plotAreaUnit: 'sqm',
+  // Кадастровые сведения участка дома: номер участка, категория земель и вид
+  // разрешённого использования. Хранятся отдельно от номера дома
+  // (cadastralNumber) — у дома и участка разные кадастровые номера.
+  plotCadastralNumber: '', plotLandCategory: '', plotPermittedUse: '',
   kitchenArea: '', rooms: '', floor: '', totalFloors: '', buildingType: '', condition: '',
   // Этажность дома (только дом и таунхаус, см. save): выбор из списка «1/2/3
   // этажа» либо своё число («другое значение»). У остальных категорий
@@ -885,6 +901,14 @@ export const CrmObjects: FC<{
   // один («1 этаж» — floorDescs[0]). Сколько полей показывать, решает
   // этажность (form.floorsMode), в базу уходит floorDescriptions объекта.
   const [floorDescs, setFloorDescs] = useState<string[]>([])
+  // «Есть земельный участок»: галочка блока «Кадастровые данные участка»
+  // (дом и таунхаус). Снятая галочка скрывает блок — у дома без участка его
+  // нет. Галочка только показывает и скрывает: сохранённые площадь и
+  // кадастровые сведения участка она не стирает (см. save), а при открытии
+  // карточки встаёт сама, если данные участка у объекта уже есть. Новому
+  // объекту — по умолчанию «да»: частный дом чаще всего с участком, и поля
+  // участка видны сразу, как было до этого блока.
+  const [hasPlot, setHasPlot] = useState(true)
   // Перетаскивание фото для смены порядка
   const [dragPhotoIdx, setDragPhotoIdx] = useState<number | null>(null)
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null)
@@ -931,6 +955,10 @@ export const CrmObjects: FC<{
   // («другое значение»), у остальных категорий — прежние поля «Этаж» и
   // «Этажей» (см. save и разметку формы ниже).
   const isHouse = isHouseCategory(form.category)
+  // Частный дом — отдельно от таунхауса: у него блок «Кадастровые данные
+  // дома», где номер дома (строения) подписан по-своему (у таунхауса
+  // остаётся прежний блок «Кадастровый номер»)
+  const isPrivateHouse = form.category === 'house'
   const houseFloorsCount = isHouse
     ? Math.round(form.floorsMode === 'other' ? toNum(form.floorsOther) ?? 0 : toNum(form.floorsMode) ?? 0)
     : 0
@@ -1057,6 +1085,8 @@ export const CrmObjects: FC<{
     setPhotos([])
     setFeatures([])
     setFloorDescs([])
+    // Новый объект: блок участка у дома показываем сразу (см. hasPlot)
+    setHasPlot(true)
     setSaveError('')
     setDuplicates(null)
     // Карточка нового объекта только открылась — несохранённых правок нет
@@ -1177,7 +1207,15 @@ export const CrmObjects: FC<{
       // идемпотентно и подстраховывает старые записи
       ownerPhone: o.ownerPhone ? formatRuPhone(o.ownerPhone as string) : '',
       cadastralNumber: (o.cadastralNumber as string) || '',
+      // Кадастровые сведения участка — как номера дома, у сотрудников их в
+      // ответе нет (закрытые поля), поэтому придут пустыми строками
+      plotCadastralNumber: (o.plotCadastralNumber as string) || '',
+      plotLandCategory: (o.plotLandCategory as string) || '',
+      plotPermittedUse: (o.plotPermittedUse as string) || '',
     })
+    // Блок участка открываем, если у объекта уже есть его данные — площадь
+    // или кадастровые сведения (у дома без участка блок остаётся скрытым)
+    setHasPlot(hasPlotInfo(o))
     const img = o.primaryImage as { id?: number; url?: string } | undefined
     const imgs = (o.images as { id?: number; url?: string }[] | undefined) || []
     const all: PhotoItem[] = []
@@ -1484,6 +1522,13 @@ export const CrmObjects: FC<{
         setSaveError(t.crm.objCadastralBad)
         return false
       }
+      // Номер участка дома — своё поле со своим форматом: у дома и участка
+      // номера разные, поэтому проверяем каждый номер отдельно
+      const plotCadastral = form.plotCadastralNumber.trim()
+      if (plotCadastral && !isCadastralFormat(plotCadastral)) {
+        setSaveError(t.crm.objCadastralPlotBad)
+        return false
+      }
       // Участок без кадастрового номера не создаём: у участка это главный
       // признак. Уже сохранённые участки без номера правятся как раньше
       if (!cadastral && !editId && form.category === 'land') {
@@ -1504,6 +1549,13 @@ export const CrmObjects: FC<{
     const plotArea = plotAreaNum != null && plotAreaNum > 0
       ? unitToSqm(plotAreaNum, plotAreaUnit)
       : undefined
+    // Поля участка уходят в запрос, когда участок отмечен. У администратора
+    // блок участка можно скрыть галочкой «Есть земельный участок», и тогда
+    // поля просто не участвуют в запросе (undefined) — снятая галочка
+    // сохранённые площадь и кадастровые сведения участка не стирает.
+    // Сотрудникам площадь участка показывается, как раньше, отдельным полем
+    // формы (кадастровые сведения им не отдаются вовсе).
+    const plotSent = isHouse && (isAdmin ? hasPlot : true)
     const mediaIds = photos.map((p) => p.id).filter((id): id is number => id !== null)
     // Этажность дома (дом и таунхаус): выбранное число этажей из списка или
     // своё («другое значение»). Хранится, как и раньше, в totalFloors — его
@@ -1529,8 +1581,8 @@ export const CrmObjects: FC<{
       livingArea: form.livingArea ? Number(form.livingArea) : undefined,
       // Земельный участок дома — только у дома и таунхауса; у остальных
       // категорий поля не отправляем, чтобы не затереть сохранённое значение
-      plotArea,
-      plotAreaUnit: isHouse ? plotAreaUnit : undefined,
+      plotArea: plotSent ? plotArea : undefined,
+      plotAreaUnit: plotSent ? plotAreaUnit : undefined,
       kitchenArea: form.kitchenArea ? Number(form.kitchenArea) : undefined,
       rooms: form.rooms ? Number(form.rooms) : undefined,
       floor: form.floor ? Number(form.floor) : undefined,
@@ -1584,7 +1636,14 @@ export const CrmObjects: FC<{
       // («+7 (918) 828-40-88»), чтобы дубли искались по одному написанию.
       ownerName: isAdmin ? form.ownerName.trim() || null : undefined,
       ownerPhone: isAdmin ? formatRuPhone(form.ownerPhone.trim()) || null : undefined,
+      // Номер дома/строения — в cadastralNumber (историческое поле объекта),
+      // кадастровые сведения участка — в своих полях: это разные объекты
+      // учёта, и один номер вместо двух не подходит. Пустое поле у
+      // администратора уходит null — стёртое значение сохраняется.
       cadastralNumber: isAdmin ? form.cadastralNumber.trim() || null : undefined,
+      plotCadastralNumber: isAdmin && plotSent ? form.plotCadastralNumber.trim() || null : undefined,
+      plotLandCategory: isAdmin && plotSent ? form.plotLandCategory.trim() || null : undefined,
+      plotPermittedUse: isAdmin && plotSent ? form.plotPermittedUse.trim() || null : undefined,
       // Перенос в архив добавляет статус и данные архива (см. runArchive)
       ...extra,
     }
@@ -1768,6 +1827,38 @@ export const CrmObjects: FC<{
     : areaUnitOf(form.plotAreaUnit) === 'ha'
       ? t.crm.objPlotAreaHa
       : t.crm.objPlotArea
+
+  /**
+   * Поле площади участка дома (число + единица показа: м² / сотки / га).
+   * Место у него одно из двух: у администратора — в блоке «Кадастровые данные
+   * участка» (номер участка, площадь, категория земель, ВРИ), у сотрудников —
+   * прежней строкой в общей сетке формы: площадь участка не закрытое
+   * сведение, она показывается и в карточке на сайте.
+   */
+  const plotAreaField = (
+    <Field label={plotAreaLabel}>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <input
+          type={form.plotAreaUnit === 'sqm' ? 'number' : 'text'}
+          inputMode={form.plotAreaUnit === 'sqm' ? undefined : 'decimal'}
+          value={form.plotArea}
+          onChange={(e) => set('plotArea', e.target.value)}
+          placeholder={form.plotAreaUnit === 'are' ? 'Например: 6 или 11,5' : form.plotAreaUnit === 'ha' ? 'Например: 1,2' : undefined}
+          style={{ ...inputStyle, flex: 1, minWidth: 0 }}
+        />
+        <select
+          value={form.plotAreaUnit}
+          onChange={(e) => changeAreaUnit('plotAreaUnit', form.plotArea, e.target.value)}
+          aria-label={t.crm.objAreaUnit}
+          style={{ ...inputStyle, width: 96, flexShrink: 0 }}
+        >
+          <option value="sqm">{t.catalog.sqm}</option>
+          <option value="are">{t.catalog.areName}</option>
+          <option value="ha">{t.catalog.hectareName}</option>
+        </select>
+      </div>
+    </Field>
+  )
 
   // Выбор садоводческого товарищества: СНТ/СНО/ДНТ живут только внутри
   // Владикавказского городского округа — район проставляется сам (если был
@@ -2014,31 +2105,12 @@ export const CrmObjects: FC<{
           {/* Земельный участок — только у дома и таунхауса (как и в коллекции
               Objects); единица показа (м² / сотки / га) своя — как у участка;
               участвует в рыночной оценке: маленький участок удешевляет лот,
-              большой — добавляет к цене */}
-          {isHouse && (
-            <Field label={plotAreaLabel}>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <input
-                  type={form.plotAreaUnit === 'sqm' ? 'number' : 'text'}
-                  inputMode={form.plotAreaUnit === 'sqm' ? undefined : 'decimal'}
-                  value={form.plotArea}
-                  onChange={(e) => set('plotArea', e.target.value)}
-                  placeholder={form.plotAreaUnit === 'are' ? 'Например: 6 или 11,5' : form.plotAreaUnit === 'ha' ? 'Например: 1,2' : undefined}
-                  style={{ ...inputStyle, flex: 1, minWidth: 0 }}
-                />
-                <select
-                  value={form.plotAreaUnit}
-                  onChange={(e) => changeAreaUnit('plotAreaUnit', form.plotArea, e.target.value)}
-                  aria-label={t.crm.objAreaUnit}
-                  style={{ ...inputStyle, width: 96, flexShrink: 0 }}
-                >
-                  <option value="sqm">{t.catalog.sqm}</option>
-                  <option value="are">{t.catalog.areName}</option>
-                  <option value="ha">{t.catalog.hectareName}</option>
-                </select>
-              </div>
-            </Field>
-          )}
+              большой — добавляет к цене.
+              У администратора поле стоит в блоке «Кадастровые данные участка»
+              ниже (номер участка и категория земель — закрытые сведения, они
+              показываются рядом с площадью), у сотрудников — здесь: площадью
+              участка они пользуются, а закрытые сведения блока им не видны */}
+          {isHouse && !isAdmin && plotAreaField}
           <Field label={t.crm.objRooms}><input type="number" value={form.rooms} onChange={(e) => set('rooms', e.target.value)} style={inputStyle} /></Field>
           {/* Этажность дома — только у дома и таунхауса: сразу видно, сколько
               этажей, и появляются поля описаний. Квартиры (этаж квартиры в
@@ -2336,19 +2408,57 @@ export const CrmObjects: FC<{
           )}
 
           {/* Блок «Кадастровый номер»: номер объекта — отдельным полем.
+              У частного дома это номер дома (строения), поэтому блок
+              называется «Кадастровые данные дома», а номер участка —
+              отдельный блок ниже: у дома и участка номера разные.
               Формат проверяется до отправки (и на сервере), у участка номер
               обязателен при создании карточки */}
           {isAdmin && (
             <div className="crm-fields-block span-2" style={{ gridColumn: '1 / -1' }}>
               <div className="crm-block-head">
-                <strong>{t.crm.objCadastralBlock}</strong>
+                <strong>{isPrivateHouse ? t.crm.objCadastralHouseBlock : t.crm.objCadastralBlock}</strong>
                 <span>{t.crm.objCadastralHint}</span>
               </div>
-              <Field label={t.crm.objCadastral}>
+              <Field label={isPrivateHouse ? t.crm.objCadastralHouse : t.crm.objCadastral}>
                 <input value={form.cadastralNumber} onChange={(e) => set('cadastralNumber', e.target.value)} style={inputStyle} placeholder="15:07:0030021:123" />
               </Field>
               {form.category === 'land' && !editId && (
                 <p className="crm-field-note">{t.crm.objCadastralLandNote}</p>
+              )}
+            </div>
+          )}
+
+          {/* Блок «Кадастровые данные участка» — у дома и таунхауса, когда у
+              них есть участок (галочка «Есть земельный участок»): номер
+              участка, площадь с единицей показа, категория земель и вид
+              разрешённого использования. Закрытые сведения, как и номер дома:
+              только администратор, на сайте не показываются. Галочка только
+              скрывает блок — сохранённые данные участка остаются (см. save) */}
+          {isAdmin && isHouse && (
+            <div className="span-2" style={{ gridColumn: '1 / -1' }}>
+              <label className="crm-plot-toggle">
+                <input type="checkbox" checked={hasPlot} onChange={(e) => setHasPlot(e.target.checked)} />
+                <span>{t.crm.objPlotHas}</span>
+              </label>
+              {hasPlot && (
+                <div className="crm-fields-block" style={{ marginTop: 10 }}>
+                  <div className="crm-block-head">
+                    <strong>{t.crm.objCadastralPlotBlock}</strong>
+                    <span>{t.crm.objCadastralPlotHint}</span>
+                  </div>
+                  <div className="crm-fields-grid">
+                    <Field label={t.crm.objCadastralPlot}>
+                      <input value={form.plotCadastralNumber} onChange={(e) => set('plotCadastralNumber', e.target.value)} style={inputStyle} placeholder="15:07:0030021:123" />
+                    </Field>
+                    {plotAreaField}
+                    <Field label={t.crm.objPlotLandCategory}>
+                      <input value={form.plotLandCategory} onChange={(e) => set('plotLandCategory', e.target.value)} style={inputStyle} />
+                    </Field>
+                    <Field label={t.crm.objPlotPermittedUse}>
+                      <input value={form.plotPermittedUse} onChange={(e) => set('plotPermittedUse', e.target.value)} style={inputStyle} />
+                    </Field>
+                  </div>
+                </div>
               )}
             </div>
           )}

@@ -88,6 +88,8 @@ export async function POST(req: NextRequest) {
       category?: string | null
       address?: Record<string, unknown>
       cadastralNumber?: string | null
+      /** Номер участка частного дома — для сверки с паспортом дома */
+      plotCadastralNumber?: string | null
     }
     const address = obj.address || {}
     const query = {
@@ -118,6 +120,9 @@ export async function POST(req: NextRequest) {
             {
               address: query,
               cadastralNumber: obj.cadastralNumber || null,
+              // Номер участка — отдельное поле карточки дома (см. Objects):
+              // в паспорте дома реестр указывает именно номер участка
+              plotCadastralNumber: obj.plotCadastralNumber || null,
               category: obj.category || null,
             },
             // Источник проверен — сразу отдаём отчёт в карточку: агент видит,

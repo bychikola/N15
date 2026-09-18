@@ -46,7 +46,21 @@ function flagFromReq(req: unknown, name: string): boolean {
 }
 
 /**
- * Проверка кадастрового номера: формат ЕГРН и обязательность у участка.
+ * Ошибка формата кадастрового номера или null, если номер пуст либо записан
+ * верно. Общая для всех кадастровых полей: номер дома (cadastralNumber) и
+ * номер участка (plotCadastralNumber) — номера разных объектов учёта, но
+ * формат у них один, ЕГРН.
+ */
+function cadastralFormatError(value: unknown): string | null {
+  const number = cleanCadastral(typeof value === 'string' ? value : '')
+  if (number && !isCadastralFormat(number)) {
+    return 'Кадастровый номер — в формате 15:07:0030021:123 (только цифры и двоеточия)'
+  }
+  return null
+}
+
+/**
+ * Проверка кадастрового номера объекта: формат ЕГРН и обязательность у участка.
  *
  * Стоит полем в коллекции, а не только в форме CRM: номер приходит и из
  * админки, и через API. Пробелы и дефисы не мешают (их снимает
@@ -58,14 +72,32 @@ function flagFromReq(req: unknown, name: string): boolean {
  * иначе агент не смог бы поправить цену, пока собственник не назовёт номер.
  */
 const validateCadastralNumber: TextFieldSingleValidation = (value, { data, operation }) => {
+  const error = cadastralFormatError(value)
+  if (error) return error
   const number = cleanCadastral(typeof value === 'string' ? value : '')
-  if (number && !isCadastralFormat(number)) {
-    return 'Кадастровый номер — в формате 15:07:0030021:123 (только цифры и двоеточия)'
-  }
   if (!number && operation === 'create' && (data as { category?: string } | undefined)?.category === 'land') {
     return 'Для земельного участка укажите кадастровый номер'
   }
   return true
+}
+
+/**
+ * Проверка кадастрового номера земельного участка частного дома: формат тот
+ * же, что у номера дома, но без обязательности — участок у дома есть не
+ * всегда, а номер вносят, когда он есть под рукой (у дома без участка поле
+ * остаётся пустым).
+ */
+const validatePlotCadastralNumber: TextFieldSingleValidation = (value) =>
+  cadastralFormatError(value) ?? true
+
+/**
+ * Земельный участок есть у дома и таунхауса — общее условие полей участка
+ * (площадь, кадастровые сведения). У квартир и коммерции участка нет, у
+ * земельных участков площадь самого объекта хранится в «Площади».
+ */
+const isPlotCategory = (siblingData: unknown): boolean => {
+  const category = (siblingData as { category?: string } | undefined)?.category
+  return category === 'house' || category === 'townhouse'
 }
 
 /** Запрос внутри access-функций коллекции (payload + текущий пользователь) */
@@ -441,6 +473,11 @@ export const Objects: CollectionConfig = {
         if (data.cadastralNumber) {
           data.cadastralNumber = cleanCadastral(data.cadastralNumber)
         }
+        // Номер участка частного дома — отдельное поле: у дома и участка
+        // разные кадастровые номера, приводятся к одному виду так же
+        if (data.plotCadastralNumber) {
+          data.plotCadastralNumber = cleanCadastral(data.plotCadastralNumber)
+        }
         // Единица площади участка: подсказка показа («6 соток» / «1,2 га» у
         // участка, «600 м²» у квартиры). Сама площадь ВСЕГДА хранится в м² —
         // конвертацию (1 сотка = 100 м², 1 га = 10000 м²) делает форма CRM,
@@ -626,10 +663,7 @@ export const Objects: CollectionConfig = {
       type: 'number',
       label: 'Земельный участок (м²)',
       admin: {
-        condition: (_data, siblingData) => {
-          const category = (siblingData as { category?: string } | undefined)?.category
-          return category === 'house' || category === 'townhouse'
-        },
+        condition: (_data, siblingData) => isPlotCategory(siblingData),
         description: 'Площадь участка частного дома в м² (6 соток = 600 м², 1,2 га = 12000 м²). Какую единицу показывать на сайте — см. «Единица площади участка»',
       },
     },
@@ -646,11 +680,64 @@ export const Objects: CollectionConfig = {
       ],
       defaultValue: 'sqm',
       admin: {
-        condition: (_data, siblingData) => {
-          const category = (siblingData as { category?: string } | undefined)?.category
-          return category === 'house' || category === 'townhouse'
-        },
+        condition: (_data, siblingData) => isPlotCategory(siblingData),
         description: 'В каких единицах агент вводил площадь участка дома (дробные значения — «5,5 сотки», «1,2 га»). В базе площадь хранится в м²',
+      },
+    },
+    {
+      // Кадастровые сведения участка частного дома — отдельная группа полей,
+      // не связанная с номером дома: у дома и участка это разные объекты
+      // учёта, и один номер вместо двух не подходит (у дома и участка свои
+      // кадастровые номера). Заполняются в CRM в блоке «Кадастровые данные
+      // участка» (см. CrmObjects) — в админке стоят рядом с площадью участка.
+      // Как и номер дома, это закрытые сведения: читает и меняет только
+      // администратор, на сайте они не показываются.
+      name: 'plotCadastralNumber',
+      type: 'text',
+      label: 'Кадастровый номер земельного участка',
+      access: {
+        read: ({ req: { user } }) => user?.role === 'admin',
+        update: ({ req: { user } }) => user?.role === 'admin',
+      },
+      admin: {
+        condition: (_data, siblingData) => isPlotCategory(siblingData),
+        description: 'Например: 15:07:0030021:123. Номер дома (строения) хранится отдельным полем «Кадастровый номер». Виден только администратору',
+      },
+      // Формат ЕГРН без обязательности — см. validatePlotCadastralNumber
+      validate: validatePlotCadastralNumber,
+    },
+    {
+      // Категория земель участка: «Земли населённых пунктов», «Земли
+      // сельскохозяйственного назначения» и т.д. Свободный текст, как у
+      // типа дома и состояния: категорию пишут так, как она названа в
+      // выписке ЕГРН
+      name: 'plotLandCategory',
+      type: 'text',
+      label: 'Категория земель',
+      access: {
+        read: ({ req: { user } }) => user?.role === 'admin',
+        update: ({ req: { user } }) => user?.role === 'admin',
+      },
+      admin: {
+        condition: (_data, siblingData) => isPlotCategory(siblingData),
+        description: 'Например: Земли населённых пунктов. Видна только администратору',
+      },
+    },
+    {
+      // Вид разрешённого использования (ВРИ) участка: «Для индивидуального
+      // жилищного строительства», «Личное подсобное хозяйство» и т.п.
+      // Свободный текст: в выписке ЕГРН ВРИ указывают строкой, иногда с
+      // кодом («2.1»)
+      name: 'plotPermittedUse',
+      type: 'text',
+      label: 'Вид разрешённого использования',
+      access: {
+        read: ({ req: { user } }) => user?.role === 'admin',
+        update: ({ req: { user } }) => user?.role === 'admin',
+      },
+      admin: {
+        condition: (_data, siblingData) => isPlotCategory(siblingData),
+        description: 'Например: Для индивидуального жилищного строительства (2.1). Виден только администратору',
       },
     },
     {
@@ -958,7 +1045,7 @@ export const Objects: CollectionConfig = {
         update: ({ req: { user } }) => user?.role === 'admin',
       },
       admin: {
-        description: 'Например: 15:07:0030021:123. Виден только администратору',
+        description: 'Например: 15:07:0030021:123. У частного дома это номер дома (строения): номер участка хранится отдельным полем «Кадастровый номер земельного участка». Виден только администратору',
       },
       // Формат номера и обязательность у участка — см. validateCadastralNumber
       validate: validateCadastralNumber,

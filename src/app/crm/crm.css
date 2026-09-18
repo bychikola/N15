@@ -75,7 +75,16 @@ body{margin:0}.crm-sidebar{box-sizing:border-box}.crm-chat-panel{box-sizing:bord
 .crm-block-head strong{color:#8b683f;font-size:10px;text-transform:uppercase;letter-spacing:.1em}
 .crm-block-head span{margin:0;color:#9b958a;font-size:10px;line-height:1.5;text-transform:none;letter-spacing:0}
 .crm-owner-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
-@media(max-width:640px){.crm-property-form input,.crm-property-form select,.crm-property-form textarea{font-size:16px}.crm-suggest-item{font-size:16px;padding:13px 12px}.crm-owner-grid{grid-template-columns:1fr}.crm-map-canvas{height:250px}.crm-map-bar{flex-wrap:wrap;gap:10px}}
+/* Блок «Кадастровые данные участка» в форме объекта: галочка «Есть земельный
+   участок» над рамкой блока, внутри — сетка полей участка (номер, площадь с
+   единицей, категория земель, ВРИ). Снятая галочка скрывает блок — у дома без
+   участка его нет; сохранённые данные участка при этом остаются. Селекторы
+   длиннее общих правил формы (.crm-property-form label/input), иначе галочка
+   получила бы стиль поля ввода */
+.crm-property-form .crm-plot-toggle{display:inline-flex;flex-direction:row;align-items:center;gap:9px;padding:0;cursor:pointer}
+.crm-property-form .crm-plot-toggle input{width:15px;height:15px;min-width:15px;margin:0;padding:0;accent-color:#a7814e;cursor:pointer}
+.crm-fields-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+@media(max-width:640px){.crm-property-form input,.crm-property-form select,.crm-property-form textarea{font-size:16px}.crm-suggest-item{font-size:16px;padding:13px 12px}.crm-owner-grid{grid-template-columns:1fr}.crm-fields-grid{grid-template-columns:1fr}.crm-map-canvas{height:250px}.crm-map-bar{flex-wrap:wrap;gap:10px}}
 
 /* ── Google Material Symbols (иконки) ──────────── */
 .material-symbols-outlined{font-family:'Material Symbols Outlined';font-weight:normal;font-style:normal;line-height:1;letter-spacing:normal;text-transform:none;display:inline-block;white-space:nowrap;word-wrap:normal;direction:ltr;font-feature-settings:'liga';-webkit-font-smoothing:antialiased}
