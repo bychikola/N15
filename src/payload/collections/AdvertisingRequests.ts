@@ -296,7 +296,9 @@ export const AdvertisingRequests: CollectionConfig = {
           name: 'desiredTerm',
           type: 'text',
           label: 'Желаемый срок размещения',
-          admin: { description: 'Как просит рекламодатель: «месяц», «до конца сезона». Итоговый срок — ниже' },
+          admin: {
+            description: 'Как просит рекламодатель: «3 месяца», свой срок или дату окончания. Итоговый срок — ниже',
+          },
         },
         {
           name: 'format',

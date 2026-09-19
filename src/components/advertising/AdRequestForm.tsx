@@ -29,6 +29,14 @@ import { AD_OFFER, AD_RULES, adDocHref } from '@/lib/advertising-legal'
 /** Сколько фотографий принимает форма — столько же проверяет сервер */
 const MAX_PHOTOS = 6
 
+/**
+ * Варианты желаемого срока размещения: значение поля и ключ строки словаря.
+ * «Другой срок» и «До указанной даты» раскрывают своё поле — свободный текст
+ * или календарь (см. termValue).
+ */
+const TERM_KINDS = ['m1', 'm3', 'm6', 'm12', 'other', 'date'] as const
+type TermKind = (typeof TERM_KINDS)[number]
+
 type Form = {
   contactKind: string
   name: string
@@ -41,7 +49,6 @@ type Form = {
   description: string
   listingUrl: string
   videoLinks: string
-  desiredTerm: string
   message: string
 }
 
@@ -57,9 +64,17 @@ const EMPTY: Form = {
   description: '',
   listingUrl: '',
   videoLinks: '',
-  desiredTerm: '',
   message: '',
 }
+
+/** 2026-09-15 → 15.09.2026: в заявке, CRM и договоре дата — в привычном виде */
+const ruDate = (iso: string): string => {
+  const [year, month, day] = iso.split('-')
+  return year && month && day ? `${day}.${month}.${year}` : iso
+}
+
+/** Сегодняшний день для min у календаря: прошедшую дату выбрать нельзя */
+const todayIso = (): string => new Date().toISOString().slice(0, 10)
 
 const labelCls = 'text-[11px] tracking-wider uppercase text-[var(--n15-muted)] mb-1.5 block'
 const inputCls =
@@ -71,10 +86,22 @@ export const AdRequestForm: FC<{ lang: string }> = ({ lang }) => {
   const [form, setForm] = useState<Form>(EMPTY)
   const [photos, setPhotos] = useState<File[]>([])
   const [consents, setConsents] = useState({ offer: false, rights: false, data: false })
+  // Срок размещения: выбранный вариант, свой текст («Другой срок») и дата
+  // окончания («До указанной даты») — в заявку уходят одной строкой
+  const [termKind, setTermKind] = useState<TermKind | ''>('')
+  const [termCustom, setTermCustom] = useState('')
+  const [termDate, setTermDate] = useState('')
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
   const [error, setError] = useState('')
   const fileInput = useRef<HTMLInputElement | null>(null)
+
+  /** Желаемый срок одной строкой — так его видят CRM и договор */
+  const termValue = (): string => {
+    if (termKind === 'other') return termCustom.trim()
+    if (termKind === 'date') return termDate ? t.advertising.termUntil.replace('%s', ruDate(termDate)) : ''
+    return termKind ? t.advertising.termKinds[termKind] : ''
+  }
 
   const set =
     (key: keyof Form) =>
@@ -110,7 +137,10 @@ export const AdRequestForm: FC<{ lang: string }> = ({ lang }) => {
     setError('')
     try {
       const body = new FormData()
-      for (const [key, value] of Object.entries(form)) body.append(key, String(value).trim())
+      // Срок собирается из варианта, своего текста или даты
+      for (const [key, value] of Object.entries({ ...form, desiredTerm: termValue() })) {
+        body.append(key, String(value).trim())
+      }
       body.append('consentOffer', String(consents.offer))
       body.append('consentRights', String(consents.rights))
       body.append('consent', String(consents.data))
@@ -319,19 +349,52 @@ export const AdRequestForm: FC<{ lang: string }> = ({ lang }) => {
         </div>
       </fieldset>
 
-      {/* Желаемый срок размещения */}
+      {/* Желаемый срок размещения: готовый вариант, свой текст или дата */}
       <fieldset className="flex flex-col gap-4">
         <legend className={sectionTitle}>{t.advertising.sectionTerm}</legend>
-        <label className="sm:max-w-sm">
-          <span className={labelCls}>{t.advertising.desiredTerm}</span>
-          <input
-            type="text"
-            value={form.desiredTerm}
-            onChange={set('desiredTerm')}
-            placeholder={t.advertising.desiredTermPlaceholder}
-            className={inputCls}
-          />
-        </label>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <label>
+            <span className={labelCls}>{t.advertising.desiredTerm}</span>
+            <select
+              value={termKind}
+              onChange={(e) => setTermKind(e.target.value as TermKind | '')}
+              className={inputCls}
+            >
+              <option value="">{t.advertising.desiredTermPlaceholder}</option>
+              {TERM_KINDS.map((kind) => (
+                <option key={kind} value={kind}>
+                  {t.advertising.termKinds[kind]}
+                </option>
+              ))}
+            </select>
+          </label>
+          {termKind === 'other' && (
+            <label>
+              <span className={labelCls}>{t.advertising.termOther}</span>
+              <input
+                type="text"
+                required
+                value={termCustom}
+                onChange={(e) => setTermCustom(e.target.value)}
+                placeholder={t.advertising.termOtherPlaceholder}
+                className={inputCls}
+              />
+            </label>
+          )}
+          {termKind === 'date' && (
+            <label>
+              <span className={labelCls}>{t.advertising.termDate}</span>
+              <input
+                type="date"
+                required
+                min={todayIso()}
+                value={termDate}
+                onChange={(e) => setTermDate(e.target.value)}
+                className={inputCls}
+              />
+            </label>
+          )}
+        </div>
       </fieldset>
 
       {/* Три отдельные обязательные галочки — у каждой свой документ */}
