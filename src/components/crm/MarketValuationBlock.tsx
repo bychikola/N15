@@ -107,7 +107,7 @@ export const MarketValuationBlock: FC<{
             {objectTitle ? `${objectTitle} · ` : ''}Объект №{objectId} · внутренний расчёт Н15
           </p>
         </div>
-        <button type="button" onClick={onClose}
+        <button type="button" onClick={onClose} aria-label="Закрыть" title="Закрыть"
           style={{ border: '1px solid #e1d8ca', borderRadius: 7, background: '#fff', color: '#716b62', padding: '8px 12px', cursor: 'pointer', fontSize: 12 }}>
           ✕
         </button>

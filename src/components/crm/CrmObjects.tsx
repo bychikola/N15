@@ -2041,7 +2041,7 @@ export const CrmObjects: FC<{
               <h2 style={{ margin: 0, fontFamily: "'New Standard', Georgia, serif", fontWeight: 400, fontSize: 22 }}>
                 {editId ? t.crm.objEdit : t.crm.objAdd}
               </h2>
-              <button type="button" onClick={closeCard} style={{ border: '1px solid #e1d8ca', borderRadius: 7, background: '#fff', color: '#716b62', padding: '8px 12px', cursor: 'pointer', fontSize: 12 }}>
+              <button type="button" onClick={closeCard} aria-label={t.crm.close} title={t.crm.close} style={{ border: '1px solid #e1d8ca', borderRadius: 7, background: '#fff', color: '#716b62', padding: '8px 12px', cursor: 'pointer', fontSize: 12 }}>
                 ✕
               </button>
             </div>

@@ -456,7 +456,7 @@ export const LegalCheckBlock: FC<{ objectId: number; onClose: () => void; focus?
           </h2>
           <p style={{ margin: '4px 0 0', color: '#817b70', fontSize: 12 }}>Объект №{objectId} · модуль CRM Н15</p>
         </div>
-        <button type="button" onClick={onClose}
+        <button type="button" onClick={onClose} aria-label="Закрыть" title="Закрыть"
           style={{ border: '1px solid #e1d8ca', borderRadius: 7, background: '#fff', color: '#716b62', padding: '8px 12px', cursor: 'pointer', fontSize: 12 }}>
           ✕
         </button>

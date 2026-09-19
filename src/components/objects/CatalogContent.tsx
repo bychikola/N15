@@ -267,7 +267,8 @@ export default function CatalogContent({ cityRegions, knownCities, agentName }: 
             {agentName}
             <button type="button" onClick={removeAgent}
               className="text-[var(--n15-gold)] hover:text-[var(--n15-white)] transition-colors cursor-pointer"
-              aria-label={t.catalog.resetFilters}>
+              aria-label={t.catalog.resetFilters}
+              title={t.catalog.resetFilters}>
               ×
             </button>
           </span>

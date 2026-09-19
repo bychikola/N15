@@ -176,6 +176,8 @@ export const AgentFormModal: FC<Props> = ({ t, agent, onClose, onSaved }) => {
           <button
             type="button"
             onClick={onClose}
+            aria-label={t.crm.close}
+            title={t.crm.close}
             style={{ border: '1px solid #e1d8ca', borderRadius: 7, background: '#fff', color: '#716b62', padding: '8px 12px', cursor: 'pointer', fontSize: 12 }}
           >
             ✕

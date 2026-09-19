@@ -847,6 +847,9 @@ export const ru = {
     roleAdmin: 'Администратор',
     roleAgent: 'Агент Н15',
     signOut: 'Выйти',
+    // Подпись для крестиков-закрытий и кнопок модальных окон (озвучивается
+    // скринридером: голый «✕» читается как знак умножения)
+    close: 'Закрыть',
     metricObjects: 'Объекты',
     metricObjectsNote: 'в базе Н15',
     metricLeads: 'Активные заявки',
@@ -2622,6 +2625,7 @@ const os: Dict = {
     roleAdmin: 'Администратор',
     roleAgent: 'Агент Н15',
     signOut: 'Рацæуын',
+    close: 'Сæхгæнын',
     metricObjects: 'Объекттæ',
     metricObjectsNote: 'Н15-ы бындуры',
     metricLeads: 'Активон заявкæтæ',

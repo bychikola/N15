@@ -113,8 +113,12 @@ export const LkShell: FC<{ children: ReactNode; active?: string }> = ({ children
             </button>
 
             {isStaff && (
+              // Белый текст на сплошном золоте и затемнение при наведении —
+              // как у кнопок блока «Рабочий кабинет агента» на обзоре ЛК
               <Link href="/crm"
-                className="mt-4 block text-center px-4 py-2.5 text-xs tracking-[0.15em] uppercase bg-[var(--n15-gold)] text-[var(--on-accent)] hover:bg-[var(--n15-gold-light)] transition-colors">
+                aria-label={t.lk.crmGo}
+                title={t.lk.crmGo}
+                className="mt-4 block text-center px-4 py-2.5 text-xs tracking-[0.15em] uppercase bg-[var(--n15-gold)] text-[var(--on-accent-solid)] hover:bg-[var(--n15-gold-dim)] transition-colors">
                 {t.lk.crmGo}
               </Link>
             )}
@@ -132,7 +136,7 @@ export const LkShell: FC<{ children: ReactNode; active?: string }> = ({ children
                 <span className="flex-1">{item.label}</span>
                 {item.count !== undefined && item.count > 0 && (
                   <span className={`min-w-5 h-5 px-1.5 rounded-full text-[11px] font-semibold flex items-center justify-center ${
-                    item.icon === 'forum' ? 'bg-[var(--n15-gold)] text-[var(--on-accent)]' : 'bg-[var(--n15-gold)]/12 text-[var(--n15-gold)]'
+                    item.icon === 'forum' ? 'bg-[var(--n15-gold)] text-[var(--on-accent-solid)]' : 'bg-[var(--n15-gold)]/12 text-[var(--n15-gold)]'
                   }`}>
                     {item.count}
                   </span>

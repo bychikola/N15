@@ -129,6 +129,7 @@ export default function MortgageCalculator({ open, onClose }: { open: boolean; o
             className="lp-calc-close"
             onClick={onClose}
             aria-label={t.landing.calcClose}
+            title={t.landing.calcClose}
             autoFocus
           >
             ✕

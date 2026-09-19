@@ -106,15 +106,24 @@ export default function LKDashboard() {
               </h2>
               <p className="mt-2 text-sm text-[var(--n15-muted)] max-w-2xl">{t.lk.crmDesc}</p>
               <div className="mt-6 flex flex-wrap gap-3">
+                {/* Белый текст на сплошном золоте (--on-accent-solid) и затемнение
+                    при наведении: на осветлённом до --n15-gold-light белый терял
+                    бы читаемость (2.4:1) */}
                 <Link href="/crm/objects?add=1"
-                  className="px-6 py-3 text-xs tracking-[0.15em] uppercase bg-[var(--n15-gold)] text-[var(--on-accent)] hover:bg-[var(--n15-gold-light)] transition-colors">
+                  aria-label={t.crm.objAdd}
+                  title={t.crm.objAdd}
+                  className="px-6 py-3 text-xs tracking-[0.15em] uppercase bg-[var(--n15-gold)] text-[var(--on-accent-solid)] hover:bg-[var(--n15-gold-dim)] transition-colors">
                   + {t.crm.objAdd}
                 </Link>
                 <Link href="/crm/objects"
+                  aria-label={`${t.crm.navObjects} — ${t.crm.sidebarCaption}`}
+                  title={`${t.crm.navObjects} — ${t.crm.sidebarCaption}`}
                   className="px-6 py-3 text-xs tracking-[0.15em] uppercase border border-[var(--n15-gold)]/40 text-[var(--n15-gold)] hover:bg-[var(--n15-gold)]/8 transition-colors">
                   {t.crm.navObjects}
                 </Link>
                 <Link href="/crm"
+                  aria-label={t.lk.crmGo}
+                  title={t.lk.crmGo}
                   className="px-6 py-3 text-xs tracking-[0.15em] uppercase border border-[var(--n15-gold)]/40 text-[var(--n15-gold)] hover:bg-[var(--n15-gold)]/8 transition-colors">
                   {t.lk.crmGo}
                 </Link>
