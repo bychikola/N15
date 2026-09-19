@@ -57,6 +57,8 @@ export default function FavoritesPage() {
           rooms: f.rooms as number | undefined,
           floor: f.floor as number | undefined,
           totalFloors: f.totalFloors as number | undefined,
+          // Варианты покупки — значки на обложке карточки (см. purchaseBadges)
+          purchaseOptions: f.purchaseOptions as string[] | undefined,
           address: f.address as ObjectListItem['address'],
           primaryImage: f.primaryImage as ObjectListItem['primaryImage'],
           agent: f.agent as ObjectListItem['agent'],

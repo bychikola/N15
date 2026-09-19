@@ -32,6 +32,10 @@ import { formatRuPhone, maskRuPhoneInput } from '@/lib/phone'
 import { isCadastralFormat } from '@/lib/cadastral'
 // Подписи этажей дома: «1 этаж», «2 этаж» (см. также t.crm.objFloors)
 import { floorLabel } from '@/lib/floor-format'
+// Варианты покупки: список отметок и правило «только продажа жилья и
+// коммерции» — общие с коллекцией Objects, каталогом и страницей объекта
+// (см. src/lib/purchase-options.ts)
+import { PURCHASE_OPTIONS, isPurchaseOption, purchaseOptionsApply } from '@/lib/purchase-options'
 import { LegalCheckBlock, type LegalFocus } from '@/components/crm/LegalCheckBlock'
 import { PlacementCheckBlock } from '@/components/crm/PlacementCheckBlock'
 import { HouseDataBlock } from '@/components/crm/HouseDataBlock'
@@ -331,6 +335,9 @@ const emptyForm = {
   corpus: '', fullAddress: '', apartment: '',
   lat: '', lng: '', description: '', status: 'draft', agent: '',
   ownerName: '', ownerPhone: '', cadastralNumber: '',
+  // Варианты покупки — множественный выбор отметками (коды из
+  // src/lib/purchase-options.ts); блок только у продажи жилья и коммерции
+  purchaseOptions: [] as string[],
 }
 
 type FormState = typeof emptyForm
@@ -1105,7 +1112,9 @@ export const CrmObjects: FC<{
   // иначе новый объект останется «бесхозным» и агент не сможет его
   // редактировать (править можно только объекты со своим профилем).
   const resetForm = useCallback(() => {
-    setForm({ ...emptyForm, agent: myAgentId ? String(myAgentId) : '' })
+    // purchaseOptions — пустой список заново, а не ссылка на массив из
+    // emptyForm: отметки нового объекта не должны задевать общий образец
+    setForm({ ...emptyForm, agent: myAgentId ? String(myAgentId) : '', purchaseOptions: [] })
     setEditId(null)
     setPhotos([])
     setFeatures([])
@@ -1238,6 +1247,9 @@ export const CrmObjects: FC<{
       plotLandCategory: (o.plotLandCategory as string) || '',
       plotPermittedUse: (o.plotPermittedUse as string) || '',
       plotPurpose: (o.plotPurpose as string) || '',
+      // Варианты покупки: чужие коды из старых записей не показываем —
+      // в форме только отметки из общего списка
+      purchaseOptions: ((o.purchaseOptions as string[] | undefined) || []).filter(isPurchaseOption),
     })
     // Блок участка открываем, если у объекта уже есть его данные — площадь
     // или кадастровые сведения (у дома без участка блок остаётся скрытым).
@@ -1652,6 +1664,11 @@ export const CrmObjects: FC<{
         ? { root: { children: [{ children: [{ text: form.description.trim(), type: 'text', version: 1 }], type: 'paragraph', version: 1 }], type: 'root', version: 1 } }
         : undefined,
       features: features.map((feature) => ({ feature })),
+      // Варианты покупки — только у продажи жилья и коммерции: у аренды и
+      // участков блок скрыт, и поле не отправляем, чтобы не затереть
+      // сохранённое значение (у самих таких объектов вариантов не бывает —
+      // см. нормализацию в коллекции Objects)
+      purchaseOptions: purchaseOptionsApply(form.type, form.category) ? form.purchaseOptions : undefined,
       status: form.status,
       agent: form.agent ? Number(form.agent) : undefined,
       primaryImage: mediaIds[0],
@@ -1837,7 +1854,38 @@ export const CrmObjects: FC<{
       category: v,
       areaUnit: v === 'land' ? prev.areaUnit : 'sqm',
       plotAreaUnit: isPlotAreaCategory(v) ? prev.plotAreaUnit : 'sqm',
+      // Участки и аренда вариантов покупки не имеют — прежние отметки
+      // снимаем, чтобы они не остались скрытыми в карточке
+      purchaseOptions: purchaseOptionsApply(prev.type, v) ? prev.purchaseOptions : [],
     }))
+  }
+
+  /**
+   * Смена типа сделки. Аренда вариантов покупки не имеет: при переключении
+   * продажа → аренда отметки снимаем — блок в форме скрывается, и скрытых
+   * отметок в карточке оставаться не должно.
+   */
+  const setType = (v: string) => {
+    setForm((prev) => ({
+      ...prev,
+      type: v,
+      purchaseOptions: purchaseOptionsApply(v, prev.category) ? prev.purchaseOptions : [],
+    }))
+  }
+
+  /**
+   * Отметка варианта покупки: выбор множественный — отметок может быть
+   * несколько (ипотека и рассрочка сразу), повторное нажатие снимает отметку.
+   * Порядок отметок — как в списке вариантов, чтобы карточка сохраняла один
+   * и тот же набор одинаково.
+   */
+  const togglePurchase = (value: string) => {
+    setForm((prev) => {
+      const next = prev.purchaseOptions.includes(value)
+        ? prev.purchaseOptions.filter((v) => v !== value)
+        : [...prev.purchaseOptions, value]
+      return { ...prev, purchaseOptions: PURCHASE_OPTIONS.map((o) => o.value).filter((v) => next.includes(v)) }
+    })
   }
 
   /**
@@ -2119,7 +2167,7 @@ export const CrmObjects: FC<{
             <div className="crm-property-form">
           <Field label={t.crm.objTitle}><input value={form.title} onChange={(e) => set('title', e.target.value)} style={inputStyle} /></Field>
           <Field label={t.crm.objType}>
-            <select value={form.type} onChange={(e) => set('type', e.target.value)} style={inputStyle}>
+            <select value={form.type} onChange={(e) => setType(e.target.value)} style={inputStyle}>
               <option value="sale">Продажа</option><option value="rent">Аренда</option>
             </select>
           </Field>
@@ -2611,6 +2659,49 @@ export const CrmObjects: FC<{
               )}
             </Field>
           </div>
+
+          {/* Варианты покупки — множественный выбор отметками: ипотека
+              (гражданская, семейная, военная), рассрочка, материнский
+              капитал, покупка без первоначального взноса. Блок есть только у
+              продажи жилья и коммерции: у аренды и земельных участков
+              вариантов покупки не бывает (см. src/lib/purchase-options.ts).
+              На обложке карточки каталога отметки видны значками, полный
+              список — на странице объекта, в каталоге по ним есть фильтр.
+              Правят отметки агент у своего объекта и администратор у любого:
+              у чужого карточка и так открыта только на просмотр (см. viewOnly) */}
+          {purchaseOptionsApply(form.type, form.category) && (
+            <div className="span-2" style={{ gridColumn: '1 / -1' }}>
+              <div className="crm-fields-block">
+                <div className="crm-block-head">
+                  <strong>{t.crm.objPurchaseBlock}</strong>
+                  <span>{t.crm.objPurchaseHint}</span>
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {PURCHASE_OPTIONS.map((option) => {
+                    const on = form.purchaseOptions.includes(option.value)
+                    return (
+                      <label key={option.value}
+                        style={{
+                          display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 12px',
+                          border: `1px solid ${on ? '#a7814e' : '#dccdb6'}`,
+                          background: on ? '#f6efe4' : '#fff',
+                          borderRadius: 999, fontSize: 12, lineHeight: 1.2,
+                          color: on ? '#8d6b40' : '#716b62', cursor: 'pointer',
+                        }}>
+                        <input type="checkbox" checked={on} onChange={() => togglePurchase(option.value)} />
+                        {option.label}
+                      </label>
+                    )
+                  })}
+                </div>
+                {/* Предупреждение агенту: отметка — обещание покупателю,
+                    неподтверждённый вариант возвращается претензией */}
+                <small style={{ display: 'block', marginTop: 8, color: '#a1661f' }}>
+                  {t.crm.objPurchaseWarning}
+                </small>
+              </div>
+            </div>
+          )}
 
           <Field label={t.crm.objStatus}>
             {/* «Архив» в списке — не просто статус: сначала спрашиваем причину

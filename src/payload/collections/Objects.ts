@@ -24,6 +24,10 @@ import { cleanCadastral, isCadastralFormat } from '@/lib/cadastral'
 // «Свой» объект сотрудника (ответственный агент или автор карточки) —
 // общее правило с маршрутами API и сервисами, см. src/lib/object-access.ts
 import { isOwnObjectDoc, ownObjectsWhere } from '@/lib/object-access'
+// Варианты покупки (ипотечные программы, рассрочка, маткапитал) — общий
+// список и правила с каталогом, страницей объекта и фильтрами,
+// см. src/lib/purchase-options.ts
+import { PURCHASE_OPTIONS, purchaseOptionsApply } from '@/lib/purchase-options'
 
 /**
  * Чтение булева флага из query-параметра запроса. В разных окружениях
@@ -223,6 +227,21 @@ const privateFieldsAccess = {
     if (req.user.role !== 'agent') return false
     return isOwnObject(req, await ownershipDoc(req, id))
   },
+  update: ({ req, doc }: { req: AccessReq; doc?: unknown }): Promise<boolean> => isOwnObject(req, doc),
+}
+
+/**
+ * Доступ к вариантам покупки (ипотечные программы, рассрочка, маткапитал).
+ *
+ * Читают все: значки на обложке карточки каталога, список на странице объекта
+ * и фильтр каталога открыты и посетителям, без авторизации. Правит агент
+ * только у своего объекта, администратор — у любого (то же правило, что у
+ * данных собственника, см. privateFieldsAccess): у чужой карточки выбор
+ * вариантов не перезапишется ни из формы, ни прямым запросом к API.
+ */
+const purchaseOptionsAccess = {
+  read: (): boolean => true,
+  create: ({ req }: { req: AccessReq }): boolean => isStaff(req.user),
   update: ({ req, doc }: { req: AccessReq; doc?: unknown }): Promise<boolean> => isOwnObject(req, doc),
 }
 
@@ -633,6 +652,14 @@ export const Objects: CollectionConfig = {
             data.plotAreaUnit = areaUnitOf(data.plotAreaUnit)
           }
         }
+        // Варианты покупки: у аренды и земельных участков их не бывает —
+        // при смене типа сделки или категории прежний выбор снимаем, иначе на
+        // обложке появившейся из продажи аренды осталась бы «Ипотека»
+        const prevType = (originalDoc as { type?: string } | undefined)?.type
+        const dealType = data.type !== undefined ? data.type : prevType
+        if (data.purchaseOptions !== undefined || data.type !== undefined || data.category !== undefined) {
+          if (!purchaseOptionsApply(dealType, category)) data.purchaseOptions = []
+        }
         // force=true приходит query-параметром (см. flagFromReq)
         if (flagFromReq(req, 'force')) return data
         const or: Where[] = []
@@ -745,6 +772,29 @@ export const Objects: CollectionConfig = {
         { label: 'Участок', value: 'land' },
       ],
       required: true,
+    },
+    {
+      // Какими программами покупки объект продаётся: ипотека (гражданская,
+      // семейная, военная), рассрочка, материнский капитал, покупка без
+      // первоначального взноса. Отметок может быть несколько — на обложке
+      // карточки каталога они показываются значками, полный список — на
+      // странице объекта, а в каталоге по ним есть фильтр
+      // (см. src/lib/purchase-options.ts).
+      name: 'purchaseOptions',
+      type: 'select',
+      hasMany: true,
+      label: 'Варианты покупки',
+      options: PURCHASE_OPTIONS.map((option) => ({ label: option.label, value: option.value })),
+      access: purchaseOptionsAccess,
+      admin: {
+        // Блок только у продажи жилья и коммерции: у аренды программ покупки
+        // нет, у земельных участков их не бывает (см. purchaseOptionsApply)
+        condition: (_data, siblingData) => {
+          const s = siblingData as { type?: string; category?: string } | undefined
+          return purchaseOptionsApply(s?.type, s?.category)
+        },
+        description: 'Отмечайте только подтверждённые варианты: одобрение банка не гарантируется',
+      },
     },
     {
       name: 'price',

@@ -116,6 +116,8 @@ export default async function HomePage({ params, searchParams }: PageProps) {
       rooms: o.rooms as number | undefined,
       floor: o.floor as number | undefined,
       totalFloors: o.totalFloors as number | undefined,
+      // Варианты покупки — значки на обложке карточки (см. purchaseBadges)
+      purchaseOptions: o.purchaseOptions as string[] | undefined,
       address: addr,
       primaryImage: img
         ? { url: img.url, alt: img.alt, focalPoint: img.focalPoint, sizes: img.sizes }

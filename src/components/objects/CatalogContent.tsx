@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useI18n } from '@/i18n/i18n-provider'
 import ObjectCard, { type ObjectListItem } from '@/components/objects/ObjectCard'
-import CatalogFilters, { buildWhere, cityValuesFor, regionValuesFor, emptyFilters, AGENT_URL_PARAM, OBJECT_TYPES, OBJECT_CATEGORIES, OBJECT_ROOMS, type FiltersState } from '@/components/objects/CatalogFilters'
+import CatalogFilters, { buildWhere, cityValuesFor, regionValuesFor, emptyFilters, purchaseValues, AGENT_URL_PARAM, OBJECT_TYPES, OBJECT_CATEGORIES, OBJECT_ROOMS, type FiltersState } from '@/components/objects/CatalogFilters'
 // Справочники допустимых значений локаций — те же, что в фильтрах каталога
 import { DISTRICT_OPTIONS, CITY_DISTRICT_OPTIONS } from '@/lib/districts'
 import { SNT_AREAS } from '@/components/home/landing-data'
@@ -33,6 +33,7 @@ const URL_PARAM: Record<keyof FiltersState, string> = {
   city: 'city',
   cityRegion: 'city_region',
   agent: AGENT_URL_PARAM,
+  purchase: 'purchase',
 }
 
 // Значения select-фильтров сверяем с опциями полей (списки и зачем — см.
@@ -82,6 +83,10 @@ function filtersFromParams(sp: URLSearchParams, cityRegions: readonly CityFilter
     // Фильтр «Объекты агента» приходит только ссылкой (карточки команды,
     // страница агентства) — допустимость id проверяет buildWhere
     agent: sp.get(AGENT_URL_PARAM) ?? '',
+    // Варианты покупки — множественный выбор: в ссылке коды через запятую.
+    // Чужие значения отбрасываем, порядок приводим к порядку списка (см.
+    // purchaseValues) — ссылка с теми же отметками читается одинаково
+    purchase: purchaseValues(sp.get('purchase') ?? '').join(','),
   }
 }
 

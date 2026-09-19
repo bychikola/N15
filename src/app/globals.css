@@ -78,6 +78,12 @@
   --card-price-fg: #F6F2E9;
   --pill-bg: rgba(30, 64, 50, .92);   /* бейдж «Продажа»/«Аренда» на фото — зелёный */
   --pill-fg: #F4F0E5;
+  /* Значки вариантов покупки на фото карточки — бронзовые: тот же тёплый
+     металл, что фирменное золото, но темнее — значки мельче бейджа сделки
+     и не должны спорить с ним и с фотографией */
+  --badge-bronze-bg: rgba(146, 102, 44, .94);
+  --badge-bronze-fg: #F6F2E9;
+  --badge-bronze-border: rgba(200, 164, 78, .45);
   --search-bg: rgba(255, 255, 255, .6);
   --search-border: rgba(176, 141, 62, .35);
 
@@ -133,6 +139,11 @@ html[data-theme='dark'] {
   --card-price-fg: #F5F5F7;
   --pill-bg: rgba(35, 74, 56, .92);
   --pill-fg: #F4F0E5;
+  /* Бронза значков вариантов покупки: в тёмной теме светлее по тексту —
+     на почти чёрном фоне тёмная заливка читалась бы хуже */
+  --badge-bronze-bg: rgba(120, 84, 38, .94);
+  --badge-bronze-fg: #EBD9B4;
+  --badge-bronze-border: rgba(200, 164, 78, .45);
   --search-bg: rgba(26, 26, 30, .6);
   --search-border: rgba(200, 164, 78, .35);
 
@@ -368,6 +379,21 @@ a:hover {
     var(--card-gradient);
   pointer-events: none;
 }
+/* Бейдж сделки и значки вариантов покупки — одной строкой в левом верхнем
+   углу фото. Позиционируется строка целиком, а бейдж внутри неё стоит в
+   потоке: значки встают рядом с ним и переносятся на вторую строку, если
+   места не хватило (на узких карточках телефона) */
+.object-card__pills {
+  position: absolute;
+  top: .55rem;
+  left: .55rem;
+  right: .55rem;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: .3rem;
+}
 .object-card__pill {
   position: absolute;
   top: .55rem;
@@ -380,6 +406,30 @@ a:hover {
   padding: .3rem .7rem;
   border-radius: 999px;
   font-weight: 600;
+}
+/* Бейдж сделки внутри строки значков — в потоке строки, а не по углу фото
+   (по углу позиционируется сама строка) */
+.object-card__pills > .object-card__pill {
+  position: static;
+  flex-shrink: 0;
+}
+/* Значок варианта покупки: мельче бейджа сделки, бронзовый — их на карточке
+   до двух, обложка не перегружается (см. purchaseBadges) */
+.object-card__badge {
+  flex-shrink: 0;
+  max-width: 100%;
+  background: var(--badge-bronze-bg);
+  color: var(--badge-bronze-fg);
+  border: 1px solid var(--badge-bronze-border);
+  font-size: 7.5px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  padding: .24rem .55rem;
+  border-radius: 999px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 /* Цена на фото карточки — лёгкая тень для читаемости на светлых участках */
 .object-card__price {
@@ -682,6 +732,9 @@ html[data-theme='dark'] .lp-featured .object-card { border: 0; }
 .lp-featured .object-card__agent img,
 .lp-featured .object-card__avatar { width: 24px; height: 24px; }
 .lp-featured .object-card__pill { top: .45rem; left: .45rem; padding: .25rem .55rem; }
+/* Строка значков на главной — у самого угла фото, как бейдж сделки выше */
+.lp-featured .object-card__pills { top: .45rem; left: .45rem; right: .45rem; gap: .25rem; }
+.lp-featured .object-card__badge { padding: .22rem .45rem; }
 /* Шапка блока «Актуальные объекты»: слева заголовок (eyebrow + h2), справа —
    кнопка-ссылка «Показать все →» на каталог (там все опубликованные объекты
    всех категорий и фильтры). flex-wrap страхует узкие экраны; на телефоне

@@ -1,6 +1,9 @@
 import type { Dict } from '@/i18n/dictionaries'
 import { areaHuman, type AreaUnit } from '@/lib/area-format'
 import { floorHuman } from '@/lib/floor-format'
+// Значки вариантов покупки на обложке — «Ипотека», «Семейная ипотека»,
+// «Рассрочка», «Военная ипотека» (см. src/lib/purchase-options.ts)
+import { purchaseBadges, purchaseOptionsApply } from '@/lib/purchase-options'
 
 export interface ObjectListItem {
   id: number
@@ -19,6 +22,9 @@ export interface ObjectListItem {
   rooms?: number
   floor?: number
   totalFloors?: number
+  /** Подтверждённые варианты покупки — коды из src/lib/purchase-options.ts.
+   *  На обложке показываются значками (до двух, см. purchaseBadges) */
+  purchaseOptions?: string[]
   address?: { city?: string; district?: string; cityDistrict?: string; locality?: string; snt?: string; street?: string; house?: string }
   primaryImage?: {
     url?: string
@@ -67,6 +73,14 @@ export default function ObjectCard({ obj, lang, t }: ObjectCardProps) {
     floorsLabel,
   ].filter(Boolean).join(' • ')
 
+  // Значки вариантов покупки — рядом с бейджем «Продажа»/«Аренда», не больше
+  // двух: при трёх и более вариантах обложка не перегружается, полный список
+  // остаётся в карточке объекта (см. purchaseBadges). У аренды и земельных
+  // участков вариантов покупки не бывает — значки им не показываем, даже если
+  // отметки остались в старых данных (у продажи жилья и коммерции — показываем)
+  const badges = (purchaseOptionsApply(obj.type, obj.category) ? purchaseBadges(obj.purchaseOptions) : [])
+    .map((key) => t.object.purchaseBadges[key])
+
   const agentInitials = obj.agent?.name
     ? obj.agent.name.split(' ').map((n) => n[0]).join('').slice(0, 2)
     : ''
@@ -97,7 +111,14 @@ export default function ObjectCard({ obj, lang, t }: ObjectCardProps) {
             </svg>
           </div>
         )}
-        <span className="object-card__pill">{obj.type === 'sale' ? t.object.sale : t.object.rent}</span>
+        {/* Бейдж сделки и значки вариантов покупки — одной строкой у левого
+            верхнего угла фото (см. .object-card__pills в globals.css) */}
+        <span className="object-card__pills">
+          <span className="object-card__pill">{obj.type === 'sale' ? t.object.sale : t.object.rent}</span>
+          {badges.map((badge) => (
+            <span key={badge} className="object-card__badge">{badge}</span>
+          ))}
+        </span>
         <div className="object-card__overlay" />
         <div className="object-card__price-wrap absolute bottom-3 left-4 right-4 z-10">
           <div className="object-card__price text-[30px] leading-tight font-[family-name:var(--font-display)] font-semibold text-[var(--card-price-fg)]">

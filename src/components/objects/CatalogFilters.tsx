@@ -14,6 +14,9 @@ import type { CityFilterField, CityFilterPlace, CityFilterRegion } from '@/lib/c
 // Конвертация площади участков: 1 сотка = 100 м², 1 га = 10000 м²
 // (те же хелперы, что в форме CRM, — см. src/lib/area-format.ts)
 import { SQM_PER_UNIT, areaNumberText, areaUnitOf, parseAreaNumber, sqmToUnit, unitToSqm, type AreaUnit } from '@/lib/area-format'
+// Варианты покупки: коды и правила показа — общие с карточкой объекта и
+// формой CRM (см. src/lib/purchase-options.ts)
+import { PURCHASE_OPTIONS, PURCHASE_OPTION_VALUES } from '@/lib/purchase-options'
 
 // Допустимые значения select-фильтров — опции одноимённых полей объекта
 // (src/payload/collections/Objects.ts). Где-запрос к /api/objects с чужим
@@ -59,11 +62,36 @@ export interface FiltersState {
    *  фильтров у него нет — фильтр приходит ссылкой с карточек команды,
    *  а снимается чипом «Объекты агента» над выдачей */
   agent: string
+  /** Варианты покупки — множественный выбор: коды (purchase-options.ts)
+   *  через запятую. Пусто — фильтр не выбран; объект подходит, если у него
+   *  отмечен любой из выбранных вариантов. Взаимоисключается с арендой и
+   *  участками: у них вариантов покупки не бывает, фильтр снимается */
+  purchase: string
 }
 
 export const emptyFilters: FiltersState = {
-  type: '', category: '', rooms: '', priceMin: '', priceMax: '', areaMin: '', areaMax: '', areaUnit: '', district: '', cityDistrict: '', locality: '', snt: '', city: '', cityRegion: '', agent: '',
+  type: '', category: '', rooms: '', priceMin: '', priceMax: '', areaMin: '', areaMax: '', areaUnit: '', district: '', cityDistrict: '', locality: '', snt: '', city: '', cityRegion: '', agent: '', purchase: '',
 }
+
+/**
+ * Выбранные варианты покупки из значения фильтра: в URL это коды через
+ * запятую. Чужие и устаревшие значения отбрасываем, как у прочих
+ * select-фильтров; порядок приводим к порядку списка вариантов — одна и та
+ * же отметка даёт одну и ту же строку фильтра (ссылки и сравнение в URL).
+ */
+export const purchaseValues = (v: string): string[] => {
+  const parts = v.split(',')
+  return PURCHASE_OPTION_VALUES.filter((code) => parts.includes(code))
+}
+
+/**
+ * Есть ли варианты покупки у объектов с таким типом сделки и категорией.
+ * Отличие от purchaseOptionsApply: не выбранный тип сделки («Любой») здесь
+ * считается подходящим — фильтр показывает и продажу, и аренду сразу, и
+ * снимать его из-за этого нельзя.
+ */
+const purchaseRelevant = (type: string, category: string): boolean =>
+  type !== 'rent' && category !== 'land'
 
 // Число из фильтра: позволяет и «600», и «11,5» (запятая — как вводят вручную)
 const numOf = (v: string): number | null => parseAreaNumber(v)
@@ -151,6 +179,10 @@ export function buildWhere(
     const max = numOf(f.areaMax)
     if (max != null && Number.isFinite(max)) conds.push({ area: { less_than_equal: Math.round(max * areaMul * 100) / 100 } })
   }
+  // Варианты покупки: множественный выбор — объект подходит, если отмечен
+  // любой из выбранных вариантов (в базе поле хранится списком)
+  const purchase = purchaseValues(f.purchase)
+  if (purchase.length) conds.push({ purchaseOptions: { in: purchase } })
   const agent = agentId(f.agent)
   if (agent != null) conds.push({ agent: { equals: agent } })
   if (q) conds.push({ or: [{ title: { contains: q } }, { 'address.street': { contains: q } }] })
@@ -255,6 +287,68 @@ function Dropdown({ label, value, options, groups, onSelect, compactLabel, open,
               </button>
             )
           ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Фильтр «Варианты покупки»: множественный выбор — отметить можно несколько
+ * вариантов сразу (например, ипотека и рассрочка). Отличие от остальных
+ * списков панели: выбор пункта список не закрывает, отметки ставят одну за
+ * другой; закрыть можно повторным нажатием на кнопку, Escape или кликом вне
+ * панели — как у прочих фильтров (см. openId в CatalogFilters).
+ *
+ * Сводка на кнопке — выбранные варианты через запятую, а не один пункт, как
+ * у одиночных фильтров.
+ */
+function PurchaseDropdown({ label, anyLabel, value, onToggleOption, onClear, open, onToggle, onClose }: {
+  label: string
+  /** Сводка, когда ничего не выбрано («Любой») */
+  anyLabel: string
+  /** Значение фильтра: коды вариантов через запятую */
+  value: string
+  onToggleOption: (value: string) => void
+  onClear: () => void
+  open: boolean
+  onToggle: () => void
+  onClose: () => void
+}) {
+  const selected = purchaseValues(value)
+  const current = selected.length ? selected.map((o) => PURCHASE_OPTIONS.find((opt) => opt.value === o)?.label).filter(Boolean).join(', ') : anyLabel
+  return (
+    <div className="relative">
+      <button type="button" onClick={onToggle} className={ddBtnCls} aria-expanded={open} aria-haspopup="listbox">
+        <span className="flex flex-col items-start min-w-0">
+          <span className={labelCls(true) + ' break-words'}>{label}</span>
+          <span className="break-words">{current}</span>
+        </span>
+        <DdArrow open={open} />
+      </button>
+      {open && (
+        <div className="absolute z-30 top-full left-0 right-0 mt-1 py-1 bg-[var(--n15-charcoal)] border border-[var(--n15-gold)]/20 shadow-lg">
+          {/* «Любой» снимает все отметки и закрывает список — как выбор
+              пункта в одиночных фильтрах; отметки вариантов список не
+              закрывают, их ставят одну за другой */}
+          <button type="button" onClick={() => { onClear(); onClose() }} aria-pressed={selected.length === 0}
+            className={`w-full text-left px-4 py-2 text-sm hover:bg-[var(--n15-gold)]/8 ${selected.length === 0 ? 'text-[var(--n15-gold)]' : 'text-[var(--n15-silver)]'}`}>
+            {anyLabel}
+          </button>
+          {PURCHASE_OPTIONS.map((option) => {
+            const on = selected.includes(option.value)
+            return (
+              <button key={option.value} type="button" aria-pressed={on} onClick={() => onToggleOption(option.value)}
+                className={`flex items-center gap-2 w-full text-left px-4 py-2 text-sm hover:bg-[var(--n15-gold)]/8 ${on ? 'text-[var(--n15-gold)]' : 'text-[var(--n15-silver)]'}`}>
+                {/* Квадратик отметки: множественный выбор виден сразу, в
+                    отличие от галочки-переключателя одиночных списков */}
+                <span aria-hidden="true" className="shrink-0 w-3.5 h-3.5 flex items-center justify-center border border-[var(--n15-gold)]/40 text-[9px] leading-none">
+                  {on ? '✓' : ''}
+                </span>
+                {option.label}
+              </button>
+            )
+          })}
         </div>
       )}
     </div>
@@ -454,7 +548,7 @@ interface CatalogFiltersProps {
 
 /** Ключи выпадающих списков панели — по одному на фильтр. Открытым может быть
  *  только один: ключ лежит в openId, остальные списки закрыты */
-type DropdownId = 'type' | 'category' | 'city' | 'district' | 'cityDistrict' | 'locality' | 'snt'
+type DropdownId = 'type' | 'category' | 'purchase' | 'city' | 'district' | 'cityDistrict' | 'locality' | 'snt'
 
 export default function CatalogFilters({ state, onChange, t, cityRegions, knownCities }: CatalogFiltersProps) {
   // Открытый выпадающий список панели. Один на все фильтры: открытие нового
@@ -496,7 +590,10 @@ export default function CatalogFilters({ state, onChange, t, cityRegions, knownC
   // Единица площади действует только для участков; не выбрана — подразумеваются м²
   const isLand = state.category === 'land'
   const areaUnit: AreaUnit = isLand ? areaUnitOf(state.areaUnit) : 'sqm'
-  const hasFilters = state.type || state.category || state.rooms || state.priceMin || state.priceMax || state.areaMin || state.areaMax || state.district || state.cityDistrict || state.locality || state.snt || state.city || state.cityRegion
+  const hasFilters = state.type || state.category || state.rooms || state.priceMin || state.priceMax || state.areaMin || state.areaMax || state.district || state.cityDistrict || state.locality || state.snt || state.city || state.cityRegion || state.purchase
+  // Варианты покупки есть только у продажи жилья и коммерции: при аренде и
+  // участках фильтра нет (значение снимается в apply)
+  const showPurchase = purchaseRelevant(state.type, state.category)
   // У участков регионов, кроме Осетии, нет: межрегиональных направлений у
   // земли не бывает (см. regionValuesFor)
   const shownRegions = useMemo(
@@ -597,6 +694,12 @@ export default function CatalogFilters({ state, onChange, t, cityRegions, knownC
         out.cityRegion = ''
       }
     }
+    // Аренда или участки: вариантов покупки у таких объектов не бывает —
+    // отметки снимаем, иначе фильтр остался бы в поле без действия (выдача
+    // по нему была бы всегда пустой)
+    const nextType = patch.type !== undefined ? patch.type : state.type
+    const nextCategory = patch.category !== undefined ? patch.category : state.category
+    if (!purchaseRelevant(nextType, nextCategory)) out.purchase = ''
     onChange(out)
   }
 
@@ -625,6 +728,24 @@ export default function CatalogFilters({ state, onChange, t, cityRegions, knownC
           open={openId === 'category'} onToggle={() => toggle('category')} onClose={close}
           onSelect={(v) => apply({ category: v })} />
       </div>
+      {/* «Варианты покупки» — множественный выбор отметками: объект подходит,
+          если у него отмечен любой из выбранных вариантов. У аренды и
+          участков фильтра нет: вариантов покупки у них не бывает */}
+      {showPurchase && (
+        <div className="w-full sm:w-64">
+          <PurchaseDropdown label={t.catalog.purchaseLabel} anyLabel={t.catalog.purchaseAny} value={state.purchase}
+            open={openId === 'purchase'} onToggle={() => toggle('purchase')} onClose={close}
+            onToggleOption={(v) => {
+              const selected = purchaseValues(state.purchase)
+              // Отметка уже стоит — снимаем её, иначе добавляем
+              const next = selected.includes(v) ? selected.filter((code) => code !== v) : [...selected, v]
+              // Порядок кодов — как в списке вариантов: один и тот же набор
+              // отметок даёт одну и ту же строку фильтра (см. purchaseValues)
+              apply({ purchase: purchaseValues(next.join(',')).join(',') })
+            }}
+            onClear={() => apply({ purchase: '' })} />
+        </div>
+      )}
       {/* «Город» — иерархия регионов: Осетия и межрегиональные направления Н15
           (Москва, Краснодарский край…). При открытии — только регионы, их
           населённые пункты показываются по стрелке, у каждого — счётчик

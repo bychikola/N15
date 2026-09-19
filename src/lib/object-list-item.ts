@@ -22,6 +22,8 @@ export function objectToListItem(doc: Record<string, unknown>): ObjectListItem {
     rooms: doc.rooms as number | undefined,
     floor: doc.floor as number | undefined,
     totalFloors: doc.totalFloors as number | undefined,
+    // Варианты покупки — значки на обложке карточки (см. purchaseBadges)
+    purchaseOptions: doc.purchaseOptions as string[] | undefined,
     address: doc.address as ObjectListItem['address'],
     primaryImage: (doc.primaryImage && typeof doc.primaryImage === 'object'
       ? doc.primaryImage

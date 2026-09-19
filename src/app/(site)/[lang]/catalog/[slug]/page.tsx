@@ -19,6 +19,9 @@ import { GoalOnMount } from '@/components/analytics/GoalOnMount'
 import { getDictionary, type Dict } from '@/i18n/dictionaries'
 import { areaHuman, type AreaUnit } from '@/lib/area-format'
 import { floorHuman, floorLabel } from '@/lib/floor-format'
+// Варианты покупки: полный список доступных вариантов показывается в карточке
+// (на обложке каталога — только значки, см. src/lib/purchase-options.ts)
+import { purchaseOptionsApply } from '@/lib/purchase-options'
 
 interface PageProps {
   params: Promise<{ lang: string; slug: string }>
@@ -83,6 +86,9 @@ export default async function ObjectPage({ params }: PageProps) {
     coordinates?: { lat?: number; lng?: number }
     description?: { root?: { children?: unknown[] } }
     features?: { feature?: string }[]
+    // Подтверждённые агентом варианты покупки (ипотека, рассрочка, маткапитал
+    // и др.) — полный список показывается в карточке объекта
+    purchaseOptions?: string[]
     // Подтверждённые агентом характеристики дома (год постройки, материал
     // стен, этажность, серия, капремонт, УК, площадь) — заполняются в CRM
     // кнопкой «Искать в открытых источниках». Неподтверждённые значения и
@@ -111,6 +117,14 @@ export default async function ObjectPage({ params }: PageProps) {
     img?.sizes?.card?.url || img?.sizes?.thumbnail?.url || img?.url || ''
 
   const features = obj.features?.map((f: { feature?: string }) => f.feature).filter(Boolean) || []
+  // Варианты покупки — только у продажи жилья и коммерции (у аренды и участков
+  // их не бывает, см. purchaseOptionsApply) и только известные коды: чужие
+  // значения из старых записей в карточке не показываем
+  const purchaseList = purchaseOptionsApply(obj.type, obj.category)
+    ? (obj.purchaseOptions || []).filter(
+        (option): option is keyof typeof t.object.purchaseOptions => option in t.object.purchaseOptions,
+      )
+    : []
   // Характеристики дома из реестра: показываем только подтверждённые агентом
   // (пустые и «не найдено» в housePublic не попадают) — с источником и датой
   const houseItems = (obj.housePublic?.items || [])
@@ -306,6 +320,31 @@ export default async function ObjectPage({ params }: PageProps) {
                     <div className="flex flex-wrap gap-2">
                       {features.map((f) => (
                         <span key={f} className="text-sm px-4 py-2 border border-[var(--n15-gold)]/30 text-[var(--n15-white)]">{f}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Варианты покупки — полный список того, что подтвердил агент:
+                    на обложке каталога их видно значками (не больше двух),
+                    здесь — все доступные варианты, с материнским капиталом и
+                    покупкой без первоначального взноса */}
+                {purchaseList.length > 0 && (
+                  <div className="mt-8">
+                    <h2 className="text-xl font-[family-name:var(--font-display)] text-[var(--n15-white)] mb-4">{t.object.purchaseTitle}</h2>
+                    <div className="flex flex-wrap gap-2">
+                      {purchaseList.map((option) => (
+                        <span
+                          key={option}
+                          className="text-xs tracking-[0.16em] uppercase px-3 py-2 border"
+                          style={{
+                            background: 'var(--badge-bronze-bg)',
+                            color: 'var(--badge-bronze-fg)',
+                            borderColor: 'var(--badge-bronze-border)',
+                          }}
+                        >
+                          {t.object.purchaseOptions[option]}
+                        </span>
                       ))}
                     </div>
                   </div>
