@@ -90,6 +90,12 @@ export interface AgentObjectRow {
   at: string
   /** Причина архива — у архивных и проданных объектов */
   archiveReason: ArchiveReason | null
+  /**
+   * Автор карточки (учётная запись пользователя): объект, заведённый
+   * сотрудником, остаётся ему доступен на правку, даже если ведение
+   * передано другому агенту (см. src/lib/object-access.ts)
+   */
+  authorId: number | null
 }
 
 export interface AgentProfile {
@@ -175,6 +181,7 @@ function objectRow(doc: Record<string, unknown>): AgentObjectRow {
     city: str(addr.locality) || str(addr.city),
     at: str(doc.updatedAt),
     archiveReason,
+    authorId: agentIdOf(doc.createdBy),
   }
 }
 

@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { canAccessCrm, getCrmUser } from '@/app/crm/auth'
 import { placementsSummary, touchManualItem, type PlacementsGroup } from '@/lib/placements-service'
 import { platformByUrl, platformBySlug, type PlacementStatus } from '@/lib/listing-check'
+import { isOwnObjectDoc } from '@/lib/object-access'
 
 /**
  * Управление привязанными к объекту объявлениями площадок из карточки CRM
@@ -75,13 +76,12 @@ export async function POST(req: NextRequest) {
     if (!doc) {
       return NextResponse.json({ error: 'Объект не найден' }, { status: 404 })
     }
-    // Агент управляет площадками только своих объектов (как в publish-manage
-    // и access.update коллекции Objects); администратор — любых
+    // Агент управляет площадками только своих объектов (ответственный агент
+    // или автор карточки — как в publish-manage и access.update коллекции
+    // Objects, см. src/lib/object-access.ts); администратор — любых
     if (user.role !== 'admin') {
       const mine = await myAgentIds(payload, user.id)
-      const agentRef = (doc as unknown as { agent?: unknown }).agent
-      const agentNum = typeof agentRef === 'number' ? agentRef : Number(agentRef)
-      if (!Number.isFinite(agentNum) || !mine.has(agentNum)) {
+      if (!isOwnObjectDoc(doc, user, mine)) {
         return NextResponse.json({ error: 'Это не ваш объект — управление доступно его агенту или администратору' }, { status: 403 })
       }
     }

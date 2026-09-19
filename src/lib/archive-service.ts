@@ -8,15 +8,17 @@
  * (каталог, поиск, прямые ссылки) и снимаются с площадок публикации
  * (src/lib/publish-service.ts), но остаются видны сотрудникам в /crm/archive.
  *
- * Права: агент управляет архивом только своих объектов (профиль агента в
- * поле agent привязан к его учётной записи, agents.user), администратор —
- * любыми; «Удалить окончательно» доступно только администратору. Внутренние
+ * Права: агент управляет архивом только своих объектов (он ответственный
+ * агент — профиль в поле agent привязан к его учётной записи, agents.user —
+ * или автор карточки, createdBy), администратор — любыми; «Удалить
+ * окончательно» доступно только администратору. Внутренние
  * комментарии архива (комментарий к переносу и комментарии истории) видит
  * только администратор — при чтении с overrideAccess их снимает
  * stripArchiveComments, а на странице раздела блоки прячутся (см. CrmArchive).
  */
 import type { Payload } from 'payload'
 import { archiveFromDoc, RESTORABLE_STATUSES, type ArchiveGroup } from './archive'
+import { isOwnObjectDoc, relationIdOf } from './object-access'
 
 export interface ArchiveActor {
   id: number
@@ -38,6 +40,8 @@ export interface ArchiveRow {
   /** Ответственный агент */
   agentId: number | null
   agentName: string
+  /** Автор карточки (учётная запись пользователя) — второй признак «своего» */
+  authorId: number | null
   archive: ArchiveGroup
   /** Дата переноса (архивная), запасная — дата последнего изменения */
   at: string
@@ -88,10 +92,10 @@ export async function canManageArchive(
 ): Promise<boolean> {
   if (actor.role === 'admin') return true
   if (actor.role !== 'agent') return false
-  const agentId = agentIdOf(doc.agent)
-  if (agentId == null) return false
+  // Правило «свой объект» общее с access коллекции Objects и маршрутами
+  // API: ответственный агент или автор карточки (см. src/lib/object-access.ts)
   const mine = await myAgentIds(payload, actor.id)
-  return mine.has(agentId)
+  return isOwnObjectDoc(doc, actor, mine)
 }
 
 /** Документ объекта или null (с проверкой прав на архив) */
@@ -263,6 +267,7 @@ export async function loadArchiveBoard(payload: Payload, isAdmin: boolean, limit
       address: archiveAddressLine(o),
       agentId,
       agentName: str(agent?.name),
+      authorId: relationIdOf(o.createdBy),
       archive,
       at: archive.archivedAt || str(o.updatedAt),
     }

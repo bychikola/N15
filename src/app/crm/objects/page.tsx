@@ -5,6 +5,7 @@ import { getDictionary } from '@/i18n/dictionaries'
 import { canAccessCrm, getCrmUser } from '../auth'
 import { CrmShell } from '@/components/crm/CrmShell'
 import { CrmObjects } from '@/components/crm/CrmObjects'
+import { ownObjectsWhere } from '@/lib/object-access'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,10 +22,14 @@ export default async function CrmObjectsPage({ searchParams }: PageProps) {
     redirect('/crm')
   }
 
-  // «Свои» объекты агента (см. access в коллекции Objects): объект считается
-  // своим, если в нём указан профиль агента (коллекция agents), привязанный
-  // к учётной записи этого пользователя (agents.user). Профиль по умолчанию
-  // для новых объектов и список id своих объектов уходят в клиентский список.
+  // «Свои» объекты сотрудника (см. access в коллекции Objects): объект
+  // считается своим, если в нём указан профиль агента (коллекция agents),
+  // привязанный к учётной записи этого пользователя (agents.user), или если
+  // он сам завёл карточку (createdBy — учётная запись пользователя). Тем же
+  // правилом ограничены права на сервере (см. src/lib/object-access.ts).
+  // Профиль по умолчанию для новых объектов и список id своих объектов
+  // уходят в клиентский список: по нему кнопка «Редактировать» есть только
+  // на своих объектах.
   const payload = await getPayload({ config })
   const myAgentIds: number[] = []
   let myObjectIds: number[] = []
@@ -39,10 +44,11 @@ export default async function CrmObjectsPage({ searchParams }: PageProps) {
     for (const agent of agentsRes.docs) {
       if (typeof agent.id === 'number') myAgentIds.push(agent.id)
     }
-    if (myAgentIds.length) {
+    const where = ownObjectsWhere(user.id, new Set(myAgentIds))
+    if (where) {
       const objectsRes = await payload.find({
         collection: 'objects',
-        where: { agent: { in: myAgentIds } },
+        where,
         limit: 2000,
         depth: 0,
         overrideAccess: true,

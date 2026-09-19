@@ -10,6 +10,7 @@ import {
   type PublishingGroup,
 } from '@/lib/publish-service'
 import { isPublishablePlatform, publishPlatformBySlug } from '@/lib/publishing'
+import { isOwnObjectDoc } from '@/lib/object-access'
 
 /**
  * Управление публикацией объекта на площадки из карточки CRM (блок
@@ -99,13 +100,13 @@ export async function POST(req: NextRequest) {
     if (!doc) {
       return NextResponse.json({ error: 'Объект не найден' }, { status: 404 })
     }
-    // Агент управляет публикациями только своих объектов (свои — по профилю
-    // агента в карточке, agents.user = этот пользователь)
+    // Агент управляет публикациями только своих объектов: он ответственный
+    // агент (профиль в карточке, agents.user = этот пользователь) или автор
+    // карточки (createdBy) — то же правило, что в access.update коллекции
+    // Objects (см. src/lib/object-access.ts)
     if (user.role !== 'admin') {
       const mine = await myAgentIds(payload, user.id)
-      const agentId = (doc as unknown as { agent?: unknown }).agent
-      const agentNum = typeof agentId === 'number' ? agentId : Number(agentId)
-      if (!Number.isFinite(agentNum) || !mine.has(agentNum)) {
+      if (!isOwnObjectDoc(doc, user, mine)) {
         return NextResponse.json({ error: 'Это не ваш объект — публикация доступна его агенту или администратору' }, { status: 403 })
       }
     }

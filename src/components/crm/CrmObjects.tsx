@@ -998,6 +998,14 @@ export const CrmObjects: FC<{
   // к объекту фото) либо «объект сохранён». Первое изменение после открытия
   // карточки или после сохранения пропускаем — иначе карточка выглядела бы
   // изменённой сразу (см. openCardMark).
+  // Закрытые сведения объекта — собственник и кадастровые номера: их правят
+  // администратор и агент в своём объекте (новый объект агента сразу его).
+  // У чужого объекта полей нет вовсе — сервер их не отдаёт и не принимает по
+  // тому же правилу (см. access полей в коллекции Objects и object-access.ts)
+  const canEditPrivate = isAdmin || editId == null || ownObjectIds.includes(editId)
+  // Чужой объект открыт только на просмотр — правки и сохранения в карточке нет
+  const viewOnly = editId != null && !canEditPrivate
+
   const [dirty, setDirty] = useState(false)
   const skipNextDirty = useRef(true)
   const openCardMark = useCallback(() => {
@@ -1537,7 +1545,7 @@ export const CrmObjects: FC<{
     // Блоки «Собственник» и «Кадастровый номер»: проверяем до отправки, чтобы
     // сотрудник увидел причину сразу и не потерял введённое (сервер проверяет
     // то же самое — см. validate поля в коллекции Objects)
-    if (isAdmin) {
+    if (canEditPrivate) {
       const cadastral = form.cadastralNumber.trim()
       if (cadastral && !isCadastralFormat(cadastral)) {
         setSaveError(t.crm.objCadastralBad)
@@ -1577,7 +1585,7 @@ export const CrmObjects: FC<{
     // сохранённые площадь и кадастровые сведения участка не стирает.
     // Сотрудникам площадь участка показывается, как раньше, отдельным полем
     // формы (кадастровые сведения им не отдаются вовсе).
-    const plotSent = isPlotArea && (isAdmin ? hasPlot : true)
+    const plotSent = isPlotArea && (canEditPrivate ? hasPlot : true)
     const mediaIds = photos.map((p) => p.id).filter((id): id is number => id !== null)
     // Этажность дома (дом и таунхаус): выбранное число этажей из списка или
     // своё («другое значение»). Хранится, как и раньше, в totalFloors — его
@@ -1656,19 +1664,19 @@ export const CrmObjects: FC<{
       // сохранялось бы — Payload считает пропущенное поле неизменённым.
       // Телефон уходит в том же виде, в каком его хранит коллекция
       // («+7 (918) 828-40-88»), чтобы дубли искались по одному написанию.
-      ownerName: isAdmin ? form.ownerName.trim() || null : undefined,
-      ownerPhone: isAdmin ? formatRuPhone(form.ownerPhone.trim()) || null : undefined,
+      ownerName: canEditPrivate ? form.ownerName.trim() || null : undefined,
+      ownerPhone: canEditPrivate ? formatRuPhone(form.ownerPhone.trim()) || null : undefined,
       // Номер дома/строения — в cadastralNumber (историческое поле объекта),
       // кадастровые сведения участка — в своих полях: это разные объекты
-      // учёта, и один номер вместо двух не подходит. Пустое поле у
-      // администратора уходит null — стёртое значение сохраняется.
-      cadastralNumber: isAdmin ? form.cadastralNumber.trim() || null : undefined,
-      plotCadastralNumber: isAdmin && plotSent ? form.plotCadastralNumber.trim() || null : undefined,
-      plotLandCategory: isAdmin && plotSent ? form.plotLandCategory.trim() || null : undefined,
-      plotPermittedUse: isAdmin && plotSent ? form.plotPermittedUse.trim() || null : undefined,
+      // учёта, и один номер вместо двух не подходит. Пустое поле уходит
+      // null — стёртое значение сохраняется.
+      cadastralNumber: canEditPrivate ? form.cadastralNumber.trim() || null : undefined,
+      plotCadastralNumber: canEditPrivate && plotSent ? form.plotCadastralNumber.trim() || null : undefined,
+      plotLandCategory: canEditPrivate && plotSent ? form.plotLandCategory.trim() || null : undefined,
+      plotPermittedUse: canEditPrivate && plotSent ? form.plotPermittedUse.trim() || null : undefined,
       // Назначение участка — поле коммерции (у дома оно повторяло бы ВРИ):
       // у остальных категорий не отправляем, сохранённое не стираем
-      plotPurpose: isAdmin && plotSent && isCommercial ? form.plotPurpose.trim() || null : undefined,
+      plotPurpose: canEditPrivate && plotSent && isCommercial ? form.plotPurpose.trim() || null : undefined,
       // Перенос в архив добавляет статус и данные архива (см. runArchive)
       ...extra,
     }
@@ -1799,6 +1807,15 @@ export const CrmObjects: FC<{
     } finally {
       setArchBusy(false)
     }
+  }
+
+  // Открытие карточки объекта: свой (или админом) — на правку, чужой — на
+  // просмотр. Право на правку определяет сервер, а форма ориентируется на
+  // тот же список своих объектов (см. canEditPrivate)
+  const openObject = async (id: number) => {
+    const res = await fetch(`/api/objects/${id}`, { credentials: 'include' })
+    if (!res.ok) return
+    startEdit(await res.json())
   }
 
   const remove = async (id: number) => {
@@ -2039,12 +2056,19 @@ export const CrmObjects: FC<{
             onClick={(e) => e.stopPropagation()}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
               <h2 style={{ margin: 0, fontFamily: "'New Standard', Georgia, serif", fontWeight: 400, fontSize: 22 }}>
-                {editId ? t.crm.objEdit : t.crm.objAdd}
+                {viewOnly ? t.crm.objView : editId ? t.crm.objEdit : t.crm.objAdd}
               </h2>
               <button type="button" onClick={closeCard} aria-label={t.crm.close} title={t.crm.close} style={{ border: '1px solid #e1d8ca', borderRadius: 7, background: '#fff', color: '#716b62', padding: '8px 12px', cursor: 'pointer', fontSize: 12 }}>
                 ✕
               </button>
             </div>
+            {/* Чужой объект: карточка открыта только для просмотра — поля
+                выключены, панели сохранения нет (см. viewOnly) */}
+            {viewOnly && (
+              <p style={{ margin: '0 0 14px', padding: '10px 12px', border: '1px solid #e8dfd0', borderRadius: 8, background: '#fbf8f1', color: '#8a857b', fontSize: 11, lineHeight: 1.5 }}>
+                {t.crm.objViewHint}
+              </p>
+            )}
             {/* Блок «Где размещён объект» — привязанные объявления площадок.
                 Доступен у сохранённого объекта (editId); у нового — появится
                 после первого сохранения. */}
@@ -2087,6 +2111,11 @@ export const CrmObjects: FC<{
                 </button>
               </div>
             )}
+            {/* Чужой объект открывается только на просмотр: fieldset с
+                disabled гасит все поля, списки, файлы и кнопки формы разом —
+                правки в такой карточке физически невозможны, а сервер их и
+                так не примет (см. access коллекции Objects) */}
+            <fieldset disabled={viewOnly} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
             <div className="crm-property-form">
           <Field label={t.crm.objTitle}><input value={form.title} onChange={(e) => set('title', e.target.value)} style={inputStyle} /></Field>
           <Field label={t.crm.objType}>
@@ -2140,7 +2169,8 @@ export const CrmObjects: FC<{
               (м² / сотки / га: «25 соток», «1,5 га») и кадастровые сведения.
               Кадастровые поля — закрытые: их видит и меняет только
               администратор (как у дома в блоке «Кадастровые данные участка»),
-              сотрудникам остаётся площадь земли — она показывается и на сайте.
+              в чужих объектах сотруднику остаётся площадь земли — она
+              показывается и на сайте.
               Галочка «Есть земельный участок» скрывает пустой блок — так же,
               как у дома; сохранённые данные она не стирает (см. save) */}
           {isCommercial && (
@@ -2156,13 +2186,13 @@ export const CrmObjects: FC<{
                   </Field>
                 </div>
               </div>
-              {isAdmin && (
+              {canEditPrivate && (
                 <label className="crm-plot-toggle">
                   <input type="checkbox" checked={hasPlot} onChange={(e) => setHasPlot(e.target.checked)} />
                   <span>{t.crm.objPlotHas}</span>
                 </label>
               )}
-              {(!isAdmin || hasPlot) && (
+              {(!canEditPrivate || hasPlot) && (
                 <div className="crm-fields-block" style={{ marginTop: 10 }}>
                   <div className="crm-block-head">
                     <strong>{t.crm.objPlotBlock}</strong>
@@ -2170,7 +2200,7 @@ export const CrmObjects: FC<{
                   </div>
                   <div className="crm-fields-grid">
                     {plotAreaField}
-                    {isAdmin && (
+                    {canEditPrivate && (
                       <>
                         <Field label={t.crm.objCadastralPlot}>
                           <input value={form.plotCadastralNumber} onChange={(e) => set('plotCadastralNumber', e.target.value)} style={inputStyle} placeholder="15:07:0030021:123" />
@@ -2197,11 +2227,12 @@ export const CrmObjects: FC<{
               Objects); единица показа (м² / сотки / га) своя — как у участка;
               участвует в рыночной оценке: маленький участок удешевляет лот,
               большой — добавляет к цене.
-              У администратора поле стоит в блоке «Кадастровые данные участка»
-              ниже (номер участка и категория земель — закрытые сведения, они
-              показываются рядом с площадью), у сотрудников — здесь: площадью
-              участка они пользуются, а закрытые сведения блока им не видны */}
-          {isHouse && !isAdmin && plotAreaField}
+              У владельца карточки поле стоит в блоке «Кадастровые данные
+              участка» ниже (номер участка и категория земель — закрытые
+              сведения, они показываются рядом с площадью), в чужом объекте —
+              здесь: площадью участка сотрудник пользуется, а закрытых
+              сведений блока не видит */}
+          {isHouse && !canEditPrivate && plotAreaField}
           <Field label={t.crm.objRooms}><input type="number" value={form.rooms} onChange={(e) => set('rooms', e.target.value)} style={inputStyle} /></Field>
           {/* Этажность дома — только у дома и таунхауса: сразу видно, сколько
               этажей, и появляются поля описаний. Квартиры (этаж квартиры в
@@ -2463,14 +2494,14 @@ export const CrmObjects: FC<{
             />
           </div>
 
-          {/* Блок «Собственник»: имя и телефон — закрытые сведения, их видит и
-              правит только администратор (у сотрудников полей нет вовсе, а не
-              «заблокированы»: см. access полей в коллекции Objects и память
-              agent-accounts — так требует владелец). Стоит перед блоком
-              «Кадастровый номер»: сначала собственник объекта, потом номер.
-              Разметка: блок = подпись + сетка полей (crm.css), на телефоне
-              поля становятся в одну колонку */}
-          {isAdmin && (
+          {/* Блок «Собственник»: имя и телефон — закрытые сведения. Их видит
+              и правит администратор, а агент — только в своём объекте (в
+              чужом полей нет вовсе, а не «заблокированы»: см. access полей в
+              коллекции Objects). Стоит перед блоком «Кадастровый номер»:
+              сначала собственник объекта, потом номер. Разметка: блок =
+              подпись + сетка полей (crm.css), на телефоне поля становятся
+              в одну колонку */}
+          {canEditPrivate && (
             <div className="crm-fields-block span-2" style={{ gridColumn: '1 / -1' }}>
               <div className="crm-block-head">
                 <strong>{t.crm.objOwnerBlock}</strong>
@@ -2504,7 +2535,7 @@ export const CrmObjects: FC<{
               отдельный блок ниже: у дома и участка номера разные.
               Формат проверяется до отправки (и на сервере), у участка номер
               обязателен при создании карточки */}
-          {isAdmin && (
+          {canEditPrivate && (
             <div className="crm-fields-block span-2" style={{ gridColumn: '1 / -1' }}>
               <div className="crm-block-head">
                 <strong>{isPrivateHouse ? t.crm.objCadastralHouseBlock : t.crm.objCadastralBlock}</strong>
@@ -2523,9 +2554,10 @@ export const CrmObjects: FC<{
               них есть участок (галочка «Есть земельный участок»): номер
               участка, площадь с единицей показа, категория земель и вид
               разрешённого использования. Закрытые сведения, как и номер дома:
-              только администратор, на сайте не показываются. Галочка только
-              скрывает блок — сохранённые данные участка остаются (см. save) */}
-          {isAdmin && isHouse && (
+              администратор и агент в своём объекте, на сайте не показываются.
+              Галочка только скрывает блок — сохранённые данные участка
+              остаются (см. save) */}
+          {canEditPrivate && isHouse && (
             <div className="span-2" style={{ gridColumn: '1 / -1' }}>
               <label className="crm-plot-toggle">
                 <input type="checkbox" checked={hasPlot} onChange={(e) => setHasPlot(e.target.checked)} />
@@ -2597,11 +2629,25 @@ export const CrmObjects: FC<{
               {editId && <option value="archived">{t.crm.statusArchived}</option>}
             </select>
           </Field>
+          {/* Ответственного агента назначает администратор: агент не может
+              ни передать свой объект другому, ни забрать чужой (сервер это
+              тоже не принимает — см. access поля в коллекции Objects). Свой
+              новый объект агент получает автоматически, поэтому ему видно
+              только имя ведущего агента */}
           <Field label={t.crm.objAgent}>
-            <select value={form.agent} onChange={(e) => set('agent', e.target.value)} style={inputStyle}>
-              <option value="">—</option>
-              {agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-            </select>
+            {isAdmin ? (
+              <select value={form.agent} onChange={(e) => set('agent', e.target.value)} style={inputStyle}>
+                <option value="">—</option>
+                {agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+              </select>
+            ) : (
+              <input
+                value={agents.find((a) => String(a.id) === form.agent)?.name || (form.agent ? form.agent : '—')}
+                readOnly
+                disabled
+                style={{ ...inputStyle, background: '#f2ede4', color: '#716b62' }}
+              />
+            )}
           </Field>
 
           <div className="span-2" style={{ gridColumn: '1 / -1' }}>
@@ -2747,7 +2793,8 @@ export const CrmObjects: FC<{
               состояние формы: «Объект сохранён», «Есть несохранённые
               изменения» или текст ошибки. Неудачное сохранение карточку не
               закрывает и ничего не теряет: введённые данные остаются в форме
-              (см. save) */}
+              (см. save). В чужом объекте панели нет: он открыт на просмотр */}
+          {!viewOnly && (
           <div className="span-2 crm-save-bar" style={{ gridColumn: '1 / -1' }}>
             <div className="crm-save-state">
               {saving ? (
@@ -2767,7 +2814,9 @@ export const CrmObjects: FC<{
               {saving ? t.crm.objSaving : t.crm.objSave}
             </button>
           </div>
+          )}
             </div>
+            </fieldset>
 
             {/* «Архив объекта»: перенос в архив с причиной и комментарием,
                 возврат из архива и история изменений (src/lib/archive.ts).
@@ -3048,11 +3097,18 @@ export const CrmObjects: FC<{
               </div>
               <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid #eee9e1', display: 'flex', gap: 6 }}>
                 {/* Чужие объекты агент видит в общей базе, но редактирует и
-                    публикует только свои (сервер это же проверяет при доступе) */}
-                {(isAdmin || ownObjectIds.includes(o.id)) && (
-                  <button type="button" onClick={async () => { const res = await fetch(`/api/objects/${o.id}`, { credentials: 'include' }); const d = await res.json(); startEdit(d) }}
+                    публикует только свои: на чужом объекте кнопки
+                    «Редактировать» нет — он открывается на просмотр (сервер
+                    правку чужого объекта тоже не пропустит) */}
+                {isAdmin || ownObjectIds.includes(o.id) ? (
+                  <button type="button" onClick={() => void openObject(o.id)}
                     style={{ flex: 1, border: '1px solid #e1d8ca', borderRadius: 6, background: '#faf7f2', color: '#716b62', padding: '8px 10px', fontSize: 9, textTransform: 'uppercase', letterSpacing: '.07em', cursor: 'pointer' }}>
                     {t.crm.objEdit}
+                  </button>
+                ) : (
+                  <button type="button" onClick={() => void openObject(o.id)}
+                    style={{ flex: 1, border: '1px solid #e1d8ca', borderRadius: 6, background: 'transparent', color: '#8a857b', padding: '8px 10px', fontSize: 9, textTransform: 'uppercase', letterSpacing: '.07em', cursor: 'pointer' }}>
+                    {t.crm.objView}
                   </button>
                 )}
                 {isAdmin && (

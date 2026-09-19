@@ -38,7 +38,10 @@ export default async function CrmAgentProfilePage({ params }: PageProps) {
     ? await loadAgentProfile(payload, agentId)
     : null
 
-  // Свои объекты: у агента — объекты его профиля (agents.user), у админа — все.
+  // Свои объекты: у админа — все, у сотрудника — объекты его профиля
+  // (agents.user) и те, что он завёл сам (createdBy): заведённый объект
+  // остаётся доступен автору, даже если ведение передали другому агенту —
+  // то же правило, что и на сервере (см. src/lib/object-access.ts).
   // Профиль агента не найден (удалён в другой вкладке) — показываем заглушку,
   // а не ошибку сервера.
   let ownObjectIds: number[] = []
@@ -53,9 +56,10 @@ export default async function CrmAgentProfilePage({ params }: PageProps) {
         depth: 0,
         overrideAccess: true,
       })
-      if (myAgents.docs.some((a) => (a.id as number) === profile.agent.id)) {
-        ownObjectIds = profile.rows.map((row) => row.id)
-      }
+      const myProfile = myAgents.docs.some((a) => (a.id as number) === profile.agent.id)
+      ownObjectIds = profile.rows
+        .filter((row) => myProfile || (row.authorId != null && String(row.authorId) === String(user.id)))
+        .map((row) => row.id)
     }
   }
 

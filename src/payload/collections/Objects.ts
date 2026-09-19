@@ -21,6 +21,9 @@ import { formatRuPhone } from '@/lib/phone'
 // Кадастровый номер — общий формат с формой CRM и юрэкспертизой
 // (см. src/lib/cadastral.ts)
 import { cleanCadastral, isCadastralFormat } from '@/lib/cadastral'
+// «Свой» объект сотрудника (ответственный агент или автор карточки) —
+// общее правило с маршрутами API и сервисами, см. src/lib/object-access.ts
+import { isOwnObjectDoc, ownObjectsWhere } from '@/lib/object-access'
 
 /**
  * Чтение булева флага из query-параметра запроса. В разных окружениях
@@ -140,6 +143,121 @@ async function myAgentIds(req: AccessReq): Promise<Set<number>> {
   })()
   myAgentIdsCache.set(req, promise)
   return promise
+}
+
+/**
+ * Автор и агент объекта из базы — для полевых правил при чтении.
+ *
+ * В afterRead поля обходят по порядку, и закрытый createdBy (чтение только
+ * администратору) успевает выпасть из документа раньше, чем проверяются
+ * права на соседние поля с собственником и кадастром: агент-автор карточки
+ * видел бы их пустыми. Поэтому владельца документа уточняем в базе — как и
+ * myAgentIds, одним запросом на документ в пределах запроса.
+ */
+const ownDocCache = new WeakMap<object, Map<string, Promise<unknown>>>()
+
+async function ownershipDoc(req: AccessReq, id: unknown): Promise<unknown> {
+  if (id == null) return null
+  let byId = ownDocCache.get(req)
+  if (!byId) {
+    byId = new Map()
+    ownDocCache.set(req, byId)
+  }
+  const key = String(id)
+  const cached = byId.get(key)
+  if (cached) return cached
+  const promise = (async () => {
+    try {
+      return await req.payload.findByID({
+        collection: 'objects',
+        id: id as number,
+        depth: 0,
+        overrideAccess: true,
+        select: { agent: true, createdBy: true },
+      })
+    } catch {
+      // документ не нашли — считаем, что своих прав на него нет
+      return null
+    }
+  })()
+  byId.set(key, promise)
+  return promise
+}
+
+/** Сотрудник CRM: агент или администратор (у клиента доступа к объектам нет) */
+const isStaff = (user?: { role?: string } | null): boolean =>
+  user?.role === 'agent' || user?.role === 'admin'
+
+/**
+ * Свой ли объект сотруднику: он указан ответственным агентом (в карточке
+ * стоит профиль из коллекции agents, привязанный к его учётной записи,
+ * agents.user) или он создал карточку (createdBy — его учётная запись).
+ *
+ * Это единственное определение «своего» объекта для прав: по нему агент
+ * правит карточку (см. access.update), распоряжается её архивом и видит
+ * данные собственника. Администратору доступно всё. Правило общее с
+ * маршрутами API и сервисами — см. src/lib/object-access.ts.
+ */
+async function isOwnObject(req: AccessReq, doc: unknown): Promise<boolean> {
+  if (!req.user) return false
+  if (req.user.role === 'admin') return true
+  const mine = await myAgentIds(req)
+  return isOwnObjectDoc(doc, req.user, mine)
+}
+
+/**
+ * Доступ к закрытым сведениям объекта — данным собственника (имя, телефон)
+ * и кадастровым номерам. Администратору — у любого объекта, агенту — только
+ * у своих (см. isOwnObject): чужие карточки сотрудник видит в общей базе,
+ * но персональные данные и кадастр чужих собственников ему не отдаются и
+ * не правятся. На публичном сайте поля не показываются никому.
+ */
+const privateFieldsAccess = {
+  create: ({ req }: { req: AccessReq }): boolean => isStaff(req.user),
+  // При чтении владельца берём из базы: к этому моменту createdBy уже вырезан
+  // из документа (см. ownershipDoc), при правке в doc приходит исходный
+  // документ целиком — там автор и агент на месте
+  read: async ({ req, id }: { req: AccessReq; id?: number | string | null }): Promise<boolean> => {
+    if (!req.user) return false
+    if (req.user.role === 'admin') return true
+    if (req.user.role !== 'agent') return false
+    return isOwnObject(req, await ownershipDoc(req, id))
+  },
+  update: ({ req, doc }: { req: AccessReq; doc?: unknown }): Promise<boolean> => isOwnObject(req, doc),
+}
+
+/**
+ * Ответственный агент и автор карточки.
+ *
+ * Новый объект агента сразу «свой»: его профиль из коллекции agents
+ * подставляется ответственным агентом, а в createdBy записывается его
+ * учётная запись. Выбирать ничего не нужно, и объект не потеряется —
+ * без агента он был бы доступен только администратору.
+ *
+ * При правке ответственного агента и автора меняет только администратор:
+ * агент не передаёт свой объект другому и не забирает чужой (правку чужого
+ * не пропускает access.update, поле «Агент» закрыто от агента на уровне
+ * поля). У не-администратора присланные значения просто не принимаются —
+ * в карточке остаются прежние.
+ */
+const objectsOwnershipHook: CollectionBeforeChangeHook = async ({ data, req, operation }) => {
+  if (!data) return data
+  const user = (req as { user?: { id?: number | string; role?: string } }).user
+  if (!user) return data
+  if (operation === 'create') {
+    if (user.id != null) data.createdBy = user.id
+    if (user.role === 'agent') {
+      const mine = await myAgentIds(req as unknown as AccessReq)
+      const own = mine.values().next().value
+      if (own != null) data.agent = own
+    }
+    return data
+  }
+  if (user.role !== 'admin') {
+    delete data.agent
+    delete data.createdBy
+  }
+  return data
 }
 
 /**
@@ -411,20 +529,24 @@ export const Objects: CollectionConfig = {
     // Клиенты регистрируются на сайте и работают через заявки — создание
     // объекта напрямую из REST им не нужно и раньше было открыто всем.
     create: ({ req: { user } }) => !!user && (user.role === 'agent' || user.role === 'admin'),
-    // Агент добавляет/редактирует/публикует только «свои» объекты (в карточке
-    // указан его профиль из коллекции agents, agents.user = этот пользователь).
-    // Общую базу агент видит на чтение, править чужие — только администратор.
-    // Возвращаем query-констрейнт — Payload сам ограничит выборку документа.
+    // Агент добавляет/редактирует/публикует только «свои» объекты: он указан
+    // в карточке ответственным агентом (профиль из коллекции agents,
+    // agents.user = этот пользователь) или создал её (createdBy — см. поле
+    // ниже). Общую базу агент видит на чтение, править чужие — только
+    // администратор. Возвращаем query-констрейнт: Payload сам проверит по нему
+    // документ, поэтому прямой PATCH чужого объекта из REST тоже отклоняется,
+    // а не только прячется кнопка в интерфейсе.
     update: async ({ req }) => {
       const user = req.user as AccessReq['user'] | undefined
       if (!user) return false
       if (user.role === 'admin') return true
       if (user.role !== 'agent') return false
       const mine = await myAgentIds(req)
-      if (!mine.size) return false
-      const where: Where = { agent: { in: [...mine] } }
-      return where
+      return ownObjectsWhere(user.id, mine) ?? false
     },
+    // Удаление объектов агентам запрещено: «Удалить окончательно» есть только
+    // у администратора (кнопка в CRM — там же). Агент снимает объект с
+    // продажи переносом в архив — это правка статуса, а не удаление.
     delete: ({ req: { user } }) => user?.role === 'admin',
   },
   hooks: {
@@ -467,6 +589,9 @@ export const Objects: CollectionConfig = {
       },
     ],
     beforeChange: [
+      // Ответственный агент и автор карточки (см. шапку хука): первым —
+      // остальные хуки и права работают уже с заполненной карточкой
+      objectsOwnershipHook,
       // Нормализация полей собственника + защита от жёстких дублей.
       // Полный анализ (включая адрес и имя) делает клиент через
       // /api/objects/check-duplicate; здесь — телефон и кадастровый,
@@ -700,18 +825,16 @@ export const Objects: CollectionConfig = {
       // и участка свои кадастровые номера). Заполняются в CRM: у дома в блоке
       // «Кадастровые данные участка», у коммерции — в блоке «Земельный
       // участок» (см. CrmObjects) — в админке стоят рядом с площадью участка.
-      // Как и номер дома, это закрытые сведения: читает и меняет только
-      // администратор, на сайте они не показываются.
+      // Как и номер дома, это закрытые сведения: на сайте их не показывают,
+      // в чужих объектах агент их не видит, в своих — заполняет сам
+      // (см. privateFieldsAccess)
       name: 'plotCadastralNumber',
       type: 'text',
       label: 'Кадастровый номер земельного участка',
-      access: {
-        read: ({ req: { user } }) => user?.role === 'admin',
-        update: ({ req: { user } }) => user?.role === 'admin',
-      },
+      access: privateFieldsAccess,
       admin: {
         condition: (_data, siblingData) => isPlotCategory(siblingData),
-        description: 'Например: 15:07:0030021:123. Номер дома (строения) хранится отдельным полем «Кадастровый номер». Виден только администратору',
+        description: 'Например: 15:07:0030021:123. Номер дома (строения) хранится отдельным полем «Кадастровый номер». Виден администратору и агенту в своём объекте',
       },
       // Формат ЕГРН без обязательности — см. validatePlotCadastralNumber
       validate: validatePlotCadastralNumber,
@@ -724,13 +847,10 @@ export const Objects: CollectionConfig = {
       name: 'plotLandCategory',
       type: 'text',
       label: 'Категория земель',
-      access: {
-        read: ({ req: { user } }) => user?.role === 'admin',
-        update: ({ req: { user } }) => user?.role === 'admin',
-      },
+      access: privateFieldsAccess,
       admin: {
         condition: (_data, siblingData) => isPlotCategory(siblingData),
-        description: 'Например: Земли населённых пунктов. Видна только администратору',
+        description: 'Например: Земли населённых пунктов. Видна администратору и агенту в своём объекте',
       },
     },
     {
@@ -741,13 +861,10 @@ export const Objects: CollectionConfig = {
       name: 'plotPermittedUse',
       type: 'text',
       label: 'Вид разрешённого использования',
-      access: {
-        read: ({ req: { user } }) => user?.role === 'admin',
-        update: ({ req: { user } }) => user?.role === 'admin',
-      },
+      access: privateFieldsAccess,
       admin: {
         condition: (_data, siblingData) => isPlotCategory(siblingData),
-        description: 'Например: Для индивидуального жилищного строительства (2.1). Виден только администратору',
+        description: 'Например: Для индивидуального жилищного строительства (2.1). Виден администратору и агенту в своём объекте',
       },
     },
     {
@@ -760,14 +877,11 @@ export const Objects: CollectionConfig = {
       name: 'plotPurpose',
       type: 'text',
       label: 'Назначение участка',
-      access: {
-        read: ({ req: { user } }) => user?.role === 'admin',
-        update: ({ req: { user } }) => user?.role === 'admin',
-      },
+      access: privateFieldsAccess,
       admin: {
         condition: (_data, siblingData) =>
           (siblingData as { category?: string } | undefined)?.category === 'commercial',
-        description: 'Например: Под базой отдыха. Видно только администратору',
+        description: 'Например: Под базой отдыха. Видно администратору и агенту в своём объекте',
       },
     },
     {
@@ -1026,25 +1140,50 @@ export const Objects: CollectionConfig = {
       relationTo: 'media',
     },
     {
+      // Ответственный агент — тот, кто ведёт объект. Назначает его только
+      // администратор: агент не может ни отдать свой объект другому, ни
+      // забрать чужой (второе не пройдёт и по access.update). Свой объект
+      // агент получает автоматически при создании карточки — профиль агента
+      // подставляет хук (см. objectsOwnershipHook).
       name: 'agent',
       type: 'relationship',
       label: 'Агент',
       relationTo: 'agents',
+      access: {
+        create: ({ req: { user } }) => user?.role === 'admin',
+        update: ({ req: { user } }) => user?.role === 'admin',
+      },
+      admin: {
+        description: 'Ответственный агент объекта. Меняет только администратор; у нового объекта агента проставляется сам',
+      },
+    },
+    {
+      // Автор карточки — учётная запись, создавшая объект (заполняется хуком
+      // при создании). Второй признак «своего» объекта для агента: объект,
+      // который он завёл, остаётся ему доступен на правку, даже если
+      // администратор передал ведение другому агенту (см. access.update).
+      // В форме не участвует и автором не переписывается.
+      name: 'createdBy',
+      type: 'relationship',
+      label: 'Создал',
+      relationTo: 'users',
+      access: {
+        read: ({ req: { user } }) => user?.role === 'admin',
+        update: ({ req: { user } }) => user?.role === 'admin',
+      },
+      admin: {
+        readOnly: true,
+        description: 'Кто завёл карточку: агент сохраняет доступ к своим объектам, даже если объект передан другому агенту',
+      },
     },
     {
       name: 'ownerName',
       type: 'text',
       label: 'Имя собственника',
-      // Данные и контакты собственника — персональные данные: их видит и
-      // правит только администратор (у любого объекта). Агентам, клиентам и
-      // посетителям поле не отдаётся вовсе — оно просто исчезает из выдачи
-      // REST, а в карточке CRM блок «Собственник» не показывается (см.
-      // CrmObjects). Правку тоже закрываем: сотрудник, который поля не
-      // видит, не должен затирать его запросом мимо формы.
-      access: {
-        read: ({ req: { user } }) => user?.role === 'admin',
-        update: ({ req: { user } }) => user?.role === 'admin',
-      },
+      // Данные собственника — персональные данные: на публичном сайте их нет
+      // вовсе, чужой карточки агент не видит, а в своей — заполняет и правит
+      // (см. privateFieldsAccess). Администратору доступно всё.
+      access: privateFieldsAccess,
       admin: {
         description: 'По имени и телефону собственника система находит дубли объекта',
       },
@@ -1053,12 +1192,9 @@ export const Objects: CollectionConfig = {
       name: 'ownerPhone',
       type: 'text',
       label: 'Телефон собственника',
-      // Как и имя собственника — персональные данные: читает и меняет
-      // только администратор
-      access: {
-        read: ({ req: { user } }) => user?.role === 'admin',
-        update: ({ req: { user } }) => user?.role === 'admin',
-      },
+      // Как и имя собственника — персональные данные: в чужих объектах полей
+      // нет, в своих агент заполняет их сам
+      access: privateFieldsAccess,
       admin: {
         description: 'Хранится в одном виде: +7 (918) 828-40-88',
       },
@@ -1067,13 +1203,10 @@ export const Objects: CollectionConfig = {
       name: 'cadastralNumber',
       type: 'text',
       label: 'Кадастровый номер объекта',
-      // Кадастровый номер — закрытые сведения: читает и меняет только
-      // администратор (агент поля не видит, при сохранении значение
-      // остаётся прежним — Payload возвращает его из исходного документа)
-      access: {
-        read: ({ req: { user } }) => user?.role === 'admin',
-        update: ({ req: { user } }) => user?.role === 'admin',
-      },
+      // Кадастровые номера — закрытые сведения: в чужих объектах их не видно
+      // и не править (значение остаётся прежним — Payload возвращает его из
+      // исходного документа), в своих агент заполняет номер сам
+      access: privateFieldsAccess,
       admin: {
         description: 'Например: 15:07:0030021:123. У частного дома это номер дома (строения): номер участка хранится отдельным полем «Кадастровый номер земельного участка». Виден только администратору',
       },

@@ -11,6 +11,7 @@
 // ---------------------------------------------------------------------------
 
 import type { Payload } from 'payload'
+import { ownObjectsWhere } from './object-access'
 import {
   LEGAL_ENGINE_VERSION,
   runLegalExpertise,
@@ -54,15 +55,20 @@ async function myAgentIds(payload: Payload, userId: number): Promise<Set<number>
   return ids
 }
 
-/** id объектов, которые ведёт пользователь (через свои профили агентов) */
+/**
+ * id объектов, которые ведёт пользователь: где он ответственный агент (через
+ * свои профили из коллекции agents) или автор карточки (createdBy) — то же
+ * правило, что в access.update коллекции Objects (см. src/lib/object-access.ts)
+ */
 export async function myObjectIds(payload: Payload, userId: number): Promise<Set<number>> {
   const ids = new Set<number>()
   const agentIds = await myAgentIds(payload, userId)
-  if (!agentIds.size) return ids
+  const where = ownObjectsWhere(userId, agentIds)
+  if (!where) return ids
   try {
     const { docs } = await payload.find({
       collection: 'objects',
-      where: { agent: { in: [...agentIds] } },
+      where,
       limit: 2000,
       depth: 0,
       overrideAccess: true,
