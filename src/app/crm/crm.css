@@ -84,6 +84,22 @@ body{margin:0}.crm-sidebar{box-sizing:border-box}.crm-chat-panel{box-sizing:bord
 .crm-property-form .crm-plot-toggle{display:inline-flex;flex-direction:row;align-items:center;gap:9px;padding:0;cursor:pointer}
 .crm-property-form .crm-plot-toggle input{width:15px;height:15px;min-width:15px;margin:0;padding:0;accent-color:#a7814e;cursor:pointer}
 .crm-fields-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+/* Блок «Варианты покупки» формы объекта: компактный список отметок — рамок
+   нет ни у самого блока, ни у варианта, только чекбокс и подпись. Две
+   колонки на компьютере, на телефоне — одна (узкие экраны) или две (широкие
+   телефоны). Селекторы длиннее общих правил формы (.crm-property-form label
+   / input) и строки «Есть земельный участок» выше — иначе чекбоксу достался
+   бы стиль поля ввода, а подписи — вид поля формы */
+.crm-purchase-block{display:flex;flex-direction:column;gap:10px}
+.crm-purchase-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px}
+.crm-property-form .crm-purchase-head strong{color:#6f6a61;font-size:9px;text-transform:uppercase;letter-spacing:.08em}
+.crm-property-form .crm-purchase-head small{color:#9b958a;font-size:10px;line-height:1.4;text-transform:none;letter-spacing:0}
+.crm-purchase-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 18px}
+.crm-property-form .crm-purchase-option{display:flex;flex-direction:row;align-items:center;gap:8px;padding:0;color:#4a463e;font-size:11px;line-height:1.35;text-transform:none;letter-spacing:0;cursor:pointer}
+.crm-property-form .crm-purchase-option input{flex:0 0 auto;width:15px;height:15px;min-width:15px;margin:0;padding:0;accent-color:#a7814e;cursor:pointer}
+.crm-property-form .crm-purchase-option span{min-width:0}
+.crm-purchase-warning{color:#a1661f;font-size:10px;line-height:1.5;text-transform:none;letter-spacing:0}
+@media(max-width:640px){.crm-purchase-grid{grid-template-columns:1fr;gap:10px}}
 @media(max-width:640px){.crm-property-form input,.crm-property-form select,.crm-property-form textarea{font-size:16px}.crm-suggest-item{font-size:16px;padding:13px 12px}.crm-owner-grid{grid-template-columns:1fr}.crm-fields-grid{grid-template-columns:1fr}.crm-map-canvas{height:250px}.crm-map-bar{flex-wrap:wrap;gap:10px}}
 
 /* ── Google Material Symbols (иконки) ──────────── */

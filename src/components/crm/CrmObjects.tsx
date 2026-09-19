@@ -2668,38 +2668,30 @@ export const CrmObjects: FC<{
               На обложке карточки каталога отметки видны значками, полный
               список — на странице объекта, в каталоге по ним есть фильтр.
               Правят отметки агент у своего объекта и администратор у любого:
-              у чужого карточка и так открыта только на просмотр (см. viewOnly) */}
+              у чужого карточка и так открыта только на просмотр (см. viewOnly).
+              Блок намеренно без рамок — компактный список в две колонки:
+              вариантов шесть, и рамка вокруг каждого превращала блок в
+              половину карточки (стили — .crm-purchase-* в crm.css) */}
           {purchaseOptionsApply(form.type, form.category) && (
-            <div className="span-2" style={{ gridColumn: '1 / -1' }}>
-              <div className="crm-fields-block">
-                <div className="crm-block-head">
-                  <strong>{t.crm.objPurchaseBlock}</strong>
-                  <span>{t.crm.objPurchaseHint}</span>
-                </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                  {PURCHASE_OPTIONS.map((option) => {
-                    const on = form.purchaseOptions.includes(option.value)
-                    return (
-                      <label key={option.value}
-                        style={{
-                          display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 12px',
-                          border: `1px solid ${on ? '#a7814e' : '#dccdb6'}`,
-                          background: on ? '#f6efe4' : '#fff',
-                          borderRadius: 999, fontSize: 12, lineHeight: 1.2,
-                          color: on ? '#8d6b40' : '#716b62', cursor: 'pointer',
-                        }}>
-                        <input type="checkbox" checked={on} onChange={() => togglePurchase(option.value)} />
-                        {option.label}
-                      </label>
-                    )
-                  })}
-                </div>
-                {/* Предупреждение агенту: отметка — обещание покупателю,
-                    неподтверждённый вариант возвращается претензией */}
-                <small style={{ display: 'block', marginTop: 8, color: '#a1661f' }}>
-                  {t.crm.objPurchaseWarning}
-                </small>
+            <div className="span-2 crm-purchase-block" style={{ gridColumn: '1 / -1' }}>
+              <div className="crm-purchase-head">
+                <strong>{t.crm.objPurchaseBlock}</strong>
+                <small>{t.crm.objPurchaseHint}</small>
               </div>
+              <div className="crm-purchase-grid">
+                {PURCHASE_OPTIONS.map((option) => {
+                  const on = form.purchaseOptions.includes(option.value)
+                  return (
+                    <label key={option.value} className="crm-purchase-option">
+                      <input type="checkbox" checked={on} onChange={() => togglePurchase(option.value)} />
+                      <span>{option.label}</span>
+                    </label>
+                  )
+                })}
+              </div>
+              {/* Предупреждение агенту: отметка — обещание покупателю,
+                  неподтверждённый вариант возвращается претензией */}
+              <small className="crm-purchase-warning">{t.crm.objPurchaseWarning}</small>
             </div>
           )}
 
