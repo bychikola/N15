@@ -84,6 +84,9 @@ export default async function ObjectPage({ params }: PageProps) {
     floorDescriptions?: { floorNumber?: number; description?: string }[]
     buildingType?: string; condition?: string; heating?: string; balcony?: string
     water?: string; sewerage?: string; electricity?: string; gas?: string; internet?: string
+    // Подкатегория коммерции (готовый бизнес, офис, торговое помещение…):
+    // у остальных категорий поля нет (см. src/lib/commercial-types.ts)
+    commercialType?: string
     address?: { city?: string; district?: string; cityDistrict?: string; locality?: string; snt?: string; street?: string; house?: string; apartment?: string }
     coordinates?: { lat?: number; lng?: number }
     description?: { root?: { children?: unknown[] } }
@@ -254,8 +257,21 @@ export default async function ObjectPage({ params }: PageProps) {
                 <span className="text-xs uppercase tracking-[0.2em] text-[var(--n15-muted)]">{obj.title}</span>
               </nav>
 
-              {/* Badges */}
+              {/* Badges: сделка (продажа или аренда), тип объекта и подкатегория
+                  коммерции — то, что клиент читает первым, — затем premium
+                  и эксклюзив */}
               <div className="flex flex-wrap items-center gap-3 mb-4">
+                <span className="text-[10px] tracking-[0.2em] uppercase text-[var(--n15-black)] bg-[var(--n15-gold)] px-3 py-1">
+                  {obj.type === 'rent' ? t.object.rent : t.object.sale}
+                </span>
+                <span className="text-[10px] tracking-[0.2em] uppercase text-[var(--n15-white)] border border-[var(--n15-gold)]/30 px-3 py-1">
+                  {t.categoryLabels[obj.category as keyof typeof t.categoryLabels] || obj.category}
+                </span>
+                {isCommercial && obj.commercialType
+                  ? <span className="text-[10px] tracking-[0.2em] uppercase text-[var(--n15-white)] border border-[var(--n15-gold)]/30 px-3 py-1">
+                      {t.catalog.commercialTypes[obj.commercialType as keyof typeof t.catalog.commercialTypes] || obj.commercialType}
+                    </span>
+                  : null}
                 {obj.isPremium && <span className="text-[10px] tracking-[0.2em] uppercase text-[var(--n15-gold)] border border-[var(--n15-gold)]/30 px-3 py-1">{t.catalog.premium}</span>}
                 {obj.isExclusive && <span className="text-[10px] tracking-[0.2em] uppercase text-[var(--n15-burgundy)] border border-[var(--n15-burgundy)]/30 px-3 py-1">{t.object.exclusive}</span>}
               </div>
@@ -263,9 +279,12 @@ export default async function ObjectPage({ params }: PageProps) {
               <h1 className="text-3xl md:text-4xl font-[family-name:var(--font-display)] text-[var(--n15-white)] mb-3">{obj.title}</h1>
               <p className="text-[var(--n15-muted)] mb-4">
                 {/* Район города (объект в черте Владикавказа) заменяет в строке
-                    муниципальный район — округ и так ясен из города */}
+                    муниципальный район — округ и так ясен из города.
+                    Населённый пункт республики идёт отдельным звеном: у объекта
+                    в селе адрес без него читался бы как городской */}
                 {[
                   obj.address?.city,
+                  obj.address?.locality,
                   obj.address?.cityDistrict ? `${obj.address.cityDistrict} район` : obj.address?.district,
                   obj.address?.snt,
                   obj.address?.street,
@@ -412,12 +431,23 @@ export default async function ObjectPage({ params }: PageProps) {
                     сервер по ответственному агенту объекта; у карточки без
                     агента звонок уходит на общий (резервный) номер агентства —
                     поэтому кнопка есть всегда, а WhatsApp без агента исчезает */}
-                <AgentContactButtons
-                  objectId={obj.id}
-                  callLabel={t.object.phone}
-                  primary
-                  className="grid grid-cols-2 gap-2 mb-4"
-                />
+                <div className="mb-4">
+                  <AgentContactButtons
+                    objectId={obj.id}
+                    callLabel={t.object.phone}
+                    primary
+                    className="grid grid-cols-2 gap-2 mb-2"
+                  />
+                  {/* Оставить заявку — третья кнопка карточки: ведёт к форме
+                      запроса просмотра ниже (заявка типа viewing попадает
+                      в CRM и адресуется агенту объекта) */}
+                  <a
+                    href="#zayavka"
+                    className="block w-full text-center px-4 py-3 text-xs tracking-wider uppercase border border-[var(--n15-gold)]/30 text-[var(--n15-silver)] transition-colors hover:border-[var(--n15-gold)]/60 hover:text-[var(--n15-gold)]"
+                  >
+                    {t.object.requestButton}
+                  </a>
+                </div>
 
                 {/* ВАШ МЕНЕДЖЕР */}
                 {obj.agent && (
@@ -451,8 +481,10 @@ export default async function ObjectPage({ params }: PageProps) {
                   </OrnamentBorder>
                 )}
 
-                {/* Запросить просмотр */}
-                <div className="mt-6 p-6 bg-[var(--n15-charcoal)] border border-[var(--n15-gold)]/10">
+                {/* Запросить просмотр — сюда ведёт кнопка «Оставить заявку»
+                    из блока контактов (scroll-mt — чтобы заголовок формы не
+                    уходил под шапку при переходе по якорю) */}
+                <div id="zayavka" className="mt-6 p-6 bg-[var(--n15-charcoal)] border border-[var(--n15-gold)]/10 scroll-mt-24">
                   <h3 className="text-sm tracking-wider uppercase text-[var(--n15-white)] mb-1">{t.object.viewTitle}</h3>
                   <p className="text-xs text-[var(--n15-muted)] mb-4">{t.object.viewSubtitle}</p>
                   <ViewRequestForm objectId={obj.id} lang={lang} />

@@ -16,13 +16,22 @@ export default async function BuyersPage({ params }: PageProps) {
   const t = getDictionary(lang)
   const s = t.services.buyers
 
-  // Порядок услуг — как в словаре: подбор, проверка, ипотека, сделка, приёмка
+  // Порядок услуг — как в словаре: подбор, проверка, ипотека, сделка, приёмка,
+  // затем консультация, новостройки, торг, госпрограммы, бронь, расчёты
+  // и дистанционная покупка (12 услуг направления)
   const items: ServiceItem[] = [
     { id: 'podbor', ...s.items.selection },
     { id: 'proverka', ...s.items.check },
     { id: 'ipoteka', ...s.items.mortgage },
     { id: 'sdelka', ...s.items.deal },
     { id: 'priemka', ...s.items.acceptance },
+    { id: 'konsultaciya', ...s.items.consultation },
+    { id: 'novostroyki', ...s.items.newBuildings },
+    { id: 'torg', ...s.items.priceCheck },
+    { id: 'gosprogrammy', ...s.items.statePrograms },
+    { id: 'bron', ...s.items.deposit },
+    { id: 'raschety', ...s.items.safePayments },
+    { id: 'distancionno', ...s.items.remote },
   ]
 
   return (

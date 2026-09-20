@@ -32,6 +32,7 @@ import { PURCHASE_OPTIONS, purchaseOptionsApply } from '@/lib/purchase-options'
 // и формой CRM (см. src/lib/object-categories.ts): порядок значений совпадает
 // с порядком enum в базе
 import { OBJECT_CATEGORIES, isPlotCategoryCode, isHouseCategoryCode } from '@/lib/object-categories'
+import { COMMERCIAL_TYPES } from '@/lib/commercial-types'
 
 /**
  * Чтение булева флага из query-параметра запроса. В разных окружениях
@@ -785,6 +786,25 @@ export const Objects: CollectionConfig = {
       // (см. src/lib/object-categories.ts); порядок значений — как в enum базы
       options: OBJECT_CATEGORIES.map((c) => ({ label: c.label, value: c.value })),
       required: true,
+    },
+    {
+      // Подкатегория коммерческой недвижимости: готовый бизнес, офис, торговое
+      // помещение, помещение свободного назначения, склад или производственное
+      // помещение. Отдельно от категории: она у всех этих объектов одна —
+      // «коммерческая» (см. src/lib/commercial-types.ts). Справочник общий с
+      // фильтром каталога и формой CRM; на сайте подписи — из словаря
+      // (t.catalog.commercialTypes).
+      name: 'commercialType',
+      type: 'select',
+      label: 'Подкатегория коммерции',
+      options: COMMERCIAL_TYPES.map((t) => ({ label: t.label, value: t.value })),
+      admin: {
+        // Поле только у категории «коммерческая»: у остальных объектов
+        // подкатегория коммерции смысла не имеет
+        condition: (_data, siblingData) =>
+          (siblingData as { category?: string } | undefined)?.category === 'commercial',
+        description: 'Готовый бизнес, офис, торговое помещение, свободное назначение, склад или производство. По подкатегории есть фильтр в каталоге',
+      },
     },
     {
       // Какими программами покупки объект продаётся: ипотека (гражданская,

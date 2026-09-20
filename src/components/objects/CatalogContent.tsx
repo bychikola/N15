@@ -4,7 +4,9 @@ import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useI18n } from '@/i18n/i18n-provider'
 import ObjectCard, { type ObjectListItem } from '@/components/objects/ObjectCard'
-import CatalogFilters, { buildWhere, cityValuesFor, regionValuesFor, emptyFilters, purchaseValues, AGENT_URL_PARAM, OBJECT_TYPES, OBJECT_CATEGORIES, OBJECT_HEATING, OBJECT_ROOMS, type FiltersState } from '@/components/objects/CatalogFilters'
+import CatalogFilters, { buildWhere, cityValuesFor, regionValuesFor, emptyFilters, purchaseValues, AGENT_URL_PARAM, OBJECT_TYPES, OBJECT_CATEGORIES, OBJECT_HEATING, OBJECT_ROOMS, OBJECT_BUILDING, OBJECT_GAS, type FiltersState } from '@/components/objects/CatalogFilters'
+import { HOUSE_TYPE_VALUES, houseTypeCategory } from '@/lib/object-categories'
+import { COMMERCIAL_TYPE_VALUES } from '@/lib/commercial-types'
 import CategoryChips from '@/components/objects/CategoryChips'
 import CatalogMap from '@/components/objects/CatalogMap'
 import { LeadForm } from '@/components/forms/LeadForm'
@@ -40,6 +42,21 @@ const URL_PARAM: Record<keyof FiltersState, string> = {
   floorsMin: 'floors_min',
   floorsMax: 'floors_max',
   heating: 'heating',
+  // Характеристики объекта (второй ряд панели фильтров): улица, жилая площадь,
+  // площадь кухни, материал дома, газ и признаки «есть»
+  street: 'street',
+  livingAreaMin: 'living_area_min',
+  livingAreaMax: 'living_area_max',
+  kitchenAreaMin: 'kitchen_area_min',
+  kitchenAreaMax: 'kitchen_area_max',
+  building: 'building',
+  gas: 'gas',
+  individualHeating: 'individual_heating',
+  elevator: 'elevator',
+  closedYard: 'closed_yard',
+  // Подкатегории: тип дома и тип коммерции (см. object-categories, commercial-types)
+  houseType: 'house_type',
+  commercialType: 'commercial_type',
   agent: AGENT_URL_PARAM,
   purchase: 'purchase',
 }
@@ -60,14 +77,26 @@ function filtersFromParams(sp: URLSearchParams, cityRegions: readonly CityFilter
   const cityDistrictParam = sp.get('cityDistrict') ?? ''
   const legacyCityDistrict = !cityDistrictParam && isKnown(districtParam, CITY_DISTRICT_OPTIONS)
   // Категория нужна раньше города: её список городов зависит от категории
-  const category = isKnown(sp.get('category') ?? '', OBJECT_CATEGORIES) ? (sp.get('category') as string) : ''
+  const rawCategory = isKnown(sp.get('category') ?? '', OBJECT_CATEGORIES) ? (sp.get('category') as string) : ''
+  // Подкатегория дома категорию и задаёт (та же очерёдность, что в buildWhere):
+  // ссылка «Дачи» открывает каталог с категорией «Дача», а не с пустым «Типом»
+  const houseType = isKnown(sp.get(URL_PARAM.houseType) ?? '', HOUSE_TYPE_VALUES) ? (sp.get(URL_PARAM.houseType) as string) : ''
+  const category = houseType ? (houseTypeCategory(houseType) ?? rawCategory) : rawCategory
+  // Тип коммерции: у объектов других категорий поля нет (там его фильтр молча
+  // ничего не находит) — чужое значение отбрасываем, а пустую категорию он
+  // задаёт сам
+  const commercialParam = sp.get(URL_PARAM.commercialType) ?? ''
+  const commercialType = isKnown(commercialParam, COMMERCIAL_TYPE_VALUES) && (!category || category === 'commercial') ? commercialParam : ''
+  const resolvedCategory = commercialType && !category ? 'commercial' : category
   const cityParam = sp.get('city') ?? ''
   // Регион фильтра «Город» («все населённые пункты региона») — отдельный
   // параметр: в city лежит город или населённый пункт, здесь — ключ региона
   const cityRegionParam = sp.get(URL_PARAM.cityRegion) ?? ''
   return {
     type: isKnown(sp.get('type') ?? '', OBJECT_TYPES) ? (sp.get('type') as string) : '',
-    category,
+    category: resolvedCategory,
+    houseType,
+    commercialType,
     rooms: isKnown(sp.get('rooms') ?? '', OBJECT_ROOMS) ? (sp.get('rooms') as string) : '',
     priceMin: sp.get('price_min') ?? '',
     priceMax: sp.get('price_max') ?? '',
@@ -90,6 +119,19 @@ function filtersFromParams(sp: URLSearchParams, cityRegions: readonly CityFilter
     floorsMin: sp.get('floors_min') ?? '',
     floorsMax: sp.get('floors_max') ?? '',
     heating: isKnown(sp.get('heating') ?? '', OBJECT_HEATING) ? (sp.get('heating') as string) : '',
+    // Характеристики объекта: улица и площади — свободный ввод и числа
+    // (мусор отбрасывает buildWhere), материал дома и газ — списки значений,
+    // признаки «есть» — только '1' или пусто
+    street: sp.get(URL_PARAM.street) ?? '',
+    livingAreaMin: sp.get(URL_PARAM.livingAreaMin) ?? '',
+    livingAreaMax: sp.get(URL_PARAM.livingAreaMax) ?? '',
+    kitchenAreaMin: sp.get(URL_PARAM.kitchenAreaMin) ?? '',
+    kitchenAreaMax: sp.get(URL_PARAM.kitchenAreaMax) ?? '',
+    building: isKnown(sp.get(URL_PARAM.building) ?? '', OBJECT_BUILDING) ? (sp.get(URL_PARAM.building) as string) : '',
+    gas: isKnown(sp.get(URL_PARAM.gas) ?? '', OBJECT_GAS) ? (sp.get(URL_PARAM.gas) as string) : '',
+    individualHeating: sp.get(URL_PARAM.individualHeating) === '1' ? '1' : '',
+    elevator: sp.get(URL_PARAM.elevator) === '1' ? '1' : '',
+    closedYard: sp.get(URL_PARAM.closedYard) === '1' ? '1' : '',
     snt: isKnown(sp.get('snt') ?? '', SNT_AREAS) ? (sp.get('snt') as string) : '',
     city: isKnown(cityParam, cityValuesFor(category, knownCities)) ? cityParam : '',
     // Регион фильтра «Город» («все населённые пункты»): ключ сверяем со списком
@@ -296,6 +338,28 @@ export default function CatalogContent({ cityRegions, knownCities, agentName }: 
   const hasFilters = useMemo(() => Object.values(filters).some(Boolean) || q !== '', [filters, q])
   const showMore = objects.length < totalDocs
 
+  // Выдача начинается здесь: «Подобрать» и «Показать на карте» в панели
+  // фильтров прокручивают к ней страницу (фильтры применяются сразу при
+  // изменении — кнопки показывают результат, а не собирают его)
+  const resultsRef = useRef<HTMLDivElement>(null)
+  const scrollToResults = useCallback(() => {
+    resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [])
+  // «Показать на карте»: тот же вид выдачи, что у переключателя над списком
+  const showMap = useCallback(() => {
+    setView('map')
+    scrollToResults()
+  }, [scrollToResults])
+
+  // Разделы каталога со своими страницами: новостройки, межрегиональная
+  // и зарубежная недвижимость. В полосе категорий их нет — там только
+  // категории объектов одного города, поэтому ссылки стоят под выдачей
+  const sections = [
+    { href: `/${lang}/newbuildings`, label: t.nav.newBuildings },
+    { href: `/${lang}/interregional`, label: t.nav.interregional },
+    { href: `/${lang}/foreign`, label: t.nav.foreign },
+  ]
+
   // Фильтр «Объекты агента»: ссылка с карточек команды (см. about/page.tsx).
   // Панель фильтров его не показывает — снимается чипом над выдачей, поэтому
   // сброс «всех фильтров» удаляет и его (удалить одиночный параметр из URL
@@ -342,7 +406,8 @@ export default function CatalogContent({ cityRegions, knownCities, agentName }: 
       />
 
       <CatalogFilters state={filters} onChange={onChangeFilters} t={t}
-        cityRegions={cityRegions} knownCities={knownCities} />
+        cityRegions={cityRegions} knownCities={knownCities}
+        onSubmit={scrollToResults} onShowMap={showMap} />
 
       {/* Фильтр, пришедший ссылкой с карточек команды (страница агентства):
           у остальных фильтров есть поля в панели, у этого — только чип */}
@@ -364,7 +429,7 @@ export default function CatalogContent({ cityRegions, knownCities, agentName }: 
       )}
 
       {/* Count + sort */}
-      <div className="flex flex-wrap items-center justify-between gap-3 my-4">
+      <div ref={resultsRef} className="flex flex-wrap items-center justify-between gap-3 my-4 scroll-mt-24">
         <p className="text-xs text-[var(--n15-muted)]">
           {t.catalog.found} <span className="text-[var(--n15-gold)]">{loading ? '...' : totalDocs}</span> {t.catalog.foundObjects}
           {hasFilters && (
@@ -461,6 +526,31 @@ export default function CatalogContent({ cityRegions, knownCities, agentName }: 
               с типом search попадает в CRM и адресуется агенту */}
           <div className="max-w-lg mx-auto border border-[var(--n15-gold)]/20 bg-[var(--n15-black)]/40 p-6">
             <LeadForm kind="search" title={t.lead.searchTitle} text={t.lead.searchText} />
+          </div>
+        </div>
+      )}
+
+      {/* Подвал выдачи: разделы со своими страницами и заявка на подбор,
+          если среди найденного подходящего объекта не оказалось. В пустом
+          состоянии заявку уже предлагает блок выше — здесь не повторяем */}
+      {!loading && objects.length > 0 && (
+        <div id="podbor" className="mt-14 pt-8 border-t border-[var(--n15-gold)]/10 scroll-mt-24">
+          <div className="flex flex-wrap items-center gap-3 mb-8">
+            <span className="text-[10px] tracking-[0.2em] uppercase text-[var(--n15-muted)]">
+              {t.catalog.sectionsTitle}
+            </span>
+            {sections.map((s) => (
+              <a
+                key={s.href}
+                href={s.href}
+                className="px-3 py-2 text-xs uppercase tracking-wider border border-[var(--n15-gold)]/20 text-[var(--n15-muted)] hover:text-[var(--n15-gold)] hover:border-[var(--n15-gold)]/50 transition-colors"
+              >
+                {s.label}
+              </a>
+            ))}
+          </div>
+          <div className="max-w-lg mx-auto border border-[var(--n15-gold)]/20 bg-[var(--n15-black)]/40 p-6">
+            <LeadForm kind="selection" title={t.catalog.selectCtaTitle} text={t.catalog.selectCtaText} />
           </div>
         </div>
       )}

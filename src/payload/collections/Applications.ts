@@ -1,4 +1,7 @@
 import type { CollectionConfig, Where } from 'payload'
+// Категории объектов — общий справочник: тип недвижимости в заявке на подбор
+// выбирается из тех же значений, что и категория объекта (см. object-categories)
+import { OBJECT_CATEGORIES } from '@/lib/object-categories'
 
 export const Applications: CollectionConfig = {
   slug: 'applications',
@@ -194,6 +197,21 @@ export const Applications: CollectionConfig = {
       admin: {
         position: 'sidebar',
       },
+    },
+    // Что ищет клиент в заявке на подбор (формы «Подбор недвижимости» и
+    // «Заявка на поиск», см. LeadForm): тип недвижимости — из общего
+    // справочника категорий, район или населённый пункт — свободным текстом
+    // (клиент пишет и «Иристонский район», и «с. Октябрьское»)
+    {
+      name: 'propertyType',
+      type: 'select',
+      label: 'Тип недвижимости',
+      options: OBJECT_CATEGORIES.map((c) => ({ label: c.label, value: c.value })),
+    },
+    {
+      name: 'location',
+      type: 'text',
+      label: 'Район или населённый пункт',
     },
     {
       name: 'source',

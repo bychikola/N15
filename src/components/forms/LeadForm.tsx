@@ -4,6 +4,9 @@ import { useState, type FC } from 'react'
 import { useI18n } from '@/i18n/i18n-provider'
 import { Button } from '@/components/ui/Button'
 import { ConsentCheckbox, MarketingConsent } from '@/components/ui/ConsentCheckbox'
+// Тип недвижимости в заявке на подбор — категории каталога: заявку и объект
+// агент читает одними и теми же словами (см. src/lib/object-categories.ts)
+import { OBJECT_CATEGORIES } from '@/lib/object-categories'
 import { reachGoal } from '@/lib/metrika'
 
 /**
@@ -12,7 +15,7 @@ import { reachGoal } from '@/lib/metrika'
  * уходит в CRM типом заявки — значения объявлены в коллекции applications,
  * подписи для списка заявок — в APPLICATION_TYPE_LABELS (FunnelCard.tsx).
  */
-export type LeadKind = 'valuation' | 'sale' | 'selection' | 'search'
+export type LeadKind = 'valuation' | 'sale' | 'selection' | 'search' | 'consultation'
 
 interface Props {
   kind: LeadKind
@@ -44,6 +47,9 @@ export const LeadForm: FC<Props> = ({ kind, title, text, className = '' }) => {
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
   const [address, setAddress] = useState('')
+  const [propertyType, setPropertyType] = useState('')
+  const [budget, setBudget] = useState('')
+  const [location, setLocation] = useState('')
   const [comment, setComment] = useState('')
   const [agreed, setAgreed] = useState(false)
   const [marketing, setMarketing] = useState(false)
@@ -53,6 +59,11 @@ export const LeadForm: FC<Props> = ({ kind, title, text, className = '' }) => {
 
   // Оценка и продажа начинаются с объекта: у них есть поле адреса
   const withAddress = kind === 'valuation' || kind === 'sale'
+  // Подбор и поиск начинаются с запроса: что ищет клиент (тип недвижимости),
+  // на какую сумму (бюджет) и где (район или населённый пункт). Эти же поля
+  // есть у заявки в CRM (propertyType, budget, location) — агент видит запрос
+  // целиком и не переспрашивает его по телефону
+  const withQuery = kind === 'selection' || kind === 'search'
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -74,6 +85,11 @@ export const LeadForm: FC<Props> = ({ kind, title, text, className = '' }) => {
           type: kind,
           clientName: name,
           clientPhone: phone,
+          // Запрос подбора: тип недвижимости, бюджет и место поиска — в свои
+          // поля заявки (в CRM их видно отдельно от сообщения)
+          propertyType: withQuery && propertyType ? propertyType : undefined,
+          budget: withQuery && budget ? Number(budget) : undefined,
+          location: withQuery && location.trim() ? location.trim() : undefined,
           message,
           marketingConsent: marketing,
           status: 'unsorted',
@@ -140,6 +156,43 @@ export const LeadForm: FC<Props> = ({ kind, title, text, className = '' }) => {
           placeholder={t.lead.addressPlaceholder}
           className={inputCls}
         />
+      )}
+      {withQuery && (
+        <>
+          {/* Тип недвижимости — из тех же категорий, что в каталоге: заявка
+              сразу читается как поиск квартиры, дома, участка… */}
+          <select
+            value={propertyType}
+            onChange={(e) => setPropertyType(e.target.value)}
+            aria-label={t.lead.propertyTypeLabel}
+            className={`${inputCls} cursor-pointer`}
+          >
+            <option value="">{t.lead.propertyTypeLabel}</option>
+            {OBJECT_CATEGORIES.map((c) => (
+              <option key={c.value} value={c.value}>{c.label}</option>
+            ))}
+          </select>
+          <div className="flex flex-col sm:flex-row gap-4">
+            <input
+              type="number"
+              min="0"
+              inputMode="numeric"
+              value={budget}
+              onChange={(e) => setBudget(e.target.value)}
+              placeholder={t.lead.budgetPlaceholder}
+              aria-label={t.lead.budgetPlaceholder}
+              className={`${inputCls} sm:flex-1`}
+            />
+            <input
+              type="text"
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+              placeholder={t.lead.locationPlaceholder}
+              aria-label={t.lead.locationPlaceholder}
+              className={`${inputCls} sm:flex-1`}
+            />
+          </div>
+        </>
       )}
       <textarea
         value={comment}

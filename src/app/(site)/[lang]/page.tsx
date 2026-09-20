@@ -10,6 +10,8 @@ import FeaturedObjects from '@/components/home/FeaturedObjects'
 import type { ObjectListItem } from '@/components/objects/ObjectCard'
 import InterregionalGuide from '@/components/home/InterregionalGuide'
 import ServicesAccordion from '@/components/home/ServicesAccordion'
+import SelectionCta from '@/components/home/SelectionCta'
+import OwnersSection from '@/components/home/OwnersSection'
 import AboutSection from '@/components/home/AboutSection'
 import ContactSection from '@/components/home/ContactSection'
 import { GoalLink } from '@/components/analytics/GoalLink'
@@ -208,8 +210,15 @@ export default async function HomePage({ params, searchParams }: PageProps) {
           filterSummary={filterSummary}
           emptyNote={filterEmptyNote}
         />
+        {/* Заявка на подбор — сразу после объектов: клиент посмотрел выдачу
+            и, если подходящего не нашлось, оставляет запрос, не уходя
+            со страницы (форма подбора живёт в каталоге, см. SelectionCta) */}
+        <SelectionCta t={t} lang={lang} />
         <InterregionalGuide t={t} lang={lang} regions={interregionalRegions} />
         <ServicesAccordion t={t} lang={lang} />
+        {/* Блок собственникам — после услуг: владельцу важно, как Н15 продаёт
+            его объект (тексты и условия — со страницы направления) */}
+        <OwnersSection t={t} lang={lang} />
         <AboutSection t={t} />
         <ContactSection t={t} phone={phone} />
         <footer className="lp-footer">

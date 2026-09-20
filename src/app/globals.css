@@ -922,6 +922,51 @@ html[data-theme='dark'] .lp-featured .object-card { border: 0; }
 /* Призыв к консультации — последняя строка юр-карточки, золотом */
 .lp-services-row-cta { color: #a87c3f; text-transform: uppercase; letter-spacing: .14em; font-size: 10px; }
 
+/* Кнопка быстрого поиска на главной — золотая надпись в строке поиска
+   (.catalog-search), отдельной кнопки-плашки не нужно: строка уже читается
+   как поле ввода с действием */
+.lp-search-submit {
+  flex: 0 0 auto; padding: 0 4px; background: none; border: none; cursor: pointer;
+  color: #a87c3f; text-transform: uppercase; letter-spacing: .14em; font-size: 10px;
+  transition: color .2s;
+}
+.lp-search-submit:hover { color: var(--n15-green); }
+
+/* «Выгодные условия» — блок для собственников: заголовок с пояснением
+   и четыре условия продажи в две колонки (те же тексты, что на странице
+   /services/owners/vygodnaya-prodazha) */
+.lp-owners { width: min(90%, 1050px); margin: 86px auto; }
+.lp-owners-title { max-width: 720px; font-size: clamp(30px, 3.7vw, 51px); }
+.lp-owners-copy { max-width: 620px; margin: 18px 0 30px; color: #777267; font-size: 15px; line-height: 1.75; }
+.lp-owners-terms {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 15px;
+  margin: 0 0 30px; padding: 0; list-style: none;
+}
+.lp-owners-terms li {
+  box-sizing: border-box; background: rgba(255, 255, 255, .58);
+  border: 1px solid #d8d1c4; padding: var(--lp-tile-pad-y) var(--lp-tile-pad-x);
+}
+.lp-owners-terms h3 {
+  margin: 0 0 8px; font-family: 'New Standard', Georgia, serif; font-weight: 400;
+  letter-spacing: -.01em; font-size: clamp(18px, 1.8vw, 22px); color: #a87c3f;
+}
+.lp-owners-terms p { margin: 0; color: #777267; font-size: 13px; line-height: 1.65; }
+
+/* Полоса «Не нашли подходящий объект?»: текст слева, кнопка заявки справа.
+   Ведёт в каталог, к форме подбора под выдачей */
+.lp-selection { width: min(90%, 1050px); margin: 0 auto 86px; }
+.lp-selection-inner {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: 21px; padding: 27px var(--lp-tile-pad-x);
+  background: rgba(255, 255, 255, .58); border: 1px solid #d8d1c4;
+}
+.lp-selection-inner h2 {
+  margin: 0 0 6px; font-family: 'New Standard', Georgia, serif; font-weight: 400;
+  letter-spacing: -.02em; font-size: clamp(22px, 2.4vw, 30px);
+}
+.lp-selection-inner p { margin: 0; max-width: 560px; color: #777267; font-size: 14px; line-height: 1.7; }
+.lp-selection-inner .lp-button { flex: 0 0 auto; }
+
 /* About — кремовая секция (компактная) */
 .lp-about { background: #f3eee3; grid-template-columns: 1fr 1fr; min-height: 345px; display: grid; }
 .lp-about-image { position: relative; color: rgba(255,255,255,.28); background: linear-gradient(rgba(31, 32, 29, .72), rgba(31, 32, 29, .78)), url('/img/villa.png') 50%/cover; place-items: center; display: grid; overflow: hidden; }
@@ -1052,6 +1097,13 @@ html[data-theme='dark'] .lp-featured .object-card { border: 0; }
   .lp-calc-modal { width: 100%; height: 100%; max-height: none; border-radius: 0; padding: 22px 16px 24px; }
   .lp-mortgage-content { padding: 20px 0 0; }
   .lp-mortgage-panel { grid-template-columns: 1fr; padding: 14px; }
+  /* Блок собственникам и полоса заявки на телефоне: колонка условий
+     в одну ширину, кнопка заявки — под текстом */
+  .lp-owners { width: auto; margin: 59px 18px; }
+  .lp-owners-terms { grid-template-columns: 1fr; gap: 10px; }
+  .lp-selection { width: auto; margin: 0 18px 59px; }
+  .lp-selection-inner { flex-direction: column; align-items: stretch; gap: 17px; padding: 22px 15px; }
+  .lp-selection-inner .lp-button { max-width: none; }
   .lp-about { grid-template-columns: 1fr; min-height: 0; }
   /* Фото Фатимы на телефоне: задаём высоту (иначе ряд схлопывается),
      чтобы образ был виден и карточку можно было открыть нажатием */

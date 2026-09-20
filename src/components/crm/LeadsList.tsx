@@ -26,9 +26,13 @@ const stageColor = (stage: string) => STAGE_COLORS[stage] || { bg: '#f2eadf', fg
 
 const money = (v: number) => new Intl.NumberFormat('ru-RU').format(v) + ' ₽'
 
-// Заявка в списке: к данным воронки добавляется клиент из базы (карточка клиента)
+// Заявка в списке: к данным воронки добавляется клиент из базы (карточка
+// клиента) и запрос подбора — что, за сколько и где ищет клиент
 interface LeadRow extends FunnelApplication {
   customerId?: number
+  propertyType?: string
+  budget?: number
+  location?: string
 }
 
 export default function LeadsList() {
@@ -86,6 +90,11 @@ export default function LeadsList() {
         tags: ((a.tags as { tag?: string }[] | undefined) || []).map((tg) => tg.tag || '').filter(Boolean),
         agentName: (agent?.name as string) || undefined,
         customerId: (customer?.id as number) || undefined,
+        // Запрос подбора: тип недвижимости, бюджет и место поиска — поля
+        // заявки из формы «Подбор недвижимости» / «Заявка на поиск»
+        propertyType: (a.propertyType as string) || undefined,
+        budget: (a.budget as number) || undefined,
+        location: (a.location as string) || undefined,
         unread: 0,
       }
     }))
@@ -243,6 +252,13 @@ export default function LeadsList() {
               a.objectTitle ? (APPLICATION_TYPE_LABELS[a.type] || a.type) : '',
               a.objectPrice != null ? money(a.objectPrice) : '',
             ].filter(Boolean).join(' · ')
+            // Запрос подбора (заявки без объекта): «Квартира · до 6 000 000 ₽ ·
+            // Иристонский район» — агент видит, что именно искать
+            const request = [
+              a.propertyType ? (t.categoryLabels as unknown as Record<string, string>)[a.propertyType] || a.propertyType : '',
+              a.budget ? money(a.budget) : '',
+              a.location || '',
+            ].filter(Boolean).join(' · ')
             return (
               <div
                 key={a.id}
@@ -279,6 +295,7 @@ export default function LeadsList() {
                 <span className="crm-lead-object">
                   <span className="crm-lead-title">{a.objectTitle || APPLICATION_TYPE_LABELS[a.type] || '—'}</span>
                   {meta && <span className="crm-lead-sub">{meta}</span>}
+                  {!a.objectTitle && request && <span className="crm-lead-sub">{request}</span>}
                 </span>
 
                 <span className="crm-lead-agent">{a.agentName || '—'}</span>

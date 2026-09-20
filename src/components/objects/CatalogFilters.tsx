@@ -19,8 +19,12 @@ import { SQM_PER_UNIT, areaNumberText, areaUnitOf, parseAreaNumber, sqmToUnit, u
 import { PURCHASE_OPTIONS, PURCHASE_OPTION_VALUES, purchaseCategoriesApply } from '@/lib/purchase-options'
 // Категории объектов — общий справочник со схемой коллекции и формой CRM
 // (см. src/lib/object-categories.ts): список значений совпадает с опциями
-// select-поля category
-import { OBJECT_CATEGORY_VALUES } from '@/lib/object-categories'
+// select-поля category. Подкатегории домов (отдельные дома, дома с участком,
+// дачи, коттеджи, таунхаусы, части домов) — оттуда же
+import { OBJECT_CATEGORY_VALUES, HOUSE_TYPES, houseTypeOf, houseTypeCategory, isHouseCategoryCode } from '@/lib/object-categories'
+// Подкатегории коммерции — общий справочник со схемой (Objects.commercialType)
+// и формой CRM: готовый бизнес, офис, торговое помещение и т.д.
+import { COMMERCIAL_TYPES, isCommercialType } from '@/lib/commercial-types'
 
 // Допустимые значения select-фильтров — опции одноимённых полей объекта
 // (src/payload/collections/Objects.ts). Где-запрос к /api/objects с чужим
@@ -49,6 +53,49 @@ export const HEATING_FILTERS = [
 export const OBJECT_HEATING = HEATING_FILTERS.map((h) => h.value) as readonly string[]
 const isKnown = (v: string, options: readonly string[]) => options.includes(v)
 
+/**
+ * Фильтр «Материал дома»: поле buildingType в базе тоже текстовое — агент
+ * пишет «Кирпичный», «кирпич», «Кирпич», поэтому ищем узнаваемый фрагмент
+ * слова (как в HEATING_FILTERS). «Блочный» и «Брус» попадают в свои пункты
+ * по первым буквам корня. Подписи — из словаря (t.catalog.buildingOptions).
+ */
+export const BUILDING_FILTERS = [
+  { value: 'brick', match: 'ирпич' },
+  { value: 'monolith', match: 'онолит' },
+  { value: 'panel', match: 'анель' },
+  { value: 'block', match: 'лок' },
+  { value: 'wood', match: 'ерев' },
+] as const
+
+/** Значения фильтра «Материал дома» — коды BUILDING_FILTERS */
+export const OBJECT_BUILDING = BUILDING_FILTERS.map((b) => b.value) as readonly string[]
+
+/**
+ * Фильтр «Газ»: поле gas текстовое, ищем фрагмент значения (как выше).
+ * «Есть» и «Подключён» — первое, «Магистральный» и «Баллонный» — способ
+ * подключения: у них свои пункты, потому что это разные вопросы покупателя.
+ */
+export const GAS_FILTERS = [
+  { value: 'yes', match: 'сть' },
+  { value: 'main', match: 'агистрал' },
+  { value: 'bottled', match: 'аллон' },
+] as const
+
+/** Значения фильтра «Газ» — коды GAS_FILTERS */
+export const OBJECT_GAS = GAS_FILTERS.map((g) => g.value) as readonly string[]
+
+/**
+ * Признаки объекта (лифт, закрытый двор, индивидуальное отопление): в базе это
+ * текстовые поля, а покупателю важен факт «есть». Фрагменты — как у прочих
+ * текстовых фильтров: «лифт» ловит «Лифт», «Лифт пассажирский» и «Есть лифт»,
+ * «закрыт» — «Закрытый», «закрытый двор». Значение, которого нет в списке
+ * (например «Нет» у лифта), такой фильтр не находит — это осознанное
+ * упрощение, как у отопления и материала дома.
+ */
+const ELEVATOR_MATCHES = ['сть', 'ифт']
+const CLOSED_YARD_MATCHES = ['акрыт']
+const INDIVIDUAL_HEATING_MATCHES = ['ндивидуальн', 'втономн']
+
 /** Имя URL-параметра фильтра «Объекты агента» — ссылки с карточек команды
  *  на странице агентства ведут в /catalog?agent=<id> */
 export const AGENT_URL_PARAM = 'agent'
@@ -67,6 +114,25 @@ export interface FiltersState {
   /** Отопление — код из HEATING_FILTERS: в базе поле текстовое, совпадение
    *  ищем по узнаваемому фрагменту значения (см. buildWhere) */
   heating: string
+  /** Материал дома — код из BUILDING_FILTERS (в базе текстовое поле
+   *  buildingType, ищем фрагмент значения) */
+  building: string
+  /** Газ — код из GAS_FILTERS: «есть», «магистральный», «баллонный» */
+  gas: string
+  /** Признаки объекта: '1' — искать только объекты с признаком, '' — не
+   *  фильтровать. Индивидуальное отопление, лифт и закрытый двор лежат
+   *  в текстовых полях (heating, elevator, yard) — совпадение по фрагменту */
+  individualHeating: string
+  elevator: string
+  closedYard: string
+  /** Улица — свободный ввод: совпадение в address.street */
+  street: string
+  /** Жилая площадь и площадь кухни, м² — диапазоны «от/до» (поля livingArea
+   *  и kitchenArea). В базе всегда м², единица не переключается */
+  livingAreaMin: string
+  livingAreaMax: string
+  kitchenAreaMin: string
+  kitchenAreaMax: string
   priceMin: string
   priceMax: string
   areaMin: string
@@ -90,6 +156,13 @@ export interface FiltersState {
    *  (см. CityFilterRegion.key). Взаимоисключается с выбранным городом и
    *  населённым пунктом: фильтр «Город» выбирает что-то одно */
   cityRegion: string
+  /** Подкатегория дома — код HOUSE_TYPES: отдельные дома, дома с участком,
+   *  дачи, коттеджи, таунхаусы, части домов. Задаёт категорию объекта: в
+   *  фильтре по категории такой пункт не значится (см. houseTypeCategory) */
+  houseType: string
+  /** Подкатегория коммерции — код COMMERCIAL_TYPES (готовый бизнес, офис,
+   *  торговое помещение…). Категория у неё одна — «коммерческая» */
+  commercialType: string
   /** id агента: показываем только его объекты. Постоянного поля в панели
    *  фильтров у него нет — фильтр приходит ссылкой с карточек команды,
    *  а снимается чипом «Объекты агента» над выдачей */
@@ -102,8 +175,29 @@ export interface FiltersState {
 }
 
 export const emptyFilters: FiltersState = {
-  type: '', category: '', rooms: '', floorMin: '', floorMax: '', floorsMin: '', floorsMax: '', heating: '', priceMin: '', priceMax: '', areaMin: '', areaMax: '', areaUnit: '', district: '', cityDistrict: '', locality: '', snt: '', city: '', cityRegion: '', agent: '', purchase: '',
+  type: '', category: '', rooms: '', floorMin: '', floorMax: '', floorsMin: '', floorsMax: '', heating: '', building: '', gas: '',
+  individualHeating: '', elevator: '', closedYard: '', street: '', livingAreaMin: '', livingAreaMax: '', kitchenAreaMin: '', kitchenAreaMax: '',
+  priceMin: '', priceMax: '', areaMin: '', areaMax: '', areaUnit: '', district: '', cityDistrict: '', locality: '', snt: '', city: '', cityRegion: '',
+  houseType: '', commercialType: '', agent: '', purchase: '',
 }
+
+/**
+ * Фильтры второго ряда панели («Показать ещё фильтры»): характеристики
+ * объекта — улица, жилая площадь, площадь кухни, этаж, этажность, отопление,
+ * материал дома, газ, индивидуальное отопление, лифт и закрытый двор.
+ * В первом ряду им тесно: покупатель ищет по сделке, категории, месту и цене,
+ * а эти поля уточняют выбор. Ряд показывается по кнопке; если хоть один из
+ * фильтров задан (в том числе ссылкой из каталога или блока на главной),
+ * он раскрыт — работающих фильтров в свёрнутом виде быть не должно.
+ */
+export const MORE_FILTER_KEYS = [
+  'street', 'livingAreaMin', 'livingAreaMax', 'kitchenAreaMin', 'kitchenAreaMax',
+  'floorMin', 'floorMax', 'floorsMin', 'floorsMax', 'heating', 'building', 'gas',
+  'individualHeating', 'elevator', 'closedYard',
+] as const satisfies readonly (keyof FiltersState)[]
+
+/** Задан ли хоть один фильтр второго ряда (см. MORE_FILTER_KEYS) */
+export const hasMoreFilters = (f: FiltersState): boolean => MORE_FILTER_KEYS.some((k) => Boolean(f[k]))
 
 /**
  * Выбранные варианты покупки из значения фильтра: в URL это коды через
@@ -171,13 +265,30 @@ export function buildWhere(
   conds.push({ status: { equals: 'published' } })
   // Select-поля фильтруем только значениями из их опций (см. isKnown выше)
   if (f.type && isKnown(f.type, OBJECT_TYPES)) conds.push({ type: { equals: f.type } })
-  if (f.category && isKnown(f.category, OBJECT_CATEGORIES)) conds.push({ category: { equals: f.category } })
+  // Категория: подкатегория дома её и задаёт («дом с участком» — та же
+  // категория «дом», см. houseTypeCategory), поэтому category и houseType
+  // не спорят друг с другом — подкатегория важнее
+  const houseType = houseTypeOf(f.houseType)
+  const category = houseType ? houseType.category : f.category
+  if (category && isKnown(category, OBJECT_CATEGORIES)) conds.push({ category: { equals: category } })
+  // «Дома с участком» — дома с заполненной площадью участка: отдельной
+  // категории в базе нет (см. HOUSE_TYPES)
+  if (houseType?.plot) conds.push({ plotArea: { greater_than: 0 } })
+  // Подкатегория коммерции: поля нет у объектов других категорий, поэтому
+  // условие ставим только у коммерции (категория не выбрана — фильтр её сам
+  // и задаёт, см. apply в CatalogFilters)
+  if (isCommercialType(f.commercialType) && (!category || category === 'commercial')) {
+    conds.push({ commercialType: { equals: f.commercialType } })
+  }
   if (f.district && isKnown(f.district, DISTRICT_OPTIONS)) conds.push({ 'address.district': { equals: f.district } })
   if (f.cityDistrict && isKnown(f.cityDistrict, CITY_DISTRICT_OPTIONS)) conds.push({ 'address.cityDistrict': { equals: f.cityDistrict } })
   // Населённый пункт Осетии — это address.locality. Рядом с каноническим
   // названием шлём написания из базы (city-filter.ts): объект находится, как
   // бы агент ни записал адрес
   if (f.locality) conds.push({ 'address.locality': { in: placeValues(regions, 'locality', f.locality) } })
+  // Улица — свободный ввод: адреса агенты пишут руками, поэтому ищем
+  // совпадение, а не точное равенство («Ленина» найдёт «ул. Ленина»)
+  if (f.street.trim()) conds.push({ 'address.street': { contains: f.street.trim() } })
   if (f.snt && isKnown(f.snt, SNT_AREAS)) conds.push({ 'address.snt': { equals: f.snt } })
   // Города: у участков список свой (только Владикавказ), у остальных — CRM
   if (f.city && isKnown(f.city, cityValuesFor(f.category, knownCities))) {
@@ -211,6 +322,17 @@ export function buildWhere(
   // значения (см. HEATING_FILTERS) — «Центральное», «центральное отопление»
   const heating = HEATING_FILTERS.find((h) => h.value === f.heating)
   if (heating) conds.push({ heating: { contains: heating.match } })
+  // Материал дома и газ — такие же текстовые поля (см. BUILDING_FILTERS)
+  const building = BUILDING_FILTERS.find((b) => b.value === f.building)
+  if (building) conds.push(matchesAny('buildingType', [building.match]))
+  const gas = GAS_FILTERS.find((g) => g.value === f.gas)
+  if (gas) conds.push(matchesAny('gas', [gas.match]))
+  // Признаки объекта: индивидуальное отопление, лифт и закрытый двор —
+  // переключатели «есть». У них по несколько фрагментов значения
+  // («Есть» / «Лифт пассажирский», «Автономное» / «Индивидуальное»)
+  if (f.individualHeating === '1') conds.push(matchesAny('heating', INDIVIDUAL_HEATING_MATCHES))
+  if (f.elevator === '1') conds.push(matchesAny('elevator', ELEVATOR_MATCHES))
+  if (f.closedYard === '1') conds.push(matchesAny('yard', CLOSED_YARD_MATCHES))
   const priceMin = parseInt(f.priceMin, 10)
   if (f.priceMin && Number.isFinite(priceMin)) conds.push({ price: { greater_than_equal: priceMin } })
   const priceMax = parseInt(f.priceMax, 10)
@@ -226,6 +348,10 @@ export function buildWhere(
     const max = numOf(f.areaMax)
     if (max != null && Number.isFinite(max)) conds.push({ area: { less_than_equal: Math.round(max * areaMul * 100) / 100 } })
   }
+  // Жилая площадь и площадь кухни — диапазоны «от/до» в м²: единица у них
+  // одна, переключателя соток и гектаров нет
+  pushRange(conds, 'livingArea', f.livingAreaMin, f.livingAreaMax)
+  pushRange(conds, 'kitchenArea', f.kitchenAreaMin, f.kitchenAreaMax)
   // Варианты покупки: множественный выбор — объект подходит, если отмечен
   // любой из выбранных вариантов (в базе поле хранится списком)
   const purchase = purchaseValues(f.purchase)
@@ -241,6 +367,27 @@ export function buildWhere(
 function agentId(v: string): number | null {
   const n = Number(v)
   return Number.isInteger(n) && n > 0 ? n : null
+}
+
+/**
+ * Условие «в текстовом поле встречается один из фрагментов»: характеристики
+ * дома агент пишет словами («Кирпичный», «кирпич», «Есть», «Лифт
+ * пассажирский»), поэтому точного равенства мало — ищем узнаваемый фрагмент
+ * значения (см. BUILDING_FILTERS, GAS_FILTERS).
+ */
+const matchesAny = (field: string, fragments: readonly string[]): Record<string, unknown> =>
+  ({ or: fragments.map((match) => ({ [field]: { contains: match } })) })
+
+/**
+ * Диапазон «от/до» по числовому полю объекта (жилая площадь, площадь кухни):
+ * пустые и мусорные границы пропускаем молча — фильтр с ними ничего не
+ * уточняет, а пустую выдачу объяснить нечем.
+ */
+function pushRange(conds: Record<string, unknown>[], field: string, min: string, max: string) {
+  const from = numOf(min)
+  if (from != null && Number.isFinite(from)) conds.push({ [field]: { greater_than_equal: from } })
+  const to = numOf(max)
+  if (to != null && Number.isFinite(to)) conds.push({ [field]: { less_than_equal: to } })
 }
 
 /**
@@ -602,13 +749,61 @@ interface CatalogFiltersProps {
   cityRegions: CityFilterRegion[]
   /** Допустимые значения фильтра «Город» — для сверки городов из ссылок */
   knownCities: readonly string[]
+  /** Нажатие «Подобрать»: выдача обновляется сразу при смене фильтра,
+   *  поэтому кнопка только показывает её (каталог прокручивает к списку) */
+  onSubmit?: () => void
+  /** Нажатие «Показать на карте»: каталог переключает вид выдачи на карту */
+  onShowMap?: () => void
 }
 
 /** Ключи выпадающих списков панели — по одному на фильтр. Открытым может быть
  *  только один: ключ лежит в openId, остальные списки закрыты */
-type DropdownId = 'type' | 'category' | 'purchase' | 'city' | 'district' | 'cityDistrict' | 'locality' | 'snt' | 'heating'
+type DropdownId = 'type' | 'category' | 'houseType' | 'commercialType' | 'purchase' | 'city' | 'district'
+  | 'cityDistrict' | 'locality' | 'snt' | 'heating' | 'building' | 'gas'
 
-export default function CatalogFilters({ state, onChange, t, cityRegions, knownCities }: CatalogFiltersProps) {
+/** Переключатель-признак («Лифт», «Закрытый двор», «Индивидуальное
+ *  отопление»): в базе это текстовые поля, а покупателю важен факт «есть».
+ *  Нажатие ставит признак, повторное — снимает (условие см. в buildWhere) */
+function FeatureToggle({ label, on, onToggle }: { label: string; on: boolean; onToggle: () => void }) {
+  return (
+    <button type="button" onClick={onToggle} aria-pressed={on}
+      className={`px-3 py-2 text-xs tracking-wider uppercase border transition-all duration-300 cursor-pointer ${
+        on
+          ? 'border-[var(--n15-gold)] text-[var(--n15-gold)] bg-[var(--n15-gold)]/8'
+          : 'border-[var(--n15-gold)]/20 text-[var(--n15-muted)] hover:border-[var(--n15-gold)]/40 hover:text-[var(--n15-silver)]'
+      }`}>
+      {label}
+    </button>
+  )
+}
+
+/** Поле диапазона «от/до»: цена, площадь, жилая площадь, площадь кухни, этаж
+ *  и этажность выглядят и работают одинаково — разметка одна на всех */
+const rangeInputCls = 'w-full px-3 py-2 text-sm bg-[var(--n15-black)]/40 border border-[var(--n15-gold)]/20 text-[var(--n15-silver)] placeholder:text-[var(--n15-muted)] focus:outline-none focus:border-[var(--n15-gold)]/50'
+
+function RangeInputs({ from, to, onFrom, onTo, step = 'any', min = '0', fromHint = 'от', toHint = 'до' }: {
+  from: string
+  to: string
+  onFrom: (v: string) => void
+  onTo: (v: string) => void
+  /** Шаг и минимум: у площади дробные, у этажа — целые от единицы */
+  step?: string
+  min?: string
+  /** Подписи полей: у площади участка — «от, сотки» (см. areaPh) */
+  fromHint?: string
+  toHint?: string
+}) {
+  return (
+    <div className="flex gap-2">
+      <input type="number" min={min} step={step} placeholder={fromHint} value={from}
+        onChange={(e) => onFrom(e.target.value)} className={rangeInputCls} />
+      <input type="number" min={min} step={step} placeholder={toHint} value={to}
+        onChange={(e) => onTo(e.target.value)} className={rangeInputCls} />
+    </div>
+  )
+}
+
+export default function CatalogFilters({ state, onChange, t, cityRegions, knownCities, onSubmit, onShowMap }: CatalogFiltersProps) {
   // Открытый выпадающий список панели. Один на все фильтры: открытие нового
   // закрывает прежний, повторное нажатие на кнопку — закрывает открытый.
   // Списки рисуются поверх друг друга, и несколько открытых окон сразу
@@ -617,6 +812,20 @@ export default function CatalogFilters({ state, onChange, t, cityRegions, knownC
   const panelRef = useRef<HTMLDivElement>(null)
   const toggle = (id: DropdownId) => setOpenId((prev) => (prev === id ? null : id))
   const close = () => setOpenId(null)
+
+  // Второй ряд панели («Показать ещё фильтры»): характеристики объекта. Ряд
+  // раскрывается по кнопке, но если хоть один его фильтр задан — ссылкой из
+  // каталога, блоком на главной или вручную — он показывается раскрытым:
+  // работающих фильтров в свёрнутом виде быть не должно (см. hasMoreFilters).
+  // Приход фильтра вместе с новым state — тот же приём, что в CatalogContent
+  // («adjusting state when props change»): setState во время рендера, а не в
+  // эффекте (правило react-hooks/set-state-in-effect)
+  const [moreOpen, setMoreOpen] = useState(() => hasMoreFilters(state))
+  const [prevState, setPrevState] = useState(state)
+  if (prevState !== state) {
+    setPrevState(state)
+    if (!moreOpen && hasMoreFilters(state)) setMoreOpen(true)
+  }
 
   // Закрытие открытого списка по Escape и по клику вне панели фильтров:
   // слушатели висят на документе, пока список открыт (клик по элементам
@@ -648,7 +857,21 @@ export default function CatalogFilters({ state, onChange, t, cityRegions, knownC
   // Единица площади действует только для участков; не выбрана — подразумеваются м²
   const isLand = state.category === 'land'
   const areaUnit: AreaUnit = isLand ? areaUnitOf(state.areaUnit) : 'sqm'
-  const hasFilters = state.type || state.category || state.rooms || state.floorMin || state.floorMax || state.floorsMin || state.floorsMax || state.heating || state.priceMin || state.priceMax || state.areaMin || state.areaMax || state.district || state.cityDistrict || state.locality || state.snt || state.city || state.cityRegion || state.purchase
+  // Задан ли хоть один фильтр — от него зависит кнопка «Сбросить». Пустая
+  // строка у каждого поля означает «не выбран» (см. emptyFilters), поэтому
+  // проверка одна на все поля и не разъедется со списком фильтров
+  const hasFilters = Object.values(state).some(Boolean)
+  // Подкатегории показываем у своей категории: «Тип дома» — у домовых
+  // категорий (дом, таунхаус, дача, коттедж, часть дома), «Тип коммерции» —
+  // у коммерции. Категория не выбрана — показываем оба: клиент может начать
+  // поиск с подкатегории, категорию ей задаёт сам выбор (см. apply)
+  const showHouseType = !state.category || isHouseCategoryCode(state.category)
+  const showCommercialType = !state.category || state.category === 'commercial'
+  const houseTypeOptions = HOUSE_TYPES.map((h) => ({ value: h.value, label: t.catalog.houseTypes[h.value] }))
+  const commercialTypeOptions = COMMERCIAL_TYPES.map((c) => ({ value: c.value, label: t.catalog.commercialTypes[c.value] }))
+  // Сколько фильтров второго ряда задано — видно на кнопке: свёрнутый ряд не
+  // должен скрывать то, что уже фильтрует выдачу
+  const moreCount = MORE_FILTER_KEYS.filter((k) => Boolean(state[k])).length
   // Варианты покупки есть только у продажи жилья и коммерции: при аренде и
   // участках фильтра нет (значение снимается в apply)
   const showPurchase = purchaseRelevant(state.type, state.category)
@@ -758,6 +981,16 @@ export default function CatalogFilters({ state, onChange, t, cityRegions, knownC
     const nextType = patch.type !== undefined ? patch.type : state.type
     const nextCategory = patch.category !== undefined ? patch.category : state.category
     if (!purchaseRelevant(nextType, nextCategory)) out.purchase = ''
+    // Смена категории и подкатегорий: подкатегория дома и коммерции уточняет
+    // категорию, а не спорит с ней. Выбрана другая категория — подкатегория,
+    // которой она не подходит, снимается (иначе в поле остался бы выбор,
+    // который ничего не фильтрует)
+    if (patch.houseType === undefined && patch.category !== undefined && houseTypeCategory(state.houseType) !== patch.category) {
+      out.houseType = ''
+    }
+    if (patch.commercialType === undefined && patch.category !== undefined && patch.category !== 'commercial') {
+      out.commercialType = ''
+    }
     onChange(out)
   }
 
@@ -786,6 +1019,29 @@ export default function CatalogFilters({ state, onChange, t, cityRegions, knownC
           open={openId === 'category'} onToggle={() => toggle('category')} onClose={close}
           onSelect={(v) => apply({ category: v })} />
       </div>
+      {/* «Тип дома» — подкатегории домов (отдельные дома, дома с участком,
+          дачи, коттеджи, таунхаусы, части домов). Подкатегория уточняет
+          категорию, поэтому выбор ставит и её (см. houseTypeCategory), а
+          сменившаяся на чужую категория снимает подкатегорию (см. apply) */}
+      {showHouseType && (
+        <div className="w-48">
+          <Dropdown label={t.catalog.houseTypeLabel} value={state.houseType} options={houseTypeOptions}
+            compactLabel
+            open={openId === 'houseType'} onToggle={() => toggle('houseType')} onClose={close}
+            onSelect={(v) => apply(v ? { houseType: v, category: houseTypeCategory(v) ?? '' } : { houseType: v })} />
+        </div>
+      )}
+      {/* «Тип коммерции» — подкатегории категории «коммерческая»: готовый
+          бизнес, офис, торговое помещение, свободное назначение, склад,
+          производство. Категория у них одна, и выбор её ставит */}
+      {showCommercialType && (
+        <div className="w-56">
+          <Dropdown label={t.catalog.commercialTypeLabel} value={state.commercialType} options={commercialTypeOptions}
+            compactLabel
+            open={openId === 'commercialType'} onToggle={() => toggle('commercialType')} onClose={close}
+            onSelect={(v) => apply(v ? { commercialType: v, category: 'commercial' } : { commercialType: v })} />
+        </div>
+      )}
       {/* «Варианты покупки» — множественный выбор отметками: объект подходит,
           если у него отмечен любой из выбранных вариантов. У аренды и
           участков фильтра нет: вариантов покупки у них не бывает */}
@@ -856,14 +1112,8 @@ export default function CatalogFilters({ state, onChange, t, cityRegions, knownC
       </div>
       <div className="w-48">
         <div className={labelCls() + ' mb-1'}>{t.catalog.priceLabel}</div>
-        <div className="flex gap-2">
-          <input type="number" min="0" placeholder="от" value={state.priceMin}
-            onChange={(e) => apply({ priceMin: e.target.value })}
-            className="w-full px-3 py-2 text-sm bg-[var(--n15-black)]/40 border border-[var(--n15-gold)]/20 text-[var(--n15-silver)] placeholder:text-[var(--n15-muted)] focus:outline-none focus:border-[var(--n15-gold)]/50" />
-          <input type="number" min="0" placeholder="до" value={state.priceMax}
-            onChange={(e) => apply({ priceMax: e.target.value })}
-            className="w-full px-3 py-2 text-sm bg-[var(--n15-black)]/40 border border-[var(--n15-gold)]/20 text-[var(--n15-silver)] placeholder:text-[var(--n15-muted)] focus:outline-none focus:border-[var(--n15-gold)]/50" />
-        </div>
+        <RangeInputs from={state.priceMin} to={state.priceMax}
+          onFrom={(v) => apply({ priceMin: v })} onTo={(v) => apply({ priceMax: v })} />
       </div>
       <div className="w-52">
         {/* Площадь: диапазон «от/до». У участков это «Площадь участка» и
@@ -871,14 +1121,8 @@ export default function CatalogFilters({ state, onChange, t, cityRegions, knownC
             всё равно в м² — пересчитывает buildWhere), дробные значения
             разрешены. У остальных категорий — всегда м², кнопок нет. */}
         <div className={labelCls() + ' mb-1'}>{areaLabel}</div>
-        <div className="flex gap-2">
-          <input type="number" min="0" step="any" placeholder={areaPh('от')} value={state.areaMin}
-            onChange={(e) => apply({ areaMin: e.target.value })}
-            className="w-full px-3 py-2 text-sm bg-[var(--n15-black)]/40 border border-[var(--n15-gold)]/20 text-[var(--n15-silver)] placeholder:text-[var(--n15-muted)] focus:outline-none focus:border-[var(--n15-gold)]/50" />
-          <input type="number" min="0" step="any" placeholder={areaPh('до')} value={state.areaMax}
-            onChange={(e) => apply({ areaMax: e.target.value })}
-            className="w-full px-3 py-2 text-sm bg-[var(--n15-black)]/40 border border-[var(--n15-gold)]/20 text-[var(--n15-silver)] placeholder:text-[var(--n15-muted)] focus:outline-none focus:border-[var(--n15-gold)]/50" />
-        </div>
+        <RangeInputs from={state.areaMin} to={state.areaMax} fromHint={areaPh('от')} toHint={areaPh('до')}
+          onFrom={(v) => apply({ areaMin: v })} onTo={(v) => apply({ areaMax: v })} />
         {isLand && (
           <div className="flex gap-1 mt-2">
             <button type="button" onClick={() => apply({ areaUnit: 'sqm' })} className={unitBtn('sqm')}>
@@ -908,45 +1152,101 @@ export default function CatalogFilters({ state, onChange, t, cityRegions, knownC
           ))}
         </div>
       </div>
-      {/* Этаж и этажность — диапазоны «от/до»: этаж у квартиры, комнаты и
-          гаража, этажность у дома и у дома квартиры. Числа целые, ввод
-          фильтруется в buildWhere (floorNumber) */}
-      <div className="w-40">
-        <div className={labelCls() + ' mb-1'}>{t.catalog.floorLabel}</div>
-        <div className="flex gap-2">
-          <input type="number" min="1" step="1" placeholder="от" value={state.floorMin}
-            onChange={(e) => apply({ floorMin: e.target.value })}
-            className="w-full px-3 py-2 text-sm bg-[var(--n15-black)]/40 border border-[var(--n15-gold)]/20 text-[var(--n15-silver)] placeholder:text-[var(--n15-muted)] focus:outline-none focus:border-[var(--n15-gold)]/50" />
-          <input type="number" min="1" step="1" placeholder="до" value={state.floorMax}
-            onChange={(e) => apply({ floorMax: e.target.value })}
-            className="w-full px-3 py-2 text-sm bg-[var(--n15-black)]/40 border border-[var(--n15-gold)]/20 text-[var(--n15-silver)] placeholder:text-[var(--n15-muted)] focus:outline-none focus:border-[var(--n15-gold)]/50" />
+      {/* ——— Второй ряд — характеристики объекта. Ширина во весь ряд:
+          фильтров много, и в первом ряду им тесно; показывается по кнопке
+          «Показать ещё фильтры» (см. moreOpen) ——— */}
+      {moreOpen && (
+        <div className="w-full flex flex-wrap items-end gap-3 pt-4 mt-1 border-t border-[var(--n15-gold)]/10">
+          <div className="w-56">
+            {/* Улица — свободный ввод: адреса агенты пишут руками, поэтому
+                ищем вхождение, а не точное совпадение (см. buildWhere) */}
+            <div className={labelCls() + ' mb-1'}>{t.catalog.streetLabel}</div>
+            <input type="text" value={state.street} placeholder={t.catalog.streetPlaceholder}
+              onChange={(e) => apply({ street: e.target.value })} className={rangeInputCls} />
+          </div>
+          <div className="w-44">
+            <div className={labelCls() + ' mb-1'}>{t.catalog.livingAreaLabel}</div>
+            <RangeInputs from={state.livingAreaMin} to={state.livingAreaMax}
+              onFrom={(v) => apply({ livingAreaMin: v })} onTo={(v) => apply({ livingAreaMax: v })} />
+          </div>
+          <div className="w-44">
+            <div className={labelCls() + ' mb-1'}>{t.catalog.kitchenAreaLabel}</div>
+            <RangeInputs from={state.kitchenAreaMin} to={state.kitchenAreaMax}
+              onFrom={(v) => apply({ kitchenAreaMin: v })} onTo={(v) => apply({ kitchenAreaMax: v })} />
+          </div>
+          {/* Этаж и этажность — диапазоны «от/до»: этаж у квартиры, комнаты и
+              гаража, этажность у дома и у дома квартиры. Числа целые, ввод
+              фильтруется в buildWhere (floorNumber) */}
+          <div className="w-40">
+            <div className={labelCls() + ' mb-1'}>{t.catalog.floorLabel}</div>
+            <RangeInputs from={state.floorMin} to={state.floorMax} step="1" min="1"
+              onFrom={(v) => apply({ floorMin: v })} onTo={(v) => apply({ floorMax: v })} />
+          </div>
+          <div className="w-40">
+            <div className={labelCls() + ' mb-1'}>{t.catalog.floorsLabel}</div>
+            <RangeInputs from={state.floorsMin} to={state.floorsMax} step="1" min="1"
+              onFrom={(v) => apply({ floorsMin: v })} onTo={(v) => apply({ floorsMax: v })} />
+          </div>
+          {/* Отопление: список из четырёх значений словаря (t.object.heatingOptions),
+              в базе поле текстовое — совпадение ищется по фрагменту (HEATING_FILTERS) */}
+          <div className="w-48">
+            <Dropdown label={t.catalog.heatingLabel} value={state.heating} compactLabel
+              options={HEATING_FILTERS.map((h) => ({ value: h.value, label: t.object.heatingOptions[h.value] }))}
+              open={openId === 'heating'} onToggle={() => toggle('heating')} onClose={close}
+              onSelect={(v) => apply({ heating: v })} />
+          </div>
+          {/* Материал дома и газ — такие же текстовые поля (BUILDING_FILTERS,
+              GAS_FILTERS): «кирпич» найдёт «Кирпичный» и «кирпич» */}
+          <div className="w-48">
+            <Dropdown label={t.catalog.buildingLabel} value={state.building} compactLabel
+              options={BUILDING_FILTERS.map((b) => ({ value: b.value, label: t.catalog.buildingOptions[b.value] }))}
+              open={openId === 'building'} onToggle={() => toggle('building')} onClose={close}
+              onSelect={(v) => apply({ building: v })} />
+          </div>
+          <div className="w-44">
+            <Dropdown label={t.catalog.gasLabel} value={state.gas} compactLabel
+              options={GAS_FILTERS.map((g) => ({ value: g.value, label: t.catalog.gasOptions[g.value] }))}
+              open={openId === 'gas'} onToggle={() => toggle('gas')} onClose={close}
+              onSelect={(v) => apply({ gas: v })} />
+          </div>
+          {/* Признаки объекта — переключатели «есть»: у каждого свой фрагмент
+              значения в текстовом поле (см. buildWhere) */}
+          <div>
+            <div className={labelCls() + ' mb-1'}>{t.catalog.featuresLabel}</div>
+            <div className="flex flex-wrap gap-1">
+              <FeatureToggle label={t.catalog.individualHeatingLabel} on={state.individualHeating === '1'}
+                onToggle={() => apply({ individualHeating: state.individualHeating === '1' ? '' : '1' })} />
+              <FeatureToggle label={t.catalog.elevatorLabel} on={state.elevator === '1'}
+                onToggle={() => apply({ elevator: state.elevator === '1' ? '' : '1' })} />
+              <FeatureToggle label={t.catalog.closedYardLabel} on={state.closedYard === '1'}
+                onToggle={() => apply({ closedYard: state.closedYard === '1' ? '' : '1' })} />
+            </div>
+          </div>
         </div>
-      </div>
-      <div className="w-40">
-        <div className={labelCls() + ' mb-1'}>{t.catalog.floorsLabel}</div>
-        <div className="flex gap-2">
-          <input type="number" min="1" step="1" placeholder="от" value={state.floorsMin}
-            onChange={(e) => apply({ floorsMin: e.target.value })}
-            className="w-full px-3 py-2 text-sm bg-[var(--n15-black)]/40 border border-[var(--n15-gold)]/20 text-[var(--n15-silver)] placeholder:text-[var(--n15-muted)] focus:outline-none focus:border-[var(--n15-gold)]/50" />
-          <input type="number" min="1" step="1" placeholder="до" value={state.floorsMax}
-            onChange={(e) => apply({ floorsMax: e.target.value })}
-            className="w-full px-3 py-2 text-sm bg-[var(--n15-black)]/40 border border-[var(--n15-gold)]/20 text-[var(--n15-silver)] placeholder:text-[var(--n15-muted)] focus:outline-none focus:border-[var(--n15-gold)]/50" />
-        </div>
-      </div>
-      {/* Отопление: список из четырёх значений словаря (t.object.heatingOptions),
-          в базе поле текстовое — совпадение ищется по фрагменту (HEATING_FILTERS) */}
-      <div className="w-48">
-        <Dropdown label={t.catalog.heatingLabel} value={state.heating} compactLabel
-          options={HEATING_FILTERS.map((h) => ({ value: h.value, label: t.object.heatingOptions[h.value] }))}
-          open={openId === 'heating'} onToggle={() => toggle('heating')} onClose={close}
-          onSelect={(v) => apply({ heating: v })} />
-      </div>
-      {hasFilters && (
-        <button type="button" onClick={() => onChange(emptyFilters)}
-          className="ml-auto text-xs text-[var(--n15-gold)] underline uppercase tracking-wider">
-          {t.catalog.resetFilters}
-        </button>
       )}
+      {/* Кнопки панели: подобрать (показать выдачу), свернуть/раскрыть второй
+          ряд, посмотреть выдачу на карте и сбросить всё. Сброс — у правого
+          края: это не действие поиска, а его отмена */}
+      <div className="w-full flex flex-wrap items-center gap-3 pt-4 mt-1 border-t border-[var(--n15-gold)]/10">
+        <button type="button" onClick={onSubmit}
+          className="px-6 py-3 text-xs uppercase tracking-wider bg-[var(--n15-gold)] text-[var(--n15-black)] hover:bg-[var(--n15-gold)]/90 transition-colors cursor-pointer">
+          {t.catalog.submitFilters}
+        </button>
+        <button type="button" onClick={() => setMoreOpen((prev) => !prev)} aria-expanded={moreOpen}
+          className="px-4 py-3 text-xs uppercase tracking-wider border border-[var(--n15-gold)]/30 text-[var(--n15-silver)] hover:border-[var(--n15-gold)]/60 hover:text-[var(--n15-gold)] transition-colors cursor-pointer">
+          {moreOpen ? t.catalog.filtersHide : t.catalog.filtersMore}{moreCount ? ` (${moreCount})` : ''}
+        </button>
+        <button type="button" onClick={onShowMap}
+          className="px-4 py-3 text-xs uppercase tracking-wider border border-[var(--n15-gold)]/30 text-[var(--n15-silver)] hover:border-[var(--n15-gold)]/60 hover:text-[var(--n15-gold)] transition-colors cursor-pointer">
+          {t.catalog.showOnMap}
+        </button>
+        {hasFilters && (
+          <button type="button" onClick={() => onChange(emptyFilters)}
+            className="ml-auto text-xs text-[var(--n15-gold)] underline uppercase tracking-wider">
+            {t.catalog.resetFilters}
+          </button>
+        )}
+      </div>
     </div>
   )
 }

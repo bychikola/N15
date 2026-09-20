@@ -62,3 +62,40 @@ export const isPrivateHouseCode = (category: unknown): boolean =>
  */
 export const isLivingCategoryCode = (category: unknown): boolean =>
   category === 'apartment' || category === 'room' || isHouseCategoryCode(category)
+
+/**
+ * Подкатегории домов для каталога: отдельные дома, дома с участком, дачи,
+ * коттеджи, таунхаусы и части домов.
+ *
+ * Отдельной категории «дом с участком» в базе нет: это дом, у которого
+ * заполнена площадь участка (plotArea) — участок вокруг дома. Поэтому
+ * подкатегория описывает условие фильтра, а не значение поля category:
+ * у остальных пунктов списка оно одноимённо категории объекта.
+ *
+ * Подписи — для схемы и CRM; на сайте показываются из словаря
+ * (t.catalog.houseTypes).
+ */
+export const HOUSE_TYPES = [
+  { value: 'house', label: 'Отдельные дома', category: 'house', plot: false },
+  { value: 'house_plot', label: 'Дома с участком', category: 'house', plot: true },
+  { value: 'dacha', label: 'Дачи', category: 'dacha', plot: false },
+  { value: 'cottage', label: 'Коттеджи', category: 'cottage', plot: false },
+  { value: 'townhouse', label: 'Таунхаусы', category: 'townhouse', plot: false },
+  { value: 'part_house', label: 'Части домов', category: 'part_house', plot: false },
+] as const
+
+export type HouseType = (typeof HOUSE_TYPES)[number]['value']
+
+/** Коды подкатегорий домов — сверка значений из ссылок и запросов */
+export const HOUSE_TYPE_VALUES: readonly string[] = HOUSE_TYPES.map((t) => t.value)
+
+/** Подкатегория дома по коду: null — код чужой (мусорный параметр ссылки) */
+export const houseTypeOf = (value: string): (typeof HOUSE_TYPES)[number] | null =>
+  HOUSE_TYPES.find((t) => t.value === value) ?? null
+
+/**
+ * Категория объекта по подкатегории дома: «дом с участком» — та же категория
+ * «дом», у остальных пунктов она своя. Нужна фильтру: выбранная подкатегория
+ * и поле category в базе не должны спорить друг с другом.
+ */
+export const houseTypeCategory = (value: string): string | null => houseTypeOf(value)?.category ?? null

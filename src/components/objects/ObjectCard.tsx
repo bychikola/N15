@@ -72,7 +72,11 @@ export default function ObjectCard({ obj, lang, t }: ObjectCardProps) {
   const floorsLabel = isHouse
     ? floorHuman(obj.totalFloors, t.object.floorUnits, (n) => n.toLocaleString(t.locale))
     : (obj.floor || obj.totalFloors) && `${obj.floor || '?'}/${obj.totalFloors || '?'} ${t.object.floor.toLowerCase()}`
+  // Тип объекта (квартира, дом, участок…) — первой строкой меты: по обложке
+  // видно, что за объект, не открывая карточку
+  const categoryLabel = t.categoryLabels[obj.category as keyof typeof t.categoryLabels] || obj.category
   const meta = [
+    categoryLabel,
     areaLabel,
     plotAreaLabel,
     obj.rooms && `${obj.rooms} ${t.catalog.rooms}`,
@@ -141,9 +145,14 @@ export default function ObjectCard({ obj, lang, t }: ObjectCardProps) {
           {obj.title}
         </h3>
         <p className="object-card__addr text-xs text-[var(--n15-muted)] mb-1.5">
+          {/* Адрес карточки: товарищество, район города (или район республики),
+              населённый пункт, улица и дом. Населённый пункт — перед районом:
+              у объекта в селе без него адрес читался бы как городской */}
           {[
             obj.address?.snt,
             obj.address?.cityDistrict && `${obj.address.cityDistrict} район`,
+            obj.address?.locality,
+            obj.address?.district,
             obj.address?.street,
             obj.address?.house,
           ].filter(Boolean).join(', ')}

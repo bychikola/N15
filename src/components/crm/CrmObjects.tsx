@@ -39,6 +39,10 @@ import { floorLabel } from '@/lib/floor-format'
 // коммерции» — общие с коллекцией Objects, каталогом и страницей объекта
 // (см. src/lib/purchase-options.ts)
 import { PURCHASE_OPTIONS, isPurchaseOption, purchaseOptionsApply } from '@/lib/purchase-options'
+// Подкатегории коммерции: готовый бизнес, офис, торговое помещение и т.д. —
+// общий справочник со схемой коллекции и фильтром каталога
+// (см. src/lib/commercial-types.ts)
+import { COMMERCIAL_TYPES } from '@/lib/commercial-types'
 import { LegalCheckBlock, type LegalFocus } from '@/components/crm/LegalCheckBlock'
 import { PlacementCheckBlock } from '@/components/crm/PlacementCheckBlock'
 import { HouseDataBlock } from '@/components/crm/HouseDataBlock'
@@ -323,7 +327,14 @@ const emptyForm = {
   // номера здания (cadastralNumber) — у дома и участка разные кадастровые
   // номера.
   plotCadastralNumber: '', plotLandCategory: '', plotPermittedUse: '', plotPurpose: '',
+  // Подкатегория коммерции (готовый бизнес, офис, торговое помещение…) —
+  // только у категории «коммерческая» (см. src/lib/commercial-types.ts)
+  commercialType: '',
   kitchenArea: '', rooms: '', floor: '', totalFloors: '', buildingType: '', condition: '',
+  // Признаки объекта: лифт, двор и парковка — свободный ввод с подсказками
+  // («Есть», «Закрытый», «Подземный паркинг»): по лифту и двору есть фильтры
+  // в каталоге, поэтому значение лучше писать узнаваемым словом
+  elevator: '', yard: '', parking: '',
   // Этажность дома (только дом и таунхаус, см. save): выбор из списка «1/2/3
   // этажа» либо своё число («другое значение»). У остальных категорий
   // этажность по-прежнему вводится в totalFloors выше.
@@ -1215,7 +1226,11 @@ export const CrmObjects: FC<{
       floorsOther: floorsMode === 'other' ? floorsTotal : '',
       buildingType: (o.buildingType as string) || '',
       condition: (o.condition as string) || '',
+      commercialType: (o.commercialType as string) || '',
       heating: (o.heating as string) || '',
+      elevator: (o.elevator as string) || '',
+      yard: (o.yard as string) || '',
+      parking: (o.parking as string) || '',
       balcony: (o.balcony as string) || '',
       water: (o.water as string) || '',
       sewerage: (o.sewerage as string) || '',
@@ -1639,8 +1654,17 @@ export const CrmObjects: FC<{
       // поле не отправляем, чтобы не затереть чужие данные
       floorDescriptions: isHouse ? floorRows : undefined,
       buildingType: form.buildingType || undefined,
+      // Подкатегория коммерции — только у коммерческой категории: у
+      // остальных объектов поля не отправляем (как plotArea и поэтажные
+      // описания выше)
+      commercialType: isCommercial ? form.commercialType || undefined : undefined,
       condition: form.condition || undefined,
       heating: form.heating || undefined,
+      // Признаки объекта: лифт, двор, парковка — свободный ввод, по лифту и
+      // двору есть фильтры в каталоге (см. ELEVATOR_MATCHES)
+      elevator: form.elevator || undefined,
+      yard: form.yard || undefined,
+      parking: form.parking || undefined,
       balcony: form.balcony || undefined,
       water: form.water || undefined,
       sewerage: form.sewerage || undefined,
@@ -1870,6 +1894,9 @@ export const CrmObjects: FC<{
       // Участки и аренда вариантов покупки не имеют — прежние отметки
       // снимаем, чтобы они не остались скрытыми в карточке
       purchaseOptions: purchaseOptionsApply(prev.type, v) ? prev.purchaseOptions : [],
+      // Тип коммерции бывает только у коммерческой категории: у остальных
+      // поле скрыто, и выбранное значение в нём оставаться не должно
+      commercialType: v === 'commercial' ? prev.commercialType : '',
     }))
   }
 
@@ -2191,6 +2218,18 @@ export const CrmObjects: FC<{
               ))}
             </select>
           </Field>
+          {/* Подкатегория коммерции — только у категории «коммерческая»: по
+              ней есть фильтр в каталоге (см. COMMERCIAL_TYPES) */}
+          {isCommercial && (
+            <Field label={t.crm.objCommercialType}>
+              <select value={form.commercialType} onChange={(e) => set('commercialType', e.target.value)} style={inputStyle}>
+                <option value="">—</option>
+                {COMMERCIAL_TYPES.map((c) => (
+                  <option key={c.value} value={c.value}>{c.label}</option>
+                ))}
+              </select>
+            </Field>
+          )}
           <Field label={t.crm.objPrice}><input type="number" value={form.price} onChange={(e) => set('price', e.target.value)} style={inputStyle} /></Field>
           {/* Площадь: у земельного участка агент выбирает единицу (м², сотки
               или гектары; «6 соток» = 600 м², «1,2 га» = 12000 м², дробные
@@ -2373,6 +2412,18 @@ export const CrmObjects: FC<{
           <Field label={t.crm.objInternet}>
             <input value={form.internet} onChange={(e) => set('internet', e.target.value)} style={inputStyle} list="crm-internet" />
           </Field>
+          {/* Лифт, двор и парковка: свободный ввод с подсказками. По лифту
+              («Есть», «Лифт пассажирский») и двору («Закрытый») ищет фильтр
+              каталога, поэтому подсказки — те же слова, что он узнаёт */}
+          <Field label={t.crm.objElevator}>
+            <input value={form.elevator} onChange={(e) => set('elevator', e.target.value)} style={inputStyle} list="crm-elevator" />
+          </Field>
+          <Field label={t.crm.objYard}>
+            <input value={form.yard} onChange={(e) => set('yard', e.target.value)} style={inputStyle} list="crm-yard" />
+          </Field>
+          <Field label={t.crm.objParking}>
+            <input value={form.parking} onChange={(e) => set('parking', e.target.value)} style={inputStyle} list="crm-parking" />
+          </Field>
 
           <datalist id="crm-building-type">
             <option value="Кирпичный" /><option value="Монолитный" /><option value="Панельный" />
@@ -2400,6 +2451,15 @@ export const CrmObjects: FC<{
           </datalist>
           <datalist id="crm-internet">
             <option value="Есть" /><option value="Нет" />
+          </datalist>
+          <datalist id="crm-elevator">
+            <option value="Есть" /><option value="Нет" /><option value="Лифт пассажирский" />
+          </datalist>
+          <datalist id="crm-yard">
+            <option value="Закрытый" /><option value="Охраняемый" /><option value="Благоустроенный" />
+          </datalist>
+          <datalist id="crm-parking">
+            <option value="Подземный паркинг" /><option value="Гостевая" /><option value="Нет" />
           </datalist>
 
           {/* Адрес: широкие поля, удобные для заполнения с телефона */}
