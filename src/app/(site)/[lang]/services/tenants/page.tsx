@@ -18,6 +18,12 @@ export default async function TenantsPage({ params }: PageProps) {
 
   const items: ServiceItem[] = [
     { id: 'podbor', ...s.items.selection },
+    // Аренда по типам объектов — сразу после общего подбора: клиент чаще
+    // всего ищет конкретный тип (квартиру, комнату, дом, помещение)
+    { id: 'arenda-kvartiry', ...s.items.rentApartment },
+    { id: 'arenda-komnaty', ...s.items.rentRoom },
+    { id: 'arenda-doma', ...s.items.rentHouse },
+    { id: 'arenda-kommercheskogo', ...s.items.rentCommercial },
     { id: 'proverka', ...s.items.check },
     { id: 'dogovor', ...s.items.contract },
     { id: 'peredacha', ...s.items.handover },

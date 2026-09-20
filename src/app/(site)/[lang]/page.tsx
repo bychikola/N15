@@ -10,6 +10,7 @@ import FeaturedObjects from '@/components/home/FeaturedObjects'
 import type { ObjectListItem } from '@/components/objects/ObjectCard'
 import InterregionalGuide from '@/components/home/InterregionalGuide'
 import ServicesAccordion from '@/components/home/ServicesAccordion'
+import PopularDirections from '@/components/home/PopularDirections'
 import SelectionCta from '@/components/home/SelectionCta'
 import OwnersSection from '@/components/home/OwnersSection'
 import AboutSection from '@/components/home/AboutSection'
@@ -80,31 +81,23 @@ export default async function HomePage({ params, searchParams }: PageProps) {
 
   const payload = await getPayload({ config })
 
-  // Блок «Актуальные объекты»: только опубликованные (черновики скрыты).
-  // Проданные, снятые с публикации и архивные в CRM переводятся в статус
-  // «Архив» — такой объект автоматически исчезает из блока.
-  const where: Where = { status: { equals: 'published' } }
-  if (qCategory) where.category = { equals: qCategory }
-  if (qRooms === '4') where.rooms = { greater_than_equal: 4 }
-  else if (qRooms) where.rooms = { equals: parseInt(qRooms, 10) }
-  if (qDistrict) where['address.district'] = { equals: qDistrict }
-  if (qCityDistrict) where['address.cityDistrict'] = { equals: qCityDistrict }
-  if (qLocality) where['address.locality'] = { equals: qLocality }
-  if (qSnt) where['address.snt'] = { equals: qSnt }
-
-  // 4 объекта: на компьютере — одна полная строка (в сетке блока xl: 4 колонки),
-  // на планшете 2×2, на телефоне — в столбик
-  const { docs } = await payload.find({
-    collection: 'objects',
-    where,
-    sort: '-createdAt',
-    limit: 4,
-    depth: 1,
-  })
+  // Сводка подбора для секции «Результаты подбора» (как на живом прототипе).
+  // Считаем до запросов: от неё зависит, какие блоки вообще показывать —
+  // при подборе «Особые предложения» и «Новинки» уступают место выдаче
+  const hasFilter = Boolean(qCategory || qRooms || qDistrict || qCityDistrict || qLocality || qSnt)
+  const filterSummary = hasFilter
+    ? [
+        qCategory ? CATEGORY_LABELS[qCategory] || qCategory : null,
+        qRooms ? `${qRooms === '4' ? '4+' : qRooms} комн.` : null,
+        qDistrict || qCityDistrict || null,
+        qLocality || null,
+        qSnt || null,
+      ].filter(Boolean).join(' · ')
+    : undefined
 
   // Карточки «как в каталоге»: ObjectCard ждёт полный набор полей —
   // тип сделки, адрес улицы/дома и изображение с Payload-размерами.
-  // Общий для обоих блоков объектов на главной.
+  // Общий для всех блоков объектов на главной.
   const toListItem = (d: { id: number | string }): ObjectListItem => {
     const o = d as unknown as Record<string, unknown>
     const img = o.primaryImage as
@@ -138,8 +131,6 @@ export default async function HomePage({ params, searchParams }: PageProps) {
     }
   }
 
-  const objects: ObjectListItem[] = docs.map(toListItem)
-
   // Особые предложения — объекты с отметкой «Особое предложение» в CRM
   // (поле urgentSale). Блок показываем, только когда такие объекты есть:
   // пустой блок с заглушками читался бы как обещание, которого нет
@@ -152,6 +143,43 @@ export default async function HomePage({ params, searchParams }: PageProps) {
   })
   const specialObjects: ObjectListItem[] = specialDocs.map(toListItem)
 
+  // Новинки — последние поступления каталога (4 самых свежих). Блок без
+  // подбора: при подборе главная отвечает на запрос клиента, и «Новинки»
+  // спорили бы с его выдачей. Объекты «Особых предложений» уже стоят выше
+  // в своей подборке — в новинках их не повторяем
+  const newsWhere: Where = { status: { equals: 'published' } }
+  if (specialObjects.length > 0) newsWhere.id = { not_in: specialObjects.map((o) => o.id) }
+  const newsDocs: { id: number | string }[] = filterSummary
+    ? []
+    : (await payload.find({ collection: 'objects', where: newsWhere, sort: '-createdAt', limit: 4, depth: 1 })).docs
+  const newsObjects: ObjectListItem[] = newsDocs.map(toListItem)
+
+  // Блок «Актуальные объекты»: только опубликованные (черновики скрыты).
+  // Проданные, снятые с публикации и архивные в CRM переводятся в статус
+  // «Архив» — такой объект автоматически исчезает из блока.
+  const where: Where = { status: { equals: 'published' } }
+  if (qCategory) where.category = { equals: qCategory }
+  if (qRooms === '4') where.rooms = { greater_than_equal: 4 }
+  else if (qRooms) where.rooms = { equals: parseInt(qRooms, 10) }
+  if (qDistrict) where['address.district'] = { equals: qDistrict }
+  if (qCityDistrict) where['address.cityDistrict'] = { equals: qCityDistrict }
+  if (qLocality) where['address.locality'] = { equals: qLocality }
+  if (qSnt) where['address.snt'] = { equals: qSnt }
+  // В основной подборке не повторяем карточки из «Новинок»: блоки идут друг
+  // за другом, и одни и те же объекты в обоих читались бы как ошибка страницы
+  if (newsObjects.length > 0) where.id = { not_in: newsObjects.map((o) => o.id) }
+
+  // 4 объекта: на компьютере — одна полная строка (в сетке блока xl: 4 колонки),
+  // на планшете 2×2, на телефоне — в столбик
+  const { docs } = await payload.find({
+    collection: 'objects',
+    where,
+    sort: '-createdAt',
+    limit: 4,
+    depth: 1,
+  })
+  const objects: ObjectListItem[] = docs.map(toListItem)
+
   // Регионы блока «Межрегиональная недвижимость» — справочник CRM
   // (коллекции regions и settlements, см. src/lib/interregional-service.ts)
   const interregionalRegions = await loadInterregionalRegions(payload)
@@ -160,18 +188,6 @@ export default async function HomePage({ params, searchParams }: PageProps) {
   const site = await payload.findGlobal({ slug: 'site-settings', depth: 0 })
   const sitePhones = ((site as Record<string, unknown>).phones as { phone?: string }[] | undefined) || []
   const phone = sitePhones[0]?.phone
-
-  // Сводка подбора для секции «Результаты подбора» (как на живом прототипе)
-  const hasFilter = Boolean(qCategory || qRooms || qDistrict || qCityDistrict || qLocality || qSnt)
-  const filterSummary = hasFilter
-    ? [
-        qCategory ? CATEGORY_LABELS[qCategory] || qCategory : null,
-        qRooms ? `${qRooms === '4' ? '4+' : qRooms} комн.` : null,
-        qDistrict || qCityDistrict || null,
-        qLocality || null,
-        qSnt || null,
-      ].filter(Boolean).join(' · ')
-    : undefined
 
   // Подбор по местоположению пуст (населённый пункт, район, район города,
   // товарищество) — вместо декоративных карточек-заглушек показываем честное
@@ -203,6 +219,20 @@ export default async function HomePage({ params, searchParams }: PageProps) {
             sectionId="special"
           />
         )}
+        {/* Новинки — последние поступления, следом за особыми предложениями.
+            Пустым не рендерится: FeaturedObjects на пустом списке рисует
+            декоративные карточки-заглушки, а обещать «новинки» без объектов
+            нельзя (то же правило, что у блока особых предложений) */}
+        {newsObjects.length > 0 && (
+          <FeaturedObjects
+            objects={newsObjects}
+            t={t}
+            lang={lang}
+            eyebrow={t.landing.newsEyebrow}
+            title={t.landing.newsTitle}
+            sectionId="news"
+          />
+        )}
         <FeaturedObjects
           objects={objects}
           t={t}
@@ -214,6 +244,10 @@ export default async function HomePage({ params, searchParams }: PageProps) {
             и, если подходящего не нашлось, оставляет запрос, не уходя
             со страницы (форма подбора живёт в каталоге, см. SelectionCta) */}
         <SelectionCta t={t} lang={lang} />
+        {/* Популярные направления — география поиска: ссылки ведут в каталог
+            с уже подставленным районом (у местной географии своей страницы
+            нет). Рядом с межрегиональной недвижимостью — оба блока про «где» */}
+        <PopularDirections t={t} lang={lang} />
         <InterregionalGuide t={t} lang={lang} regions={interregionalRegions} />
         <ServicesAccordion t={t} lang={lang} />
         {/* Блок собственникам — после услуг: владельцу важно, как Н15 продаёт

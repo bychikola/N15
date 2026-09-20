@@ -57,6 +57,8 @@ const URL_PARAM: Record<keyof FiltersState, string> = {
   // Подкатегории: тип дома и тип коммерции (см. object-categories, commercial-types)
   houseType: 'house_type',
   commercialType: 'commercial_type',
+  // Кадастровый номер участка (см. cadastral в FiltersState)
+  cadastral: 'cadastral',
   agent: AGENT_URL_PARAM,
   purchase: 'purchase',
 }
@@ -123,6 +125,9 @@ function filtersFromParams(sp: URLSearchParams, cityRegions: readonly CityFilter
     // (мусор отбрасывает buildWhere), материал дома и газ — списки значений,
     // признаки «есть» — только '1' или пусто
     street: sp.get(URL_PARAM.street) ?? '',
+    // Кадастровый номер — свободный ввод: формат сверяет серверный маршрут,
+    // чужое значение даёт пустую выдачу, а не ошибку (см. buildWhere)
+    cadastral: sp.get(URL_PARAM.cadastral) ?? '',
     livingAreaMin: sp.get(URL_PARAM.livingAreaMin) ?? '',
     livingAreaMax: sp.get(URL_PARAM.livingAreaMax) ?? '',
     kitchenAreaMin: sp.get(URL_PARAM.kitchenAreaMin) ?? '',
@@ -177,7 +182,21 @@ export default function CatalogContent({ cityRegions, knownCities, agentName }: 
   const [view, setView] = useState(searchParams.get('view') ?? '')
   const [filters, setFilters] = useState<FiltersState>(() => filtersFromParams(searchParams, cityRegions, knownCities))
 
-  const where = useMemo(() => buildWhere(filters, q, cityRegions, knownCities), [filters, q, cityRegions, knownCities])
+  // Кадастровый номер участка: поле закрыто для посетителей — публичный API
+  // его не отдаёт и не принимает в where, поэтому номер ищет серверный
+  // маршрут (/api/objects/by-cadastral), а каталог фильтрует выдачу по id
+  // найденных объектов. Здесь хранится результат поиска вместе с номером,
+  // по которому он получен: пока они не совпадают с полем фильтра, номер
+  // ещё ищется (ids = null), и выдачу не грузим — иначе каталог на секунду
+  // показал бы «ничего не найдено» по недописанному номеру
+  const [cadastral, setCadastral] = useState<{ number: string; ids: number[] } | null>(null)
+  const cadastralNumber = filters.cadastral.trim()
+  const cadastralPending = cadastralNumber !== '' && cadastral?.number !== cadastralNumber
+
+  const where = useMemo(
+    () => buildWhere(filters, q, cityRegions, knownCities, cadastralNumber ? (cadastral?.ids ?? null) : null),
+    [filters, q, cityRegions, knownCities, cadastralNumber, cadastral],
+  )
   const sortParam = sort || '-createdAt'
 
   // Счётчики полосы категорий: та же выдача, но без фильтра по категории —
@@ -185,8 +204,8 @@ export default function CatalogContent({ cityRegions, knownCities, agentName }: 
   // собирает тот же buildWhere, что и основную выдачу: счётчики не разъедутся
   // с ней при добавлении нового фильтра
   const countsWhere = useMemo(
-    () => buildWhere({ ...filters, category: '' }, q, cityRegions, knownCities),
-    [filters, q, cityRegions, knownCities],
+    () => buildWhere({ ...filters, category: '' }, q, cityRegions, knownCities, cadastralNumber ? (cadastral?.ids ?? null) : null),
+    [filters, q, cityRegions, knownCities, cadastralNumber, cadastral],
   )
   const [categoryCounts, setCategoryCounts] = useState<Record<string, number>>({})
   const [countsLoading, setCountsLoading] = useState(true)
@@ -267,6 +286,9 @@ export default function CatalogContent({ cityRegions, knownCities, agentName }: 
     // setState — внутри таймера, а не в теле эффекта (правило
     // react-hooks/set-state-in-effect, см. чтение URL выше)
     const timer = setTimeout(() => {
+      // Номер участка ещё ищется — счётчики не пересчитываем: без найденных
+      // id они показали бы нули по всем категориям (см. cadastralPending)
+      if (cadastralPending) return
       setCountsLoading(true)
       Promise.all([
         countFor(countsWhere),
@@ -289,13 +311,44 @@ export default function CatalogContent({ cityRegions, knownCities, agentName }: 
       clearTimeout(timer)
       controller.abort()
     }
-  }, [countsWhere])
+    // cadastralPending — по той же причине, что у выдачи: поиск номера может
+    // вернуть пусто, дерево условий не изменится, и счётчики остались бы
+    // прежними (см. комментарий у загрузки первой страницы)
+  }, [countsWhere, cadastralPending])
+
+  // Поиск по кадастровому номеру: спрашиваем сервер, какие участки подходят.
+  // С задержкой — номер вводят посимвольно, и запрос на каждую цифру был бы
+  // и лишней работой, и перебором с точки зрения лимита маршрута (он считает
+  // обращения с одного адреса). Пустое поле — поиск не нужен, результат
+  // прошлого номера просто не используется
+  useEffect(() => {
+    if (!cadastralNumber) return
+    const controller = new AbortController()
+    // setState — внутри таймера, а не в теле эффекта (правило
+    // react-hooks/set-state-in-effect, см. счётчики категорий ниже)
+    const timer = setTimeout(() => {
+      fetch(`/api/objects/by-cadastral?number=${encodeURIComponent(cadastralNumber)}`, { signal: controller.signal })
+        .then((res) => res.json())
+        .then((data) => setCadastral({ number: cadastralNumber, ids: Array.isArray(data?.ids) ? data.ids : [] }))
+        // Поиск не удался (лимит запросов, сеть) — считаем, что не найдено:
+        // повторять запрос молча нельзя, клиент увидит пустую выдачу
+        .catch(() => { if (!controller.signal.aborted) setCadastral({ number: cadastralNumber, ids: [] }) })
+    }, 500)
+    return () => {
+      clearTimeout(timer)
+      controller.abort()
+    }
+  }, [cadastralNumber])
 
   // (re)load first page on filter/sort/search change.
   // All setState calls happen after await, so no synchronous setState in the effect body.
   useEffect(() => {
     let cancelled = false
     async function run() {
+      // Номер ещё ищется — выдачу не грузим: условие по нему в where ещё не
+      // собрано (см. cadastralPending). Загрузка уже показана (setLoading в
+      // onChangeFilters), поэтому экран не «моргает» прошлой выдачей
+      if (cadastralPending) return
       try {
         const params = new URLSearchParams({ limit: String(PAGE_SIZE), page: '1', depth: '2', sort: sortParam })
         if (Object.keys(where).length) params.set('where', JSON.stringify(where))
@@ -313,7 +366,11 @@ export default function CatalogContent({ cityRegions, knownCities, agentName }: 
     }
     void run()
     return () => { cancelled = true }
-  }, [where, sortParam])
+    // cadastralPending — в зависимостях наравне с where: поиск номера может
+    // закончиться «ничего не найдено», и дерево условий при этом не изменится
+    // (в обоих случаях один и тот же несуществующий id) — без этой зависимости
+    // выдача осталась бы в состоянии загрузки навсегда
+  }, [where, sortParam, cadastralPending])
 
   const loadMore = useCallback(async () => {
     setLoadingMore(true)

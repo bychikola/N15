@@ -17,6 +17,7 @@ export default async function LegalServicesPage({ params }: PageProps) {
     { id: 'soprovozhdenie-sdelki', title: legal.sdelka.title, text: legal.sdelka.text },
     { id: 'pereplanirovki', title: legal.pereplanirovki.title, text: legal.pereplanirovki.text },
     { id: 'privatizaciya', title: legal.privatizaciya.title, text: legal.privatizaciya.text },
+    { id: 'darenie', title: legal.darenie.title, text: legal.darenie.text },
     { id: 'nasledstvo', title: legal.nasledstvo.title, text: legal.nasledstvo.text },
     { id: 'proverka-riskov', title: legal.risks.title, text: legal.risks.text },
   ]

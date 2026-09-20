@@ -127,6 +127,11 @@ export interface FiltersState {
   closedYard: string
   /** Улица — свободный ввод: совпадение в address.street */
   street: string
+  /** Кадастровый номер участка — свободный ввод, только у категории «участок».
+   *  Поле закрыто для посетителей (см. buildWhere): по номеру каталог
+   *  спрашивает отдельный серверный маршрут и фильтрует по id найденных
+   *  объектов, а не по самому полю */
+  cadastral: string
   /** Жилая площадь и площадь кухни, м² — диапазоны «от/до» (поля livingArea
    *  и kitchenArea). В базе всегда м², единица не переключается */
   livingAreaMin: string
@@ -176,7 +181,7 @@ export interface FiltersState {
 
 export const emptyFilters: FiltersState = {
   type: '', category: '', rooms: '', floorMin: '', floorMax: '', floorsMin: '', floorsMax: '', heating: '', building: '', gas: '',
-  individualHeating: '', elevator: '', closedYard: '', street: '', livingAreaMin: '', livingAreaMax: '', kitchenAreaMin: '', kitchenAreaMax: '',
+  individualHeating: '', elevator: '', closedYard: '', street: '', cadastral: '', livingAreaMin: '', livingAreaMax: '', kitchenAreaMin: '', kitchenAreaMax: '',
   priceMin: '', priceMax: '', areaMin: '', areaMax: '', areaUnit: '', district: '', cityDistrict: '', locality: '', snt: '', city: '', cityRegion: '',
   houseType: '', commercialType: '', agent: '', purchase: '',
 }
@@ -191,7 +196,7 @@ export const emptyFilters: FiltersState = {
  * он раскрыт — работающих фильтров в свёрнутом виде быть не должно.
  */
 export const MORE_FILTER_KEYS = [
-  'street', 'livingAreaMin', 'livingAreaMax', 'kitchenAreaMin', 'kitchenAreaMax',
+  'street', 'cadastral', 'livingAreaMin', 'livingAreaMax', 'kitchenAreaMin', 'kitchenAreaMax',
   'floorMin', 'floorMax', 'floorsMin', 'floorsMax', 'heating', 'building', 'gas',
   'individualHeating', 'elevator', 'closedYard',
 ] as const satisfies readonly (keyof FiltersState)[]
@@ -259,6 +264,15 @@ export function buildWhere(
   q: string,
   regions: readonly CityFilterRegion[],
   knownCities: readonly string[],
+  /**
+   * id объектов, найденных по кадастровому номеру (см. фильтр «Кадастровый
+   * номер»). Поле cadastralNumber закрыто для посетителей: публичный API его
+   * не только не отдаёт, но и не принимает в where, поэтому номер ищет
+   * серверный маршрут (/api/objects/by-cadastral), а каталог фильтрует выдачу
+   * по id найденного. null — номер ещё ищется; каталог в это время не грузит
+   * выдачу, поэтому null до where не доходит (см. CatalogContent)
+   */
+  cadastralIds?: number[] | null,
 ): Record<string, unknown> {
   const conds: Record<string, unknown>[] = []
   // На сайте показываем только опубликованные (черновики и архив скрыты)
@@ -289,6 +303,12 @@ export function buildWhere(
   // Улица — свободный ввод: адреса агенты пишут руками, поэтому ищем
   // совпадение, а не точное равенство («Ленина» найдёт «ул. Ленина»)
   if (f.street.trim()) conds.push({ 'address.street': { contains: f.street.trim() } })
+  // Кадастровый номер участка: условие ставим по id найденных объектов, а не
+  // по самому полю (см. cadastralIds выше). Пустой список — «ничего не
+  // найдено»: без него фильтр по несуществующему номеру молча показывал бы
+  // весь каталог. Несуществующий id вместо пустого in — у пустого списка
+  // в SQL получается некорректное «id in ()»
+  if (f.cadastral.trim()) conds.push({ id: { in: cadastralIds?.length ? cadastralIds : [-1] } })
   if (f.snt && isKnown(f.snt, SNT_AREAS)) conds.push({ 'address.snt': { equals: f.snt } })
   // Города: у участков список свой (только Владикавказ), у остальных — CRM
   if (f.city && isKnown(f.city, cityValuesFor(f.category, knownCities))) {
@@ -991,6 +1011,12 @@ export default function CatalogFilters({ state, onChange, t, cityRegions, knownC
     if (patch.commercialType === undefined && patch.category !== undefined && patch.category !== 'commercial') {
       out.commercialType = ''
     }
+    // Кадастровый номер — фильтр только участков: у других категорий поля
+    // нет, и условие по нему дало бы пустую выдачу. Сменившаяся категория
+    // снимает номер вместе с полем
+    if (patch.category !== undefined && patch.category !== 'land') {
+      out.cadastral = ''
+    }
     onChange(out)
   }
 
@@ -1164,6 +1190,18 @@ export default function CatalogFilters({ state, onChange, t, cityRegions, knownC
             <input type="text" value={state.street} placeholder={t.catalog.streetPlaceholder}
               onChange={(e) => apply({ street: e.target.value })} className={rangeInputCls} />
           </div>
+          {/* Кадастровый номер — только у участков: у земли номер участка
+              хранится в cadastralNumber (у дома в этом поле номер строения,
+              номер участка — отдельным полем, см. коллекцию objects), и
+              фильтр ищет именно участки. Поиск точный: номер сверяется с
+              найденным сервером списком id (см. buildWhere) */}
+          {isLand && (
+            <div className="w-56">
+              <div className={labelCls(true) + ' mb-1'}>{t.catalog.cadastralLabel}</div>
+              <input type="text" value={state.cadastral} placeholder={t.catalog.cadastralPlaceholder}
+                inputMode="numeric" onChange={(e) => apply({ cadastral: e.target.value })} className={rangeInputCls} />
+            </div>
+          )}
           <div className="w-44">
             <div className={labelCls() + ' mb-1'}>{t.catalog.livingAreaLabel}</div>
             <RangeInputs from={state.livingAreaMin} to={state.livingAreaMax}

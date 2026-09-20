@@ -88,6 +88,33 @@ export const Applications: CollectionConfig = {
             }
           }
         }
+
+        // Заявка с карточки объекта адресуется ответственному агенту этого
+        // объекта — тому же, кому АТС направляет звонок по объекту (см.
+        // src/lib/call-routing.ts). Ответственного назначает администратор,
+        // и клиент, оставивший заявку на просмотр, должен попасть к нему,
+        // а не в общую очередь. Заявку без объекта (подбор, оценка) не
+        // трогаем: её разбирает дежурный по очереди «Неразобранные» — при
+        // переводе в работу агент становится ответственным сам (см. LeadsList)
+        if (data.object && !data.agent) {
+          try {
+            const objRes = await req.payload.find({
+              collection: 'objects',
+              where: { id: { equals: data.object } },
+              limit: 1,
+              depth: 0,
+              overrideAccess: true,
+            })
+            // Поле читаем с overrideAccess: у объекта без ответственного
+            // агента оно пустое, и заявка остаётся нераспределённой
+            const objAgent = (objRes.docs[0] as { agent?: number | { id: number } } | undefined)?.agent
+            const agentId = typeof objAgent === 'object' && objAgent ? objAgent.id : objAgent
+            if (typeof agentId === 'number') data.agent = agentId
+          } catch (e) {
+            // Поиск агента не должен ломать создание заявки
+            console.error('attach object agent failed:', e)
+          }
+        }
         return data
       },
     ],
