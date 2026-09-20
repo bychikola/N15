@@ -26,7 +26,9 @@ export function loadYmaps(apiKey: string): Promise<Ymaps> {
       }, LOAD_TIMEOUT_MS)
 
       const script = document.createElement('script')
-      script.src = `https://api-maps.yandex.ru/2.1/?apikey=${encodeURIComponent(apiKey)}&lang=ru_RU&load=Map,Placemark,geocode,control.ZoomControl`
+      // Clusterer — модуль кластеризации: на карте каталога меток десятки,
+      // без него они сливаются в одно пятно (см. CatalogMap)
+      script.src = `https://api-maps.yandex.ru/2.1/?apikey=${encodeURIComponent(apiKey)}&lang=ru_RU&load=Map,Placemark,Clusterer,geocode,control.ZoomControl`
       script.async = true
       script.onload = () => {
         if (win.ymaps?.ready) {

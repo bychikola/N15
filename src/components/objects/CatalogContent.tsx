@@ -542,7 +542,10 @@ export default function CatalogContent({ cityRegions, knownCities, agentName }: 
       ) : objects.length > 0 ? (
         <>
           {view === 'map' ? (
-            <CatalogMap objects={objects} lang={lang} />
+            // Карте передаём условия выдачи, а не загруженную страницу
+            // карточек: режим «На карте» показывает все объекты выдачи
+            // (точки отдаёт /api/objects/map, см. CatalogMap)
+            <CatalogMap where={where} lang={lang} />
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-6 gap-y-8">
               {objects.map((obj) => <ObjectCard key={obj.id} obj={obj} lang={lang} t={t} />)}

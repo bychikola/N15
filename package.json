@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "check:city-filter": "node scripts/check-city-filter.mjs",
-    "check:call-routing": "node scripts/check-call-routing.mjs"
+    "check:call-routing": "node scripts/check-call-routing.mjs",
+    "check:catalog-map": "node scripts/check-catalog-map.mjs"
   },
   "dependencies": {
     "@payloadcms/db-postgres": "3.86.0",

@@ -6,7 +6,7 @@ import { loadYmaps, type Ymaps } from '@/lib/ymaps'
 import { geocodeAddress } from '@/lib/geocode'
 
 interface ObjectMapProps {
-  /** Адрес для геокодирования и фолбэк-ссылки (город, улица, дом). */
+  /** Адрес для геокодирования (город, улица, дом). */
   address: string
   /** Ручные координаты из админки — приоритет над геокодированием. */
   lat?: number
@@ -82,23 +82,14 @@ export const ObjectMap: FC<ObjectMapProps> = ({ address, lat, lng }) => {
     }
   }, [apiKey, address, lat, lng, hasManualCoords, canGeocode, showFallback])
 
-  const mapsUrl = `https://yandex.ru/maps/?text=${encodeURIComponent(address)}`
-
   // Фолбэк: нет ключа / ошибка скрипта / геокод не нашёл / нет адреса.
+  // На сторонние карты не уводим: показываем адрес — его довольно, чтобы
+  // найти объект, а объект со страницы виден и списком характеристик
   if (showFallback || status === 'error') {
     return (
       <div className="w-full h-[320px] md:h-[380px] flex flex-col items-center justify-center gap-3 bg-[var(--n15-charcoal)] border border-[var(--n15-gold)]/20 px-6 text-center">
+        <p className="text-xs tracking-wider uppercase text-[var(--n15-muted)]">{t.map.title}</p>
         {address && <p className="text-sm text-[var(--n15-silver)]">{address}</p>}
-        {address && (
-          <a
-            href={mapsUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 text-xs tracking-wider uppercase text-[var(--n15-gold)] border border-[var(--n15-gold)]/40 px-4 py-2 transition-colors hover:bg-[var(--n15-gold)]/10"
-          >
-            {t.map.openInYandex}
-          </a>
-        )}
       </div>
     )
   }
