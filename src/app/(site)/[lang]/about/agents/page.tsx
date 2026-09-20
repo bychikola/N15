@@ -63,7 +63,8 @@ export default async function AgentsPage({ params }: PageProps) {
                   {agent.experience != null && <span>{agent.experience} {t.agents.years}</span>}
                 </div>
                 {/* Контакты агента: только «Позвонить» и «WhatsApp» — номера
-                    телефонов клиентам не показываются (см. AgentContactButtons) */}
+                    телефонов клиентам не показываются, звонок идёт через АТС
+                    (см. AgentContactButtons и src/lib/call-routing.ts) */}
                 <AgentContactButtons
                   agentId={agent.id}
                   callLabel={t.agents.call}

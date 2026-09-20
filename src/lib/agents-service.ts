@@ -54,6 +54,9 @@ export interface AgentCard {
   email: string
   telegram: string
   whatsapp: string
+  /** Номер агента в АТС: прямой или добавочный — по нему АТС соединяет
+   *  клиента с агентом при звонке из карточки объекта (src/lib/call-routing.ts) */
+  atsNumber: string
   photo?: string
   /** id фото в media — по нему карточка правит агента, не трогая снимок */
   photoId?: number
@@ -148,6 +151,8 @@ function cardOf(doc: Record<string, unknown>, counts: Record<AgentObjectBucket, 
     email: str(doc.email),
     telegram: str(doc.telegram),
     whatsapp: str(doc.whatsapp),
+    // Номер в АТС — как и телефон, только для команды (см. Agents.ts)
+    atsNumber: str(doc.atsNumber),
     photo: photo?.url,
     photoId: typeof photo?.id === 'number' ? photo.id : undefined,
     initials: agentInitials(name),

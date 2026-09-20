@@ -97,7 +97,9 @@ export default async function ObjectPage({ params }: PageProps) {
     isPremium?: boolean; isExclusive?: boolean
     // Поля phone/whatsapp/telegram намеренно не используются: номера агентов
     // скрыты от посетителей полевой access-проверкой коллекции agents,
-    // контакты работают кнопками «Позвонить»/«WhatsApp» (AgentContactButtons)
+    // контакты работают кнопками «Позвонить»/«WhatsApp» (AgentContactButtons),
+    // а маршрут звонка строит сервер по ответственному агенту объекта
+    // (src/lib/call-routing.ts)
     agent?: {
       id: number
       name?: string
@@ -403,15 +405,16 @@ export default async function ObjectPage({ params }: PageProps) {
                 <ObjectActions objectId={obj.id} shareUrl={`/${lang}/catalog/${obj.id}`} />
 
                 {/* ПОЗВОНИТЬ — контакты менеджера кнопками, номер на странице
-                    не публикуется (см. AgentContactButtons) */}
-                {obj.agent?.id && (
-                  <AgentContactButtons
-                    agentId={obj.agent.id}
-                    callLabel={t.object.phone}
-                    primary
-                    className="grid grid-cols-2 gap-2 mb-4"
-                  />
-                )}
+                    не публикуется (см. AgentContactButtons). Маршрут строит
+                    сервер по ответственному агенту объекта; у карточки без
+                    агента звонок уходит на общий (резервный) номер агентства —
+                    поэтому кнопка есть всегда, а WhatsApp без агента исчезает */}
+                <AgentContactButtons
+                  objectId={obj.id}
+                  callLabel={t.object.phone}
+                  primary
+                  className="grid grid-cols-2 gap-2 mb-4"
+                />
 
                 {/* ВАШ МЕНЕДЖЕР */}
                 {obj.agent && (
@@ -433,9 +436,11 @@ export default async function ObjectPage({ params }: PageProps) {
                           <div className="text-xs text-[var(--n15-muted)]">{obj.agent.position || t.object.leadingExpert}</div>
                         </div>
                       </div>
-                      {/* Контакты агента: только «Позвонить» и «WhatsApp» */}
+                      {/* Контакты агента: только «Позвонить» и «WhatsApp».
+                          Объект передаём целиком — маршрут звонка сервер
+                          строит по его ответственному агенту */}
                       <AgentContactButtons
-                        agentId={obj.agent.id}
+                        objectId={obj.id}
                         callLabel={t.object.phone}
                         className="flex flex-col gap-2"
                       />

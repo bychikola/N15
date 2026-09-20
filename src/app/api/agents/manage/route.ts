@@ -7,9 +7,9 @@ import { canAccessCrm, getCrmUser } from '@/app/crm/auth'
  * Создание и правка профиля агента из CRM (раздел «Агенты»).
  *
  *   POST  /api/agents/manage  { name, position?, phone?, email?, telegram?,
- *                               whatsapp?, photoId?, isActive? }
+ *                               whatsapp?, atsNumber?, photoId?, isActive? }
  *   PATCH /api/agents/manage  { id, name, position?, phone?, email?, telegram?,
- *                               whatsapp?, photoId?, isActive? }
+ *                               whatsapp?, atsNumber?, photoId?, isActive? }
  *
  * Доступ: администратор или сотрудник с галочкой «Может добавлять агентов»
  * (поле canManageAgents, ставится в админке Payload — как доступ к ИИ-агенту).
@@ -36,6 +36,8 @@ type AgentBody = {
   email?: string
   telegram?: string
   whatsapp?: string
+  /** Номер в АТС: прямой или добавочный — по нему идёт звонок из карточки */
+  atsNumber?: string
   photoId?: number | string | null
   isActive?: boolean
 }
@@ -126,6 +128,7 @@ export async function POST(req: NextRequest) {
         email: text(body?.email, 200),
         telegram: text(body?.telegram),
         whatsapp: text(body?.whatsapp, 200),
+        atsNumber: text(body?.atsNumber, 40),
         ...(photo ? { photo } : {}),
         isActive: body?.isActive !== false,
       },
@@ -197,6 +200,7 @@ export async function PATCH(req: NextRequest) {
         email: patchText(body?.email, 200),
         telegram: patchText(body?.telegram),
         whatsapp: patchText(body?.whatsapp, 200),
+        atsNumber: patchText(body?.atsNumber, 40),
         // Активность меняем только когда её прислали: иначе частичный запрос
         // возвращал бы в строй снятого с публикации агента
         ...(body && 'isActive' in body ? { isActive: body.isActive !== false } : {}),

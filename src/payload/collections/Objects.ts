@@ -1,4 +1,4 @@
-import type { CollectionBeforeChangeHook, CollectionConfig, Payload, TextFieldSingleValidation, Where } from 'payload'
+import type { CollectionBeforeChangeHook, CollectionConfig, Payload, RelationshipFieldSingleValidation, TextFieldSingleValidation, Where } from 'payload'
 import { DISTRICT_OPTIONS, CITY_DISTRICT_OPTIONS } from '@/lib/districts'
 // Садовые товарищества — тот же справочник, что в разделах СТ/СНТ/СНО
 // на главной, в каталоге и форме CRM (landing-data.ts)
@@ -96,6 +96,27 @@ const validateCadastralNumber: TextFieldSingleValidation = (value, { data, opera
  */
 const validatePlotCadastralNumber: TextFieldSingleValidation = (value) =>
   cadastralFormatError(value) ?? true
+
+/**
+ * Ответственный агент обязателен для нового объекта: по нему маршрутизируются
+ * звонки клиентов (см. src/lib/call-routing.ts) и строится доступ агента к
+ * своим объектам — карточка без ответственного повисает ни на кого, и звонок
+ * по ней уходит на общий (резервный) номер агентства.
+ *
+ * Требуем поле только при создании: у части старых карточек агент не
+ * проставлен (они заведены до этого правила), и обязательность на каждой
+ * правке запретила бы их редактировать — цену в такой карточке нельзя было бы
+ * поправить, пока не выбран новый ответственный. Такие объекты назначают в
+ * CRM вручную; их список печатает scripts/check-call-routing.mjs.
+ *
+ * Новому объекту агента проставляет хук objectsOwnershipHook, а он выполняется
+ * до проверки полей — поэтому у агента поле всегда заполнено.
+ */
+const validateResponsibleAgent: RelationshipFieldSingleValidation = (value, { operation }) => {
+  if (value) return true
+  if (operation !== 'create') return true
+  return 'Укажите ответственного агента — по нему маршрутизируются звонки по объекту'
+}
 
 /**
  * У каких категорий есть земельный участок — общее условие полей участка
@@ -1190,21 +1211,23 @@ export const Objects: CollectionConfig = {
       relationTo: 'media',
     },
     {
-      // Ответственный агент — тот, кто ведёт объект. Назначает его только
-      // администратор: агент не может ни отдать свой объект другому, ни
-      // забрать чужой (второе не пройдёт и по access.update). Свой объект
-      // агент получает автоматически при создании карточки — профиль агента
-      // подставляет хук (см. objectsOwnershipHook).
+      // Ответственный агент — тот, кто ведёт объект и кому АТС направляет
+      // звонки клиентов по этому объекту (см. src/lib/call-routing.ts).
+      // Назначает его только администратор: агент не может ни отдать свой
+      // объект другому, ни забрать чужой (второе не пройдёт и по
+      // access.update). Свой объект агент получает автоматически при создании
+      // карточки, у нового объекта поле обязательно — см. validateResponsibleAgent.
       name: 'agent',
       type: 'relationship',
-      label: 'Агент',
+      label: 'Ответственный агент',
       relationTo: 'agents',
+      validate: validateResponsibleAgent,
       access: {
         create: ({ req: { user } }) => user?.role === 'admin',
         update: ({ req: { user } }) => user?.role === 'admin',
       },
       admin: {
-        description: 'Ответственный агент объекта. Меняет только администратор; у нового объекта агента проставляется сам',
+        description: 'Ответственный агент объекта: к нему АТС направляет звонки клиентов по этому объекту. Меняет только администратор; у нового объекта агента проставляет сам. Без агента звонок уходит на общий номер агентства',
       },
     },
     {

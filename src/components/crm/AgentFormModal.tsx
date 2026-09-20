@@ -63,6 +63,7 @@ export const AgentFormModal: FC<Props> = ({ t, agent, onClose, onSaved }) => {
     email: agent?.email || '',
     telegram: agent?.telegram || '',
     whatsapp: agent?.whatsapp || '',
+    atsNumber: agent?.atsNumber || '',
   })
   const [active, setActive] = useState(agent ? agent.isActive : true)
 
@@ -137,6 +138,7 @@ export const AgentFormModal: FC<Props> = ({ t, agent, onClose, onSaved }) => {
         email: fields.email,
         telegram: fields.telegram,
         whatsapp: fields.whatsapp,
+        atsNumber: fields.atsNumber,
         isActive: active,
         ...photoPart,
       }
@@ -219,6 +221,15 @@ export const AgentFormModal: FC<Props> = ({ t, agent, onClose, onSaved }) => {
           <label style={labelStyle}>
             {t.crm.agAddWhatsapp}
             <input value={fields.whatsapp} onChange={(e) => setField('whatsapp', maskRuPhoneInput(e.target.value))} style={inputStyle} placeholder="+7 (___) ___-__-__ или https://wa.me/7…" />
+          </label>
+          {/* Номер в АТС: по нему АТС соединяет клиента с агентом, когда
+              звонок пришёл из карточки объекта. Маски телефона нет — здесь
+              бывает и короткий добавочный (101), маска превратила бы его
+              в городской номер. Личный номер сюда не вписывают: он остаётся
+              в поле «Телефон» и клиентам не набирается */}
+          <label style={labelStyle}>
+            {t.crm.agAddAts}
+            <input value={fields.atsNumber} onChange={(e) => setField('atsNumber', e.target.value)} style={inputStyle} placeholder="+7 (867) 2__-__-__ или 101" />
           </label>
         </div>
 
