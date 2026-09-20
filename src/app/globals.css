@@ -880,7 +880,9 @@ html[data-theme='dark'] .lp-featured .object-card { border: 0; }
    «Дизайн и ремонт под ключ». Размер блока — общий для главной (см.
    «Прямоугольные блоки главной»): та же ширина колонки, высота, отступы и
    кегль, что у карточек категорий и регионов. Перечень услуг раскрывается
-   нажатием на заголовок: <details>, поэтому без клиентского JS. */
+   нажатием на заголовок: <details>, поэтому без клиентского JS; открытой
+   может быть только одна карточка — у всех трёх <details> одно имя (name),
+   и браузер сам закрывает соседнюю. */
 .lp-services { width: min(90%, 1050px); margin: 86px auto; }
 /* Высота — по содержимому: закрытая карточка не ниже общего блока
    (min-height), раскрытая — ровно по высоте перечня. Фиксированной высоты
@@ -895,17 +897,28 @@ html[data-theme='dark'] .lp-featured .object-card { border: 0; }
 .lp-services-arrow { flex: none; }
 .lp-services-card[open] .lp-services-arrow { transform: rotate(45deg); }
 /* Перечень идёт под заголовком и задаёт высоту карточки: своей высоты,
-   обрезки (overflow) и внутренней прокрутки у него нет — на телефоне
-   прокрутка появляется только для очень длинного списка (см. медиазапрос
-   ниже) */
+   обрезки (overflow) и внутренней прокрутки у него нет — карточка растёт
+   под перечень и показывает все пункты целиком на любой ширине экрана */
 .lp-services-list {
   list-style: none; margin: 0; padding: 0 var(--lp-tile-pad-x) var(--lp-tile-pad-y);
-  display: grid; gap: 7px;
+  display: grid; gap: 6px;
 }
-.lp-services-row { display: flex; align-items: center; justify-content: space-between; gap: 11px; padding: 10px 11px; background: rgba(255, 255, 255, .66); border: 1px solid #e2dbcd; color: #24231f; font-size: 14px; line-height: 1.35; transition: background .25s, border-color .25s, color .25s; }
+/* Пункт перечня — компактный прямоугольник: кегль и отступы меньше, чем у
+   заголовков блоков, а собственной рамки у пункта нет — рамка одна, у самой
+   карточки, вторая внутри была лишней. От карточки пункт отделяет песочная
+   плашка; при наведении плашка светлеет до белого, название и стрелка
+   зеленеют — как у остальных ссылок лендинга */
+.lp-services-row { display: flex; align-items: center; justify-content: space-between; gap: 11px; padding: 8px 10px; background: #EFE8D9; color: #24231f; font-size: 13px; line-height: 1.35; transition: background .25s, color .25s; }
+.lp-services-row-head { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 11px; }
 .lp-services-row i { color: #a87c3f; font: normal 300 12px Arial; transition: transform .25s, color .25s; }
-.lp-services-row:hover, .lp-services-row:focus-visible { background: #fff; border-color: #b9a98c; color: var(--n15-green); }
+.lp-services-row:hover, .lp-services-row:focus-visible { background: #fff; color: var(--n15-green); }
 .lp-services-row:hover i, .lp-services-row:focus-visible i { color: var(--n15-green); transform: translateX(3px); }
+/* Пункт с пояснением (карточка «Ипотека»): название со стрелкой строкой,
+   под ним — пояснение. Читается целиком: обрезки текста и внутренней
+   прокрутки у перечня нет, карточка растёт по содержимому */
+.lp-services-row-note { display: block; }
+.lp-services-row-text { display: block; margin-top: 3px; color: #6f6758; font-size: 11.5px; line-height: 1.45; }
+.lp-services-row-note:hover .lp-services-row-text, .lp-services-row-note:focus-visible .lp-services-row-text { color: #55635a; }
 /* Призыв к консультации — последняя строка юр-карточки, золотом */
 .lp-services-row-cta { color: #a87c3f; text-transform: uppercase; letter-spacing: .14em; font-size: 10px; }
 
@@ -1020,19 +1033,13 @@ html[data-theme='dark'] .lp-featured .object-card { border: 0; }
   .lp-services-title { font-size: clamp(15px, 3.6vw, 21px); }
   .lp-services-head { gap: 10px; }
   .lp-services { width: auto; margin: 59px 18px; }
-  /* Перечень не уезжает за нижний край экрана: очень длинный список
-     прокручивается внутри карточки касанием, а прокрутка страницы при этом
-     не «проваливается» внутрь (overscroll-behavior). Полоса прокрутки —
-     светлая в любой теме: лендинг всегда кремовый, а общая полоса сайта в
-     тёмной теме тёмная */
-  .lp-services-list {
-    gap: 5px; max-height: 60dvh; overflow-y: auto; overscroll-behavior: contain;
-    scrollbar-width: thin; scrollbar-color: #b9a98c #EFE8D9;
-  }
-  .lp-services-list::-webkit-scrollbar { width: 5px; }
-  .lp-services-list::-webkit-scrollbar-track { background: #EFE8D9; }
-  .lp-services-list::-webkit-scrollbar-thumb { background: #b9a98c; border-radius: 3px; }
-  .lp-services-row { padding: 9px 10px; font-size: 13px; }
+  /* Перечень на телефоне раскрывается целиком: ограничения высоты и
+     внутренней прокрутки нет — карточка растёт по содержимому, все пункты
+     видны полностью (прокручивается сама страница). Отступы и кегль пунктов
+     ещё компактнее, чем на компьютере */
+  .lp-services-list { gap: 5px; }
+  .lp-services-row { padding: 7px 9px; font-size: 12.5px; }
+  .lp-services-row-text { font-size: 11px; line-height: 1.4; }
   .lp-cards { width: auto; margin: 0 18px; }
   /* «Показать все →» на телефоне — под заголовком, слева (в одну строку
      с заголовком не помещается без сжатия) */
@@ -1073,6 +1080,10 @@ html[data-theme='dark'] .lp-featured .object-card { border: 0; }
      («Коммерческая», «недвижимость») не помещаются в половину экрана */
   .lp-category-card { grid-template-columns: 1fr 16px; }
   .lp-category-num { display: none; }
+  /* Карточки услуг — в один столбик на всю ширину: в половине экрана
+     пояснения пунктов («Ипотека») рвались бы на 5–6 узких строк, а так
+     пояснение укладывается в две-три строки и читается целиком */
+  .lp-services-grid { grid-template-columns: 1fr; }
 }
 
 /* Совсем узкий телефон (≤380px): подписям над блоками (10px) с трекингом

@@ -7,17 +7,20 @@ import type { Dict } from '@/i18n/dictionaries'
 // главной»). В закрытом виде видна только строка заголовка с «плюсом»; нажатие
 // на заголовок раскрывает перечень услуг — карточка растёт по содержимому,
 // показывает все строки целиком и не обрезается, а соседние карточки остаются
-// компактными и не перекрываются. «Плюс» в открытой карточке становится «×»,
-// повторное нажатие закрывает перечень; открытие одной карточки закрывает
-// остальные — у всех <details> одно имя (name), это встроенное поведение
-// браузера, клиентский JS не нужен (как у меню «Межрегиональная недвижимость»
-// в шапке).
+// компактными и не перекрываются. Пункты перечня — компактные прямоугольники
+// без собственных рамок, в едином стиле у всех трёх карточек; у пунктов
+// «Ипотеки» под названием есть пояснение, у остальных пунктов — одна строка.
+// «Плюс» в открытой карточке становится «×», повторное нажатие закрывает
+// перечень; открытие одной карточки закрывает остальные — у всех <details>
+// одно имя (name), это встроенное поведение браузера, клиентский JS не нужен
+// (как у меню «Межрегиональная недвижимость» в шапке).
 //
 // Строки перечня — ссылки на описания услуг: у дизайна это якоря страницы
 // /services/design, у юридического блока — /services/legal, у ипотеки —
 // /services/mortgage (id якорей те же, что у меню «Услуги» в шапке,
-// см. Header.tsx)
-type ServiceItem = { label: string; href: string }
+// см. Header.tsx). У пунктов карточки «Ипотека» под названием есть ещё
+// пояснение-абзац — поле note
+type ServiceItem = { label: string; href: string; note?: string }
 
 // Шесть строк перечня карточки «Дизайн и ремонт под ключ»
 function designItems(t: Dict): ServiceItem[] {
@@ -48,13 +51,16 @@ function legalItems(t: Dict): ServiceItem[] {
   ]
 }
 
-// Три услуги направления «Ипотека» — те же, что на странице /services/mortgage
-// (названия берём из словаря услуг, чтобы не дублировать строки)
+// Три пункта карточки «Ипотека» — путь клиента по ипотеке: консультация
+// брокера, документы к сделке, подписание договора. У каждого пункта, кроме
+// названия, есть пояснение (строки словаря landing.mortgageCard*). Первый
+// пункт ведёт на страницу услуги «Ипотечный брокер», остальные — на описания
+// этих же этапов на странице /services/mortgage
 function mortgageItems(t: Dict): ServiceItem[] {
   return [
-    { label: t.services.mortgage.raschet.title, href: '/services/mortgage#raschet' },
-    { label: t.services.mortgage.dokumenty.title, href: '/services/mortgage#dokumenty' },
-    { label: t.services.mortgage.zayavka.title, href: '/services/mortgage#zayavka' },
+    { label: t.landing.mortgageCard1, note: t.landing.mortgageCard1Text, href: '/services/broker' },
+    { label: t.landing.mortgageCard2, note: t.landing.mortgageCard2Text, href: '/services/mortgage#dokumenty' },
+    { label: t.landing.mortgageCard3, note: t.landing.mortgageCard3Text, href: '/services/mortgage#zayavka' },
   ]
 }
 
@@ -85,17 +91,27 @@ function ServicesCard({
       <ul className="lp-services-list">
         {items.map((item) => (
           <li key={item.href}>
-            <a className="lp-services-row" href={`/${lang}${item.href}`}>
-              <span>{item.label}</span>
-              <i aria-hidden="true">→</i>
+            {/* Пункт с пояснением раскладывается в два ряда: название со
+                стрелкой и под ним пояснение (см. .lp-services-row-note) */}
+            <a
+              className={item.note ? 'lp-services-row lp-services-row-note' : 'lp-services-row'}
+              href={`/${lang}${item.href}`}
+            >
+              <span className="lp-services-row-head">
+                <span>{item.label}</span>
+                <i aria-hidden="true">→</i>
+              </span>
+              {item.note ? <span className="lp-services-row-text">{item.note}</span> : null}
             </a>
           </li>
         ))}
         {cta ? (
           <li>
             <a className="lp-services-row lp-services-row-cta" href={cta.href}>
-              <span>{cta.label}</span>
-              <i aria-hidden="true">→</i>
+              <span className="lp-services-row-head">
+                <span>{cta.label}</span>
+                <i aria-hidden="true">→</i>
+              </span>
             </a>
           </li>
         ) : null}
