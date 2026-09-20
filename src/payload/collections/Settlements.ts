@@ -154,7 +154,11 @@ export const Settlements: CollectionConfig = {
           : rel
         const base = translitSlug(name) || `place-${crypto.randomUUID().slice(0, 8)}`
         let slug = base
-        // Уникальность — внутри региона: -2, -3… для одноимённых сёл
+        // Уникальность — внутри региона: -2, -3… для одноимённых сёл.
+        // req передаём, чтобы счёт видел записи текущей транзакции: сид
+        // справочника (см. src/lib/interregional-service.ts) пишет регион с
+        // населёнными пунктами одной транзакцией, и одноимённые сёла внутри
+        // неё получили бы одинаковый путь
         for (let n = 2; n < 50; n += 1) {
           const { totalDocs } = await req.payload.count({
             collection: 'settlements',
@@ -165,6 +169,7 @@ export const Settlements: CollectionConfig = {
               ],
             },
             overrideAccess: true,
+            req,
           })
           if (!totalDocs) break
           slug = `${base}-${n}`

@@ -136,7 +136,10 @@ function SettlementRow({
         className="flex items-baseline justify-between gap-4 py-3 text-sm text-[var(--n15-silver)] hover:text-[var(--n15-gold)] transition-colors"
         href={settlementHref(lang, region.slug, place.slug)}
       >
-        <span>{place.name}</span>
+        {/* min-w-0 и перенос: в справочнике Крыма есть длинные названия
+            («1-е отделение Золотой Балки») — на узком экране они должны
+            переноситься, а не выдавливать счётчик из строки */}
+        <span className="min-w-0 break-words">{place.name}</span>
         {place.count > 0 ? (
           <em className="not-italic text-xs text-[var(--n15-gold)]/80 whitespace-nowrap">
             {place.count} {objectsWord(place.count, t.interregional.objectWords)}

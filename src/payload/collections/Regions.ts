@@ -76,6 +76,7 @@ export const Regions: CollectionConfig = {
             collection: 'regions',
             where: { slug: { equals: slug } },
             overrideAccess: true,
+            req,
           })
           if (!totalDocs) break
           slug = `${base}-${n}`

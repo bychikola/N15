@@ -8,7 +8,7 @@ import { SectionWrapper } from '@/components/ui/SectionWrapper'
 import { Button } from '@/components/ui/Button'
 import ObjectCard from '@/components/objects/ObjectCard'
 import { getDictionary } from '@/i18n/dictionaries'
-import { settlementCatalogHref } from '@/lib/interregional'
+import { cityKey, settlementCatalogHref } from '@/lib/interregional'
 import { loadSettlementPage } from '@/lib/interregional-service'
 import { objectToListItem } from '@/lib/object-list-item'
 
@@ -24,8 +24,8 @@ export const dynamic = 'force-dynamic'
  * Страница населённого пункта межрегиональной недвижимости: объекты по
  * фильтру, который задан для населённого пункта в CRM (город в адресах,
  * категория — по умолчанию квартиры, тип сделки — по умолчанию продажа).
- * Пока объектов нет, страница не пустует: пометка «Объекты в этом населённом
- * пункте скоро появятся» и кнопка «Оставить заявку».
+ * Пока объектов нет, страница не пустует: обещание подобрать объект под запрос
+ * и кнопка «Оставить заявку».
  */
 export default async function SettlementPage({ params }: PageProps) {
   const { lang, region: regionSlug, city: citySlug } = await params
@@ -43,6 +43,15 @@ export default async function SettlementPage({ params }: PageProps) {
     ? ''
     : t.typeLabels[settlement.dealType as keyof typeof t.typeLabels]
   const filterLabel = [categoryLabel, dealLabel].filter(Boolean).join(', ')
+  // Район показываем, когда он не повторяет название региона или самого
+  // населённого пункта: в справочнике Крыма 146 одноимённых сёл (четыре
+  // Ивановки, три Виноградных), и без района на странице не понять, какое из
+  // них открыто
+  const placeArea = settlement.group
+    && cityKey(settlement.group) !== cityKey(settlement.name)
+    && cityKey(settlement.group) !== cityKey(region.title)
+    ? settlement.group
+    : ''
 
   return (
     <>
@@ -60,8 +69,7 @@ export default async function SettlementPage({ params }: PageProps) {
             {settlement.name}
           </h1>
           <p className="text-[var(--n15-muted)] max-w-2xl">
-            {region.title}
-            {filterLabel && ` · ${filterLabel}`}
+            {[region.title, placeArea, filterLabel].filter(Boolean).join(' · ')}
           </p>
         </SectionWrapper>
 

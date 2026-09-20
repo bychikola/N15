@@ -118,46 +118,74 @@ export function settlementFilter(s: Pick<InterregionalSettlement, 'city' | 'cate
 
 /**
  * Заполнение справочника из кода. Вызывается при старте (onInit в
- * payload.config): если в коллекции regions уже есть записи, справочник
- * считается заполненным и трогать его нельзя — данные CRM важнее сида.
- * Повторный запуск на пустой или частично заполненной базе безопасен.
+ * payload.config) и заводит только те регионы, которых в коллекции ещё нет:
+ * заведённый регион код не трогает — справочник ведётся в CRM, и удалённый
+ * сотрудником населённый пункт не должен возвращаться при каждом старте.
+ *
+ * Регион заводится целиком или не заводится вовсе: и сам регион, и его
+ * населённые пункты пишутся одной транзакцией. Иначе обрыв на середине списка
+ * (страница Крыма — это больше тысячи населённых пунктов) оставил бы в базе
+ * регион с половиной справочника, а его записи хватило бы, чтобы сид к нему
+ * больше не вернулся. Если транзакций у адаптера нет — пишем как есть.
  */
 export async function seedInterregional(payload: Payload): Promise<number> {
-  const { totalDocs } = await payload.count({ collection: 'regions', overrideAccess: true })
-  if (totalDocs > 0) return 0
+  // Регион ищем по пути и по названию: путь не меняется при правке названия в
+  // CRM, название — на случай, если путь собирался иначе. Так уже заведённый
+  // регион не задваивается при старте
+  const { docs } = await payload.find({
+    collection: 'regions',
+    pagination: false,
+    depth: 0,
+    overrideAccess: true,
+  })
+  const existing = docs as unknown as { slug?: string; title?: string }[]
+  const knownSlugs = new Set(existing.map((doc) => str(doc.slug)))
+  const knownTitles = new Set(existing.map((doc) => cityKey(str(doc.title))))
 
   let created = 0
   for (const [index, region] of SEED_REGIONS.entries()) {
-    const doc = await payload.create({
-      collection: 'regions',
-      data: { title: region.title, slug: translitSlug(region.title), order: index + 1 },
-      overrideAccess: true,
-    })
-    created += 1
-    let order = 0
-    for (const group of region.groups) {
-      const places = [
-        ...group.cities.map((name) => ({ name, alwaysVisible: true })),
-        ...(group.extra ?? []).map((name) => ({ name, alwaysVisible: false })),
-      ]
-      for (const place of places) {
-        await payload.create({
-          collection: 'settlements',
-          data: {
-            name: place.name,
-            region: doc.id,
-            group: group.label ?? null,
-            city: place.name,
-            category: SETTLEMENT_DEFAULT_CATEGORY,
-            dealType: SETTLEMENT_DEFAULT_DEAL_TYPE,
-            alwaysVisible: place.alwaysVisible,
-            order,
-          },
-          overrideAccess: true,
-        })
-        order += 1
-        created += 1
+    if (knownSlugs.has(translitSlug(region.title)) || knownTitles.has(cityKey(region.title))) continue
+
+    const transactionID = await payload.db.beginTransaction()
+    const req = transactionID ? { transactionID } : undefined
+    try {
+      const doc = await payload.create({
+        collection: 'regions',
+        data: { title: region.title, slug: translitSlug(region.title), order: index + 1 },
+        overrideAccess: true,
+        req,
+      })
+      created += 1
+      let order = 0
+      for (const group of region.groups) {
+        const places = [
+          ...group.cities.map((name) => ({ name, alwaysVisible: true })),
+          ...(group.extra ?? []).map((name) => ({ name, alwaysVisible: false })),
+        ]
+        for (const place of places) {
+          await payload.create({
+            collection: 'settlements',
+            data: {
+              name: place.name,
+              region: doc.id,
+              group: group.label ?? null,
+              city: place.name,
+              category: SETTLEMENT_DEFAULT_CATEGORY,
+              dealType: SETTLEMENT_DEFAULT_DEAL_TYPE,
+              alwaysVisible: place.alwaysVisible,
+              order,
+            },
+            overrideAccess: true,
+            req,
+          })
+          order += 1
+          created += 1
+        }
       }
+      if (transactionID) await payload.db.commitTransaction(transactionID)
+    } catch (error) {
+      if (transactionID) await payload.db.rollbackTransaction(transactionID)
+      throw error
     }
   }
   return created
@@ -192,7 +220,9 @@ async function directoryRows(payload: Payload): Promise<{
     payload.find({
       collection: 'settlements',
       sort: 'order',
-      limit: 1000,
+      // Весь справочник целиком: у одного Крыма больше тысячи населённых
+      // пунктов, и предел выборки молча срезал бы хвост списка
+      pagination: false,
       depth: 0,
       overrideAccess: true,
     }),

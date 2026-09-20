@@ -63,6 +63,8 @@ const FILTER_ROWS = [
   { label: 'Ставропольский край', crmRegion: 'Ставропольский край' },
   { label: 'Республика Адыгея', crmRegion: 'Республика Адыгея' },
   { label: 'Санкт-Петербург и Ленинградская область', crmRegion: 'Санкт-Петербург и Ленинградская область' },
+  { label: 'Республика Крым', crmRegion: 'Республика Крым' },
+  { label: 'Севастополь', crmRegion: 'Севастополь' },
 ]
 
 /** Склонение счётчика: 1 объект, 2 объекта, 5 объектов */
@@ -87,7 +89,9 @@ async function api(path) {
 async function loadData() {
   const [regions, settlements, objects] = await Promise.all([
     api('/api/regions?limit=200&depth=0&sort=order'),
-    api('/api/settlements?limit=1000&depth=0&sort=order'),
+    // Справочник с Крымом — больше тысячи населённых пунктов: предел выборки
+    // не должен срезать хвост списка
+    api('/api/settlements?limit=5000&depth=0&sort=order'),
     api(`/api/objects?limit=1000&depth=0&where=${encodeURIComponent(JSON.stringify({ status: { equals: 'published' } }))}`),
   ])
   return {
