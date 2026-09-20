@@ -653,25 +653,33 @@ html[data-theme='dark'] span.theme-icon-moon { display: block; }
 .lp-objects-heading h2 { font-size: clamp(30px, 3.7vw, 51px); }
 /* ── Прямоугольные блоки главной — один размер ───────────────────────
    Карточки категорий («Подберите недвижимость»), регионов
-   («Межрегиональная недвижимость») и направлений услуг («Дизайн и ремонт
-   под ключ», «Юридические услуги») — блоки одного размера: одна ширина
-   (колонка сетки), одна высота, одни отступы (--lp-tile-* у .lp-section).
-   Слева — номер или название, справа —
-   стрелка перехода (у карточек-гармошек услуг — «плюс» раскрытия).
-   Сетка ровная, в 2 колонки: блок занимает свою колонку и на всю ширину
-   не растягивается; ряд заданной высоты (grid-auto-rows), поэтому блоки
-   одной высоты, а перечень внутри карточки услуг раскрывается в её же
-   габаритах и соседей не двигает. */
-.lp-categories, .lp-services-grid {
+   («Межрегиональная недвижимость») и направлений услуг («Юридические
+   услуги», «Ипотека», «Дизайн и ремонт под ключ») — блоки одного размера:
+   одна ширина (колонка сетки), одна высота, одни отступы (--lp-tile-* у
+   .lp-section). Слева — номер или название, справа — стрелка перехода
+   (у карточек-гармошек услуг — «плюс» раскрытия).
+   Категории и регионы — ровная сетка в 2 колонки: блок занимает свою
+   колонку и на всю ширину не растягивается; ряд заданной высоты
+   (grid-auto-rows), поэтому блоки одной высоты.
+   Услуги — три блока в ряд, высота по содержимому: закрытая карточка
+   держит высоту блока (min-height), раскрытая растёт под перечень и
+   показывает его целиком. Соседей карточка не двигает по вертикали
+   (align-items: start) и не перекрывает их. */
+.lp-categories {
   display: grid; grid-template-columns: 1fr 1fr; gap: 15px;
   grid-auto-rows: var(--lp-tile-h);
 }
+.lp-services-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px;
+  align-items: start;
+}
 .lp-category-card, .lp-services-card {
-  box-sizing: border-box; height: var(--lp-tile-h);
+  box-sizing: border-box;
   background: rgba(255, 255, 255, .58); border: 1px solid #d8d1c4;
   transition: background .25s, border-color .25s;
 }
 .lp-category-card {
+  height: var(--lp-tile-h);
   display: grid; grid-template-columns: 33px 1fr 29px; align-items: center;
   gap: 15px; padding: var(--lp-tile-pad-y) var(--lp-tile-pad-x);
 }
@@ -868,37 +876,32 @@ html[data-theme='dark'] .lp-featured .object-card { border: 0; }
 .lp-snt-cat[open] summary i { transform: rotate(45deg); }
 .lp-snt-cat .lp-places { margin: 0; padding: 4px 0 16px; }
 
-/* Услуги: карточки-гармошки рядом — «Дизайн и ремонт под ключ» и
-   «Юридические услуги». Размер блока — общий для главной (см.
+/* Услуги: три карточки-гармошки в ряд — «Юридические услуги», «Ипотека» и
+   «Дизайн и ремонт под ключ». Размер блока — общий для главной (см.
    «Прямоугольные блоки главной»): та же ширина колонки, высота, отступы и
    кегль, что у карточек категорий и регионов. Перечень услуг раскрывается
-   нажатием на заголовок: <details>, поэтому без клиентского JS, — и
-   прокручивается внутри карточки. Карточка не растягивается на всю ширину
-   и не меняет габаритов при раскрытии: соседняя остаётся того же размера. */
+   нажатием на заголовок: <details>, поэтому без клиентского JS. */
 .lp-services { width: min(90%, 1050px); margin: 86px auto; }
-.lp-services-card { display: flex; flex-direction: column; overflow: hidden; }
+/* Высота — по содержимому: закрытая карточка не ниже общего блока
+   (min-height), раскрытая — ровно по высоте перечня. Фиксированной высоты
+   и обрезки содержимого нет, поэтому все строки видны целиком */
+.lp-services-card { display: flex; flex-direction: column; min-height: var(--lp-tile-h); }
 .lp-services-head { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 15px; padding: var(--lp-tile-pad-y) var(--lp-tile-pad-x); cursor: pointer; list-style: none; }
 .lp-services-head::-webkit-details-marker { display: none; }
-/* Рамка фокуса — внутрь карточки: её габарит обрезает внешние рамки
-   (overflow: hidden), а с клавиатуры заголовок должен быть виден */
+/* Рамка фокуса — внутрь карточки, чтобы не выходить за её габарит */
 .lp-services-head:focus-visible { outline: 2px solid var(--n15-green); outline-offset: -2px; }
 /* «Плюс» раскрытия в открытой карточке разворачивается в «×» — как у
    списков «Ближний пригород» и регионов «Межрегиональной недвижимости» */
 .lp-services-arrow { flex: none; }
 .lp-services-card[open] .lp-services-arrow { transform: rotate(45deg); }
-/* Перечень занимает остаток карточки и прокручивается внутри неё — высота
-   самой карточки при раскрытии не меняется */
+/* Перечень идёт под заголовком и задаёт высоту карточки: своей высоты,
+   обрезки (overflow) и внутренней прокрутки у него нет — на телефоне
+   прокрутка появляется только для очень длинного списка (см. медиазапрос
+   ниже) */
 .lp-services-list {
-  flex: 1; min-height: 0; overflow-y: auto; align-content: start;
   list-style: none; margin: 0; padding: 0 var(--lp-tile-pad-x) var(--lp-tile-pad-y);
   display: grid; gap: 7px;
-  /* Полоса прокрутки перечня — светлая в любой теме: лендинг всегда
-     кремовый, а общая полоса сайта в тёмной теме тёмная */
-  scrollbar-width: thin; scrollbar-color: #b9a98c #EFE8D9;
 }
-.lp-services-list::-webkit-scrollbar { width: 5px; }
-.lp-services-list::-webkit-scrollbar-track { background: #EFE8D9; }
-.lp-services-list::-webkit-scrollbar-thumb { background: #b9a98c; border-radius: 3px; }
 .lp-services-row { display: flex; align-items: center; justify-content: space-between; gap: 11px; padding: 10px 11px; background: rgba(255, 255, 255, .66); border: 1px solid #e2dbcd; color: #24231f; font-size: 14px; line-height: 1.35; transition: background .25s, border-color .25s, color .25s; }
 .lp-services-row i { color: #a87c3f; font: normal 300 12px Arial; transition: transform .25s, color .25s; }
 .lp-services-row:hover, .lp-services-row:focus-visible { background: #fff; border-color: #b9a98c; color: var(--n15-green); }
@@ -1001,11 +1004,13 @@ html[data-theme='dark'] .lp-featured .object-card { border: 0; }
   .lp-objects { width: auto; margin: 59px 18px; }
   .lp-objects-heading { margin-bottom: 23px; }
   .lp-objects-heading h2 { font-size: 34px; }
-  /* На телефоне сетка блоков остаётся ровной, в 2 колонки: блоки не
+  /* На телефоне сетки блоков остаются ровными, в 2 колонки: блоки не
      растягиваются на всю ширину, единый размер сохраняется — компактнее
-     только высота и отступы (--lp-tile-* у .lp-section) */
+     только высота и отступы (--lp-tile-* у .lp-section). Три карточки услуг
+     встают по две в ряд: третья переносится на следующую строку. */
   .lp-section { --lp-tile-h: 122px; --lp-tile-pad-y: 14px; --lp-tile-pad-x: 15px; }
   .lp-categories, .lp-services-grid { gap: 10px; }
+  .lp-services-grid { grid-template-columns: 1fr 1fr; }
   .lp-category-card { grid-template-columns: 18px 1fr 16px; gap: 7px; }
   .lp-category-card i, .lp-services-arrow { font-size: 15px; }
   /* Названия в 2 колонки: на планшете — прежний крупный кегль, на узком
@@ -1015,7 +1020,18 @@ html[data-theme='dark'] .lp-featured .object-card { border: 0; }
   .lp-services-title { font-size: clamp(15px, 3.6vw, 21px); }
   .lp-services-head { gap: 10px; }
   .lp-services { width: auto; margin: 59px 18px; }
-  .lp-services-list { gap: 5px; }
+  /* Перечень не уезжает за нижний край экрана: очень длинный список
+     прокручивается внутри карточки касанием, а прокрутка страницы при этом
+     не «проваливается» внутрь (overscroll-behavior). Полоса прокрутки —
+     светлая в любой теме: лендинг всегда кремовый, а общая полоса сайта в
+     тёмной теме тёмная */
+  .lp-services-list {
+    gap: 5px; max-height: 60dvh; overflow-y: auto; overscroll-behavior: contain;
+    scrollbar-width: thin; scrollbar-color: #b9a98c #EFE8D9;
+  }
+  .lp-services-list::-webkit-scrollbar { width: 5px; }
+  .lp-services-list::-webkit-scrollbar-track { background: #EFE8D9; }
+  .lp-services-list::-webkit-scrollbar-thumb { background: #b9a98c; border-radius: 3px; }
   .lp-services-row { padding: 9px 10px; font-size: 13px; }
   .lp-cards { width: auto; margin: 0 18px; }
   /* «Показать все →» на телефоне — под заголовком, слева (в одну строку
