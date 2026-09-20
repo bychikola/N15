@@ -38,6 +38,8 @@ export function stageLabel(t: Dict, stage: string): string {
 // Типы заявок: код из коллекции applications → русское название (общее для ЛК и CRM)
 export const APPLICATION_TYPE_LABELS: Record<string, string> = {
   viewing: 'Просмотр', callback: 'Обратный звонок', mortgage: 'Ипотека', consultation: 'Консультация',
+  // Заявки форм раздела «Услуги» и каталога (см. LeadForm)
+  valuation: 'Оценка объекта', sale: 'Продажа объекта', selection: 'Подбор недвижимости', search: 'Заявка на поиск',
 }
 
 interface Props {

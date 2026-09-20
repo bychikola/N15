@@ -160,6 +160,11 @@ const CATEGORY_LABELS: Record<string, string> = {
   townhouse: 'Таунхаус',
   commercial: 'Коммерческая недвижимость',
   land: 'Земельный участок',
+  room: 'Комната',
+  garage: 'Гараж',
+  dacha: 'Дача',
+  cottage: 'Коттедж',
+  part_house: 'Часть дома',
 }
 
 const UNIT_LABELS: Record<ValuationUnit, string> = {

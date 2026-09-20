@@ -175,6 +175,11 @@ const CATEGORY_WORDS: Record<string, string> = {
   townhouse: 'таунхаус',
   commercial: 'коммерческая недвижимость',
   land: 'земельный участок',
+  room: 'комната',
+  garage: 'гараж',
+  dacha: 'дача',
+  cottage: 'коттедж',
+  part_house: 'часть дома',
 }
 
 export interface SearchObjectLike extends ObjectLike {

@@ -22,6 +22,8 @@ import { floorHuman, floorLabel } from '@/lib/floor-format'
 // Варианты покупки: полный список доступных вариантов показывается в карточке
 // (на обложке каталога — только значки, см. src/lib/purchase-options.ts)
 import { purchaseOptionsApply } from '@/lib/purchase-options'
+// Домовые категории и категории с участком — общий справочник
+import { isHouseCategoryCode } from '@/lib/object-categories'
 
 interface PageProps {
   params: Promise<{ lang: string; slug: string }>
@@ -150,10 +152,11 @@ export default async function ObjectPage({ params }: PageProps) {
   // участок вокруг дома, у базы отдыха, гостиницы или туристического объекта
   // — площадь земли под комплексом
   const plotAreaHumanLabel = areaHuman(obj.plotArea, obj.plotAreaUnit, areaWords, areaFmt)
-  // Дом и таунхаус — этажность дома («2 этажа») и описания помещений по
-  // этажам («1 этаж: кухня-гостиная, санузел…», заполняются в CRM); у
-  // остальных категорий — как раньше: «этаж / всего этажей»
-  const isHouse = obj.category === 'house' || obj.category === 'townhouse'
+  // Домовые категории (дом, таунхаус, коттедж, дача, часть дома) — этажность
+  // дома («2 этажа») и описания помещений по этажам («1 этаж:
+  // кухня-гостиная, санузел…», заполняются в CRM); у остальных категорий —
+  // как раньше: «этаж / всего этажей»
+  const isHouse = isHouseCategoryCode(obj.category)
   const isLand = obj.category === 'land'
   // Коммерция: в «Площади» — здание или комплекс, участок идёт отдельной
   // строкой «Площадь участка»

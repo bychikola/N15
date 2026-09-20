@@ -4,7 +4,10 @@ import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useI18n } from '@/i18n/i18n-provider'
 import ObjectCard, { type ObjectListItem } from '@/components/objects/ObjectCard'
-import CatalogFilters, { buildWhere, cityValuesFor, regionValuesFor, emptyFilters, purchaseValues, AGENT_URL_PARAM, OBJECT_TYPES, OBJECT_CATEGORIES, OBJECT_ROOMS, type FiltersState } from '@/components/objects/CatalogFilters'
+import CatalogFilters, { buildWhere, cityValuesFor, regionValuesFor, emptyFilters, purchaseValues, AGENT_URL_PARAM, OBJECT_TYPES, OBJECT_CATEGORIES, OBJECT_HEATING, OBJECT_ROOMS, type FiltersState } from '@/components/objects/CatalogFilters'
+import CategoryChips from '@/components/objects/CategoryChips'
+import CatalogMap from '@/components/objects/CatalogMap'
+import { LeadForm } from '@/components/forms/LeadForm'
 // Справочники допустимых значений локаций — те же, что в фильтрах каталога
 import { DISTRICT_OPTIONS, CITY_DISTRICT_OPTIONS } from '@/lib/districts'
 import { SNT_AREAS } from '@/components/home/landing-data'
@@ -32,6 +35,11 @@ const URL_PARAM: Record<keyof FiltersState, string> = {
   snt: 'snt',
   city: 'city',
   cityRegion: 'city_region',
+  floorMin: 'floor_min',
+  floorMax: 'floor_max',
+  floorsMin: 'floors_min',
+  floorsMax: 'floors_max',
+  heating: 'heating',
   agent: AGENT_URL_PARAM,
   purchase: 'purchase',
 }
@@ -75,6 +83,13 @@ function filtersFromParams(sp: URLSearchParams, cityRegions: readonly CityFilter
         ? cityDistrictParam
         : '',
     locality: sp.get('locality') ?? '',
+    // Этаж, этажность и отопление — диапазоны числами и список значений;
+    // приводим к числу и отбрасываем мусор устаревших ссылок (см. buildWhere)
+    floorMin: sp.get('floor_min') ?? '',
+    floorMax: sp.get('floor_max') ?? '',
+    floorsMin: sp.get('floors_min') ?? '',
+    floorsMax: sp.get('floors_max') ?? '',
+    heating: isKnown(sp.get('heating') ?? '', OBJECT_HEATING) ? (sp.get('heating') as string) : '',
     snt: isKnown(sp.get('snt') ?? '', SNT_AREAS) ? (sp.get('snt') as string) : '',
     city: isKnown(cityParam, cityValuesFor(category, knownCities)) ? cityParam : '',
     // Регион фильтра «Город» («все населённые пункты»): ключ сверяем со списком
@@ -116,10 +131,23 @@ export default function CatalogContent({ cityRegions, knownCities, agentName }: 
   const [loadingMore, setLoadingMore] = useState(false)
   const [q, setQ] = useState(searchParams.get('q') ?? '')
   const [sort, setSort] = useState(searchParams.get('sort') ?? '')
+  // Вид выдачи: список карточек или карта с метками (см. CatalogMap)
+  const [view, setView] = useState(searchParams.get('view') ?? '')
   const [filters, setFilters] = useState<FiltersState>(() => filtersFromParams(searchParams, cityRegions, knownCities))
 
   const where = useMemo(() => buildWhere(filters, q, cityRegions, knownCities), [filters, q, cityRegions, knownCities])
   const sortParam = sort || '-createdAt'
+
+  // Счётчики полосы категорий: та же выдача, но без фильтра по категории —
+  // «сколько объектов было бы, выбери я соседнюю категорию». Дерево условий
+  // собирает тот же buildWhere, что и основную выдачу: счётчики не разъедутся
+  // с ней при добавлении нового фильтра
+  const countsWhere = useMemo(
+    () => buildWhere({ ...filters, category: '' }, q, cityRegions, knownCities),
+    [filters, q, cityRegions, knownCities],
+  )
+  const [categoryCounts, setCategoryCounts] = useState<Record<string, number>>({})
+  const [countsLoading, setCountsLoading] = useState(true)
 
   // Debounced search: write q to URL after 300ms (only q — filters/sort handled below)
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined)
@@ -154,9 +182,14 @@ export default function CatalogContent({ cityRegions, knownCities, agentName }: 
     } else {
       params.delete('sort')
     }
+    if (view) {
+      params.set('view', view)
+    } else {
+      params.delete('view')
+    }
     params.delete('page')
     router.replace(`/${lang}/catalog?${params.toString()}`, { scroll: false })
-  }, [filters, sort, lang, router, searchParams])
+  }, [filters, sort, view, lang, router, searchParams])
 
   // Чтение изменений URL извне (ссылки футера «Купить/Квартиры/…», шаринг-ссылки).
   // Паттерн React «adjusting state when props change» — setState во время рендера,
@@ -173,7 +206,48 @@ export default function CatalogContent({ cityRegions, knownCities, agentName }: 
     )
     const nextSort = searchParams.get('sort') ?? ''
     setSort((prev) => (prev === nextSort ? prev : nextSort))
+    const nextView = searchParams.get('view') ?? ''
+    setView((prev) => (prev === nextView ? prev : nextView))
   }
+
+  // Пересчёт счётчиков категорий: одна сводка «все» (без фильтра по
+  // категории) и по одной на категорию — parallel, limit=0 отдаёт только
+  // totalDocs. Запросы дорогие (11 штук), поэтому с задержкой: пока клиент
+  // печатает поиск или крутит цену, считаем один раз после паузы
+  useEffect(() => {
+    const controller = new AbortController()
+    const whereParam = (w: unknown) => (Object.keys(w as object).length ? `&where=${encodeURIComponent(JSON.stringify(w))}` : '')
+    const countFor = (w: unknown) =>
+      fetch(`/api/objects?limit=0&depth=0${whereParam(w)}`, { credentials: 'include', signal: controller.signal })
+        .then((res) => res.json())
+        .then((data) => Number(data.totalDocs) || 0)
+
+    // setState — внутри таймера, а не в теле эффекта (правило
+    // react-hooks/set-state-in-effect, см. чтение URL выше)
+    const timer = setTimeout(() => {
+      setCountsLoading(true)
+      Promise.all([
+        countFor(countsWhere),
+        ...OBJECT_CATEGORIES.map((category) =>
+          // Пустое дерево условий в and[] не подставляем: запрос без фильтров
+          // по остальным полям — это просто «все объекты категории»
+          countFor(Object.keys(countsWhere).length ? { and: [countsWhere, { category: { equals: category } }] } : { category: { equals: category } }),
+        ),
+      ])
+        .then(([all, ...rest]) => {
+          const counts: Record<string, number> = { all }
+          OBJECT_CATEGORIES.forEach((category, i) => { counts[category] = rest[i] })
+          setCategoryCounts(counts)
+        })
+        .catch(() => { /* счётчики — подсказка: не пересчитались, чипы покажут «…» */ })
+        .finally(() => { if (!controller.signal.aborted) setCountsLoading(false) })
+    }, 400)
+
+    return () => {
+      clearTimeout(timer)
+      controller.abort()
+    }
+  }, [countsWhere])
 
   // (re)load first page on filter/sort/search change.
   // All setState calls happen after await, so no synchronous setState in the effect body.
@@ -258,6 +332,15 @@ export default function CatalogContent({ cityRegions, knownCities, agentName }: 
         />
       </div>
 
+      {/* Полоса категорий со счётчиками — над фильтрами: категория это
+          первый выбор клиента, остальные фильтры её уточняют */}
+      <CategoryChips
+        value={filters.category}
+        counts={categoryCounts}
+        loading={countsLoading}
+        onChange={(category) => { onChangeFilters({ category }); }}
+      />
+
       <CatalogFilters state={filters} onChange={onChangeFilters} t={t}
         cityRegions={cityRegions} knownCities={knownCities} />
 
@@ -291,28 +374,58 @@ export default function CatalogContent({ cityRegions, knownCities, agentName }: 
             </button>
           )}
         </p>
-        <label className="text-xs text-[var(--n15-muted)] flex items-center gap-2">
-          <span className="text-[10px] tracking-[0.2em] uppercase">{t.catalog.sortDefault.split(':')[0]}:</span>
-          <select
-            value={sort}
-            onChange={(e) => { setSort(e.target.value); setLoading(true) }}
-            className="bg-[var(--n15-charcoal)] border border-[var(--n15-gold)]/20 px-3 py-2 text-sm text-[var(--n15-silver)] focus:outline-none focus:border-[var(--n15-gold)]/50"
-          >
-            <option value="">{t.catalog.sortDefault}</option>
-            <option value="price">{t.catalog.sortPriceAsc}</option>
-            <option value="-price">{t.catalog.sortPriceDesc}</option>
-            <option value="-area">{t.catalog.sortAreaDesc}</option>
-          </select>
-        </label>
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Вид выдачи: список или карта с метками объектов */}
+          <div className="inline-flex border border-[var(--n15-gold)]/20">
+            {[
+              { value: '', label: t.catalog.viewList },
+              { value: 'map', label: t.catalog.viewMap },
+            ].map((v) => (
+              <button
+                key={v.value || 'list'}
+                type="button"
+                onClick={() => setView(v.value)}
+                aria-pressed={view === v.value}
+                className={`px-3 py-2 text-xs uppercase tracking-wider transition-colors cursor-pointer ${
+                  view === v.value
+                    ? 'bg-[var(--n15-gold)] text-[var(--n15-black)]'
+                    : 'text-[var(--n15-muted)] hover:text-[var(--n15-gold)]'
+                }`}
+              >
+                {v.label}
+              </button>
+            ))}
+          </div>
+          <label className="text-xs text-[var(--n15-muted)] flex items-center gap-2">
+            <span className="text-[10px] tracking-[0.2em] uppercase">{t.catalog.sortDefault.split(':')[0]}:</span>
+            <select
+              value={sort}
+              onChange={(e) => { setSort(e.target.value); setLoading(true) }}
+              className="bg-[var(--n15-charcoal)] border border-[var(--n15-gold)]/20 px-3 py-2 text-sm text-[var(--n15-silver)] focus:outline-none focus:border-[var(--n15-gold)]/50"
+            >
+              {/* Пустое значение — порядок подборки, он же «сначала новые»
+                  (каталог сортирует по -createdAt, см. sortParam) */}
+              <option value="">{t.catalog.sortNew}</option>
+              <option value="price">{t.catalog.sortPriceAsc}</option>
+              <option value="-price">{t.catalog.sortPriceDesc}</option>
+              <option value="area">{t.catalog.sortAreaAsc}</option>
+              <option value="-area">{t.catalog.sortAreaDesc}</option>
+            </select>
+          </label>
+        </div>
       </div>
 
       {loading ? (
         <p className="text-center py-20 text-[var(--n15-muted)]">{t.catalog.loading}</p>
       ) : objects.length > 0 ? (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-6 gap-y-8">
-            {objects.map((obj) => <ObjectCard key={obj.id} obj={obj} lang={lang} t={t} />)}
-          </div>
+          {view === 'map' ? (
+            <CatalogMap objects={objects} lang={lang} />
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-6 gap-y-8">
+              {objects.map((obj) => <ObjectCard key={obj.id} obj={obj} lang={lang} t={t} />)}
+            </div>
+          )}
           {showMore && (
             <div className="text-center mt-12">
               <button
@@ -326,22 +439,29 @@ export default function CatalogContent({ cityRegions, knownCities, agentName }: 
           )}
         </>
       ) : (
-        <div className="text-center py-20">
+        <div className="py-12">
           {/* Подбор по конкретному нас. пункту, региону или межрегиональному
               городу пуст — сообщение понятнее общего «ничего не найдено».
               Регион и город без объектов — это «пока подбираются»: вместо
               пустого списка предлагаем оставить заявку (см. nothingInRegion) */}
-          <p className="text-[var(--n15-muted)] text-lg mb-4">
+          <p className="text-center text-[var(--n15-muted)] text-lg mb-4">
             {filters.city || filters.cityRegion
               ? t.catalog.nothingInRegion
               : filters.locality
                 ? t.catalog.nothingInLocality
                 : t.catalog.nothingFound}
           </p>
-          <button onClick={clearAll}
-            className="text-sm text-[var(--n15-gold)] underline">
-            {t.catalog.resetAll}
-          </button>
+          <p className="text-center mb-8">
+            <button onClick={clearAll}
+              className="text-sm text-[var(--n15-gold)] underline">
+              {t.catalog.resetAll}
+            </button>
+          </p>
+          {/* Подходящего объекта нет — предлагаем заявку на поиск: заявка
+              с типом search попадает в CRM и адресуется агенту */}
+          <div className="max-w-lg mx-auto border border-[var(--n15-gold)]/20 bg-[var(--n15-black)]/40 p-6">
+            <LeadForm kind="search" title={t.lead.searchTitle} text={t.lead.searchText} />
+          </div>
         </div>
       )}
       </div>

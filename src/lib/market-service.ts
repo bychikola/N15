@@ -9,6 +9,8 @@
  * правилами площадок и здесь не реализован.
  */
 import { getPayload } from 'payload'
+// Подпись категории объекта — общий справочник (см. lib/object-categories.ts)
+import { categoryLabel } from './object-categories'
 import type { ObjectLike } from './listing-check'
 import {
   applyPriceObservation,
@@ -119,9 +121,8 @@ export function objectHeadline(doc: Record<string, unknown>): string {
   }
   const title = (doc.title as string) || ''
   const category = (doc.category as string) || ''
-  const kind = category
-    ? ({ apartment: 'Квартира', house: 'Дом', townhouse: 'Таунхаус', commercial: 'Коммерческая', land: 'Участок' } as Record<string, string>)[category] || category
-    : ''
+  // Подпись категории — общий справочник (новые категории не требуют правок)
+  const kind = category ? categoryLabel(category) : ''
   return [title || kind || (doc.id as string), parts.filter(Boolean).join(', ')].filter(Boolean).join(' · ')
 }
 

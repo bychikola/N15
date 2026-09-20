@@ -83,6 +83,13 @@ body{margin:0}.crm-sidebar{box-sizing:border-box}.crm-chat-panel{box-sizing:bord
    получила бы стиль поля ввода */
 .crm-property-form .crm-plot-toggle{display:inline-flex;flex-direction:row;align-items:center;gap:9px;padding:0;cursor:pointer}
 .crm-property-form .crm-plot-toggle input{width:15px;height:15px;min-width:15px;margin:0;padding:0;accent-color:#a7814e;cursor:pointer}
+/* Галочка-отметка вне блока участка: «Особое предложение» в форме объекта —
+   та же строка «чекбокс + подпись», что у галочки участка выше, но не
+   привязана к блоку (отметка для подборки на главной). Селекторы, как и у
+   crm-plot-toggle, длиннее общих правил формы (.crm-property-form label
+   / input), иначе галочка получила бы стиль поля ввода */
+.crm-property-form .crm-check-toggle{display:inline-flex;flex-direction:row;align-items:center;gap:9px;padding:0;cursor:pointer}
+.crm-property-form .crm-check-toggle input{width:15px;height:15px;min-width:15px;margin:0;padding:0;accent-color:#a7814e;cursor:pointer}
 .crm-fields-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
 /* Блок «Варианты покупки» формы объекта: компактный список отметок — рамок
    нет ни у самого блока, ни у варианта, только чекбокс и подпись. Две

@@ -21,6 +21,9 @@ import {
 // написание адреса на карточке, в реестре и в фильтрах
 import { normalizeHouseAddress } from '@/lib/house-info'
 import { sortAgents } from '@/lib/agents-sort'
+// Категории объектов: полный список значений, правила участка и домовых
+// категорий — общий справочник схемы коллекции (src/lib/object-categories.ts)
+import { OBJECT_CATEGORIES, isHouseCategoryCode, isPlotCategoryCode, isPrivateHouseCode } from '@/lib/object-categories'
 // Площадь участков: м² ↔ сотки ↔ гектары (1 сотка = 100 м², 1 га = 10000 м²),
 // чтение «11,5» с запятой — дробные значения разрешены
 import { areaNumberText, areaUnitOf, parseAreaNumber, sqmToUnit, unitToSqm, type AreaUnit } from '@/lib/area-format'
@@ -214,17 +217,14 @@ const rowPlacementSummary = (o: Record<string, unknown>): { checked: boolean; fo
   return { checked: !!p.lastCheckedAt, found: active.size }
 }
 
-// Дом и таунхаус: только у них есть этажность дома и поэтажные описания
-// помещений. У квартиры один этаж — этаж квартиры в доме (поля «Этаж» и
-// «Всего этажей»), у участка и коммерческого объекта этажей нет вовсе.
-const isHouseCategory = (category: string) => category === 'house' || category === 'townhouse'
-
-// У каких категорий есть земельный участок — то же правило, что в коллекции
-// Objects (см. isPlotCategoryCode): у дома и таунхауса — участок вокруг дома,
-// у коммерции — земля под базой отдыха, гостиницей, рестораном или
-// туристическим объектом. У квартир участка нет, у земельных участков
-// площадь самого объекта хранится в «Площади»
-const isPlotAreaCategory = (category: string) => isHouseCategory(category) || category === 'commercial'
+// Домовые категории (дом, таунхаус, коттедж, дача, часть дома): только у них
+// есть этажность дома и поэтажные описания помещений. У квартиры и комнаты
+// один этаж — этаж в доме (поля «Этаж» и «Всего этажей»), у участка, гаража
+// и коммерческого объекта этажей нет вовсе.
+// Участок и признак частного дома — общие правила схемы и карточки объекта
+// (см. src/lib/object-categories.ts), здесь только читаем их.
+const isHouseCategory = isHouseCategoryCode
+const isPlotAreaCategory = isPlotCategoryCode
 
 /**
  * Водяной знак на фото: рисуем кадр на canvas и поверх — watermark.png по
@@ -338,6 +338,9 @@ const emptyForm = {
   // Варианты покупки — множественный выбор отметками (коды из
   // src/lib/purchase-options.ts); блок только у продажи жилья и коммерции
   purchaseOptions: [] as string[],
+  // Особое предложение — отметка для блока на главной странице: объект
+  // остаётся в каталоге и находится по всем фильтрам (см. t.landing.special*)
+  urgentSale: false,
 }
 
 type FormState = typeof emptyForm
@@ -981,8 +984,9 @@ export const CrmObjects: FC<{
   const isPlotArea = isPlotAreaCategory(form.category)
   // Частный дом — отдельно от таунхауса: у него блок «Кадастровые данные
   // дома», где номер дома (строения) подписан по-своему (у таунхауса
-  // остаётся прежний блок «Кадастровый номер»)
-  const isPrivateHouse = form.category === 'house'
+  // остаётся прежний блок «Кадастровый номер»). Дача, коттедж и часть дома
+  // описываются как частный дом (см. isPrivateHouseCode)
+  const isPrivateHouse = isPrivateHouseCode(form.category)
   const houseFloorsCount = isHouse
     ? Math.round(form.floorsMode === 'other' ? toNum(form.floorsOther) ?? 0 : toNum(form.floorsMode) ?? 0)
     : 0
@@ -1250,13 +1254,15 @@ export const CrmObjects: FC<{
       // Варианты покупки: чужие коды из старых записей не показываем —
       // в форме только отметки из общего списка
       purchaseOptions: ((o.purchaseOptions as string[] | undefined) || []).filter(isPurchaseOption),
+      urgentSale: o.urgentSale === true,
     })
     // Блок участка открываем, если у объекта уже есть его данные — площадь
     // или кадастровые сведения (у дома без участка блок остаётся скрытым).
     // У коммерции блок открыт всегда: у базы отдыха, гостиницы или
     // туристического объекта земля входит в лот, и заполнить её предлагается
-    // сразу — закрыть пустой блок можно галочкой «Есть земельный участок»
-    setHasPlot(o.category === 'commercial' || hasPlotInfo(o))
+    // сразу — закрыть пустой блок можно галочкой «Есть земельный участок».
+    // У коттеджа, дачи и части дома участок вокруг дома — тоже открываем
+    setHasPlot(isPlotAreaCategory(String(o.category || '')) || hasPlotInfo(o))
     const img = o.primaryImage as { id?: number; url?: string } | undefined
     const imgs = (o.images as { id?: number; url?: string }[] | undefined) || []
     const all: PhotoItem[] = []
@@ -1669,6 +1675,9 @@ export const CrmObjects: FC<{
       // сохранённое значение (у самих таких объектов вариантов не бывает —
       // см. нормализацию в коллекции Objects)
       purchaseOptions: purchaseOptionsApply(form.type, form.category) ? form.purchaseOptions : undefined,
+      // Особое предложение: отметка уходит всегда — снятая галочка снимает
+      // показ в блоке на главной (как и прочие признаки карточки)
+      urgentSale: form.urgentSale,
       status: form.status,
       agent: form.agent ? Number(form.agent) : undefined,
       primaryImage: mediaIds[0],
@@ -1843,6 +1852,10 @@ export const CrmObjects: FC<{
   }
 
   const set = (k: keyof FormState, v: string) => setForm((prev) => ({ ...prev, [k]: v }))
+
+  // Отметка «Особое предложение» — единственная галочка в самом form (у
+  // остальных признаков своё состояние: участок, варианты покупки)
+  const setUrgentSale = (v: boolean) => setForm((prev) => ({ ...prev, urgentSale: v }))
 
   // Категория: единица «сотки»/«га» доступна только участкам, единица
   // площади участка — дому, таунхаусу и коммерции. При смене категории
@@ -2173,7 +2186,9 @@ export const CrmObjects: FC<{
           </Field>
           <Field label={t.crm.objCategory}>
             <select value={form.category} onChange={(e) => setCategory(e.target.value)} style={inputStyle}>
-              <option value="apartment">Квартира</option><option value="house">Дом</option><option value="townhouse">Таунхаус</option><option value="commercial">Коммерческая</option><option value="land">Участок</option>
+              {OBJECT_CATEGORIES.map((c) => (
+                <option key={c.value} value={c.value}>{c.label}</option>
+              ))}
             </select>
           </Field>
           <Field label={t.crm.objPrice}><input type="number" value={form.price} onChange={(e) => set('price', e.target.value)} style={inputStyle} /></Field>
@@ -2433,7 +2448,7 @@ export const CrmObjects: FC<{
                 по категориям СНТ/СНО/ДНТ — товарищества живут только внутри
                 Владикавказского городского округа, к районам республики не
                 относятся. Значение — в address.snt объекта. */}
-            {(form.category === 'land' || form.category === 'house' || form.category === 'apartment') && (
+            {(form.category === 'land' || form.category === 'apartment' || form.category === 'room' || isPrivateHouseCode(form.category)) && (
               <div className="crm-addr-full">
                 <Field label={t.crm.objSnt}>
                   <select value={form.snt} onChange={(e) => setSnt(e.target.value)} style={inputStyle}>
@@ -2694,6 +2709,19 @@ export const CrmObjects: FC<{
               <small className="crm-purchase-warning">{t.crm.objPurchaseWarning}</small>
             </div>
           )}
+
+          {/* Особое предложение — отметка для блока «Особые предложения» на
+              главной странице (см. urgentSale в коллекции Objects). Сам
+              объект остаётся в каталоге и находится по всем фильтрам:
+              отметка только добавляет его в блок. Галочка эта, в отличие от
+              вариантов покупки, не обещание клиенту, а признак подборки —
+              предупреждения агенту здесь нет */}
+          <div style={{ gridColumn: '1 / -1' }}>
+            <label className="crm-check-toggle">
+              <input type="checkbox" checked={form.urgentSale} onChange={(e) => setUrgentSale(e.target.checked)} />
+              <span>{t.crm.objSpecial}</span>
+            </label>
+          </div>
 
           <Field label={t.crm.objStatus}>
             {/* «Архив» в списке — не просто статус: сначала спрашиваем причину

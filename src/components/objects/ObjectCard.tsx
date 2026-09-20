@@ -4,6 +4,9 @@ import { floorHuman } from '@/lib/floor-format'
 // Значки вариантов покупки на обложке — «Ипотека», «Семейная ипотека»,
 // «Рассрочка», «Военная ипотека» (см. src/lib/purchase-options.ts)
 import { purchaseBadges, purchaseOptionsApply } from '@/lib/purchase-options'
+// Домовые категории — дом, таунхаус, коттедж, дача, часть дома
+// (см. src/lib/object-categories.ts)
+import { isHouseCategoryCode } from '@/lib/object-categories'
 
 export interface ObjectListItem {
   id: number
@@ -26,6 +29,9 @@ export interface ObjectListItem {
    *  На обложке показываются значками (до двух, см. purchaseBadges) */
   purchaseOptions?: string[]
   address?: { city?: string; district?: string; cityDistrict?: string; locality?: string; snt?: string; street?: string; house?: string }
+  /** Координаты точки объекта (ставятся картой в форме CRM). Нужны режиму
+   *  «На карте» каталога: без координат объект на карту не попадает */
+  coordinates?: { lat?: number; lng?: number }
   primaryImage?: {
     url?: string
     alt?: string
@@ -58,10 +64,10 @@ export default function ObjectCard({ obj, lang, t }: ObjectCardProps) {
   const areaFmt = (n: number) => n.toLocaleString(t.locale, { maximumFractionDigits: 3 })
   const areaWords = { are: t.catalog.areaUnits, ha: t.catalog.hectareUnits }
   const areaLabel = areaHuman(obj.area, obj.areaUnit, areaWords, areaFmt)
-  // Дом и таунхаус: площадь дома и площадь участка — разные строки меты
-  const isHouse = obj.category === 'house' || obj.category === 'townhouse'
+  // Домовые категории: площадь дома и площадь участка — разные строки меты
+  const isHouse = isHouseCategoryCode(obj.category)
   const plotAreaLabel = areaHuman(obj.plotArea, obj.plotAreaUnit, areaWords, areaFmt)
-  // Дом и таунхаус — этажность дома («2 этажа»); у остальных категорий —
+  // Домовые категории — этажность дома («2 этажа»); у остальных —
   // как раньше: «этаж / всего этажей» (этаж квартиры в доме)
   const floorsLabel = isHouse
     ? floorHuman(obj.totalFloors, t.object.floorUnits, (n) => n.toLocaleString(t.locale))

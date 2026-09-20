@@ -2,6 +2,7 @@ import { Header } from '@/components/layout/Header'
 import { Footer } from '@/components/layout/Footer'
 import { SectionWrapper } from '@/components/ui/SectionWrapper'
 import { Button } from '@/components/ui/Button'
+import { LeadForm } from '@/components/forms/LeadForm'
 import { getDictionary } from '@/i18n/dictionaries'
 
 interface PageProps {
@@ -42,6 +43,24 @@ export default async function SellPage({ params }: PageProps) {
           <div className="flex flex-wrap justify-center gap-4">
             <Button variant="primary" href={`/${lang}/contacts`}>{sell.cta}</Button>
             <Button variant="outline" href={`/${lang}/catalog?type=sale`}>{sell.ctaSale}</Button>
+          </div>
+          {/* Форма «Продать объект» — заявка типа sale в CRM. Ниже ссылка на
+              страницу владельцам: там продажа на условиях собственника */}
+          <div className="mt-14 grid grid-cols-1 lg:grid-cols-2 gap-10 items-start">
+            <div className="border border-[var(--n15-gold)]/15 p-6">
+              <LeadForm kind="sale" title={t.lead.saleTitle} text={t.lead.saleText} />
+            </div>
+            <div className="p-6">
+              <h2 className="text-xl md:text-2xl font-[family-name:var(--font-display)] text-[var(--n15-white)] mb-4">
+                {t.services.owners.salePage.title}
+              </h2>
+              <p className="text-sm text-[var(--n15-muted)] leading-relaxed mb-6">
+                {t.services.owners.salePage.subtitle}
+              </p>
+              <Button variant="outline" href={`/${lang}/services/owners/vygodnaya-prodazha`}>
+                {t.services.owners.title}
+              </Button>
+            </div>
           </div>
         </SectionWrapper>
       </main>

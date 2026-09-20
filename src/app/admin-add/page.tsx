@@ -6,6 +6,8 @@ import { Footer } from '@/components/layout/Footer'
 import { SectionWrapper } from '@/components/ui/SectionWrapper'
 import { Button } from '@/components/ui/Button'
 import { OrnamentBorder } from '@/components/ui/OrnamentBorder'
+// Категории объектов — общий справочник (см. src/lib/object-categories.ts)
+import { OBJECT_CATEGORIES } from '@/lib/object-categories'
 
 export default function AdminAddPage() {
   const [title, setTitle] = useState('')
@@ -111,11 +113,9 @@ export default function AdminAddPage() {
                   <div>
                     <label className="text-xs tracking-wider uppercase text-[var(--n15-muted)] block mb-1">Категория</label>
                     <select value={category} onChange={e => setCategory(e.target.value)} className={inputClass}>
-                      <option value="apartment">Квартира</option>
-                      <option value="house">Дом</option>
-                      <option value="townhouse">Таунхаус</option>
-                      <option value="commercial">Коммерческая</option>
-                      <option value="land">Участок</option>
+                      {OBJECT_CATEGORIES.map((c) => (
+                        <option key={c.value} value={c.value}>{c.label}</option>
+                      ))}
                     </select>
                   </div>
                 </div>

@@ -13,6 +13,16 @@ export default async function ServicesPage({ params }: PageProps) {
   const { lang } = await params
   const t = getDictionary(lang)
 
+  // Подразделы по стороне сделки: покупателям, владельцам, арендаторам.
+  // У каждого — свой перечень услуг и страница (см. /services/buyers,
+  // /services/owners, /services/tenants); у владельцев дополнительно
+  // страница «Выгодная продажа недвижимости на ваших условиях»
+  const audiences = [
+    { title: t.services.buyers.title, desc: t.services.buyers.desc, href: `/${lang}/services/buyers`, accent: 'gold' },
+    { title: t.services.owners.title, desc: t.services.owners.desc, href: `/${lang}/services/owners`, accent: 'burgundy' },
+    { title: t.services.tenants.title, desc: t.services.tenants.desc, href: `/${lang}/services/tenants`, accent: 'gold' },
+  ]
+
   // Шесть услуг раздела «Услуги» — карточки-ссылки на страницы услуг,
   // где раскрыт полный перечень услуг внутри каждой. Порядок — как в
   // вертикальном списке меню шапки (см. Header.tsx). Покупка, продажа
@@ -40,6 +50,30 @@ export default async function ServicesPage({ params }: PageProps) {
         </SectionWrapper>
 
         <SectionWrapper variant="charcoal">
+          {/* Подразделы по стороне сделки — первыми: с них начинается выбор
+              («я покупаю», «я продаю», «я снимаю»), ниже — направления работ */}
+          <h2 className="text-xl md:text-2xl font-[family-name:var(--font-display)] text-[var(--n15-white)] mb-6">
+            {t.services.audienceTitle}
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-14">
+            {audiences.map((s) => (
+              <OrnamentBorder key={s.href} cornerOrnament>
+                <div className="p-8 group">
+                  <div className={`w-12 h-px mb-6 ${s.accent === 'burgundy' ? 'bg-[var(--n15-burgundy)]' : 'bg-[var(--n15-gold)]'}`} />
+                  <h3 className="text-xl font-[family-name:var(--font-display)] text-[var(--n15-white)] mb-3 group-hover:text-[var(--n15-gold)] transition-colors">
+                    {s.title}
+                  </h3>
+                  <p className="text-sm text-[var(--n15-muted)] mb-6 leading-relaxed">
+                    {s.desc}
+                  </p>
+                  <Button variant="ghost" size="sm" href={s.href}>
+                    {t.services.more}
+                  </Button>
+                </div>
+              </OrnamentBorder>
+            ))}
+          </div>
+
           {/* Шесть услуг: 1 колонка на телефоне, 2 на планшете, 3 на десктопе */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {directions.map((s) => (

@@ -176,12 +176,20 @@ export interface PublishObjectLike {
 }
 
 export const TYPE_LABELS: Record<string, string> = { sale: 'Продажа', rent: 'Аренда' }
+// Коды должны совпадать с опциями поля category (см. lib/object-categories.ts):
+// по этому словарю validateForPublish проверяет заполненность категории,
+// поэтому новая категория без подписи блокировала бы публикацию объекта
 export const CATEGORY_LABELS: Record<string, string> = {
   apartment: 'Квартира',
   house: 'Дом',
   townhouse: 'Таунхаус',
   commercial: 'Коммерческая недвижимость',
   land: 'Земельный участок',
+  room: 'Комната',
+  garage: 'Гараж',
+  dacha: 'Дача',
+  cottage: 'Коттедж',
+  part_house: 'Часть дома',
 }
 
 /** Обязательные для публикации поля (код — для машины, label — для людей) */

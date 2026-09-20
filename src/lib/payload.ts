@@ -1,6 +1,10 @@
 // Data fetching helpers for Payload CMS REST API
 // All requests go through Next.js API routes (/api/...)
 
+// Категория объекта — значения из общего справочника схемы и фильтров
+// (см. src/lib/object-categories.ts)
+import type { ObjectCategory } from '@/lib/object-categories'
+
 const BASE = ''
 
 interface FetchOptions {
@@ -38,7 +42,7 @@ export interface ObjectData {
   title: string
   slug?: string
   type: 'sale' | 'rent'
-  category: 'apartment' | 'house' | 'townhouse' | 'commercial' | 'land'
+  category: ObjectCategory
   price: number
   area?: number
   livingArea?: number

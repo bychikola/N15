@@ -94,11 +94,18 @@ export const Applications: CollectionConfig = {
       name: 'type',
       type: 'select',
       label: 'Тип заявки',
+      // Новые типы дописываются в конец списка: порядок значений совпадает
+      // с порядком enum в базе (см. memory payload-schema-autopush)
       options: [
         { label: 'Просмотр', value: 'viewing' },
         { label: 'Обратный звонок', value: 'callback' },
         { label: 'Ипотека', value: 'mortgage' },
         { label: 'Консультация', value: 'consultation' },
+        // Формы раздела «Услуги» и каталога (см. LeadForm)
+        { label: 'Оценка объекта', value: 'valuation' },
+        { label: 'Продажа объекта', value: 'sale' },
+        { label: 'Подбор недвижимости', value: 'selection' },
+        { label: 'Заявка на поиск', value: 'search' },
       ],
       required: true,
     },

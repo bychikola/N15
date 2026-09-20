@@ -1,4 +1,5 @@
 import { ServiceDirectionPage } from '@/components/services/ServiceDirectionPage'
+import { LeadForm } from '@/components/forms/LeadForm'
 import { getDictionary } from '@/i18n/dictionaries'
 
 interface PageProps {
@@ -37,7 +38,7 @@ export default async function ValuationServicesPage({ params }: PageProps) {
         <h2 className="text-xl md:text-2xl font-[family-name:var(--font-display)] text-[var(--n15-white)] mb-8">
           {valuation.processTitle}
         </h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-14">
           {steps.map((s) => (
             <div key={s.step} className="p-6 border border-[var(--n15-gold)]/10">
               <div className="text-3xl font-[family-name:var(--font-display)] text-[var(--n15-gold)]/30 mb-4">{s.step}</div>
@@ -45,6 +46,11 @@ export default async function ValuationServicesPage({ params }: PageProps) {
               <p className="text-xs text-[var(--n15-muted)]">{s.desc}</p>
             </div>
           ))}
+        </div>
+        {/* Форма «Оценить объект» — заявка типа valuation в CRM: агент
+            получает адрес объекта и пожелания клиента */}
+        <div className="max-w-lg mx-auto">
+          <LeadForm kind="valuation" title={t.lead.valuationTitle} text={t.lead.valuationText} />
         </div>
       </div>
     </ServiceDirectionPage>

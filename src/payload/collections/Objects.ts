@@ -28,6 +28,10 @@ import { isOwnObjectDoc, ownObjectsWhere } from '@/lib/object-access'
 // список и правила с каталогом, страницей объекта и фильтрами,
 // см. src/lib/purchase-options.ts
 import { PURCHASE_OPTIONS, purchaseOptionsApply } from '@/lib/purchase-options'
+// Категории объектов — общий справочник с фильтрами каталога, чипами главной
+// и формой CRM (см. src/lib/object-categories.ts): порядок значений совпадает
+// с порядком enum в базе
+import { OBJECT_CATEGORIES, isPlotCategoryCode, isHouseCategoryCode } from '@/lib/object-categories'
 
 /**
  * Чтение булева флага из query-параметра запроса. В разных окружениях
@@ -120,17 +124,9 @@ const validateResponsibleAgent: RelationshipFieldSingleValidation = (value, { op
 
 /**
  * У каких категорий есть земельный участок — общее условие полей участка
- * (площадь, кадастровые сведения): дом, таунхаус и коммерция.
- *
- * Коммерция добавлена ради объектов с землёй — баз отдыха, гостиниц,
- * ресторанов и туристических объектов: у них площадь здания (поле «Площадь»)
- * и площадь земли — разные величины, и участок входит в стоимость лота.
- * У квартир участка нет, у земельных участков площадь самого объекта
- * хранится в «Площади».
+ * (площадь, кадастровые сведения). Список категорий — в общем справочнике
+ * (isPlotCategoryCode, src/lib/object-categories.ts).
  */
-const isPlotCategoryCode = (category: unknown): boolean =>
-  category === 'house' || category === 'townhouse' || category === 'commercial'
-
 const isPlotCategory = (siblingData: unknown): boolean =>
   isPlotCategoryCode((siblingData as { category?: string } | undefined)?.category)
 
@@ -785,13 +781,9 @@ export const Objects: CollectionConfig = {
       name: 'category',
       type: 'select',
       label: 'Категория',
-      options: [
-        { label: 'Квартира', value: 'apartment' },
-        { label: 'Дом', value: 'house' },
-        { label: 'Таунхаус', value: 'townhouse' },
-        { label: 'Коммерческая', value: 'commercial' },
-        { label: 'Участок', value: 'land' },
-      ],
+      // Справочник категорий общий с фильтрами каталога и формой CRM
+      // (см. src/lib/object-categories.ts); порядок значений — как в enum базы
+      options: OBJECT_CATEGORIES.map((c) => ({ label: c.label, value: c.value })),
       required: true,
     },
     {
@@ -975,8 +967,9 @@ export const Objects: CollectionConfig = {
       // санузел, спальня», «2 этаж — две спальни, санузел, балкон». Этажность
       // дома хранится в totalFloors (в CRM — выпадающий список «1/2/3 этажа»),
       // здесь — только тексты по каждому этажу, отдельной строкой на этаж.
-      // Заполняется только у дома и таунхауса (у квартир этаж один — этаж
-      // квартиры в доме, участкам и коммерции поэтажные описания не нужны);
+      // Заполняется только у домовых категорий — дом, таунхаус, коттедж,
+      // дача, часть дома (у квартир и комнат этаж один — этаж в доме,
+      // участкам и коммерции поэтажные описания не нужны);
       // показывается в карточке объекта на сайте.
       name: 'floorDescriptions',
       type: 'array',
@@ -984,7 +977,7 @@ export const Objects: CollectionConfig = {
       admin: {
         condition: (_data, siblingData) => {
           const category = (siblingData as { category?: string } | undefined)?.category
-          return category === 'house' || category === 'townhouse'
+          return isHouseCategoryCode(category)
         },
         description: 'Помещения каждого этажа дома: «1 этаж — кухня-гостиная, санузел», «2 этаж — спальни, балкон». Показывается в карточке объекта на сайте',
       },
@@ -1301,10 +1294,10 @@ export const Objects: CollectionConfig = {
     {
       name: 'urgentSale',
       type: 'checkbox',
-      label: 'Срочная продажа',
+      label: 'Особое предложение',
       defaultValue: false,
       admin: {
-        description: 'Показывает объект в блоке «Срочные продажи» на главной странице. Объект остаётся в каталоге и доступен по всем фильтрам',
+        description: 'Показывает объект в блоке «Особые предложения» на главной странице. Объект остаётся в каталоге и доступен по всем фильтрам',
       },
     },
     {

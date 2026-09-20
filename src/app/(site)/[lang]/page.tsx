@@ -18,14 +18,17 @@ import { GoalLink } from '@/components/analytics/GoalLink'
 // серверной ошибкой («This page couldn't load»)
 import { DISTRICT_OPTIONS, CITY_DISTRICT_OPTIONS } from '@/lib/districts'
 import { SNT_AREAS } from '@/components/home/landing-data'
+// Категории объектов — общий справочник схемы и фильтров
+import { OBJECT_CATEGORY_VALUES } from '@/lib/object-categories'
 // Регионы «Межрегиональной недвижимости» для блока на главной — из CRM
 import { loadInterregionalRegions } from '@/lib/interregional-service'
 
 export const dynamic = 'force-dynamic'
 
 // Категории и комнаты параметров подбора — опции одноимённых полей объекта
-// (см. src/payload/collections/Objects.ts); должны совпадать с ними
-const CATEGORY_PARAM_VALUES = ['apartment', 'house', 'townhouse', 'commercial', 'land']
+// (см. src/payload/collections/Objects.ts); категории берём из общего
+// справочника, чтобы список не расходился со схемой
+const CATEGORY_PARAM_VALUES = OBJECT_CATEGORY_VALUES
 const ROOMS_PARAM_VALUES = ['1', '2', '3', '4']
 const isKnown = (v: string, options: readonly string[]) => options.includes(v)
 
@@ -34,12 +37,19 @@ interface PageProps {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>
 }
 
+// Подписи чипа сводки подбора — развёрнутые, как в заголовках разделов
+// (в фильтрах каталога короче, см. t.categoryLabels)
 const CATEGORY_LABELS: Record<string, string> = {
   apartment: 'Квартира',
   house: 'Частный дом',
   townhouse: 'Таунхаус',
   commercial: 'Коммерческая недвижимость',
   land: 'Земельный участок',
+  room: 'Комната',
+  garage: 'Гараж',
+  dacha: 'Дача',
+  cottage: 'Коттедж',
+  part_house: 'Часть дома',
 }
 
 export default async function HomePage({ params, searchParams }: PageProps) {
@@ -91,8 +101,9 @@ export default async function HomePage({ params, searchParams }: PageProps) {
   })
 
   // Карточки «как в каталоге»: ObjectCard ждёт полный набор полей —
-  // тип сделки, адрес улицы/дома и изображение с Payload-размерами
-  const objects: ObjectListItem[] = docs.map((d) => {
+  // тип сделки, адрес улицы/дома и изображение с Payload-размерами.
+  // Общий для обоих блоков объектов на главной.
+  const toListItem = (d: { id: number | string }): ObjectListItem => {
     const o = d as unknown as Record<string, unknown>
     const img = o.primaryImage as
       | {
@@ -123,7 +134,21 @@ export default async function HomePage({ params, searchParams }: PageProps) {
         ? { url: img.url, alt: img.alt, focalPoint: img.focalPoint, sizes: img.sizes }
         : undefined,
     }
+  }
+
+  const objects: ObjectListItem[] = docs.map(toListItem)
+
+  // Особые предложения — объекты с отметкой «Особое предложение» в CRM
+  // (поле urgentSale). Блок показываем, только когда такие объекты есть:
+  // пустой блок с заглушками читался бы как обещание, которого нет
+  const { docs: specialDocs } = await payload.find({
+    collection: 'objects',
+    where: { status: { equals: 'published' }, urgentSale: { equals: true } },
+    sort: '-createdAt',
+    limit: 4,
+    depth: 1,
   })
+  const specialObjects: ObjectListItem[] = specialDocs.map(toListItem)
 
   // Регионы блока «Межрегиональная недвижимость» — справочник CRM
   // (коллекции regions и settlements, см. src/lib/interregional-service.ts)
@@ -164,6 +189,18 @@ export default async function HomePage({ params, searchParams }: PageProps) {
       <main>
         <LandingHero t={t} lang={lang} />
         <SearchCategories t={t} lang={lang} />
+        {/* Особые предложения — до подборки: без фильтра подбора (иначе
+            блок с чужими объектами встал бы над результатами клиента) */}
+        {specialObjects.length > 0 && !filterSummary && (
+          <FeaturedObjects
+            objects={specialObjects}
+            t={t}
+            lang={lang}
+            eyebrow={t.landing.specialEyebrow}
+            title={t.landing.specialTitle}
+            sectionId="special"
+          />
+        )}
         <FeaturedObjects
           objects={objects}
           t={t}

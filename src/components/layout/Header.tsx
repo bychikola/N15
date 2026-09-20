@@ -124,9 +124,11 @@ export const Header: FC = () => {
     { href: `/${lang}/foreign`, label: t.nav.foreign },
   ]
 
-  // Раздел «Услуги»: двухуровневое меню. Первый уровень — пять направлений
-  // (Ипотека, Юридические услуги, Дизайн интерьера, Строительство частных
-  // домов, Оценка недвижимости) — кнопки, раскрывают второй уровень.
+  // Раздел «Услуги»: двухуровневое меню. Первый уровень — три подраздела
+  // по стороне сделки (Покупателям, Владельцам, Арендаторам) и пять
+  // направлений (Ипотека, Юридические услуги, Дизайн интерьера,
+  // Строительство частных домов, Оценка недвижимости) — кнопки,
+  // раскрывают второй уровень.
   // Второй уровень — услуги направления, каждый пункт ссылкой на страницу
   // услуги или на якорь её описания внутри страницы направления (id якорей
   // совпадают с id блоков на страницах: /services/legal#proverka-obekta
@@ -134,7 +136,42 @@ export const Header: FC = () => {
   // «Недвижимость». Названия пунктов, не совпадающие с заголовками
   // страниц и блоков, лежат в словаре (services.menu.*). Один список
   // для десктопа и мобильного меню.
+  // стороне сделки: покупателям, владельцам, арендаторам — первыми:
+  // это первый выбор клиента, дальше идут направления работ
   const serviceDirs = [
+    {
+      key: 'buyers',
+      label: t.services.buyers.title,
+      items: [
+        { href: `/${lang}/services/buyers`, label: t.services.buyers.title },
+        { href: `/${lang}/services/buyers#podbor`, label: t.services.buyers.items.selection.title },
+        { href: `/${lang}/services/buyers#proverka`, label: t.services.buyers.items.check.title },
+        { href: `/${lang}/services/buyers#ipoteka`, label: t.services.buyers.items.mortgage.title },
+        { href: `/${lang}/services/buyers#priemka`, label: t.services.buyers.items.acceptance.title },
+      ],
+    },
+    {
+      key: 'owners',
+      label: t.services.owners.title,
+      items: [
+        { href: `/${lang}/services/owners`, label: t.services.owners.title },
+        { href: `/${lang}/services/owners/vygodnaya-prodazha`, label: t.services.owners.salePage.title },
+        { href: `/${lang}/services/owners#ocenka`, label: t.services.owners.items.valuation.title },
+        { href: `/${lang}/services/owners#prodvizhenie`, label: t.services.owners.items.marketing.title },
+        { href: `/${lang}/services/owners#sdelka`, label: t.services.owners.items.deal.title },
+      ],
+    },
+    {
+      key: 'tenants',
+      label: t.services.tenants.title,
+      items: [
+        { href: `/${lang}/services/tenants`, label: t.services.tenants.title },
+        { href: `/${lang}/services/tenants#podbor`, label: t.services.tenants.items.selection.title },
+        { href: `/${lang}/services/tenants#dogovor`, label: t.services.tenants.items.contract.title },
+        { href: `/${lang}/services/tenants#peredacha`, label: t.services.tenants.items.handover.title },
+        { href: `/${lang}/services/tenants#podderzhka`, label: t.services.tenants.items.support.title },
+      ],
+    },
     {
       key: 'ipoteka',
       label: t.services.menu.ipoteka,

@@ -9,6 +9,14 @@ interface Props {
   /** Текст вместо декоративных карточек-заглушек, если подбор пуст
    *  (например: «В этом населённом пункте пока нет доступных объектов»). */
   emptyNote?: string
+  /** Заголовок и надзаголовок блока. По умолчанию — «Актуальные объекты»;
+   *  блок «Особые предложения» передаёт свои тексты (t.landing.special*) */
+  eyebrow?: string
+  title?: string
+  /** Якорь секции (id) — на главной блоков объектов два */
+  sectionId?: string
+  /** Куда ведёт «Показать все →»: по умолчанию — весь каталог */
+  showAllHref?: string
 }
 
 // Заглушка при пустой выдаче: та же карточка-каталога, но со статичным
@@ -43,7 +51,17 @@ function PlaceholderCard({
   )
 }
 
-export default function FeaturedObjects({ objects, t, lang, filterSummary, emptyNote }: Props) {
+export default function FeaturedObjects({
+  objects,
+  t,
+  lang,
+  filterSummary,
+  emptyNote,
+  eyebrow = t.landing.featuredEyebrow,
+  title = t.landing.featuredTitle,
+  sectionId = 'featured',
+  showAllHref = `/${lang}/catalog`,
+}: Props) {
   const cards = objects.length
     ? objects.map((o) => <ObjectCard key={o.id} obj={o} lang={lang} t={t} />)
     : [
@@ -82,7 +100,7 @@ export default function FeaturedObjects({ objects, t, lang, filterSummary, empty
       ]
 
   return (
-    <section className="lp-section lp-featured" id="featured">
+    <section className="lp-section lp-featured" id={sectionId}>
       {/* Шапка: слева заголовок, справа — кнопка «Показать все →» на полный
           каталог (в нём все опубликованные объекты всех категорий и фильтры).
           В режиме подбора кнопку не дублируем: под сводкой уже есть ссылка
@@ -90,19 +108,19 @@ export default function FeaturedObjects({ objects, t, lang, filterSummary, empty
           заголовок (flex-wrap + медиа-запрос в globals.css). */}
       <div className="lp-featured-head">
         <div className="lp-featured-title">
-          <p className="lp-eyebrow">{filterSummary ? t.landing.featuredFilteredEyebrow : t.landing.featuredEyebrow}</p>
-          <h2 className="lp-h2">{filterSummary ? t.landing.featuredFilteredTitle : t.landing.featuredTitle}</h2>
+          <p className="lp-eyebrow">{filterSummary ? t.landing.featuredFilteredEyebrow : eyebrow}</p>
+          <h2 className="lp-h2">{filterSummary ? t.landing.featuredFilteredTitle : title}</h2>
           {filterSummary && (
             <div className="lp-featured-filter">
               <span className="lp-featured-filter-summary">{filterSummary}</span>
-              <a className="lp-featured-filter-reset" href={`/${lang}/catalog`}>
+              <a className="lp-featured-filter-reset" href={showAllHref}>
                 {t.landing.featuredShowAll}
               </a>
             </div>
           )}
         </div>
         {!filterSummary && (
-          <a className="lp-featured-all" href={`/${lang}/catalog`}>
+          <a className="lp-featured-all" href={showAllHref}>
             <span>{t.landing.featuredShowAll}</span>
             <span aria-hidden="true">→</span>
           </a>
@@ -114,7 +132,7 @@ export default function FeaturedObjects({ objects, t, lang, filterSummary, empty
       {objects.length === 0 && emptyNote ? (
         <div className="lp-featured-empty">
           <p className="lp-featured-empty-text">{emptyNote}</p>
-          <a className="lp-featured-filter-reset" href={`/${lang}/catalog`}>
+          <a className="lp-featured-filter-reset" href={showAllHref}>
             {t.landing.featuredShowAll}
           </a>
         </div>

@@ -720,6 +720,23 @@ export function niceRound(v: number): number {
 
 const SPREAD: Record<Confidence, number> = { high: 0.08, medium: 0.14, low: 0.2 }
 
+/**
+ * Семейство категории для расчёта. Ставки движка калиброваны по пяти
+ * базовым категориям (см. referenceRatePerUnit), у добавленных позже
+ * (комната, гараж, дача, коттедж, часть дома) своих ставок нет — считаем их
+ * по ближайшей базовой: комната — как квартира (та же этажность и лифт),
+ * гараж — как коммерция (нежилое помещение), дача, коттедж и часть дома —
+ * как дом. Для отчётов название категории берётся из исходного значения
+ * (см. market-valuation.ts, publishing.ts).
+ */
+const CATEGORY_FAMILY: Record<string, string> = {
+  room: 'apartment',
+  garage: 'commercial',
+  cottage: 'house',
+  dacha: 'house',
+  part_house: 'house',
+}
+
 /** Основной расчёт: параметры + необязательная выборка компараблей (за единицу) */
 export function evaluateValuation(
   raw: ValuationParams,
@@ -727,7 +744,10 @@ export function evaluateValuation(
 ): ValuationResult {
   const at = new Date().toISOString()
   const p: ValuationParams = { ...raw }
-  const category = norm(p.category as string) || ''
+  // Заявленная категория — для проверки и подписей; расчётные ветки работают
+  // с семейством (см. CATEGORY_FAMILY)
+  const declared = norm(p.category as string) || ''
+  const category = CATEGORY_FAMILY[declared] || declared
   const type = norm(p.type as string) || 'sale'
   const sale = type !== 'rent'
   const used: string[] = []
@@ -758,14 +778,21 @@ export function evaluateValuation(
   })
 
   // ── Проверка обязательных данных ──────────────────────────────────────
+  // Проверяем заявленную категорию: у добавленных позже кодов расчёт идёт
+  // по семейству, но сам код должен быть известен
   const KNOWN: Record<string, string> = {
     apartment: 'Квартира',
     house: 'Дом',
     townhouse: 'Таунхаус',
     commercial: 'Коммерческая',
     land: 'Участок',
+    room: 'Комната',
+    garage: 'Гараж',
+    dacha: 'Дача',
+    cottage: 'Коттедж',
+    part_house: 'Часть дома',
   }
-  if (!KNOWN[category]) return empty('Неизвестная категория объекта')
+  if (!KNOWN[declared]) return empty('Неизвестная категория объекта')
 
   if (!area || area <= 0) {
     return {

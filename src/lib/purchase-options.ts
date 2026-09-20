@@ -38,13 +38,22 @@ export const isPurchaseOption = (v: unknown): v is PurchaseOption =>
 const PURCHASE_CATEGORIES = ['apartment', 'house', 'townhouse', 'commercial']
 
 /**
+ * Применимы ли варианты покупки к категории (без учёта типа сделки).
+ * Спрашивает фильтр каталога: у остальных категорий (участок, гараж,
+ * комната, дача, коттедж, часть дома) поля вариантов нет в схеме, поэтому
+ * фильтр по ним был бы всегда пустым — его там не показываем.
+ */
+export const purchaseCategoriesApply = (category?: string | null): boolean =>
+  PURCHASE_CATEGORIES.includes(category ?? '')
+
+/**
  * Есть ли у объекта блок «Варианты покупки». Блок только у продажи жилья и
  * коммерции: у аренды программ покупки не бывает, по земельным участкам
  * ипотечных программ агентство не ведёт (у участка в карточке только тип
  * сделки и цена).
  */
 export const purchaseOptionsApply = (type?: string | null, category?: string | null): boolean =>
-  type === 'sale' && PURCHASE_CATEGORIES.includes(category ?? '')
+  type === 'sale' && purchaseCategoriesApply(category)
 
 /** Ипотечные варианты: на обложке сворачиваются в общий значок «Ипотека» */
 const MORTGAGE_OPTIONS: readonly PurchaseOption[] = ['mortgage', 'familyMortgage', 'militaryMortgage']

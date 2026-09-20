@@ -16,15 +16,37 @@ import type { CityFilterField, CityFilterPlace, CityFilterRegion } from '@/lib/c
 import { SQM_PER_UNIT, areaNumberText, areaUnitOf, parseAreaNumber, sqmToUnit, unitToSqm, type AreaUnit } from '@/lib/area-format'
 // Варианты покупки: коды и правила показа — общие с карточкой объекта и
 // формой CRM (см. src/lib/purchase-options.ts)
-import { PURCHASE_OPTIONS, PURCHASE_OPTION_VALUES } from '@/lib/purchase-options'
+import { PURCHASE_OPTIONS, PURCHASE_OPTION_VALUES, purchaseCategoriesApply } from '@/lib/purchase-options'
+// Категории объектов — общий справочник со схемой коллекции и формой CRM
+// (см. src/lib/object-categories.ts): список значений совпадает с опциями
+// select-поля category
+import { OBJECT_CATEGORY_VALUES } from '@/lib/object-categories'
 
 // Допустимые значения select-фильтров — опции одноимённых полей объекта
 // (src/payload/collections/Objects.ts). Где-запрос к /api/objects с чужим
 // значением (мусорный или устаревший параметр URL) падает серверной
 // ошибкой, поэтому такие значения отбрасываем, а не отправляем.
 export const OBJECT_TYPES = ['sale', 'rent']
-export const OBJECT_CATEGORIES = ['apartment', 'house', 'townhouse', 'commercial', 'land']
+export const OBJECT_CATEGORIES = OBJECT_CATEGORY_VALUES
 export const OBJECT_ROOMS = ['1', '2', '3', '4']
+
+/**
+ * Фильтр «Отопление»: в базе поле текстовое (агент вводит значение списком
+ * CRM или своими словами), поэтому точного равенства тут мало — ищем
+ * узнаваемый фрагмент слова. Первую букву не пишем: «ентральн» находит и
+ * «Центральное», и «центральное». Коды и подписи — из словаря
+ * (t.object.heatingOptions). Значение, которого нет в списке (например
+ * «Печное»), фильтром не находится — это осознанное упрощение.
+ */
+export const HEATING_FILTERS = [
+  { value: 'central', match: 'ентральн' },
+  { value: 'autonomous', match: 'втономн' },
+  { value: 'gas', match: 'азов' },
+  { value: 'electric', match: 'лектрич' },
+] as const
+
+/** Значения фильтра «Отопление» — коды HEATING_FILTERS */
+export const OBJECT_HEATING = HEATING_FILTERS.map((h) => h.value) as readonly string[]
 const isKnown = (v: string, options: readonly string[]) => options.includes(v)
 
 /** Имя URL-параметра фильтра «Объекты агента» — ссылки с карточек команды
@@ -35,6 +57,16 @@ export interface FiltersState {
   type: string
   category: string
   rooms: string
+  /** Этаж — диапазон «от/до»: у квартиры, комнаты и гаража это этаж в доме */
+  floorMin: string
+  floorMax: string
+  /** Этажность — диапазон «от/до»: у дома и таунхауса это этажи дома
+   *  (поле totalFloors), у квартиры — этажность её дома */
+  floorsMin: string
+  floorsMax: string
+  /** Отопление — код из HEATING_FILTERS: в базе поле текстовое, совпадение
+   *  ищем по узнаваемому фрагменту значения (см. buildWhere) */
+  heating: string
   priceMin: string
   priceMax: string
   areaMin: string
@@ -70,7 +102,7 @@ export interface FiltersState {
 }
 
 export const emptyFilters: FiltersState = {
-  type: '', category: '', rooms: '', priceMin: '', priceMax: '', areaMin: '', areaMax: '', areaUnit: '', district: '', cityDistrict: '', locality: '', snt: '', city: '', cityRegion: '', agent: '', purchase: '',
+  type: '', category: '', rooms: '', floorMin: '', floorMax: '', floorsMin: '', floorsMax: '', heating: '', priceMin: '', priceMax: '', areaMin: '', areaMax: '', areaUnit: '', district: '', cityDistrict: '', locality: '', snt: '', city: '', cityRegion: '', agent: '', purchase: '',
 }
 
 /**
@@ -91,7 +123,7 @@ export const purchaseValues = (v: string): string[] => {
  * снимать его из-за этого нельзя.
  */
 const purchaseRelevant = (type: string, category: string): boolean =>
-  type !== 'rent' && category !== 'land'
+  type !== 'rent' && (!category || purchaseCategoriesApply(category))
 
 // Число из фильтра: позволяет и «600», и «11,5» (запятая — как вводят вручную)
 const numOf = (v: string): number | null => parseAreaNumber(v)
@@ -164,6 +196,21 @@ export function buildWhere(
       ? { rooms: { greater_than_equal: 4 } }
       : { rooms: { equals: parseInt(f.rooms, 10) } })
   }
+  // Этаж и этажность: диапазоны «от/до» по числовым полям floor и
+  // totalFloors. Значения отрицательные и дробные отбрасываем — этаж и
+  // этажность целые и положительные
+  const floorMin = floorNumber(f.floorMin)
+  if (floorMin != null) conds.push({ floor: { greater_than_equal: floorMin } })
+  const floorMax = floorNumber(f.floorMax)
+  if (floorMax != null) conds.push({ floor: { less_than_equal: floorMax } })
+  const floorsMin = floorNumber(f.floorsMin)
+  if (floorsMin != null) conds.push({ totalFloors: { greater_than_equal: floorsMin } })
+  const floorsMax = floorNumber(f.floorsMax)
+  if (floorsMax != null) conds.push({ totalFloors: { less_than_equal: floorsMax } })
+  // Отопление: поле в базе текстовое, поэтому ищем узнаваемый фрагмент
+  // значения (см. HEATING_FILTERS) — «Центральное», «центральное отопление»
+  const heating = HEATING_FILTERS.find((h) => h.value === f.heating)
+  if (heating) conds.push({ heating: { contains: heating.match } })
   const priceMin = parseInt(f.priceMin, 10)
   if (f.priceMin && Number.isFinite(priceMin)) conds.push({ price: { greater_than_equal: priceMin } })
   const priceMax = parseInt(f.priceMax, 10)
@@ -193,6 +240,17 @@ export function buildWhere(
 // значения из ссылки отбрасываем — серверный where с нецелым id падает
 function agentId(v: string): number | null {
   const n = Number(v)
+  return Number.isInteger(n) && n > 0 ? n : null
+}
+
+/**
+ * Этаж или этажность из фильтра: целое положительное число либо null.
+ * «1,5» и «−2» — не этаж: такие значения в where не отправляем, иначе
+ * фильтр молча даёт пустую выдачу.
+ */
+function floorNumber(v: string): number | null {
+  if (!v.trim()) return null
+  const n = Number(v.replace(',', '.'))
   return Number.isInteger(n) && n > 0 ? n : null
 }
 
@@ -548,7 +606,7 @@ interface CatalogFiltersProps {
 
 /** Ключи выпадающих списков панели — по одному на фильтр. Открытым может быть
  *  только один: ключ лежит в openId, остальные списки закрыты */
-type DropdownId = 'type' | 'category' | 'purchase' | 'city' | 'district' | 'cityDistrict' | 'locality' | 'snt'
+type DropdownId = 'type' | 'category' | 'purchase' | 'city' | 'district' | 'cityDistrict' | 'locality' | 'snt' | 'heating'
 
 export default function CatalogFilters({ state, onChange, t, cityRegions, knownCities }: CatalogFiltersProps) {
   // Открытый выпадающий список панели. Один на все фильтры: открытие нового
@@ -590,7 +648,7 @@ export default function CatalogFilters({ state, onChange, t, cityRegions, knownC
   // Единица площади действует только для участков; не выбрана — подразумеваются м²
   const isLand = state.category === 'land'
   const areaUnit: AreaUnit = isLand ? areaUnitOf(state.areaUnit) : 'sqm'
-  const hasFilters = state.type || state.category || state.rooms || state.priceMin || state.priceMax || state.areaMin || state.areaMax || state.district || state.cityDistrict || state.locality || state.snt || state.city || state.cityRegion || state.purchase
+  const hasFilters = state.type || state.category || state.rooms || state.floorMin || state.floorMax || state.floorsMin || state.floorsMax || state.heating || state.priceMin || state.priceMax || state.areaMin || state.areaMax || state.district || state.cityDistrict || state.locality || state.snt || state.city || state.cityRegion || state.purchase
   // Варианты покупки есть только у продажи жилья и коммерции: при аренде и
   // участках фильтра нет (значение снимается в apply)
   const showPurchase = purchaseRelevant(state.type, state.category)
@@ -849,6 +907,39 @@ export default function CatalogFilters({ state, onChange, t, cityRegions, knownC
             </button>
           ))}
         </div>
+      </div>
+      {/* Этаж и этажность — диапазоны «от/до»: этаж у квартиры, комнаты и
+          гаража, этажность у дома и у дома квартиры. Числа целые, ввод
+          фильтруется в buildWhere (floorNumber) */}
+      <div className="w-40">
+        <div className={labelCls() + ' mb-1'}>{t.catalog.floorLabel}</div>
+        <div className="flex gap-2">
+          <input type="number" min="1" step="1" placeholder="от" value={state.floorMin}
+            onChange={(e) => apply({ floorMin: e.target.value })}
+            className="w-full px-3 py-2 text-sm bg-[var(--n15-black)]/40 border border-[var(--n15-gold)]/20 text-[var(--n15-silver)] placeholder:text-[var(--n15-muted)] focus:outline-none focus:border-[var(--n15-gold)]/50" />
+          <input type="number" min="1" step="1" placeholder="до" value={state.floorMax}
+            onChange={(e) => apply({ floorMax: e.target.value })}
+            className="w-full px-3 py-2 text-sm bg-[var(--n15-black)]/40 border border-[var(--n15-gold)]/20 text-[var(--n15-silver)] placeholder:text-[var(--n15-muted)] focus:outline-none focus:border-[var(--n15-gold)]/50" />
+        </div>
+      </div>
+      <div className="w-40">
+        <div className={labelCls() + ' mb-1'}>{t.catalog.floorsLabel}</div>
+        <div className="flex gap-2">
+          <input type="number" min="1" step="1" placeholder="от" value={state.floorsMin}
+            onChange={(e) => apply({ floorsMin: e.target.value })}
+            className="w-full px-3 py-2 text-sm bg-[var(--n15-black)]/40 border border-[var(--n15-gold)]/20 text-[var(--n15-silver)] placeholder:text-[var(--n15-muted)] focus:outline-none focus:border-[var(--n15-gold)]/50" />
+          <input type="number" min="1" step="1" placeholder="до" value={state.floorsMax}
+            onChange={(e) => apply({ floorsMax: e.target.value })}
+            className="w-full px-3 py-2 text-sm bg-[var(--n15-black)]/40 border border-[var(--n15-gold)]/20 text-[var(--n15-silver)] placeholder:text-[var(--n15-muted)] focus:outline-none focus:border-[var(--n15-gold)]/50" />
+        </div>
+      </div>
+      {/* Отопление: список из четырёх значений словаря (t.object.heatingOptions),
+          в базе поле текстовое — совпадение ищется по фрагменту (HEATING_FILTERS) */}
+      <div className="w-48">
+        <Dropdown label={t.catalog.heatingLabel} value={state.heating} compactLabel
+          options={HEATING_FILTERS.map((h) => ({ value: h.value, label: t.object.heatingOptions[h.value] }))}
+          open={openId === 'heating'} onToggle={() => toggle('heating')} onClose={close}
+          onSelect={(v) => apply({ heating: v })} />
       </div>
       {hasFilters && (
         <button type="button" onClick={() => onChange(emptyFilters)}

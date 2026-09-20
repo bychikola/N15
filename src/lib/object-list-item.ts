@@ -25,6 +25,9 @@ export function objectToListItem(doc: Record<string, unknown>): ObjectListItem {
     // Варианты покупки — значки на обложке карточки (см. purchaseBadges)
     purchaseOptions: doc.purchaseOptions as string[] | undefined,
     address: doc.address as ObjectListItem['address'],
+    // Координаты точки объекта — для режима «На карте» в каталоге
+    // (объекты без координат на карту не попадают, см. CatalogMap)
+    coordinates: doc.coordinates as ObjectListItem['coordinates'],
     primaryImage: (doc.primaryImage && typeof doc.primaryImage === 'object'
       ? doc.primaryImage
       : undefined) as ObjectListItem['primaryImage'],

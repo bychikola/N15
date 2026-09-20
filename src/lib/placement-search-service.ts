@@ -35,6 +35,8 @@ import {
   type SearchObjectLike,
 } from './placement-search'
 import type { ListingLike } from './listing-check'
+// Подпись категории объекта — общий справочник (см. lib/object-categories.ts)
+import { categoryLabel } from './object-categories'
 import { marketPlatformByUrl } from './market-parser'
 import { platformChannelAccess, type PlatformChannelAccess } from './platform-integration-service'
 import { CONNECTION_STATUS_LABELS, type ConnectionStatus } from './platform-integrations'
@@ -410,14 +412,7 @@ function addressLine(addr: Record<string, string | undefined>): string {
 
 /** «Квартира, 1 комн., продажа» — тип объекта для подписи в блоке */
 function probeKindText(category: string | null, rooms: number | null, dealType: string | null): string {
-  const cat: Record<string, string> = {
-    apartment: 'Квартира',
-    house: 'Дом',
-    townhouse: 'Таунхаус',
-    commercial: 'Коммерческая',
-    land: 'Участок',
-  }
-  const parts = [category ? cat[category] || category : '', rooms ? `${rooms} комн.` : '', dealType === 'rent' ? 'аренда' : dealType === 'sale' ? 'продажа' : '']
+  const parts = [category ? categoryLabel(category) : '', rooms ? `${rooms} комн.` : '', dealType === 'rent' ? 'аренда' : dealType === 'sale' ? 'продажа' : '']
   return parts.filter(Boolean).join(', ')
 }
 

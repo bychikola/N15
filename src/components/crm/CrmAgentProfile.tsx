@@ -10,6 +10,8 @@ import { CITY_DISTRICT_OPTIONS, DISTRICT_OPTIONS } from '@/lib/districts'
 // Единицы площади участка: сотки и гектары (см. src/lib/area-format.ts)
 import { areaUnitOf, sqmToUnit } from '@/lib/area-format'
 import { AgentFormModal } from '@/components/crm/AgentFormModal'
+// Категории объектов — общий справочник (см. src/lib/object-categories.ts)
+import { OBJECT_CATEGORY_VALUES } from '@/lib/object-categories'
 
 /**
  * Профиль агента в разделе CRM «Агенты»: контакты агента и его объекты по
@@ -42,7 +44,7 @@ interface Props {
 const BUCKETS: AgentObjectBucket[] = ['active', 'moderation', 'archive', 'sold']
 
 // Порядок категорий в фильтре «Тип объекта» — как в схеме объектов
-const CATEGORIES = ['apartment', 'house', 'townhouse', 'commercial', 'land']
+const CATEGORIES = OBJECT_CATEGORY_VALUES
 
 // Типы сделки — как в схеме объектов
 const DEAL_TYPES = ['sale', 'rent']
