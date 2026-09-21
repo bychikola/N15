@@ -10,6 +10,9 @@ import { MusicPlayer } from '@/components/layout/MusicPlayer'
 import CabinetBadge from '@/components/layout/CabinetBadge'
 import MortgageCalculator from '@/components/layout/MortgageCalculator'
 import { reachGoal } from '@/lib/metrika'
+// Общий номер агентства — один на весь сайт: та же ссылка, что у кнопки
+// «Позвонить» в карточке объекта, когда номер агента клиенту не показывается
+import { SITE_PHONE_TEL } from '@/lib/call-routing'
 
 // Иконка телефона — контурная, цвет берёт из currentColor (золотой акцент),
 // чтобы кнопка «Позвонить нам» выглядела в едином стиле с остальной шапкой.
@@ -78,9 +81,6 @@ const cabinetIcon = (
     <circle cx="12" cy="7" r="4" />
   </svg>
 )
-
-// Общий номер агентства для tel:-ссылки (текстом рядом с кнопкой не показывается)
-const SITE_PHONE_TEL = 'tel:+79581161515'
 
 export const Header: FC = () => {
   const [isOpen, setIsOpen] = useState(false)

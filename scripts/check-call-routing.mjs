@@ -22,6 +22,8 @@
  * 5. Объекты без ответственного агента — список для назначения в CRM:
  *    это не ошибка маршрута (звонок по ним не теряется), но карточки стоит
  *    закрепить за агентами.
+ * 6. Ссылки кнопок: «Позвонить» — обычный звонок (tel:), «WhatsApp» — wa.me.
+ *    Кнопки не перепутаны и не ведут по одной и той же ссылке.
  *
  * Код возврата: 0 — все проверки прошли, 1 — есть ошибки (они помечены ✗).
  */
@@ -75,13 +77,20 @@ async function routeOf(path) {
   }
 }
 
-/** Как маршрут видит АТС: по ответу API (kind) — понятной фразой */
-const atsWord = (kind) =>
+/**
+ * Как маршрут видит АТС: по ответу API (kind) — понятной фразой. Поле ats
+ * приходит только у адресного маршрута, поэтому когда его нет, смотрим на
+ * источник: у агента без номера в АТС звонок идёт на общий номер, без агента —
+ * это резервный маршрут.
+ */
+const atsWord = (kind, source) =>
   ({
     extension: 'общий номер + добавочный агента',
     direct: 'прямой номер агента в АТС',
     common: 'общий номер (номер в АТС не задан)',
-  })[kind] ?? 'маршрут не построен'
+  })[kind] ?? (source === 'agent'
+    ? 'номер в АТС не задан — звонок на общий номер, с агентом соединяет АТС'
+    : 'резервный маршрут — общий номер')
 
 /** Общий номер агентства из tel:-ссылок главной страницы */
 async function commonNumbers() {
@@ -158,6 +167,8 @@ async function main() {
 
   // 2–3. Маршрут по объекту: агент объекта или резерв
   console.log('\nМаршрут по объекту (ответственный агент / резерв):')
+  // Собранные ответы — для проверки ссылок кнопок (пункт 6)
+  const links = []
   const withAgent = objects.filter((o) => agentIdOf(o) !== null)
   const withoutAgent = objects.filter((o) => agentIdOf(o) === null)
 
@@ -175,7 +186,8 @@ async function main() {
     if (!route) bad(`#${object.id} «${object.title}» (${name}): маршрут не ответил`, 'ожидается 200 с маршрутом звонка')
     else if (route.source !== 'agent') bad(`#${object.id} «${object.title}» (${name}): звонок ушёл в резерв`, 'ответственный агент не попал в маршрут')
     else if (Number(route.agentId) !== agentId) bad(`#${object.id} «${object.title}»: маршрут на агента #${route.agentId}, а ответственный #${agentId}`, 'звонок придёт не тому агенту')
-    else ok(`#${object.id} «${object.title}» → ${name}`, atsWord(route.ats))
+    else ok(`#${object.id} «${object.title}» → ${name}`, atsWord(route.ats, route.source))
+    if (route) links.push({ label: `#${object.id} «${object.title}»`, route })
   }
   if (!byAgent.size) console.log('  • опубликованных объектов с ответственным агентом нет — проверять нечего')
 
@@ -189,6 +201,9 @@ async function main() {
   else if (reserve.source !== 'reserve') bad(`#${reserveProbe.id} без ответственного агента: source=${reserve.source}`, 'ожидается reserve — звонок должен уйти на общий номер')
   else if (ruDigits(reserve.tel) !== commonDigits) bad(`#${reserveProbe.id}: резервный звонок идёт на ${reserve.tel}`, `ожидался общий номер ${commonDigits}`)
   else ok(`#${reserveProbe.id} «${reserveProbe.title}» без ответственного → общий номер ${commonDigits}`, 'в АТС это резервный агент (Лана)')
+  // Настоящий объект без агента — в проверку ссылок; выдуманный id для этого
+  // не годится (у него нет карточки на сайте)
+  if (reserve && withoutAgent.length) links.push({ label: `#${reserveProbe.id} «${reserveProbe.title}» (без агента)`, route: reserve })
 
   // 4. Личные номера в ответе: сверка с базой, если она доступна
   console.log('\nЛичные номера агентов в маршруте:')
@@ -203,6 +218,7 @@ async function main() {
       for (const number of agent.numbers) {
         if (digits(route.tel).includes(number)) leaked.push(`${agent.name} — ${number} в звонке #${agent.id}`)
       }
+      links.push({ label: `агент #${agent.id} ${String(agent.name).trim()}`, route })
     }
     if (leaked.length) bad('личный номер попал в маршрут звонка', leaked.join('; '))
     else ok(`проверено агентов: ${personal.rows.length}`, 'ни один личный номер не набирается кнопкой «Позвонить» (WhatsApp — отдельный канал, у него свой номер)')
@@ -217,6 +233,30 @@ async function main() {
     }
     if (withoutAgent.length > 20) console.log(`  • …и ещё ${withoutAgent.length - 20}`)
     console.log(`  Всего ${objectsWord(withoutAgent.length)}: их звонки идут на общий (резервный) номер, пока не выбран агент`)
+  }
+
+  // 6. Ссылки кнопок: «Позвонить» — звонок (tel:), «WhatsApp» — wa.me.
+  // Кнопки не перепутаны и не ведут по одной и той же ссылке: у звонка схема
+  // tel: (набор номера), у WhatsApp — https://wa.me/<цифры>.
+  console.log('\nСсылки кнопок («Позвонить» и «WhatsApp»):')
+  const linkFails = []
+  for (const { label, route } of links) {
+    // tel: — цифры, у адресного маршрута ещё добавочный через паузу (,101)
+    if (!/^tel:\+\d{10,}(,+\d+)?$/.test(route.tel ?? '')) {
+      linkFails.push(`${label}: «Позвонить» ведёт не на звонок (${route.tel ?? 'ссылки нет'})`)
+    }
+    if (route.wa && !/^https:\/\/wa\.me\/\d{10,15}$/.test(route.wa)) {
+      linkFails.push(`${label}: «WhatsApp» ведёт не в WhatsApp (${route.wa})`)
+    }
+    if (route.wa && route.wa === route.tel) {
+      linkFails.push(`${label}: обе кнопки ведут по одной и той же ссылке`)
+    }
+  }
+  if (linkFails.length) linkFails.forEach((problem) => bad(problem))
+  else if (!links.length) bad('маршрутов для проверки ссылок нет', 'ни один ответ API не получен')
+  else {
+    const waCount = links.filter((l) => l.route.wa).length
+    ok(`проверено маршрутов: ${links.length}`, `«Позвонить» — tel:, WhatsApp — wa.me (номер WhatsApp есть у ${waCount}); одна ссылка на две кнопки не подставляется`)
   }
 
   console.log(failed.length ? `\n✗ Ошибок: ${failed.length}` : '\n✓ Все проверки пройдены')

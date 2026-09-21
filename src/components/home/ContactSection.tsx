@@ -1,4 +1,5 @@
 import { GoalLink } from '@/components/analytics/GoalLink'
+import { phoneHref } from '@/lib/call-routing'
 import type { Dict } from '@/i18n/dictionaries'
 
 interface Props {
@@ -7,7 +8,7 @@ interface Props {
 }
 
 export default function ContactSection({ t, phone }: Props) {
-  const phoneHref = phone ? `tel:${phone.replace(/\s+/g, '')}` : 'tel:+79581161515'
+  const phoneLink = phoneHref(phone)
   const phoneLabel = phone || '8 958 116-15-15'
 
   return (
@@ -24,8 +25,8 @@ export default function ContactSection({ t, phone }: Props) {
         <p>{t.landing.contactText}</p>
         {/* Обе ссылки ведут на общий номер: переход не задерживается,
             цель «нажатие Позвонить» уходит в Метрику (номер — нет) */}
-        <GoalLink className="lp-contact-phone" href={phoneHref} goal="call_click">{phoneLabel}</GoalLink>
-        <GoalLink className="lp-button" href={phoneHref} goal="call_click">
+        <GoalLink className="lp-contact-phone" href={phoneLink} goal="call_click">{phoneLabel}</GoalLink>
+        <GoalLink className="lp-button" href={phoneLink} goal="call_click">
           {t.landing.contactCall} <span aria-hidden="true">→</span>
         </GoalLink>
         <small>{t.landing.contactNote}</small>

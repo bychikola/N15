@@ -7,6 +7,9 @@ import { OrnamentBorder } from '@/components/ui/OrnamentBorder'
 import { ContactForm } from '@/components/contacts/ContactForm'
 import { GoalLink } from '@/components/analytics/GoalLink'
 import { linkGoal } from '@/lib/metrika'
+// Телефоны из настроек — в ссылки tel: тем же видом, что в шапке сайта
+// (+7…); WhatsApp ведёт отдельной ссылкой wa.me (см. SITE_PHONE)
+import { phoneHref, SITE_PHONE, SITE_PHONE_TEL } from '@/lib/call-routing'
 import { getDictionary, type Dict } from '@/i18n/dictionaries'
 
 export const dynamic = 'force-dynamic'
@@ -35,7 +38,7 @@ async function getContacts(t: Dict) {
         contacts.push({
           label: p.label || t.contacts.phone,
           value: p.phone,
-          href: `tel:${p.phone.replace(/\D/g, '')}`,
+          href: phoneHref(p.phone),
         })
       }
     }
@@ -81,7 +84,7 @@ export default async function ContactsPage({ params }: PageProps) {
   // Default fallback if no data in admin
   if (contacts.length === 0) {
     contacts = [
-      { label: t.contacts.phone, value: '+7 (958) 116-15-15', href: 'tel:+79581161515' },
+      { label: t.contacts.phone, value: SITE_PHONE, href: SITE_PHONE_TEL },
       { label: 'WhatsApp', value: '+7 (958) 116-15-15', href: 'https://wa.me/79581161515' },
       { label: 'Telegram', value: '@n15_realty', href: 'https://t.me/n15_realty' },
       { label: t.contacts.email, value: 'info@n15-realty.ru', href: 'mailto:info@n15-realty.ru' },

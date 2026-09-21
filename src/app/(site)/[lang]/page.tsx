@@ -15,6 +15,9 @@ import OwnersSection from '@/components/home/OwnersSection'
 import AboutSection from '@/components/home/AboutSection'
 import ContactSection from '@/components/home/ContactSection'
 import { GoalLink } from '@/components/analytics/GoalLink'
+// Звонок в подвале главной — тем же номером, что в шапке: tel:-ссылка
+// собирается из номера настроек (см. src/lib/call-routing.ts)
+import { phoneHref } from '@/lib/call-routing'
 // Справочники допустимых значений фильтров: where-запрос по select-полю
 // принимает только значения из его опций — чужое значение роняет страницу
 // серверной ошибкой («This page couldn't load»)
@@ -249,7 +252,7 @@ export default async function HomePage({ params, searchParams }: PageProps) {
               на странице контактов */}
           <GoalLink
             className="lp-footer-phone"
-            href={phone ? `tel:${phone.replace(/\s+/g, '')}` : 'tel:+79581161515'}
+            href={phoneHref(phone)}
             goal="call_click"
           >
             {phone || '8 958 116-15-15'}

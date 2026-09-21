@@ -13,6 +13,9 @@ import { GoalOnMount } from '@/components/analytics/GoalOnMount'
 import { getDictionary } from '@/i18n/dictionaries'
 import { AD_OFFER, AD_RULES, adDocHref } from '@/lib/advertising-legal'
 import { visibleAdRequestCards, visibleAdvertisements, type SiteAdCard } from '@/lib/advertising-service'
+// «Позвонить» из первого экрана — та же tel:-ссылка на общий номер агентства,
+// что в шапке и в карточке объекта (см. src/lib/call-routing.ts)
+import { phoneHref as phoneLink } from '@/lib/call-routing'
 
 export const dynamic = 'force-dynamic'
 
@@ -61,7 +64,7 @@ export default async function AdvertisingPage({ params }: PageProps) {
   } catch {
     // Без базы страница всё равно открывается: текст и форма важнее списка
   }
-  const phoneHref = phone ? `tel:${phone.replace(/\s+/g, '')}` : 'tel:+79581161515'
+  const callHref = phoneLink(phone)
 
   const docs = [
     { href: adDocHref(lang, AD_OFFER.path), title: t.advertising.consentOfferDoc },
@@ -95,7 +98,7 @@ export default async function AdvertisingPage({ params }: PageProps) {
                 {t.advertising.discussCta} <span aria-hidden="true">→</span>
               </Button>
               {/* «Позвонить» — ссылка с целью Метрики (номер в аналитику не уходит) */}
-              <GoalButton variant="outline" size="md" href={phoneHref} goal="call_click">
+              <GoalButton variant="outline" size="md" href={callHref} goal="call_click">
                 {t.advertising.callCta}
               </GoalButton>
             </div>
@@ -165,7 +168,7 @@ export default async function AdvertisingPage({ params }: PageProps) {
                 <p className="text-sm leading-relaxed text-[var(--n15-muted)] mb-4">{t.advertising.helpText}</p>
                 <p className="flex flex-col gap-2 text-sm">
                   <GoalLink
-                    href={phoneHref}
+                    href={callHref}
                     goal="call_click"
                     className="text-[var(--n15-gold)] hover:text-[var(--n15-gold-light)]"
                   >
