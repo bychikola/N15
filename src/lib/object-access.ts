@@ -13,7 +13,7 @@
  * одно для интерфейса и для прямых запросов к API.
  */
 
-import type { Where } from 'payload'
+import type { Payload, Where } from 'payload'
 
 /** Текущий пользователь в доступе/хуке: id и роль (клиент, агент, админ) */
 export type ObjectActor = { id?: number | string; role?: string } | null | undefined
@@ -65,4 +65,47 @@ export function ownObjectsWhere(
   if (agentIds.size) or.push({ agent: { in: [...agentIds] } })
   if (userId != null) or.push({ createdBy: { equals: userId } })
   return or.length ? { or } : null
+}
+
+/**
+ * id профилей агентов пользователя (коллекция agents, agents.user = этот
+ * пользователь): по ним собирается условие выборки «своих» объектов —
+ * см. ownObjectsWhere. Профилей может быть несколько (в базе остаются
+ * неактивные), поэтому возвращаем множество.
+ */
+export async function agentProfileIds(
+  payload: Payload,
+  userId: number | string,
+): Promise<Set<number>> {
+  const { docs } = await payload.find({
+    collection: 'agents',
+    where: { user: { equals: userId } },
+    limit: 100,
+    depth: 0,
+    overrideAccess: true,
+  })
+  const ids = new Set<number>()
+  for (const doc of docs) if (typeof doc.id === 'number') ids.add(doc.id)
+  return ids
+}
+
+/**
+ * Условие выборки объектов, доступных сотруднику, — для серверных страниц и
+ * счётчиков. Local API читает с overrideAccess: true (access коллекции Objects
+ * при этом не применяется, см. payload/dist/.../local/count), поэтому в CRM
+ * условие приходится задавать явно: без него счётчик показал бы агенту всю
+ * базу агентства. Администратору — все объекты (undefined: условия нет),
+ * агенту — только свои (ответственный агент или автор карточки), остальным —
+ * ни одного: клиент в CRM не работает (см. canAccessCrm).
+ */
+export async function viewerObjectsWhere(
+  payload: Payload,
+  user: { id: number | string; role?: string },
+): Promise<Where | undefined> {
+  if (user.role === 'admin') return undefined
+  const mine = await agentProfileIds(payload, user.id)
+  // ownObjectsWhere возвращает null, только если у сотрудника нет ни id, ни
+  // профиля агента: подставляем условие, по которому не подходит ни один
+  // объект (id в базе начинаются с единицы)
+  return ownObjectsWhere(user.id, mine) ?? { id: { equals: 0 } }
 }

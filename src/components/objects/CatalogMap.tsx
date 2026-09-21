@@ -15,10 +15,11 @@ interface Props {
   lang: string
 }
 
-/** Ответ маршрута /api/objects/map (см. его описание) */
+/** Ответ маршрута /api/objects/map (см. его описание). Числа найденных
+ *  объектов в ответе нет: общее количество объектов компании сайт не
+ *  показывает, а сколько точек пришло — видно по самому массиву */
 interface MapData {
   points: ObjectMapPoint[]
-  total: number
   /** В выдаче больше объектов, чем помещается на карту */
   truncated: boolean
   /** Сколько адресов сервер ещё определяет — за ними стоит повторить запрос */
@@ -100,7 +101,6 @@ export const CatalogMap: FC<Props> = ({ where, lang }) => {
         const next: LoadedMap = {
           key: whereKey,
           points: payload.points || [],
-          total: payload.total ?? 0,
           truncated: !!payload.truncated,
           pending: payload.pending ?? 0,
         }
@@ -266,13 +266,12 @@ export const CatalogMap: FC<Props> = ({ where, lang }) => {
           </div>
         )}
       </div>
-      {/* Сколько объектов выдачи попало на карту: точка — координаты объекта
-          или определённый по адресу геокодер */}
+      {/* Подсказка под картой — без числа объектов: сколько объектов нашлось
+          и сколько попало на карту, на сайте не показываем (см. CatalogContent).
+          Точка — координаты объекта или определённый по адресу геокодер */}
       {points.length > 0 && (
         <p className="mt-3 text-xs text-[var(--n15-muted)]">
-          {t.catalog.mapOnMap} {points.length}
-          {data && data.total > points.length ? ` / ${data.total}` : ''} {t.catalog.foundObjects}
-          {data?.truncated ? ` — ${t.catalog.mapTruncated}` : ` — ${t.catalog.mapHint}`}
+          {t.catalog.mapOnMap} {data?.truncated ? t.catalog.mapTruncated : t.catalog.mapHint}
         </p>
       )}
     </div>

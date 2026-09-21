@@ -209,17 +209,6 @@ export default function CatalogContent({ cityRegions, knownCities, agentName }: 
   )
   const sortParam = sort || '-createdAt'
 
-  // Счётчики полосы категорий: та же выдача, но без фильтра по категории —
-  // «сколько объектов было бы, выбери я соседнюю категорию». Дерево условий
-  // собирает тот же buildWhere, что и основную выдачу: счётчики не разъедутся
-  // с ней при добавлении нового фильтра
-  const countsWhere = useMemo(
-    () => buildWhere({ ...filters, category: '' }, q, cityRegions, knownCities, cadastralNumber ? (cadastral?.ids ?? null) : null),
-    [filters, q, cityRegions, knownCities, cadastralNumber, cadastral],
-  )
-  const [categoryCounts, setCategoryCounts] = useState<Record<string, number>>({})
-  const [countsLoading, setCountsLoading] = useState(true)
-
   // Debounced search: write q to URL after 300ms (only q — filters/sort handled below)
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined)
   useEffect(() => {
@@ -282,51 +271,11 @@ export default function CatalogContent({ cityRegions, knownCities, agentName }: 
     setView((prev) => (prev === nextView ? prev : nextView))
   }
 
-  // Пересчёт счётчиков категорий: одна сводка «все» (без фильтра по
-  // категории) и по одной на категорию — parallel, limit=0 отдаёт только
-  // totalDocs. Запросы дорогие (11 штук), поэтому с задержкой: пока клиент
-  // печатает поиск или крутит цену, считаем один раз после паузы
-  useEffect(() => {
-    const controller = new AbortController()
-    const whereParam = (w: unknown) => (Object.keys(w as object).length ? `&where=${encodeURIComponent(JSON.stringify(w))}` : '')
-    const countFor = (w: unknown) =>
-      fetch(`/api/objects?limit=0&depth=0${whereParam(w)}`, { credentials: 'include', signal: controller.signal })
-        .then((res) => res.json())
-        .then((data) => Number(data.totalDocs) || 0)
-
-    // setState — внутри таймера, а не в теле эффекта (правило
-    // react-hooks/set-state-in-effect, см. чтение URL выше)
-    const timer = setTimeout(() => {
-      // Номер участка ещё ищется — счётчики не пересчитываем: без найденных
-      // id они показали бы нули по всем категориям (см. cadastralPending)
-      if (cadastralPending) return
-      setCountsLoading(true)
-      Promise.all([
-        countFor(countsWhere),
-        ...OBJECT_CATEGORIES.map((category) =>
-          // Пустое дерево условий в and[] не подставляем: запрос без фильтров
-          // по остальным полям — это просто «все объекты категории»
-          countFor(Object.keys(countsWhere).length ? { and: [countsWhere, { category: { equals: category } }] } : { category: { equals: category } }),
-        ),
-      ])
-        .then(([all, ...rest]) => {
-          const counts: Record<string, number> = { all }
-          OBJECT_CATEGORIES.forEach((category, i) => { counts[category] = rest[i] })
-          setCategoryCounts(counts)
-        })
-        .catch(() => { /* счётчики — подсказка: не пересчитались, чипы покажут «…» */ })
-        .finally(() => { if (!controller.signal.aborted) setCountsLoading(false) })
-    }, 400)
-
-    return () => {
-      clearTimeout(timer)
-      controller.abort()
-    }
-    // cadastralPending — по той же причине, что у выдачи: поиск номера может
-    // вернуть пусто, дерево условий не изменится, и счётчики остались бы
-    // прежними (см. комментарий у загрузки первой страницы)
-  }, [countsWhere, cadastralPending])
-
+  // Счётчиков объектов в каталоге нет намеренно: общее количество объектов
+  // компании на публичном сайте не показываем — ни строкой «Найдено» над
+  // выдачей, ни числами у категорий и населённых пунктов (см. CatalogFilters),
+  // ни числами на карте (см. CatalogMap).
+  //
   // Поиск по кадастровому номеру: спрашиваем сервер, какие участки подходят.
   // С задержкой — номер вводят посимвольно, и запрос на каждую цифру был бы
   // и лишней работой, и перебором с точки зрения лимита маршрута (он считает
@@ -336,7 +285,7 @@ export default function CatalogContent({ cityRegions, knownCities, agentName }: 
     if (!cadastralNumber) return
     const controller = new AbortController()
     // setState — внутри таймера, а не в теле эффекта (правило
-    // react-hooks/set-state-in-effect, см. счётчики категорий ниже)
+    // react-hooks/set-state-in-effect, см. чтение URL выше)
     const timer = setTimeout(() => {
       fetch(`/api/objects/by-cadastral?number=${encodeURIComponent(cadastralNumber)}`, { signal: controller.signal })
         .then((res) => res.json())
@@ -464,12 +413,10 @@ export default function CatalogContent({ cityRegions, knownCities, agentName }: 
         />
       </div>
 
-      {/* Полоса категорий со счётчиками — над фильтрами: категория это
-          первый выбор клиента, остальные фильтры её уточняют */}
+      {/* Полоса категорий — над фильтрами: категория это первый выбор
+          клиента, остальные фильтры её уточняют */}
       <CategoryChips
         value={filters.category}
-        counts={categoryCounts}
-        loading={countsLoading}
         onChange={(category) => { onChangeFilters({ category }); }}
       />
 
@@ -496,17 +443,14 @@ export default function CatalogContent({ cityRegions, knownCities, agentName }: 
         </div>
       )}
 
-      {/* Count + sort */}
+      {/* Сброс фильтров + вид выдачи и сортировка. Числа найденных объектов
+          здесь нет: общее количество объектов компании на сайте не показываем */}
       <div ref={resultsRef} className="flex flex-wrap items-center justify-between gap-3 my-4 scroll-mt-24">
-        <p className="text-xs text-[var(--n15-muted)]">
-          {t.catalog.found} <span className="text-[var(--n15-gold)]">{loading ? '...' : totalDocs}</span> {t.catalog.foundObjects}
-          {hasFilters && (
-            <button onClick={clearAll}
-              className="ml-4 text-[var(--n15-gold)] underline">
-              {t.catalog.resetFilters}
-            </button>
-          )}
-        </p>
+        {hasFilters ? (
+          <button onClick={clearAll} className="text-xs text-[var(--n15-gold)] underline">
+            {t.catalog.resetFilters}
+          </button>
+        ) : <span />}
         <div className="flex flex-wrap items-center gap-3">
           {/* Вид выдачи: список или карта с метками объектов */}
           <div className="inline-flex border border-[var(--n15-gold)]/20">

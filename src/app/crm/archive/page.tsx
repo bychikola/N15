@@ -6,6 +6,7 @@ import { canAccessCrm, getCrmUser } from '../auth'
 import { CrmShell } from '@/components/crm/CrmShell'
 import { CrmArchive } from '@/components/crm/CrmArchive'
 import { loadArchiveBoard } from '@/lib/archive-service'
+import { agentProfileIds } from '@/lib/object-access'
 
 export const dynamic = 'force-dynamic'
 
@@ -20,26 +21,25 @@ export default async function CrmArchivePage() {
 
   const payload = await getPayload({ config })
   // Внутренние комментарии архива — только администратору (см. archive-service)
-  const rows = await loadArchiveBoard(payload, user.role === 'admin')
+  const board = await loadArchiveBoard(payload, user.role === 'admin')
 
-  // «Свои» объекты сотрудника: восстановить объект может его агент, автор
-  // карточки или администратор (то же правило, что у правки объектов в
-  // коллекции Objects — см. src/lib/object-access.ts)
-  const ownObjectIds: number[] = []
-  if (user.role !== 'admin') {
-    const agentsRes = await payload.find({
-      collection: 'agents',
-      where: { user: { equals: user.id } },
-      limit: 100,
-      depth: 0,
-      overrideAccess: true,
-    })
-    const myAgentIds = agentsRes.docs.map((a) => a.id as number)
-    for (const row of rows) {
-      if (row.agentId != null && myAgentIds.includes(row.agentId)) ownObjectIds.push(row.id)
-      else if (row.authorId != null && String(row.authorId) === String(user.id)) ownObjectIds.push(row.id)
-    }
-  }
+  // Агенту показываем только его архив: «свой» объект — тот, где он
+  // ответственный агент (профиль agents, agents.user = его учётная запись) или
+  // автор карточки (то же правило, что у правки объектов в коллекции Objects —
+  // см. src/lib/object-access.ts). Чужой архив ему не отдаём: иначе список и
+  // счётчик «Найдено» считали бы объекты коллег, а восстановить их он всё
+  // равно не может. Администратор видит архив целиком.
+  const myAgentIds = user.role === 'admin' ? new Set<number>() : await agentProfileIds(payload, user.id)
+  const rows = user.role === 'admin'
+    ? board
+    : board.filter(
+        (row) =>
+          (row.agentId != null && myAgentIds.has(row.agentId)) ||
+          (row.authorId != null && String(row.authorId) === String(user.id)),
+      )
+  // Восстановить объект может его агент, автор карточки или администратор,
+  // поэтому у агента «свои» — все строки, что он видит
+  const ownObjectIds: number[] = user.role === 'admin' ? [] : rows.map((row) => row.id)
 
   return (
     <CrmShell user={user} t={t} active="archive">

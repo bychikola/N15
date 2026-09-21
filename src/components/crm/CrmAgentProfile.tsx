@@ -27,6 +27,11 @@ import { OBJECT_CATEGORY_VALUES } from '@/lib/object-categories'
  * «Объекты» с открытой карточкой (?edit=<id>) — права на правку там те же
  * (access коллекции Objects). Персональные данные собственников в строки
  * объектов не попадают (см. src/lib/agents-service.ts).
+ *
+ * Количество объектов — закрытое сведение: числа по категориям и счётчик
+ * «Найдено…» видит администратор и сам агент в своём профиле (countsVisible),
+ * в чужом профиле вместо них прочерки. Чужие числа страница в пропсы не
+ * кладёт (см. src/app/crm/agents/[id]/page.tsx).
  */
 
 interface Props {
@@ -38,6 +43,8 @@ interface Props {
   ownObjectIds: number[]
   /** Право править сам профиль агента: админ или сотрудник с разрешением */
   canManage: boolean
+  /** Показывать ли количество объектов: админ или свой профиль (см. описание) */
+  countsVisible: boolean
 }
 
 // Категории объектов в профиле — в порядке показа (см. objectBucket)
@@ -114,7 +121,7 @@ const btnGhost: React.CSSProperties = {
   cursor: 'pointer',
 }
 
-export const CrmAgentProfile: FC<Props> = ({ t, agent, rows, isAdmin, ownObjectIds, canManage }) => {
+export const CrmAgentProfile: FC<Props> = ({ t, agent, rows, isAdmin, ownObjectIds, canManage, countsVisible }) => {
   const router = useRouter()
   const [q, setQ] = useState('')
   const [bucket, setBucket] = useState('')
@@ -228,7 +235,9 @@ export const CrmAgentProfile: FC<Props> = ({ t, agent, rows, isAdmin, ownObjectI
           </div>
         </div>
 
-        {/* Сводка: сколько объектов в каждой категории */}
+        {/* Сводка: сколько объектов в каждой категории. Числа закрыты, если
+            профиль чужой (см. countsVisible) — подписи остаются, чтобы было
+            видно, что сведение есть, но не показано */}
         <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid #eee9e1', display: 'flex', flexWrap: 'wrap', gap: 10 }}>
           {BUCKETS.map((b) => (
             <div key={b} style={{ flex: '1 1 150px', background: '#faf7f2', border: '1px solid #eee4d5', borderRadius: 10, padding: '12px 14px' }}>
@@ -236,7 +245,7 @@ export const CrmAgentProfile: FC<Props> = ({ t, agent, rows, isAdmin, ownObjectI
                 {bucketLabels[b]}
               </span>
               <strong style={{ display: 'block', marginTop: 8, fontFamily: "'New Standard', Georgia, serif", fontWeight: 400, fontSize: 24 }}>
-                {agent.counts[b]}
+                {countsVisible ? agent.counts[b] : '—'}
               </strong>
             </div>
           ))}
@@ -318,9 +327,13 @@ export const CrmAgentProfile: FC<Props> = ({ t, agent, rows, isAdmin, ownObjectI
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
-        <span style={{ fontSize: 10, color: '#817b70', textTransform: 'uppercase', letterSpacing: '.08em' }}>
-          {fmt(t.crm.agFound, visible.length, rows.length)}
-        </span>
+        {/* Счётчик «Найдено: N из M» — сведение о количестве объектов, в чужом
+            профиле его нет (см. countsVisible) */}
+        {countsVisible && (
+          <span style={{ fontSize: 10, color: '#817b70', textTransform: 'uppercase', letterSpacing: '.08em' }}>
+            {fmt(t.crm.agFound, visible.length, rows.length)}
+          </span>
+        )}
         <span style={{ fontSize: 10, color: '#9b958a' }}>{t.crm.agEditHint}</span>
       </div>
 
@@ -340,7 +353,11 @@ export const CrmAgentProfile: FC<Props> = ({ t, agent, rows, isAdmin, ownObjectI
               <h4 style={{ margin: 0, fontFamily: "'New Standard', Georgia, serif", fontWeight: 400, fontSize: 16 }}>
                 {bucketLabels[section.bucket]}
               </h4>
-              <span style={{ fontSize: 10, color: '#927046' }}>{section.rows.length}</span>
+              {/* Число объектов в категории — сведение о количестве, в чужом
+                  профиле его нет (см. countsVisible) */}
+              {countsVisible && (
+                <span style={{ fontSize: 10, color: '#927046' }}>{section.rows.length}</span>
+              )}
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: 14 }}>
               {section.rows.map((row) => (

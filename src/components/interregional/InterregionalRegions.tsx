@@ -17,16 +17,23 @@ interface Props {
   otherCities: InterregionalOtherCity[]
 }
 
-/** «1 объект» / «3 объекта» / «14 объектов» */
-const objectsWord = (n: number, words: Dict['interregional']['objectWords']): string =>
+/** «1 населённый пункт» / «3 населённых пункта» / «14 населённых пунктов» —
+ *  размер справочника, а не число объектов (см. описание компонента) */
+const placesWord = (n: number, words: Dict['interregional']['placeWords']): string =>
   [words.one, words.few, words.many][pluralIndex(n)]
 
 /**
  * Справочник раздела «Межрегиональная недвижимость»: строки-регионы
  * раскрываются в населённые пункты (нативный details/summary — работает и без
  * JavaScript). Каждый населённый пункт ведёт на свою страницу с объектами
- * квартир; рядом с названием — сколько объектов Н15 в нём уже есть, либо
- * честная пометка «Объектов Н15 пока нет».
+ * квартир; населённый пункт без объектов Н15 помечаем честно — «Объектов Н15
+ * пока нет».
+ *
+ * Количества объектов рядом с названиями нет намеренно: общее число объектов
+ * компании на публичном сайте не показываем. Сколько объектов у населённого
+ * пункта, сервис по-прежнему считает — по нему решается, показывать ли пункт
+ * в справочнике (см. src/lib/interregional-service.ts), но наружу это число
+ * не выводится.
  *
  * Данные приходят из CRM (регионы и населённые пункты, см.
  * src/lib/interregional-service.ts) — в компоненте списков нет: новый регион
@@ -56,7 +63,7 @@ export default function InterregionalRegions({ t, lang, regions, otherCities }: 
                   {region.title}
                 </strong>
                 <em className="hidden sm:block text-xs not-italic text-[var(--n15-muted)]">
-                  {region.settlements.length} {objectsWord(region.settlements.length, t.interregional.placeWords)}
+                  {region.settlements.length} {placesWord(region.settlements.length, t.interregional.placeWords)}
                 </em>
                 <i className="ir-region-plus text-xl not-italic text-[var(--n15-gold)]" aria-hidden="true">
                   +
@@ -107,7 +114,6 @@ export default function InterregionalRegions({ t, lang, regions, otherCities }: 
                   href={`/${lang}/catalog?city=${encodeURIComponent(city.name)}&category=apartment`}
                 >
                   {city.name}
-                  <em className="not-italic text-[var(--n15-gold)]/70">{city.count}</em>
                 </Link>
               </li>
             ))}
@@ -118,7 +124,8 @@ export default function InterregionalRegions({ t, lang, regions, otherCities }: 
   )
 }
 
-/** Строка населённого пункта: название, счётчик объектов и переход на его страницу */
+/** Строка населённого пункта: название, пометка «объектов пока нет» и переход
+ *  на его страницу. Счётчика объектов нет — см. описание справочника выше */
 function SettlementRow({
   t,
   lang,
@@ -138,13 +145,9 @@ function SettlementRow({
       >
         {/* min-w-0 и перенос: в справочнике Крыма есть длинные названия
             («1-е отделение Золотой Балки») — на узком экране они должны
-            переноситься, а не выдавливать счётчик из строки */}
+            переноситься, а не выдавливать соседний элемент из строки */}
         <span className="min-w-0 break-words">{place.name}</span>
-        {place.count > 0 ? (
-          <em className="not-italic text-xs text-[var(--n15-gold)]/80 whitespace-nowrap">
-            {place.count} {objectsWord(place.count, t.interregional.objectWords)}
-          </em>
-        ) : (
+        {place.count === 0 && (
           <small className="text-[11px] text-[var(--n15-muted)]/70 whitespace-nowrap">
             {t.interregional.placeNone}
           </small>

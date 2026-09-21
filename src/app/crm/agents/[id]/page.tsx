@@ -6,7 +6,8 @@ import { getDictionary } from '@/i18n/dictionaries'
 import { canAccessCrm, getCrmUser } from '../../auth'
 import { CrmShell } from '@/components/crm/CrmShell'
 import { CrmAgentProfile } from '@/components/crm/CrmAgentProfile'
-import { loadAgentProfile } from '@/lib/agents-service'
+import { emptyAgentCounts, loadAgentProfile } from '@/lib/agents-service'
+import { agentProfileIds } from '@/lib/object-access'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,6 +25,10 @@ interface PageProps {
  * кнопка «Редактировать» показывается, когда профиль агента привязан к учётной
  * записи сотрудника (agents.user — то же правило, что в access коллекции
  * Objects), администратору — всегда.
+ *
+ * Количество объектов — закрытое сведение: числа по категориям и счётчики
+ * списка видит администратор и сам агент в своём профиле. В чужом профиле
+ * числа не показываются и в пропсы не попадают.
  */
 export default async function CrmAgentProfilePage({ params }: PageProps) {
   const { id } = await params
@@ -45,33 +50,36 @@ export default async function CrmAgentProfilePage({ params }: PageProps) {
   // Профиль агента не найден (удалён в другой вкладке) — показываем заглушку,
   // а не ошибку сервера.
   let ownObjectIds: number[] = []
+  // Счётчики объектов профиля: администратору — всегда, агенту — только в
+  // своём профиле (в чужом числа не показываем, см. шапку файла)
+  let countsVisible = user.role === 'admin'
   if (profile) {
     if (user.role === 'admin') {
       ownObjectIds = profile.rows.map((row) => row.id)
     } else {
-      const myAgents = await payload.find({
-        collection: 'agents',
-        where: { user: { equals: user.id } },
-        limit: 100,
-        depth: 0,
-        overrideAccess: true,
-      })
-      const myProfile = myAgents.docs.some((a) => (a.id as number) === profile.agent.id)
+      const myAgentIds = await agentProfileIds(payload, user.id)
+      const myProfile = myAgentIds.has(profile.agent.id)
+      countsVisible = myProfile
       ownObjectIds = profile.rows
         .filter((row) => myProfile || (row.authorId != null && String(row.authorId) === String(user.id)))
         .map((row) => row.id)
     }
   }
 
+
   return (
     <CrmShell user={user} t={t} active="agents">
       {profile ? (
         <CrmAgentProfile
           t={t}
-          agent={profile.agent}
+          /* Чужой профиль: числа по категориям — закрытое сведение, в пропсы
+             их не кладём (клиентская часть получает их как есть). Строки
+             объектов остаются: список коллег команда видит на чтение */
+          agent={countsVisible ? profile.agent : { ...profile.agent, counts: emptyAgentCounts() }}
           rows={profile.rows}
           isAdmin={user.role === 'admin'}
           ownObjectIds={ownObjectIds}
+          countsVisible={countsVisible}
           /* Правка самого профиля — то же право, что у «Добавить агента»
              в списке: админ или сотрудник с галочкой «Может добавлять агентов» */
           canManage={user.role === 'admin' || user.canManageAgents}

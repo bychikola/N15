@@ -446,15 +446,6 @@ function DdArrow({ open, className = 'text-[10px]' }: { open: boolean; className
   )
 }
 
-/** Счётчик объектов в строке списка. Ноль не показываем: в справочнике
- *  регионов населённые пункты видны и без объектов (см. placesOf в
- *  src/lib/interregional-service.ts), и ноль рядом с каждым названием читался
- *  бы как пустой список */
-function PlaceCount({ n }: { n: number }) {
-  if (n <= 0) return null
-  return <span className="shrink-0 text-xs tabular-nums text-[var(--n15-muted)]">{n}</span>
-}
-
 /** Выпадающий список панели фильтров. Открытым его держит родитель (см.
  *  openId в CatalogFilters): одновременно открыт ровно один список, поэтому
  *  состояние «открыт» приходит пропом, а не живёт внутри */
@@ -713,7 +704,6 @@ function CityList({ label, regions, place, regionKey, onPlace, onRegion, onClear
                 <span className="block break-words">{found.label}</span>
                 <span className="block text-[10px] text-[var(--n15-muted)]">{region.label}</span>
               </span>
-              <PlaceCount n={found.count} />
             </button>
           ))
         ) : (
@@ -730,7 +720,6 @@ function CityList({ label, regions, place, regionKey, onPlace, onRegion, onClear
                 className={`${cityRowTop} hover:bg-[var(--n15-gold)]/8 ${regionKey === region.key ? 'text-[var(--n15-gold)]' : 'text-[var(--n15-silver)]'}`}>
                 <DdArrow open={isOpen} className="text-[9px] text-[var(--n15-gold)]" />
                 <span className="min-w-0 flex-1 break-words">{region.label}</span>
-                <PlaceCount n={region.count} />
               </button>
               {isOpen && (
                 <div className="pb-1">
@@ -738,7 +727,6 @@ function CityList({ label, regions, place, regionKey, onPlace, onRegion, onClear
                     <button key={p.value} type="button" onClick={() => pick(p)}
                       className={`${cityRowSub} hover:bg-[var(--n15-gold)]/8 ${p.value === place ? 'text-[var(--n15-gold)]' : 'text-[var(--n15-silver)]'}`}>
                       <span className="min-w-0 flex-1 break-words">{p.label}</span>
-                      <PlaceCount n={p.count} />
                     </button>
                   ))}
                   {/* Региона без населённых пунктов (пустые «Другие регионы»)
@@ -747,7 +735,6 @@ function CityList({ label, regions, place, regionKey, onPlace, onRegion, onClear
                     <button type="button" onClick={() => pickRegion(region)}
                       className={`${cityRowSub} hover:bg-[var(--n15-gold)]/8 ${regionKey === region.key ? 'text-[var(--n15-gold)]' : 'text-[var(--n15-gold)]/80'}`}>
                       <span className="min-w-0 flex-1 break-words">{t.catalog.allRegionPlaces}</span>
-                      <PlaceCount n={region.count} />
                     </button>
                   )}
                 </div>

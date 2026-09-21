@@ -76,13 +76,12 @@ export default async function SettlementPage({ params }: PageProps) {
         <SectionWrapper variant="charcoal">
           {cards.length > 0 ? (
             <>
+              {/* Счётчика найденных объектов здесь нет: общее количество
+                  объектов компании на сайте не показываем (см. CatalogContent) */}
               <div className="flex flex-wrap items-baseline justify-between gap-3 mb-8">
                 <h2 className="text-xl md:text-2xl font-[family-name:var(--font-display)] text-[var(--n15-white)]">
                   {t.interregional.objectsTitle}
                 </h2>
-                <p className="text-xs text-[var(--n15-muted)]">
-                  {t.catalog.found} <span className="text-[var(--n15-gold)]">{total}</span> {t.catalog.foundObjects}
-                </p>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-6 gap-y-8">
                 {cards.map((obj) => (

@@ -17,6 +17,10 @@ import { AgentFormModal } from '@/components/crm/AgentFormModal'
  * Персональные данные собственников и закрытые документы в раздел не
  * попадают (см. src/lib/agents-service.ts).
  *
+ * Число активных объектов сотрудник видит только у себя: администратор — у
+ * всех, агент — на своей карточке (ownAgentIds), у коллег вместо числа
+ * прочерк. Сами числа чужих счётчиков страница в пропсы не кладёт.
+ *
  * Профиль агента заводят кнопкой «Добавить агента», правят — «Редактировать»
  * на карточке (окно одно и то же, см. CrmAgentFormModal). Кнопки видны только
  * тем, кто вправе менять профили (canManage).
@@ -27,6 +31,10 @@ interface Props {
   agents: AgentCard[]
   /** Право заводить и править профили: админ или сотрудник с разрешением (см. Users.ts) */
   canManage: boolean
+  /** Администратору видны счётчики объектов всех агентов (см. описание) */
+  isAdmin: boolean
+  /** Профили агентов этого сотрудника: на своей карточке счётчик видит и агент */
+  ownAgentIds: number[]
 }
 
 // Подстановка %d/%s в строку словаря (как в других разделах CRM)
@@ -73,7 +81,7 @@ const editBtnStyle: React.CSSProperties = {
   cursor: 'pointer',
 }
 
-export const CrmAgents: FC<Props> = ({ t, agents, canManage }) => {
+export const CrmAgents: FC<Props> = ({ t, agents, canManage, isAdmin, ownAgentIds }) => {
   const [q, setQ] = useState('')
   const router = useRouter()
 
@@ -81,6 +89,13 @@ export const CrmAgents: FC<Props> = ({ t, agents, canManage }) => {
   // { agent } — правка выбранного. Состояние одним объектом, чтобы окно
   // не могло открыться сразу в двух режимах
   const [modal, setModal] = useState<{ agent: AgentCard | null } | null>(null)
+
+  // Чьи счётчики объектов показываем: администратору — все, агенту — только
+  // свои профили (см. описание раздела). Set: карточек в списке десятки
+  const shownCounts = useMemo(
+    () => (isAdmin ? null : new Set(ownAgentIds)),
+    [isAdmin, ownAgentIds],
+  )
 
   // Фильтр по имени агента: ищем по имени и фамилии, должности и телефону
   const visible = useMemo(() => {
@@ -216,7 +231,7 @@ export const CrmAgents: FC<Props> = ({ t, agents, canManage }) => {
                       {t.crm.agActiveObjects}
                     </span>
                     <strong style={{ fontFamily: "'New Standard', Georgia, serif", fontWeight: 400, fontSize: 20, color: '#25241f' }}>
-                      {agent.counts.active}
+                      {!shownCounts || shownCounts.has(agent.id) ? agent.counts.active : '—'}
                     </strong>
                   </div>
                   {/* Неактивного агента показываем в списке (за ним остались

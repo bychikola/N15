@@ -8,6 +8,7 @@ import { canAccessCrm, getCrmUser } from './auth'
 import { CrmShell } from '@/components/crm/CrmShell'
 import { CrmDenied } from '@/components/crm/CrmDenied'
 import { APPLICATION_TYPE_LABELS, STAGES, stageLabel } from '@/components/lk/FunnelCard'
+import { viewerObjectsWhere } from '@/lib/object-access'
 
 export const dynamic = 'force-dynamic'
 
@@ -26,8 +27,13 @@ export default async function CrmPage({ searchParams }: PageProps) {
   }
 
   const payload = await getPayload({ config })
+  // Метрика «Объекты»: администратору — общее число объектов агентства,
+  // агенту — только свои. Local API считает с overrideAccess: true (access
+  // коллекции Objects не применяется), поэтому условие задаём явно — тем же
+  // правилом, что и в самой коллекции (см. src/lib/object-access.ts)
+  const objectsWhere = await viewerObjectsWhere(payload, user)
   const [objectsCount, clientsCount, activeLeads, messagesCount, recentDocs] = await Promise.all([
-    payload.count({ collection: 'objects' }),
+    payload.count({ collection: 'objects', where: objectsWhere }),
     payload.count({ collection: 'users', where: { role: { equals: 'user' } } }),
     payload.count({
       collection: 'applications',
@@ -94,8 +100,12 @@ export default async function CrmPage({ searchParams }: PageProps) {
     .filter((r) => r.count > 0)
   const forecastTotal = forecastRows.reduce((acc, r) => acc + r.weighted, 0)
 
+  // Подпись метрики объектов: агент видит только свои объекты (см.
+  // objectsWhere выше) — под общую подпись «в базе Н15» это число не подходит
+  const objectsMetricLabel = user.role === 'admin' ? t.crm.metricObjects : t.crm.agObjectsTitle
+
   const metrics = [
-    { label: t.crm.metricObjects, value: String(objectsCount.totalDocs), note: t.crm.metricObjectsNote },
+    { label: objectsMetricLabel, value: String(objectsCount.totalDocs), note: t.crm.metricObjectsNote },
     { label: t.crm.metricLeads, value: String(activeLeads.totalDocs), note: t.crm.metricLeadsNote },
     { label: t.crm.metricClients, value: String(clientsCount.totalDocs), note: t.crm.metricClientsNote },
     { label: t.crm.metricMessages, value: String(messagesCount.totalDocs), note: t.crm.metricMessagesNote },
