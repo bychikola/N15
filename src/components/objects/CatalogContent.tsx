@@ -72,6 +72,13 @@ const isKnown = (v: string, options: readonly string[]) => options.includes(v)
 /** Единицы площади фильтра участков: м², сотки, гектары (см. area-format) */
 const AREA_UNITS = ['sqm', 'are', 'ha'] as const
 
+/** Варианты сортировки выдачи: пустое значение — порядок подборки
+ *  («Актуальные объекты»), оно же выбранное явно «По дате публикации»
+ *  (каталог сортирует по -createdAt, см. sortParam). Сортировок по цене и
+ *  площади в списке больше нет — чужие значения устаревших ссылок
+ *  отбрасываем, как у прочих select-фильтров */
+const SORT_VALUES = ['', '-createdAt'] as const
+
 function filtersFromParams(sp: URLSearchParams, cityRegions: readonly CityFilterRegion[], knownCities: readonly string[]): FiltersState {
   // Район города (Иристонский и др.) старые ссылки могли передавать
   // в параметре district — такой параметр направляем в cityDistrict
@@ -177,7 +184,10 @@ export default function CatalogContent({ cityRegions, knownCities, agentName }: 
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [q, setQ] = useState(searchParams.get('q') ?? '')
-  const [sort, setSort] = useState(searchParams.get('sort') ?? '')
+  const [sort, setSort] = useState(() => {
+    const v = searchParams.get('sort') ?? ''
+    return isKnown(v, SORT_VALUES) ? v : ''
+  })
   // Вид выдачи: список карточек или карта с метками (см. CatalogMap)
   const [view, setView] = useState(searchParams.get('view') ?? '')
   const [filters, setFilters] = useState<FiltersState>(() => filtersFromParams(searchParams, cityRegions, knownCities))
@@ -265,7 +275,8 @@ export default function CatalogContent({ cityRegions, knownCities, agentName }: 
         ? prev
         : next,
     )
-    const nextSort = searchParams.get('sort') ?? ''
+    const rawSort = searchParams.get('sort') ?? ''
+    const nextSort = isKnown(rawSort, SORT_VALUES) ? rawSort : ''
     setSort((prev) => (prev === nextSort ? prev : nextSort))
     const nextView = searchParams.get('view') ?? ''
     setView((prev) => (prev === nextView ? prev : nextView))
@@ -525,13 +536,10 @@ export default function CatalogContent({ cityRegions, knownCities, agentName }: 
               onChange={(e) => { setSort(e.target.value); setLoading(true) }}
               className="bg-[var(--n15-charcoal)] border border-[var(--n15-gold)]/20 px-3 py-2 text-sm text-[var(--n15-silver)] focus:outline-none focus:border-[var(--n15-gold)]/50"
             >
-              {/* Пустое значение — порядок подборки, он же «сначала новые»
-                  (каталог сортирует по -createdAt, см. sortParam) */}
-              <option value="">{t.catalog.sortNew}</option>
-              <option value="price">{t.catalog.sortPriceAsc}</option>
-              <option value="-price">{t.catalog.sortPriceDesc}</option>
-              <option value="area">{t.catalog.sortAreaAsc}</option>
-              <option value="-area">{t.catalog.sortAreaDesc}</option>
+              {/* Два варианта (см. SORT_VALUES): порядок подборки и он же,
+                  выбранный явно, — по дате публикации */}
+              <option value="">{t.catalog.sortActual}</option>
+              <option value="-createdAt">{t.catalog.sortDate}</option>
             </select>
           </label>
         </div>

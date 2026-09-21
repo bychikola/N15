@@ -83,7 +83,7 @@ export default async function HomePage({ params, searchParams }: PageProps) {
 
   // Сводка подбора для секции «Результаты подбора» (как на живом прототипе).
   // Считаем до запросов: от неё зависит, какие блоки вообще показывать —
-  // при подборе «Особые предложения» и «Новинки» уступают место выдаче
+  // при подборе «Особые предложения» уступают место выдаче
   const hasFilter = Boolean(qCategory || qRooms || qDistrict || qCityDistrict || qLocality || qSnt)
   const filterSummary = hasFilter
     ? [
@@ -143,17 +143,6 @@ export default async function HomePage({ params, searchParams }: PageProps) {
   })
   const specialObjects: ObjectListItem[] = specialDocs.map(toListItem)
 
-  // Новинки — последние поступления каталога (4 самых свежих). Блок без
-  // подбора: при подборе главная отвечает на запрос клиента, и «Новинки»
-  // спорили бы с его выдачей. Объекты «Особых предложений» уже стоят выше
-  // в своей подборке — в новинках их не повторяем
-  const newsWhere: Where = { status: { equals: 'published' } }
-  if (specialObjects.length > 0) newsWhere.id = { not_in: specialObjects.map((o) => o.id) }
-  const newsDocs: { id: number | string }[] = filterSummary
-    ? []
-    : (await payload.find({ collection: 'objects', where: newsWhere, sort: '-createdAt', limit: 4, depth: 1 })).docs
-  const newsObjects: ObjectListItem[] = newsDocs.map(toListItem)
-
   // Блок «Актуальные объекты»: только опубликованные (черновики скрыты).
   // Проданные, снятые с публикации и архивные в CRM переводятся в статус
   // «Архив» — такой объект автоматически исчезает из блока.
@@ -165,9 +154,11 @@ export default async function HomePage({ params, searchParams }: PageProps) {
   if (qCityDistrict) where['address.cityDistrict'] = { equals: qCityDistrict }
   if (qLocality) where['address.locality'] = { equals: qLocality }
   if (qSnt) where['address.snt'] = { equals: qSnt }
-  // В основной подборке не повторяем карточки из «Новинок»: блоки идут друг
-  // за другом, и одни и те же объекты в обоих читались бы как ошибка страницы
-  if (newsObjects.length > 0) where.id = { not_in: newsObjects.map((o) => o.id) }
+  // В основной подборке не повторяем карточки из «Особых предложений»: блоки
+  // идут друг за другом, и одни и те же объекты в обоих читались бы как
+  // ошибка страницы. При подборе блока особых предложений нет — объекты из
+  // него в выдаче не прячем
+  if (!filterSummary && specialObjects.length > 0) where.id = { not_in: specialObjects.map((o) => o.id) }
 
   // 4 объекта: на компьютере — одна полная строка (в сетке блока xl: 4 колонки),
   // на планшете 2×2, на телефоне — в столбик
@@ -219,20 +210,9 @@ export default async function HomePage({ params, searchParams }: PageProps) {
             sectionId="special"
           />
         )}
-        {/* Новинки — последние поступления, следом за особыми предложениями.
-            Пустым не рендерится: FeaturedObjects на пустом списке рисует
-            декоративные карточки-заглушки, а обещать «новинки» без объектов
-            нельзя (то же правило, что у блока особых предложений) */}
-        {newsObjects.length > 0 && (
-          <FeaturedObjects
-            objects={newsObjects}
-            t={t}
-            lang={lang}
-            eyebrow={t.landing.newsEyebrow}
-            title={t.landing.newsTitle}
-            sectionId="news"
-          />
-        )}
+        {/* «Новинки» отдельным блоком не показываем: те же последние
+            поступления, что и в блоке «Актуальные объекты» ниже, — порядок
+            по дате публикации выбирается сортировкой в каталоге */}
         <FeaturedObjects
           objects={objects}
           t={t}
