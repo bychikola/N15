@@ -33,6 +33,10 @@ export function CrmShell({ user, t, active, children }: Props) {
     { id: 'news', href: '/crm/news', label: t.crm.navNews },
     { id: 'market', href: '/crm/market', label: t.crm.navMarket },
     { id: 'stats', href: '/crm/stats', label: t.crm.navStats },
+    // «Статистика сайта»: посещения, источники, популярные страницы и объекты.
+    // Раздел только для администратора — агентам и клиентам статистика
+    // недоступна (та же проверка на странице /crm/site-stats)
+    ...(isAdmin ? [{ id: 'site-stats', href: '/crm/site-stats', label: t.crm.navSiteStats }] : []),
     { id: 'mail', href: '/crm/mail', label: t.crm.navMail },
     // Рекламой управляет администратор — агентам раздел не показываем
     ...(isAdmin ? [{ id: 'advertising', href: '/crm/advertising', label: t.crm.navAdvertising }] : []),

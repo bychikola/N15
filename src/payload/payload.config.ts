@@ -36,6 +36,9 @@ import { LegalReports } from './collections/LegalReports'
 // старте заполняет список из кода — см. src/lib/interregional-service.ts
 import { Regions } from './collections/Regions'
 import { Settlements } from './collections/Settlements'
+// «Статистика сайта»: обезличенные посещения сайта для закрытого раздела CRM
+// (см. src/lib/site-stats.ts, src/app/crm/site-stats)
+import { SiteVisits } from './collections/SiteVisits'
 import { seedInterregional } from '@/lib/interregional-service'
 import { SiteSettings } from './globals/SiteSettings'
 import { MailSettings } from './globals/MailSettings'
@@ -84,7 +87,7 @@ export default buildConfig({
     abortOnLimit: true,
     responseOnLimit: `Файл больше ${PHOTO_MAX_LABEL} — допустимы ${PHOTO_FORMATS_LABEL} до ${PHOTO_MAX_LABEL}`,
   },
-  collections: [Users, Media, Objects, Agents, Applications, Tasks, Messages, Blog, News, Pages, Customers, Emails, MailAttachments, AgentTasks, MarketListings, LegalDocuments, LegalReports, Advertisers, Advertisements, AdvertisingRequests, AdvertisingMaterials, Regions, Settlements],
+  collections: [Users, Media, Objects, Agents, Applications, Tasks, Messages, Blog, News, Pages, Customers, Emails, MailAttachments, AgentTasks, MarketListings, LegalDocuments, LegalReports, Advertisers, Advertisements, AdvertisingRequests, AdvertisingMaterials, Regions, Settlements, SiteVisits],
   globals: [SiteSettings, MailSettings, AgentSettings, NewsSettings, PlatformSettings],
   editor: lexicalEditor(),
   i18n: {

@@ -5,6 +5,7 @@ import type { Metadata } from 'next'
 import { getDictionary, isLocale, locales } from '@/i18n/dictionaries'
 import { I18nProvider } from '@/i18n/i18n-provider'
 import { YandexMetrika } from '@/components/analytics/YandexMetrika'
+import { SiteVisitTracker } from '@/components/analytics/SiteVisitTracker'
 
 interface LayoutProps {
   children: React.ReactNode
@@ -58,6 +59,13 @@ export default async function SiteLayout({ children, params }: LayoutProps) {
         {/* Счётчик Яндекс.Метрики: подключается, только если номер задан
             в настройках сайта (см. components/analytics/YandexMetrika) */}
         <YandexMetrika />
+        {/* Счётчик посещений сайта: маячок со страниц и пиксель для тех, у кого
+            нет JavaScript (см. components/analytics/SiteVisitTracker). Отчёт по
+            этим данным видит только администратор в CRM → «Статистика сайта» */}
+        <SiteVisitTracker />
+        <noscript>
+          <img src="/api/visit" alt="" width={1} height={1} style={{ position: 'absolute', left: '-9999px' }} />
+        </noscript>
       </body>
     </html>
   )
