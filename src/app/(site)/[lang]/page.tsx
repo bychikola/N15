@@ -10,7 +10,6 @@ import FeaturedObjects from '@/components/home/FeaturedObjects'
 import type { ObjectListItem } from '@/components/objects/ObjectCard'
 import InterregionalGuide from '@/components/home/InterregionalGuide'
 import ServicesAccordion from '@/components/home/ServicesAccordion'
-import PopularDirections from '@/components/home/PopularDirections'
 import SelectionCta from '@/components/home/SelectionCta'
 import OwnersSection from '@/components/home/OwnersSection'
 import AboutSection from '@/components/home/AboutSection'
@@ -224,10 +223,11 @@ export default async function HomePage({ params, searchParams }: PageProps) {
             и, если подходящего не нашлось, оставляет запрос, не уходя
             со страницы (форма подбора живёт в каталоге, см. SelectionCta) */}
         <SelectionCta t={t} lang={lang} />
-        {/* Популярные направления — география поиска: ссылки ведут в каталог
-            с уже подставленным районом (у местной географии своей страницы
-            нет). Рядом с межрегиональной недвижимостью — оба блока про «где» */}
-        <PopularDirections t={t} lang={lang} />
+        {/* «Популярные направления» с главной убраны: география поиска —
+            районы Владикавказа и республики — осталась в разделе «Объекты»
+            и в фильтрах каталога (городские районы, район республики).
+            Блок PopularDirections сохранён в components/home на случай
+            возврата; его место занимает «Межрегиональная недвижимость» */}
         <InterregionalGuide t={t} lang={lang} regions={interregionalRegions} />
         <ServicesAccordion t={t} lang={lang} />
         {/* Блок собственникам — после услуг: владельцу важно, как Н15 продаёт
