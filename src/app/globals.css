@@ -713,12 +713,15 @@ html[data-theme='dark'] span.theme-icon-moon { display: block; }
 
 /* Кнопки-CTA («Выбрать объект», «Ваша реклама», «Позвонить» в контактах) —
    глубокий зелёный с кремовой надписью; на тёмном фото и тёмной секции
-   кнопку отделяет тонкая золотая линия */
+   кнопку отделяет тонкая золотая линия. Плашка бывает и ссылкой, и кнопкой,
+   раскрывающей блок (плашки блока собственникам): у <button> убираем рамку
+   и системный шрифт — иначе она отличалась бы от соседних плашек-ссылок */
 .lp-button {
   display: inline-flex; align-items: center; justify-content: space-between; gap: 23px;
   min-width: 160px; padding: 13px 16px; background: var(--n15-green); color: #F6F2E9;
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--n15-green-gold) 42%, transparent);
-  font-size: 11px; text-transform: uppercase; letter-spacing: .13em;
+  border: 0; font-family: inherit; font-size: 11px; text-transform: uppercase;
+  letter-spacing: .13em; cursor: pointer;
   transition: background .2s, box-shadow .2s;
 }
 .lp-button:hover {
@@ -1015,24 +1018,41 @@ html[data-theme='dark'] .lp-featured .object-card { border: 0; }
 .lp-search-submit:hover { color: var(--n15-green); }
 
 /* «Выгодные условия» — блок для собственников: заголовок с пояснением
-   и четыре условия продажи в две колонки (те же тексты, что на странице
-   /services/owners/vygodnaya-prodazha) */
+   и две зелёные плашки (.lp-button, как в герое), каждая раскрывает свой
+   блок — четыре условия продажи или работу Н15 по продаже (те же тексты,
+   что на странице /services/owners/vygodnaya-prodazha) */
 .lp-owners { width: min(90%, 1050px); margin: 86px auto; }
 .lp-owners-title { max-width: 720px; font-size: clamp(30px, 3.7vw, 51px); }
 .lp-owners-copy { max-width: 620px; margin: 18px 0 30px; color: #777267; font-size: 15px; line-height: 1.75; }
-.lp-owners-terms {
+/* Раскрытый блок плашки: карточки условий и работы Н15 — один размер,
+   две колонки (на телефоне одна, см. медиазапросы) */
+.lp-owners-panel { margin-top: 27px; }
+.lp-owners-terms, .lp-owners-benefits {
   display: grid; grid-template-columns: 1fr 1fr; gap: 15px;
-  margin: 0 0 30px; padding: 0; list-style: none;
+  margin: 0; padding: 0; list-style: none;
 }
-.lp-owners-terms li {
+.lp-owners-terms li, .lp-owners-benefits li {
   box-sizing: border-box; background: rgba(255, 255, 255, .58);
   border: 1px solid #d8d1c4; padding: var(--lp-tile-pad-y) var(--lp-tile-pad-x);
 }
-.lp-owners-terms h3 {
+.lp-owners-terms h3, .lp-owners-benefits h3 {
   margin: 0 0 8px; font-family: 'New Standard', Georgia, serif; font-weight: 400;
   letter-spacing: -.01em; font-size: clamp(18px, 1.8vw, 22px); color: #a87c3f;
 }
-.lp-owners-terms p { margin: 0; color: #777267; font-size: 13px; line-height: 1.65; }
+.lp-owners-terms p, .lp-owners-benefits p { margin: 0; color: #777267; font-size: 13px; line-height: 1.65; }
+/* Ссылка на страницу направления в раскрытом блоке условий — как на самой
+   странице продажи: золотая строка с подчёркиванием */
+.lp-owners-more {
+  display: inline-block; margin-top: 18px; color: #a87c3f; font-size: 12px;
+  letter-spacing: .04em; border-bottom: 1px solid color-mix(in srgb, #a87c3f 45%, transparent);
+}
+.lp-owners-more:hover { color: var(--n15-green); border-bottom-color: currentColor; }
+/* Телефон: три плашки в строку не помещаются — встают друг под другом,
+   во всю ширину колонки, без выхода за края экрана (у героя так же) */
+@media (max-width: 640px) {
+  .lp-hero-actions.lp-owners-actions { flex-direction: column; align-items: stretch; gap: 10px; }
+  .lp-hero-actions.lp-owners-actions .lp-button { flex: 0 0 auto; max-width: none; }
+}
 
 /* Полоса «Не нашли подходящий объект?»: текст слева, кнопка заявки справа.
    Ведёт в каталог, к форме подбора под выдачей */
@@ -1179,10 +1199,10 @@ html[data-theme='dark'] .lp-featured .object-card { border: 0; }
   .lp-calc-modal { width: 100%; height: 100%; max-height: none; border-radius: 0; padding: 22px 16px 24px; }
   .lp-mortgage-content { padding: 20px 0 0; }
   .lp-mortgage-panel { grid-template-columns: 1fr; padding: 14px; }
-  /* Блок собственникам и полоса заявки на телефоне: колонка условий
-     в одну ширину, кнопка заявки — под текстом */
+  /* Блок собственникам и полоса заявки на телефоне: карточки раскрытых
+     блоков в одну ширину, кнопка заявки — под текстом */
   .lp-owners { width: auto; margin: 59px 18px; }
-  .lp-owners-terms { grid-template-columns: 1fr; gap: 10px; }
+  .lp-owners-terms, .lp-owners-benefits { grid-template-columns: 1fr; gap: 10px; }
   .lp-selection { width: auto; margin: 0 18px 59px; }
   .lp-selection-inner { flex-direction: column; align-items: stretch; gap: 17px; padding: 22px 15px; }
   .lp-selection-inner .lp-button { max-width: none; }
