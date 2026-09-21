@@ -230,66 +230,6 @@ const rowPlacementSummary = (o: Record<string, unknown>): { checked: boolean; fo
 const isHouseCategory = isHouseCategoryCode
 const isPlotAreaCategory = isPlotCategoryCode
 
-/**
- * Водяной знак на фото: рисуем кадр на canvas и поверх — watermark.png по
- * центру, размером ~28% ширины. Функция модульная (не состояние компонента):
- * ею пользуется очередь загрузки, а результат — готовый к отправке файл.
- *
- * null — кадр не читается браузером (HEIC с iPhone, битый файл): вызывающий
- * показывает ошибку, а не пропускает фото молча, как было раньше.
- */
-const watermarkPhoto = (file: File): Promise<{ blob: Blob; name: string } | null> => {
-  return new Promise((resolve) => {
-    const img = new Image()
-    img.onload = () => {
-      const wm = new Image()
-      wm.onload = () => {
-        const canvas = document.createElement('canvas')
-        canvas.width = img.naturalWidth
-        canvas.height = img.naturalHeight
-        const ctx = canvas.getContext('2d')
-        if (!ctx) {
-          resolve(null)
-          return
-        }
-        ctx.drawImage(img, 0, 0)
-        const wmW = Math.round(canvas.width * 0.28)
-        const wmH = Math.round(wmW * (wm.naturalHeight / wm.naturalWidth))
-        // По центру фото
-        const wmX = Math.round((canvas.width - wmW) / 2)
-        const wmY = Math.round((canvas.height - wmH) / 2)
-        // Знак в исходнике очень прозрачный (alpha ~0.1) — рисуем его несколько
-        // раз: каждый проход накапливает непрозрачность (1-(1-a)^n)
-        for (let pass = 0; pass < 4; pass++) {
-          ctx.drawImage(wm, wmX, wmY, wmW, wmH)
-        }
-        // Формат сохраняем исходный (JPG/PNG/WEBP), а имя файла получает
-        // правильное расширение: canvas перекодирует кадр, и «.webp» рядом с
-        // JPEG-содержимым сбило бы проверку типа на сервере
-        const outType = file.type === 'image/png'
-          ? 'image/png'
-          : file.type === 'image/webp' ? 'image/webp' : 'image/jpeg'
-        const ext = outType === 'image/png' ? 'png' : outType === 'image/webp' ? 'webp' : 'jpg'
-        canvas.toBlob(
-          (blob) => {
-            if (!blob) {
-              resolve(null)
-              return
-            }
-            resolve({ blob, name: `${file.name.replace(/\.[^.]+$/, '') || 'photo'}.${ext}` })
-          },
-          outType,
-          0.95,
-        )
-      }
-      wm.onerror = () => resolve(null)
-      wm.src = '/img/watermark.png'
-    }
-    img.onerror = () => resolve(null)
-    img.src = URL.createObjectURL(file)
-  })
-}
-
 // Поэтажные описания из документа объекта: место в массиве — номер этажа
 // минус один (floorNumber), а не порядок строк в базе. Так «3 этаж» останется
 // третьим, даже если 1-й и 2-й не заполнены (пропуски — пустые поля).
@@ -1343,29 +1283,16 @@ export const CrmObjects: FC<{
     setUploads((prev) => prev.map((u) => (u.key === key ? { ...u, ...patch } : u)))
   }, [])
 
-  // Отправка одного файла: водяной знак в браузере (на сервере нет ни
-  // ffmpeg, ни headless-браузера) и прогресс через XHR — fetch не умеет
-  // показывать, сколько уже улетело. watermarkPhoto объявлена на уровне
-  // модуля, в зависимостях её нет — список вычисляется во время рендера.
+  // Отправка одного файла: прогресс через XHR — fetch не умеет показывать,
+  // сколько уже улетело. Файл уходит как выбран: водяной знак «Н15» накладывает
+  // сервер (см. src/lib/watermark.ts), поэтому и формат с качеством кадра
+  // остаются исходными. Формат и размер уже проверены при выборе фото
+  // (onPhotoPick), сервер проверяет их ещё раз.
   const sendPhoto = useCallback(async (
     item: PhotoUpload,
   ): Promise<{ ok: true; id: number; url?: string } | { ok: false; session?: boolean; message: string }> => {
-    const prepared = await watermarkPhoto(item.source)
-    if (!prepared) {
-      // Кадр не читается браузером (HEIC с iPhone) — раньше такой файл молча
-      // пропадал, теперь сотрудник видит причину
-      return { ok: false, message: t.crm.objUploadUnreadable }
-    }
-    // Размер проверяем по тому файлу, который реально уходит: canvas
-    // перекодирует кадр, и после водяного знака он весит иначе
-    if (prepared.blob.size > PHOTO_MAX_BYTES) {
-      return {
-        ok: false,
-        message: `${t.crm.objUploadTooBig} ${photoSizeLabel(prepared.blob.size)} — ${t.crm.objUploadMax} ${PHOTO_MAX_LABEL}`,
-      }
-    }
     const fd = new FormData()
-    fd.append('file', prepared.blob, prepared.name)
+    fd.append('file', item.source, item.source.name)
 
     return new Promise((resolve) => {
       const xhr = new XMLHttpRequest()
@@ -1393,6 +1320,12 @@ export const CrmObjects: FC<{
         }
         if (xhr.status === 401 || data?.code === 'session_expired') {
           resolve({ ok: false, session: true, message: t.crm.objUploadSession })
+          return
+        }
+        // Кадр не читается (битый файл, HEIC под расширением .jpg) — сервер
+        // отвечает кодом, а текст берём из словаря
+        if (data?.code === 'unreadable') {
+          resolve({ ok: false, message: t.crm.objUploadUnreadable })
           return
         }
         resolve({ ok: false, message: data?.error || t.crm.objUploadFailed })

@@ -9,9 +9,17 @@ import {
   isAllowedPhoto,
   photoSizeLabel,
 } from '@/lib/photo-rules'
+import { applyWatermark } from '@/lib/watermark'
 
 /**
- * Загрузка фотографии объекта из CRM.
+ * Загрузка фотографии объекта из CRM. Сюда же ходит старая форма /admin-add —
+ * через алиас /api/upload (см. src/app/api/upload/route.ts). Фото уходит в
+ * хранилище с водяным знаком «Н15» в углу кадра.
+ *
+ * Поле kind отличает фото объекта от портрета сотрудника (карточка агента
+ * грузит аватар тем же маршрутом): 'avatar' — знак не нужен, он выглядит
+ * наклейкой на портрете. Всё остальное, включая отсутствие поля, — фото
+ * объекта: новый вызывающий получит знак, а не тихо загрузит кадр без него.
  *
  * Раньше карточка отправляла фото прямо в REST Payload (/api/media) и на
  * любую неудачу молча продолжала работу: файл не сохранялся, а сотрудник
@@ -24,6 +32,9 @@ import {
  *       max_size и отдавал пустой ответ 413, который нечем объяснить);
  *   bad_type (415) — формат не из списка JPG/PNG/WEBP (HEIC с iPhone раньше
  *       уезжал в хранилище нечитаемым файлом);
+ *   unreadable (415) — файл заявленного формата не открывается (битый или
+ *       HEIC под расширением .jpg): сотруднику — понятная причина, а не
+ *       «повторите», которое не сработает;
  *   upload_failed (500) — прочие ошибки хранилища.
  *
  * Отвечаем 401, а не 403 как REST Payload: на истёкшую сессию Payload отдаёт
@@ -69,13 +80,24 @@ export async function POST(req: NextRequest) {
   // второй, никому не нужный файл с неочищенным именем из браузера.
   try {
     const payload = await getPayload({ config })
-    const buffer = Buffer.from(await file.arrayBuffer())
+    const original = Buffer.from(await file.arrayBuffer())
+    // Водяной знак «Н15» в углу кадра — здесь, а не в браузере: маршрут один
+    // для карточки CRM и старой формы /admin-add, поэтому знак получают все
+    // фото объектов (см. src/lib/watermark.ts). Кадр, который не читается
+    // sharp, не сохраняем: сотрудник видит причину, а не «повторите» на файл,
+    // который не откроется никогда
+    const kind = String(form?.get('kind') || 'object')
+    const marked = kind === 'avatar' ? null : await applyWatermark(original, file.type, file.name)
+    if (marked?.status === 'unreadable') {
+      return fail(415, 'unreadable', 'Не удалось прочитать файл — сохраните фото в JPG или PNG')
+    }
+    const buffer = marked?.status === 'done' ? marked.data : original
     const doc = await payload.create({
       collection: 'media',
       data: { alt: file.name.replace(/\.[^.]+$/, '') },
       file: {
         data: buffer,
-        mimetype: file.type || 'image/jpeg',
+        mimetype: marked?.status === 'done' ? marked.mimetype : (file.type || 'image/jpeg'),
         name: file.name,
         size: buffer.length,
       },

@@ -18,6 +18,9 @@ import { maskRuPhoneInput } from '@/lib/phone'
  * его тронули — иначе в теле запроса ключа photoId нет, и снимок остаётся
  * прежним (см. PATCH в /api/agents/manage).
  *
+ * Портрет уходит с kind=avatar: это снимок сотрудника, а не объект, и водяной
+ * знак «Н15» на нём не нужен (см. src/app/api/crm/upload/route.ts).
+ *
  * Права проверяет сервер (маршрут отвечает 403) — окно открывают только те,
  * кому кнопка показана.
  */
@@ -90,6 +93,8 @@ export const AgentFormModal: FC<Props> = ({ t, agent, onClose, onSaved }) => {
     try {
       const body = new FormData()
       body.append('file', file)
+      // Портрет сотрудника: знак «Н15» маршрут накладывает только на фото объектов
+      body.append('kind', 'avatar')
       const res = await fetch('/api/crm/upload', { method: 'POST', body, credentials: 'include' })
       const data = await res.json().catch(() => null)
       if (!res.ok) {
