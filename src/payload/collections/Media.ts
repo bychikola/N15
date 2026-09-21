@@ -69,5 +69,19 @@ export const Media: CollectionConfig = {
       label: 'Alt-текст',
       required: false,
     },
+    {
+      // Какой водяной знак уже вшит в файл (см. src/lib/watermark.ts).
+      // Нужен массовому обновлению знака: по нему видно, какие фото ещё не
+      // размечены, и знак не ложится вторым слоем поверх первого.
+      name: 'wm',
+      type: 'number',
+      label: 'Версия водяного знака',
+      defaultValue: 0,
+      admin: {
+        readOnly: true,
+        position: 'sidebar',
+        description: '0 — знака нет, 1 — прежний знак «Н15», 2 — знак с ключиком и подписью.',
+      },
+    },
   ],
 }

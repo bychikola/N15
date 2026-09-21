@@ -9,7 +9,7 @@ import {
   isAllowedPhoto,
   photoSizeLabel,
 } from '@/lib/photo-rules'
-import { applyWatermark } from '@/lib/watermark'
+import { WATERMARK_VERSION, applyWatermark } from '@/lib/watermark'
 
 /**
  * Загрузка фотографии объекта из CRM. Сюда же ходит старая форма /admin-add —
@@ -94,7 +94,13 @@ export async function POST(req: NextRequest) {
     const buffer = marked?.status === 'done' ? marked.data : original
     const doc = await payload.create({
       collection: 'media',
-      data: { alt: file.name.replace(/\.[^.]+$/, '') },
+      // wm — какой знак вшит в файл: по нему массовое обновление знака
+      // (src/app/api/watermark/route.ts) не накладывает знак второй раз.
+      // Портрет сотрудника (kind=avatar) — 1: знака на нём быть не должно
+      data: {
+        alt: file.name.replace(/\.[^.]+$/, ''),
+        wm: marked?.status === 'done' ? WATERMARK_VERSION : kind === 'avatar' ? 1 : 0,
+      },
       file: {
         data: buffer,
         mimetype: marked?.status === 'done' ? marked.mimetype : (file.type || 'image/jpeg'),
