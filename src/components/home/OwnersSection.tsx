@@ -9,22 +9,21 @@ interface Props {
   lang: string
 }
 
-// Блок «Выгодные условия» на главной — для собственников: продажа по цене
-// и срокам владельца. Заголовок, пояснение и тексты берутся со страницы
-// направления (/services/owners/vygodnaya-prodazha, словарь
+// Блок для собственников на главной. Заголовок, пояснение и тексты берутся
+// со страницы направления (/services/owners/vygodnaya-prodazha, словарь
 // t.services.owners) — на главной и на самой странице они одни и те же,
 // поэтому тексты не расходятся. Третья плашка ведёт на оценку объекта.
 //
 // Две зелёные плашки одного оформления (.lp-button, как в герое) раскрывают
-// каждый свой блок и не мешают друг другу: «Условия продажи» показывает
-// четыре условия собственника, «Выгодные условия» — что Н15 делает для
-// продажи. Подпись второй плашки совпадает с подписью блока выше (та же
-// строка словаря). На телефоне плашки встают друг под другом, во всю ширину
-// колонки (см. .lp-owners-actions в globals.css).
+// каждый свой блок и не мешают друг другу: «План продажи» показывает четыре
+// пункта плана, «Условия собственника» — что Н15 делает для владельца.
+// Подписи плашек лежат в словаре главной (t.landing.owners*Cta) и не
+// совпадают с подписью блока выше. На телефоне плашки встают друг под
+// другом, во всю ширину колонки (см. .lp-owners-actions в globals.css).
 export default function OwnersSection({ t, lang }: Props) {
   const s = t.services.owners.salePage
   const o = t.services.owners.items
-  // Четыре условия собственника — цена, сроки, показы, отчётность
+  // Четыре пункта плана — цена и стратегия, сроки, показы, отчётность
   const terms = [s.terms.price, s.terms.timing, s.terms.shows, s.terms.report]
   // Что делает Н15 — оценка по рынку, подготовка, продвижение, проверка
   // документов и сопровождение сделки (те же пункты, что на странице
@@ -44,8 +43,8 @@ export default function OwnersSection({ t, lang }: Props) {
         <h2 className="lp-h2 lp-owners-title">{s.title}</h2>
         <p className="lp-owners-copy">{s.subtitle}</p>
 
-        {/* Плашки одного оформления (.lp-button, как в герое): «Условия
-            продажи» и «Выгодные условия» раскрывают свои блоки ниже,
+        {/* Плашки одного оформления (.lp-button, как в герое): «План
+            продажи» и «Условия собственника» раскрывают свои блоки ниже,
             третья ведёт на страницу оценки объекта */}
         <div className="lp-hero-actions lp-owners-actions">
           <button
@@ -55,7 +54,7 @@ export default function OwnersSection({ t, lang }: Props) {
             aria-controls="owners-terms"
             onClick={() => setOpenTerms((v) => !v)}
           >
-            {t.landing.ownersCta} <span aria-hidden="true">→</span>
+            {t.landing.ownersPlanCta} <span aria-hidden="true">→</span>
           </button>
           <button
             type="button"
@@ -64,15 +63,15 @@ export default function OwnersSection({ t, lang }: Props) {
             aria-controls="owners-benefits"
             onClick={() => setOpenBenefits((v) => !v)}
           >
-            {t.landing.ownersEyebrow} <span aria-hidden="true">→</span>
+            {t.landing.ownersTermsCta} <span aria-hidden="true">→</span>
           </button>
           <Link className="lp-button" href={`/${lang}/services/valuation`}>
-            {t.services.valuation.title} <span aria-hidden="true">→</span>
+            {t.landing.ownersValuationCta} <span aria-hidden="true">→</span>
           </Link>
         </div>
 
-        {/* Блок плашки «Условия продажи»: четыре условия собственника и
-            ссылка на страницу направления — как у прежней плашки-ссылки */}
+        {/* Блок плашки «План продажи»: четыре пункта плана и ссылка
+            на страницу направления — как у прежней плашки-ссылки */}
         <div className="lp-owners-panel" id="owners-terms" hidden={!openTerms}>
           <ul className="lp-owners-terms">
             {terms.map((term) => (
@@ -87,7 +86,7 @@ export default function OwnersSection({ t, lang }: Props) {
           </Link>
         </div>
 
-        {/* Блок плашки «Выгодные условия»: что Н15 делает для продажи */}
+        {/* Блок плашки «Условия собственника»: что Н15 делает для владельца */}
         <div className="lp-owners-panel" id="owners-benefits" hidden={!openBenefits}>
           <ul className="lp-owners-benefits">
             {benefits.map((item) => (
