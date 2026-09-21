@@ -557,10 +557,19 @@ export const Objects: CollectionConfig = {
     // (снятые с продажи) посетителям и клиентам не отдаём вовсе: они живут
     // только в разделе CRM «Архив объектов» — сайт, каталог, поиск и рекламные
     // выгрузки берут объекты без статуса archived (см. src/lib/archive.ts).
-    read: ({ req: { user } }) => {
-      const staff = user as { role?: string } | null | undefined
-      if (staff?.role === 'agent' || staff?.role === 'admin') return true
-      return { status: { not_equals: 'archived' } }
+    //
+    // Сотрудник-агент читает только свои объекты (ответственный агент или
+    // автор карточки — см. isOwnObject): в кабинете агента нет чужой базы, и
+    // прямая ссылка на чужую карточку ничего не открывает. Администратору
+    // доступны все объекты. Условие возвращаем запросом — и списки, и чтение
+    // по id (Payload объединяет его с запросом, см. findByID).
+    read: async ({ req }) => {
+      const staff = req.user as AccessReq['user'] | undefined
+      if (!staff) return { status: { not_equals: 'archived' } }
+      if (staff.role === 'admin') return true
+      if (staff.role !== 'agent') return { status: { not_equals: 'archived' } }
+      const mine = await myAgentIds(req)
+      return ownObjectsWhere(staff.id, mine) ?? false
     },
     // Добавлять объекты могут только сотрудники (агент или администратор).
     // Клиенты регистрируются на сайте и работают через заявки — создание

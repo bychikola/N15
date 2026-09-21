@@ -21,6 +21,11 @@ import {
 // написание адреса на карточке, в реестре и в фильтрах
 import { normalizeHouseAddress } from '@/lib/house-info'
 import { sortAgents } from '@/lib/agents-sort'
+// Фильтры списка (агент и статус) — общее условие выборки для запроса к
+// /api/objects, см. src/lib/object-filters.ts
+import { objectListWhere, type ObjectListFilters } from '@/lib/object-filters'
+// Ответственный агент — поле с поиском по агентам (см. AgentPicker)
+import { AgentPicker } from '@/components/crm/AgentPicker'
 // Категории объектов: полный список значений, правила участка и домовых
 // категорий — общий справочник схемы коллекции (src/lib/object-categories.ts)
 import { OBJECT_CATEGORIES, isHouseCategoryCode, isPlotCategoryCode, isPrivateHouseCode } from '@/lib/object-categories'
@@ -304,6 +309,17 @@ type AddrField = 'city' | 'district' | 'cityDistrict' | 'locality' | 'street' | 
 const inputStyle: React.CSSProperties = {
   width: '100%', boxSizing: 'border-box', border: '1px solid #d9d1c4', borderRadius: 7,
   background: 'white', color: '#25241f', padding: 12,
+}
+
+// Поля фильтров списка (агент и статус) — как у фильтров раздела «Архив
+// объектов»: подпись сверху, выпадающий список под ней
+const filterLabelStyle: React.CSSProperties = {
+  display: 'flex', flexDirection: 'column', gap: 5, color: '#6f6a61',
+  fontSize: 9, textTransform: 'uppercase', letterSpacing: '.07em', minWidth: 0,
+}
+const filterInputStyle: React.CSSProperties = {
+  border: '1px solid #d9d1c4', borderRadius: 8, background: '#fff', color: '#25241f',
+  padding: '11px 12px', font: '12px Arial, Helvetica, sans-serif',
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -888,7 +904,18 @@ export const CrmObjects: FC<{
   const [saved, setSaved] = useState(false)
   const [modalOpen, setModalOpen] = useState(false)
   const [saveError, setSaveError] = useState('')
+  // Фильтры списка: ответственный агент (выбор — администратору, см. разметку
+  // фильтров ниже) и статус карточки. Оба уходят в запрос к /api/objects (см.
+  // load): фильтрует сервер, поэтому в списке ровно выбранная выборка, а не
+  // вся доступная база
+  const [agentFilter, setAgentFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
+  // Сколько объектов нашлось по фильтрам (totalDocs ответа сервера, см. load) —
+  // это же число печатает счётчик списка
+  const [found, setFound] = useState(0)
+  // Актуальные фильтры для вызовов load() вне контрола: фоновый обход площадок
+  // и сохранение карточки обновляют список, не сбрасывая выбранный фильтр
+  const filtersRef = useRef<ObjectListFilters>({ agent: '', status: '' })
   // Найденные дубли объекта (модалка подтверждения)
   const [duplicates, setDuplicates] = useState<DuplicateInfo[] | null>(null)
   // Адрес менялся с момента открытия формы — для авто-поиска метки на карте
@@ -993,14 +1020,24 @@ export const CrmObjects: FC<{
   }, [dirty, t])
 
   const load = useCallback(async () => {
+    // Фильтры уходят в запрос (where): сервер отдаёт только выбранную выборку,
+    // и в списке оказываются именно те объекты, что посчитал счётчик. limit=0 —
+    // все найденные объекты, чтобы список и число «Найдено» не расходились.
+    // Права сервер при этом не ослабляет: сотрудник-агент и так получает
+    // только свои объекты (см. access коллекции Objects).
+    const where = objectListWhere(filtersRef.current)
+    const params = new URLSearchParams({ limit: '0', depth: '1' })
+    if (where) params.set('where', JSON.stringify(where))
     const [objectsRes, agentsRes] = await Promise.all([
-      fetch('/api/objects?limit=100&depth=1', { credentials: 'include' }),
+      fetch(`/api/objects?${params.toString()}`, { credentials: 'include' }),
       fetch('/api/agents?limit=100', { credentials: 'include' }),
     ])
     const objectsData = await objectsRes.json()
     const agentsData = await agentsRes.json()
+    const docs = (objectsData.docs || []) as Record<string, unknown>[]
+    setFound(Number(objectsData.totalDocs) || docs.length)
     setRows(
-      ((objectsData.docs || []) as Record<string, unknown>[]).map((o) => {
+      (docs).map((o) => {
         const img = o.primaryImage as { url?: string } | undefined
         const agent = o.agent as { name?: string } | undefined
         const plSum = rowPlacementSummary(o)
@@ -1022,7 +1059,10 @@ export const CrmObjects: FC<{
     setLoading(false)
   }, [])
 
+  // Смена фильтра перечитывает список с сервера: в ref кладём выбранное
+  // значение до запроса — им же пользуются фоновые обновления (см. load)
   useEffect(() => {
+    filtersRef.current = { agent: agentFilter, status: statusFilter }
     let cancelled = false
     async function tick() {
       if (cancelled) return
@@ -1030,7 +1070,7 @@ export const CrmObjects: FC<{
     }
     void tick()
     return () => { cancelled = true }
-  }, [load])
+  }, [agentFilter, statusFilter, load])
 
   // Автоматическая периодическая проверка площадок: пока страница открыта,
   // раз в минуту предлагаем серверу обработать объекты с наступившим сроком
@@ -1636,7 +1676,10 @@ export const CrmObjects: FC<{
       // показ в блоке на главной (как и прочие признаки карточки)
       urgentSale: form.urgentSale,
       status: form.status,
-      agent: form.agent ? Number(form.agent) : undefined,
+      // Ответственный агент: у администратора пустое значение очищает поле
+      // (в поле выбора это строка «—»), у остальных агент не участвует в
+      // запросе — своего агента агенту проставляет хук коллекции при создании
+      agent: form.agent ? Number(form.agent) : isAdmin ? null : undefined,
       primaryImage: mediaIds[0],
       images: mediaIds.slice(1),
       // Поля собственника и кадастровый номер правят только администраторы:
@@ -1793,7 +1836,9 @@ export const CrmObjects: FC<{
   }
 
   // Открытие карточки объекта: свой (или админом) — на правку, чужой — на
-  // просмотр. Право на правку определяет сервер, а форма ориентируется на
+  // просмотр. Чужой объект сервер агенту не отдаёт (см. access коллекции
+  // Objects), поэтому ответ без прав — это отказ, и карточка просто не
+  // открывается. Право на правку определяет сервер, а форма ориентируется на
   // тот же список своих объектов (см. canEditPrivate)
   const openObject = async (id: number) => {
     const res = await fetch(`/api/objects/${id}`, { credentials: 'include' })
@@ -2008,8 +2053,14 @@ export const CrmObjects: FC<{
     applyAddressFields(proposed)
   }
 
-  // Фильтр по статусу (черновик / опубликован / архив)
-  const visibleRows = statusFilter ? rows.filter((o) => o.status === statusFilter) : rows
+  // Фильтры выбраны — в списке выборка с сервера, а не вся база (см. load)
+  const filtersActive = Boolean(agentFilter || statusFilter)
+
+  /** Сброс фильтров: пустые значения — снова весь доступный список */
+  const resetFilters = () => {
+    setAgentFilter('')
+    setStatusFilter('')
+  }
 
   // Архивом объекта распоряжаются его агент и администратор — то же правило,
   // что у правки объектов (см. access коллекции Objects)
@@ -2049,20 +2100,39 @@ export const CrmObjects: FC<{
 
   return (
     <div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, marginBottom: 18 }}>
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          aria-label={t.crm.filterStatus}
-          style={{ border: '1px solid #d9d1c4', borderRadius: 8, background: '#fff', color: '#25241f', padding: '10px 12px', font: '12px Arial, Helvetica, sans-serif' }}
-        >
-          <option value="">{t.crm.filterStatus}: {t.crm.filterAll}</option>
-          <option value="draft">{t.crm.statusDraft}</option>
-          <option value="published">{t.crm.statusPublished}</option>
-          <option value="archived">{t.crm.statusArchived}</option>
-        </select>
-        <span style={{ fontSize: 10, color: '#817b70', textTransform: 'uppercase', letterSpacing: '.08em' }}>
-          {visibleRows.length} / {rows.length}
+      {/* Фильтры списка. Ответственного агента выбирает администратор: агент
+          и так видит только свои объекты (см. access коллекции Objects), и
+          фильтр по агентам ему не нужен. Оба фильтра уходят в запрос к
+          /api/objects (см. load) и складываются — например, «Фатима» +
+          «Опубликованные» показывает только её опубликованные объекты. */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', gap: 10, marginBottom: 14 }}>
+        {isAdmin && (
+          <label style={filterLabelStyle}>
+            {t.crm.filterAgent}
+            <select value={agentFilter} onChange={(e) => setAgentFilter(e.target.value)} style={filterInputStyle}>
+              <option value="">{t.crm.filterAllAgents}</option>
+              {agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+            </select>
+          </label>
+        )}
+        <label style={filterLabelStyle}>
+          {t.crm.filterStatus}
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={filterInputStyle}>
+            <option value="">{t.crm.filterAllStatuses}</option>
+            <option value="draft">{t.crm.statusDraft}</option>
+            <option value="published">{t.crm.statusPublished}</option>
+            <option value="archived">{t.crm.statusArchived}</option>
+          </select>
+        </label>
+        {/* «Сбросить фильтры» — снять оба фильтра сразу и вернуться к полному
+            списку (доступному сотруднику). Без выбранных фильтров кнопка не
+            активна: сбрасывать нечего */}
+        <button type="button" onClick={resetFilters} disabled={!filtersActive}
+          style={{ ...filterInputStyle, cursor: filtersActive ? 'pointer' : 'default', opacity: filtersActive ? 1 : .55, textTransform: 'uppercase', letterSpacing: '.07em', fontSize: 9.5, color: '#716b62', background: '#faf7f2' }}>
+          {t.crm.filterReset}
+        </button>
+        <span style={{ fontSize: 10, color: '#817b70', textTransform: 'uppercase', letterSpacing: '.08em', paddingBottom: 13 }}>
+          {fmt(t.crm.filterFound, found)}
         </span>
         <button type="button" onClick={() => { resetForm(); setModalOpen(true) }}
           style={{ marginLeft: 'auto', border: 0, borderRadius: 8, background: '#a7814e', color: '#fff', padding: '12px 20px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.1em', cursor: 'pointer' }}>
@@ -2740,10 +2810,10 @@ export const CrmObjects: FC<{
               только имя ведущего агента */}
           <Field label={t.crm.objAgent}>
             {isAdmin ? (
-              <select value={form.agent} onChange={(e) => set('agent', e.target.value)} style={inputStyle}>
-                <option value="">—</option>
-                {agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-              </select>
+              // Поле с поиском по агентам: список длинный, нужного ищут по
+              // фамилии (см. AgentPicker). Строка «—» снимает ответственного —
+              // это же значение сохраняет карточка (см. agent в save)
+              <AgentPicker t={t} agents={agents} value={form.agent} onChange={(id) => set('agent', id)} />
             ) : (
               <input
                 value={agents.find((a) => String(a.id) === form.agent)?.name || (form.agent ? form.agent : '—')}
@@ -3165,13 +3235,15 @@ export const CrmObjects: FC<{
 
       {loading ? (
         <p style={{ color: '#817b70', fontSize: 12 }}>…</p>
-      ) : rows.length && !visibleRows.length ? (
+      ) : !rows.length && filtersActive ? (
+        // По выбранным фильтрам ничего не нашлось: список с сервера пуст,
+        // но у сотрудника объекты есть (см. счётчик «Найдено»)
         <div style={{ background: '#fff', border: '1px solid #e5dfd3', borderRadius: 12, padding: 30, textAlign: 'center' }}>
           <p style={{ color: '#817b70', fontSize: 13, margin: 0 }}>{t.crm.objEmptyStatus}</p>
         </div>
-      ) : visibleRows.length ? (
+      ) : rows.length ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }}>
-          {visibleRows.map((o) => (
+          {rows.map((o) => (
             <div key={o.id} style={{ background: '#fff', border: '1px solid #e5dfd3', borderRadius: 12, padding: 14 }}>
               <div style={{ aspectRatio: '4 / 3', borderRadius: 8, overflow: 'hidden', background: o.thumb ? undefined : '#f2eadf', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 {o.thumb
@@ -3200,10 +3272,12 @@ export const CrmObjects: FC<{
                   : t.crm.plTileNone}
               </div>
               <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid #eee9e1', display: 'flex', gap: 6 }}>
-                {/* Чужие объекты агент видит в общей базе, но редактирует и
-                    публикует только свои: на чужом объекте кнопки
-                    «Редактировать» нет — он открывается на просмотр (сервер
-                    правку чужого объекта тоже не пропустит) */}
+                {/* Объекты агента — только свои (сервер отдаёт их по правилу
+                    «своего» объекта, см. access коллекции Objects), поэтому
+                    кнопка «Редактировать» у него на каждой карточке списка.
+                    Ветка просмотра остаётся для чужого объекта, если он всё
+                    же попал в выборку: правку такого объекта сервер не
+                    пропустит (см. canEditPrivate и viewOnly) */}
                 {isAdmin || ownObjectIds.includes(o.id) ? (
                   <button type="button" onClick={() => void openObject(o.id)}
                     style={{ flex: 1, border: '1px solid #e1d8ca', borderRadius: 6, background: '#faf7f2', color: '#716b62', padding: '8px 10px', fontSize: 9, textTransform: 'uppercase', letterSpacing: '.07em', cursor: 'pointer' }}>
