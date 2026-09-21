@@ -15,8 +15,9 @@ interface Props {
 // поэтому тексты не расходятся. Третья плашка ведёт на оценку объекта.
 //
 // Две зелёные плашки одного оформления (.lp-button, как в герое) раскрывают
-// каждый свой блок и не мешают друг другу: «План продажи» показывает четыре
-// пункта плана, «Условия собственника» — что Н15 делает для владельца.
+// каждый свой блок: «План продажи» показывает четыре пункта плана, «Условия
+// собственника» — что Н15 делает для владельца. Блоки работают аккордеоном —
+// открыт может быть только один, открытие второй плашки закрывает первую.
 // Подписи плашек лежат в словаре главной (t.landing.owners*Cta) и не
 // совпадают с подписью блока выше. На телефоне плашки встают друг под
 // другом, во всю ширину колонки (см. .lp-owners-actions в globals.css).
@@ -30,11 +31,12 @@ export default function OwnersSection({ t, lang }: Props) {
   // владельцам, /services/owners)
   const benefits = [o.valuation, o.preparation, o.marketing, o.legal, o.deal]
 
-  // Плашки раскрываются независимо: открытие одной не закрывает вторую.
-  // Блоки лежат в разметке всегда (скрыты атрибутом hidden) — иначе их
-  // тексты не попадали бы в серверный HTML страницы
-  const [openTerms, setOpenTerms] = useState(false)
-  const [openBenefits, setOpenBenefits] = useState(false)
+  // Аккордеон: открыт максимум один блок, повторное нажатие закрывает
+  // открытый. Блоки лежат в разметке всегда (скрыты атрибутом hidden) —
+  // иначе их тексты не попадали бы в серверный HTML страницы
+  const [openPanel, setOpenPanel] = useState<'terms' | 'benefits' | null>(null)
+  const togglePanel = (panel: 'terms' | 'benefits') =>
+    setOpenPanel((current) => (current === panel ? null : panel))
 
   return (
     <section className="lp-section lp-owners" id="owners">
@@ -44,24 +46,25 @@ export default function OwnersSection({ t, lang }: Props) {
         <p className="lp-owners-copy">{s.subtitle}</p>
 
         {/* Плашки одного оформления (.lp-button, как в герое): «План
-            продажи» и «Условия собственника» раскрывают свои блоки ниже,
-            третья ведёт на страницу оценки объекта */}
+            продажи» и «Условия собственника» раскрывают свои блоки ниже
+            (открыт только один — аккордеон), третья ведёт на страницу
+            оценки объекта */}
         <div className="lp-hero-actions lp-owners-actions">
           <button
             type="button"
             className="lp-button"
-            aria-expanded={openTerms}
+            aria-expanded={openPanel === 'terms'}
             aria-controls="owners-terms"
-            onClick={() => setOpenTerms((v) => !v)}
+            onClick={() => togglePanel('terms')}
           >
             {t.landing.ownersPlanCta} <span aria-hidden="true">→</span>
           </button>
           <button
             type="button"
             className="lp-button"
-            aria-expanded={openBenefits}
+            aria-expanded={openPanel === 'benefits'}
             aria-controls="owners-benefits"
-            onClick={() => setOpenBenefits((v) => !v)}
+            onClick={() => togglePanel('benefits')}
           >
             {t.landing.ownersTermsCta} <span aria-hidden="true">→</span>
           </button>
@@ -72,7 +75,7 @@ export default function OwnersSection({ t, lang }: Props) {
 
         {/* Блок плашки «План продажи»: четыре пункта плана и ссылка
             на страницу направления — как у прежней плашки-ссылки */}
-        <div className="lp-owners-panel" id="owners-terms" hidden={!openTerms}>
+        <div className="lp-owners-panel" id="owners-terms" hidden={openPanel !== 'terms'}>
           <ul className="lp-owners-terms">
             {terms.map((term) => (
               <li key={term.title}>
@@ -87,7 +90,7 @@ export default function OwnersSection({ t, lang }: Props) {
         </div>
 
         {/* Блок плашки «Условия собственника»: что Н15 делает для владельца */}
-        <div className="lp-owners-panel" id="owners-benefits" hidden={!openBenefits}>
+        <div className="lp-owners-panel" id="owners-benefits" hidden={openPanel !== 'benefits'}>
           <ul className="lp-owners-benefits">
             {benefits.map((item) => (
               <li key={item.title}>

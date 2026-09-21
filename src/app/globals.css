@@ -1020,7 +1020,8 @@ html[data-theme='dark'] .lp-featured .object-card { border: 0; }
 /* Блок для собственников: заголовок с пояснением и две зелёные плашки
    (.lp-button, как в герое), каждая раскрывает свой блок — «План продажи»
    (четыре пункта) или «Условия собственника» (работа Н15; те же тексты,
-   что на странице /services/owners/vygodnaya-prodazha) */
+   что на странице /services/owners/vygodnaya-prodazha). Блоки работают
+   аккордеоном: открыт только один, повторное нажатие закрывает */
 .lp-owners { width: min(90%, 1050px); margin: 86px auto; }
 .lp-owners-title { max-width: 720px; font-size: clamp(30px, 3.7vw, 51px); }
 .lp-owners-copy { max-width: 620px; margin: 18px 0 30px; color: #777267; font-size: 15px; line-height: 1.75; }
