@@ -1,6 +1,14 @@
 import type { Payload } from 'payload'
 
-import { diskSpace, mediaDir, pendingWhere, processPhoto, type PhotoDoc } from './media-marking'
+import {
+  cleanFramePath,
+  diskSpace,
+  markedWhere,
+  mediaDir,
+  pendingWhere,
+  processPhoto,
+  type PhotoDoc,
+} from './media-marking'
 
 /**
  * Фоновая разметка уже загруженных фотографий: знак «Н15» получают снимки,
@@ -15,6 +23,9 @@ import { diskSpace, mediaDir, pendingWhere, processPhoto, type PhotoDoc } from '
  * Выключается переменной окружения WATERMARK_BACKFILL=off (например, пока
  * заказчик смотрит вид знака на своих фото) — при следующем старте задача
  * просто не начнётся.
+ *
+ * Перед очередью задача один раз за запуск обходит фото прошлой разметки —
+ * те, чьи размеры на сайте остались без знака (см. sweepMarkedWithoutMaster).
  */
 
 /** Сколько фото берём за раз: одна порция — минута-две работы sharp */
@@ -38,11 +49,25 @@ const START_PAUSE = 15 * 1000
  * это заметная доля диска — при нехватке места разметку лучше не начинать.
  */
 const MIN_FREE_MB = 512
+/** Сколько документов за раз просматривает обход прошлой разметки (см. ниже) */
+const SWEEP_BATCH = 50
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
 
 function disabled(): boolean {
   return process.env.WATERMARK_BACKFILL === 'off'
+}
+
+/** Хватает ли места под чистые кадры: они занимают столько же, сколько сами фото */
+async function enoughSpace(payload: Payload): Promise<boolean> {
+  const space = await diskSpace(mediaDir(payload))
+  if (space.freeMb && space.freeMb < MIN_FREE_MB) {
+    console.error(
+      `media-marking: на диске ${space.freeMb} МБ — разметка ждёт места (нужно ${MIN_FREE_MB} МБ под чистые кадры)`,
+    )
+    return false
+  }
+  return true
 }
 
 /**
@@ -61,6 +86,12 @@ export function startWatermarkBackfill(payload: Payload): void {
 
 async function run(payload: Payload): Promise<void> {
   await sleep(START_PAUSE)
+  // Сначала — фото прошлой разметки: очередь их не берёт, а на сайте они без знака
+  try {
+    await sweepMarkedWithoutMaster(payload)
+  } catch (e) {
+    console.error('media-marking: обход прошлой разметки не удался', e)
+  }
   for (;;) {
     if (disabled()) return
     try {
@@ -72,15 +103,68 @@ async function run(payload: Payload): Promise<void> {
   }
 }
 
+/**
+ * Обход прошлой разметки — по разу за запуск, до очереди.
+ *
+ * Фото, размеченные прошлой версией знака, в базе уже помечены текущей версией
+ * (wm=2), но чистого кадра у них нет: знак ложился только в сам оригинал, а
+ * Payload собирает размеры из оригинала кадрированием — в размерах знака не
+ * было (см. src/lib/media-marking.ts). Ждущими такие фото не считаются (очередь
+ * смотрит на wm 0), поэтому сами они не починятся никогда: на сайте их размеры
+ * так и останутся чистыми. Чистый кадр у них лежит в копии прошлой разметки
+ * (media/.wm-backup) — из него фото и размечается заново, как в режиме repair
+ * маршрута /api/watermark.
+ *
+ * Если чистого кадра нет вовсе, фото не трогаем: второй знак поверх первого
+ * печатать нельзя, а снять его будет нечем.
+ */
+async function sweepMarkedWithoutMaster(payload: Payload): Promise<void> {
+  if (!(await enoughSpace(payload))) return
+  const dir = mediaDir(payload)
+  const failed = new Set<number>()
+  let from = 0
+  let repaired = 0
+
+  for (;;) {
+    const found = await payload.find({
+      collection: 'media',
+      where: { and: [markedWhere(), { id: { greater_than: from } }] },
+      limit: SWEEP_BATCH,
+      // По возрастанию id — так обход идёт вперёд без пропусков и повторов
+      sort: 'id',
+      overrideAccess: true,
+      depth: 0,
+    })
+    const docs = found.docs as unknown as PhotoDoc[]
+    if (!docs.length) break
+    from = docs[docs.length - 1].id
+
+    for (const doc of docs) {
+      const file = doc.filename ? String(doc.filename) : ''
+      if (!file) continue
+      // Чистый кадр на месте — фото размечала текущая версия, оно ни при чём
+      if (await cleanFramePath(dir, file)) continue
+
+      const result = await processPhoto({ payload, doc, rebuild: true })
+      if (result.status === 'marked') {
+        repaired++
+      } else {
+        failed.add(doc.id)
+        console.error('media-marking: фото прошлой разметки не починено', file, result.status, result.reason || '')
+      }
+      await sleep(STEP_PAUSE)
+    }
+    // Отказов слишком много подряд — беда общая, перебирать весь каталог незачем
+    if (failed.size >= MAX_FAIL || disabled()) break
+  }
+
+  if (repaired) console.log(`media-marking: размечено заново после прошлой разметки — ${repaired}`)
+  if (failed.size) console.error(`media-marking: осталось без разметки после прошлой разметки — ${failed.size}`)
+}
+
 /** Один проход: размечаем всё, что ждёт знака, неудачное в этом проходе не трогаем */
 async function pass(payload: Payload): Promise<void> {
-  const space = await diskSpace(mediaDir(payload))
-  if (space.freeMb && space.freeMb < MIN_FREE_MB) {
-    console.error(
-      `media-marking: на диске ${space.freeMb} МБ — разметка ждёт места (нужно ${MIN_FREE_MB} МБ под чистые кадры)`,
-    )
-    return
-  }
+  if (!(await enoughSpace(payload))) return
 
   const failed = new Set<number>()
   let marked = 0

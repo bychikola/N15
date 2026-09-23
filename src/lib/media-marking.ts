@@ -146,6 +146,23 @@ async function readFileOrNull(file: string): Promise<Buffer | null> {
   }
 }
 
+/**
+ * Чистый кадр фото: свой мастер из закрытой папки или копия прошлой разметки.
+ * null — чистого кадра нет вовсе: так выглядят фото, размеченные прошлой
+ * версией знака, когда рядом не осталось ни мастера, ни копии.
+ */
+export async function cleanFramePath(dir: string, file: string): Promise<string | null> {
+  for (const candidate of [path.join(dir, MASTER_DIR, file), path.join(dir, BACKUP_DIR, file)]) {
+    try {
+      await fs.access(candidate)
+      return candidate
+    } catch {
+      /* файла нет — смотрим следующее место */
+    }
+  }
+  return null
+}
+
 /** Прямоугольник кропа: цель не выходит за кадр, при нехватке места прижимается к краю */
 function bound(center: number, target: number, total: number): number {
   let value = center - target / 2
