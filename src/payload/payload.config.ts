@@ -40,6 +40,9 @@ import { Settlements } from './collections/Settlements'
 // (см. src/lib/site-stats.ts, src/app/crm/site-stats)
 import { SiteVisits } from './collections/SiteVisits'
 import { seedInterregional } from '@/lib/interregional-service'
+// Фоновая разметка уже загруженных фото знаком «Н15»
+// (см. src/lib/media-marking-job.ts)
+import { startWatermarkBackfill } from '@/lib/media-marking-job'
 import { SiteSettings } from './globals/SiteSettings'
 import { MailSettings } from './globals/MailSettings'
 import { AgentSettings } from './globals/AgentSettings'
@@ -121,6 +124,11 @@ export default buildConfig({
     } catch (e) {
       console.error('[interregional] не удалось заполнить справочник:', e)
     }
+    // Фоновая разметка фотографий знаком «Н15»: снимки, загруженные до
+    // появления разметки, лежат в хранилище без знака. Задача идёт порциями и
+    // в фоне, старт приложения её не ждёт (см. src/lib/media-marking-job.ts).
+    // Выключается переменной окружения WATERMARK_BACKFILL=off
+    startWatermarkBackfill(payload)
   },
   sharp,
 })

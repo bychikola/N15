@@ -58,6 +58,12 @@ const SHADOW_BLUR_RATIO = 0.035
  */
 export const WATERMARK_VERSION = 2
 /**
+ * Портрет сотрудника (kind=avatar при загрузке): знака на нём быть не должно —
+ * на маленьком портрете знак выглядит наклейкой. Массовая разметка такие фото
+ * пропускает (см. src/lib/media-marking.ts).
+ */
+export const WATERMARK_AVATAR = 1
+/**
  * Качество пережима JPEG/WebP. 92 — как у размеров Payload (webp 86 ≈ jpeg 92):
  * на глаз от исходника не отличается (PSNR выше 46 дБ), но файл не растёт
  * вдвое, как на 95 — фото уходят в каталог и на карточку объекта.
@@ -102,7 +108,7 @@ function readMark(): Buffer | null {
  * Формат фото по MIME-типу, а при пустом типе — по расширению файла:
  * часть браузеров (и почти все на iPhone) не присылает file.type.
  */
-function photoFormat(mimetype: string, filename: string): PhotoFormat | null {
+export function photoFormat(mimetype: string, filename: string): PhotoFormat | null {
   const byMime = FORMAT_BY_MIME[(mimetype || '').toLowerCase()]
   if (byMime) return byMime
   const ext = /\.([^.]+)$/.exec(filename || '')?.[1].toLowerCase()
@@ -118,11 +124,26 @@ function isSupportedMime(mimetype: string): boolean {
 }
 
 /**
+ * Проверка, что кадр вообще читается sharp. Знак накладывается уже после
+ * записи файла (см. src/lib/media-marking.ts), а сотруднику причину отказа
+ * нужно показать сразу — до сохранения: битый файл или HEIC под расширением
+ * .jpg не откроется и в каталоге.
+ */
+export async function probePhoto(input: Buffer): Promise<'ok' | 'unreadable'> {
+  try {
+    const meta = await sharp(input).metadata()
+    return meta.width && meta.height ? 'ok' : 'unreadable'
+  } catch {
+    return 'unreadable'
+  }
+}
+
+/**
  * Слой знака в raw RGBA: нужен цвет и общая непрозрачность, а sharp умеет
  * только «наложить как есть» — поэтому альфу готовим сами. Размытие нужно
  * тени: размываем альфу, а не саму картинку, чтобы контур остался чётким.
  */
-async function markLayer(
+export async function markLayer(
   mark: Buffer,
   width: number,
   opacity: number,

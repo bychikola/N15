@@ -9,12 +9,13 @@ import {
   isAllowedPhoto,
   photoSizeLabel,
 } from '@/lib/photo-rules'
-import { WATERMARK_VERSION, applyWatermark } from '@/lib/watermark'
+import { WATERMARK_AVATAR, probePhoto } from '@/lib/watermark'
 
 /**
  * Загрузка фотографии объекта из CRM. Сюда же ходит старая форма /admin-add —
- * через алиас /api/upload (см. src/app/api/upload/route.ts). Фото уходит в
- * хранилище с водяным знаком «Н15» в углу кадра.
+ * через алиас /api/upload (см. src/app/api/upload/route.ts). Файл уходит в
+ * хранилище как есть, а знак «Н15» накладывает хук коллекции media — на
+ * оригинал и на каждый размер (см. src/lib/media-marking.ts).
  *
  * Поле kind отличает фото объекта от портрета сотрудника (карточка агента
  * грузит аватар тем же маршрутом): 'avatar' — знак не нужен, он выглядит
@@ -81,31 +82,29 @@ export async function POST(req: NextRequest) {
   try {
     const payload = await getPayload({ config })
     const original = Buffer.from(await file.arrayBuffer())
-    // Водяной знак «Н15» в углу кадра — здесь, а не в браузере: маршрут один
-    // для карточки CRM и старой формы /admin-add, поэтому знак получают все
-    // фото объектов (см. src/lib/watermark.ts). Кадр, который не читается
-    // sharp, не сохраняем: сотрудник видит причину, а не «повторите» на файл,
-    // который не откроется никогда
+    // Кадр, который не читается sharp, не сохраняем: сотрудник видит причину,
+    // а не «повторите» на файл, который не откроется никогда
     const kind = String(form?.get('kind') || 'object')
-    const marked = kind === 'avatar' ? null : await applyWatermark(original, file.type, file.name)
-    if (marked?.status === 'unreadable') {
+    if (kind !== 'avatar' && (await probePhoto(original)) === 'unreadable') {
       return fail(415, 'unreadable', 'Не удалось прочитать файл — сохраните фото в JPG или PNG')
     }
-    const buffer = marked?.status === 'done' ? marked.data : original
+    // Знак «Н15» накладывается не здесь, а хуком коллекции media — сразу после
+    // того, как Payload запишет оригинал и соберёт размеры: знак в углу
+    // оригинала не попадает в кроп размера, поэтому размечать нужно каждый
+    // файл (см. src/lib/media-marking.ts). Здесь же файл уходит чистой копией.
     const doc = await payload.create({
       collection: 'media',
-      // wm — какой знак вшит в файл: по нему массовое обновление знака
-      // (src/app/api/watermark/route.ts) не накладывает знак второй раз.
-      // Портрет сотрудника (kind=avatar) — 1: знака на нём быть не должно
+      // wm — какая версия знака вшита в файлы: хук разметки поставит 2, а
+      // портрет сотрудника (kind=avatar) она не трогает — ему 1
       data: {
         alt: file.name.replace(/\.[^.]+$/, ''),
-        wm: marked?.status === 'done' ? WATERMARK_VERSION : kind === 'avatar' ? 1 : 0,
+        wm: kind === 'avatar' ? WATERMARK_AVATAR : 0,
       },
       file: {
-        data: buffer,
-        mimetype: marked?.status === 'done' ? marked.mimetype : (file.type || 'image/jpeg'),
+        data: original,
+        mimetype: file.type || 'image/jpeg',
         name: file.name,
-        size: buffer.length,
+        size: original.length,
       },
       // Пользователь уже проверен через payload.auth (getCrmUser) — передаём
       // его в операцию, чтобы правила доступа коллекции media применялись

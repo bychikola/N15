@@ -1,5 +1,6 @@
 import type { CollectionConfig } from 'payload'
 import { PHOTO_MIME_TYPES } from '@/lib/photo-rules'
+import { mediaAfterChange, mediaFocalChange } from '@/lib/media-marking'
 
 export const Media: CollectionConfig = {
   slug: 'media',
@@ -60,7 +61,17 @@ export const Media: CollectionConfig = {
         }
         return data
       },
+      // Смену фокусной точки кадра помечаем как «фото ждёт разметки»: Payload
+      // пересобирает размеры из размеченного оригинала, и знак в новом кропе
+      // может остаться за кадром — фоновая разметка соберёт размеры заново из
+      // чистого кадра (см. src/lib/media-marking.ts)
+      mediaFocalChange,
     ],
+    // Разметка фотографии сразу после загрузки: знак «Н15» ложится и на
+    // оригинал, и на каждый размер, чистый кадр уходит в закрытую папку
+    // (см. src/lib/media-marking.ts). Хук общий для всех путей загрузки —
+    // карточка CRM, старая форма /admin-add, админка Payload
+    afterChange: [mediaAfterChange],
   },
   fields: [
     {
@@ -80,7 +91,7 @@ export const Media: CollectionConfig = {
       admin: {
         readOnly: true,
         position: 'sidebar',
-        description: '0 — знака нет, 1 — прежний знак «Н15», 2 — знак с ключиком и подписью.',
+        description: '0 — ждёт разметки, 1 — портрет сотрудника (знака нет), 2 — знак «Н15» с ключиком и подписью.',
       },
     },
   ],
