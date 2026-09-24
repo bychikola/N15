@@ -19,30 +19,48 @@ import { markLayer } from './watermark'
  * Накладывать текущий знак поверх прежнего нельзя: в правом нижнем углу два
  * знака наложатся друг на друга, а по центру останется чужой логотип. Поэтому
  * прежний знак снимаем — обратной композицией: если знак лёг как
- * obs = a·c + dst·(1-a), то исходный кадр восстанавливается как
- * dst = (obs - a·c) / (1-a). Все параметры прежних знаков известны (файл
- * образца, место, размер, непрозрачность), поэтому снятие точное, а не
- * «замазывание».
+ * obs = c·a_m + (1-a_m)·(1-a_s)·dst (слой знака поверх тени поверх кадра), то
+ * исходный кадр восстанавливается как dst = (obs - c·a_m) / ((1-a_m)(1-a_s)).
+ * Образец знака, место, размер и непрозрачность известны, поэтому снятие
+ * точное, а не «замазывание».
  *
  * Опасность обратной композиции — снять знак там, где его нет: тогда на фото
- * останется светлый отпечаток букв. Поэтому перед снятием кадр проверяется:
- * подгоняем модель знака к кадру и требуем, чтобы контур знака совпал с
- * картинкой (r), а сила отпечатка (k) и его амплитуда (amp) были в разумных
- * пределах. Если проверка не прошла — знак не снимаем (лучше чужой знак, чем
- * испорченное фото), в отчёте такие кадры видны.
+ * останется отпечаток букв (и наоборот, снятый «наизнанку» знак оставит
+ * цветной след). Поэтому кадр проверяется дважды: до снятия (сверка знака с
+ * кадром: совпал ли контур, есть ли отпечаток) и после него (пропал ли
+ * отпечаток). Не прошла проверка — кадр остаётся нетронутым: лучше чужой знак,
+ * чем испорченное фото.
+ *
+ * Проверка — опыт на заведомо чистых кадрах: знак кладётся так, как его клала
+ * прежняя версия, и очистка должна вернуть кадр к исходному. Опыт же показал,
+ * что по этой модели нельзя подгонять непрозрачности: фон под знаком знаешь
+ * только приблизительно, и на живом кадре подгонка уводит множитель (p=1.34
+ * вместо 1, остаток на месте знака в 37 уровней), тогда как паспортные
+ * непрозрачности дают остаток в 3 уровня. Поэтому множители не подгоняются —
+ * берутся из плана.
  */
 
-/** Ширина кадра при проверке: на ней же меряются r, k и amp */
+/** Ширина кадра при проверке (на ней меряется и отпечаток знака) */
 const ANALYSIS_WIDTH = 1000
 /** Размытие фона при проверке (в пикселях кадра проверки) */
 const ANALYSIS_BLUR = 30
 /** Ниже этого совпадения контура знак не снимаем */
 const MIN_SHAPE = 0.55
-/** Амплитуда отпечатка в уровнях яркости: слабее — не отличить от шума */
-const MIN_AMPLITUDE = 15
-/** Во сколько раз непрозрачность на фото может отличаться от образца */
-const MIN_SCALE = 0.45
-const MAX_SCALE = 3.5
+/**
+ * Амплитуда отпечатка (в уровнях серого): слабее — не отличить от шума. Порог
+ * низкий нарочно: пропустить знак (он останется на фото) не так страшно, как
+ * снять его там, где его нет, — а от такой ошибки бережёт ещё и проверка
+ * снятия. Опыт на ровном фоне: серый знак 21.09 на сером же фоне даёт в
+ * среднем 3.4 уровня отпечатка — сам знак светлее фона на 16 уровней, а мягкие
+ * края штрихов тянут среднее вниз. С порогом 6 такой знак не опознавался бы
+ * вовсе, хотя контур совпадал идеально (0.94).
+ */
+const MIN_AMPLITUDE = 3
+/**
+ * Проверка снятия: какая доля узора знака осталась на кадре (см. residueShape).
+ * Выше этого — считаем снятие неудачным и кадр не трогаем
+ */
+const RESIDUE_SHAPE = 0.35
 
 export type LegacyEra = 'start' | 'center' | 'corner'
 
@@ -167,28 +185,133 @@ async function layerAt(plan: LegacyPlan, asset: Buffer, width: number): Promise<
   return { data: out, width: layer.width, height: layer.height }
 }
 
-/** Яркость цвета знака в пикселе — по ней считается вклад знака в кадр */
-function luminance(r: number, g: number, b: number): number {
-  return r * 0.299 + g * 0.587 + b * 0.114
+/**
+ * Отпечаток знака в пикселе меряется по среднему каналов — и на кадре, и в
+ * модели. Считать яркость по-человечески (0.299·R + 0.587·G + 0.114·B) нельзя:
+ * sharp().greyscale() берёт линейный свет, и та же мера по значениям каналов
+ * расходится с кадром на несколько процентов — подгонка тогда завышает
+ * непрозрачность знака (на ровном фоне выходило 1.07 вместо 1.00).
+ */
+function average(r: number, g: number, b: number): number {
+  return (r + g + b) / 3
 }
 
 type Fit = {
   era: LegacyEra
-  /** Во сколько раз непрозрачность на фото отличается от образца */
-  scale: number
-  /** Совпадение контура знака с картинкой (0..1) */
+  /** Совпадение контура знака с картинкой (0..1): по нему знак и опознаётся */
   shape: number
-  /** Средняя сила отпечатка в уровнях яркости */
+  /** Средняя сила отпечатка в уровнях серого */
   amplitude: number
 }
 
 /**
- * Подгонка знака к кадру на уменьшенной копии: obs - S ≈ scale·a·(c - S), где
- * a — альфа образца, c — его цвет, S — фон кадра под знаком (его считаем
- * размытием кадра, из которого пиксели знака исключены, иначе знак «увидит»
- * сам себя). Правильный знак даёт scale ≈ 1, высокое shape и заметную
- * amplitude; случайное совпадение контура — низкое shape.
+ * Сверка знака с кадром на уменьшенной копии. Модель — ровно то, как знак
+ * ложился на фото: слой знака поверх тени поверх кадра,
+ *   obs = a_m·c + (1 - a_m)·(1 - a_s)·S,
+ * откуда obs - S = a_m·(c - S) - a_s·S·(1 - a_m), где a_m и a_s — альфа знака и
+ * тени в пикселе, c — цвет знака, S — фон кадра под ним (его считаем размытием
+ * кадра, из которого пиксели знака исключены, иначе знак «увидит» сам себя).
+ * Неизвестных нет: непрозрачности заданы планом, поэтому отпечаток считается
+ * таким, каким он должен быть. Сверка отвечает на один вопрос — тот ли знак
+ * лежит на кадре: настоящий даёт высокое shape (контур совпал с картинкой) и
+ * заметную amplitude, случайное совпадение — низкое shape.
+ *
+ * Подгонять по этой модели множители непрозрачности нельзя: фон под знаком
+ * знаешь только приблизительно, и ошибка фона уводит множитель (см. strip).
  */
+/**
+ * Кадр проверки — в среднем каналов (см. average): так и модель знака, и сам
+ * кадр считаются в одной мере, и сверка не сбивается на цветности
+ */
+async function analysisFrame(
+  frame: Buffer,
+  meta: { width: number; height: number },
+): Promise<{ data: Buffer; width: number; height: number }> {
+  const width = Math.max(16, Math.round(meta.width * Math.min(1, ANALYSIS_WIDTH / meta.width)))
+  const { data: rgb, info } = await sharp(frame)
+    .rotate()
+    .resize({ width })
+    .raw()
+    .toBuffer({ resolveWithObject: true })
+  const data = Buffer.alloc(info.width * info.height)
+  for (let i = 0; i < data.length; i++) {
+    const j = i * info.channels
+    data[i] = info.channels === 1 ? rgb[j] : Math.round((rgb[j] + rgb[j + 1] + rgb[j + 2]) / 3)
+  }
+  return { data, width: info.width, height: info.height }
+}
+
+/**
+ * Проверка снятия: остался ли на кадре узор знака. Меряется по мелкой
+ * структуре — крупный фон и промах его оценки сюда не попадают: кадр минус его
+ * размытие (рябь) сопоставляется с контуром знака минус его размытие. У верно
+ * очищенного кадра корреляция около нуля (остаётся только текстура фото), у
+ * недоснятого знака — высокая, у снятого «наизнанку» — высокая со знаком минус.
+ */
+async function residueShape(
+  frame: Buffer,
+  meta: { width: number; height: number },
+  plan: LegacyPlan,
+  asset: Buffer,
+): Promise<number | null> {
+  const assetMeta = await sharp(asset).metadata()
+  if (!assetMeta.width || !assetMeta.height) return null
+  const info = await analysisFrame(frame, meta)
+  const factor = info.width / meta.width
+  const full: Frame = { width: meta.width, height: meta.height }
+  const layerFullWidth = plan.width(full)
+  const layerFullHeight = Math.round((layerFullWidth * assetMeta.height) / assetMeta.width)
+  const spot = plan.place(full, { data: Buffer.alloc(0), width: layerFullWidth, height: layerFullHeight })
+  const layer = await layerAt(plan, asset, Math.max(8, Math.round(layerFullWidth * factor)))
+  const left = Math.max(0, Math.round(spot.left * factor))
+  const top = Math.max(0, Math.round(spot.top * factor))
+  const bw = Math.max(1, Math.min(info.width - left, layer.width))
+  const bh = Math.max(1, Math.min(info.height - top, layer.height))
+  if (bw < 16 || bh < 16) return null
+
+  // Радиус размытия — мелкая структура: штрихи знака шире него, фон — глаже
+  const radius = Math.max(2, Math.round(layer.width * 0.06))
+  const blurThe = (buf: Buffer, width: number, height: number) =>
+    sharp(buf, { raw: { width, height, channels: 1 } })
+      .blur(radius)
+      .raw()
+      .toBuffer()
+  const box = Buffer.alloc(bw * bh)
+  const alphaBox = Buffer.alloc(bw * bh)
+  for (let y = 0; y < bh; y++) {
+    for (let x = 0; x < bw; x++) {
+      box[y * bw + x] = info.data[(top + y) * info.width + (left + x)]
+      alphaBox[y * bw + x] = layer.data[(y * layer.width + x) * 4 + 3]
+    }
+  }
+  const [frameBlur, alphaBlur] = await Promise.all([
+    blurThe(box, bw, bh),
+    blurThe(alphaBox, bw, bh),
+  ])
+  let sx = 0
+  let sy = 0
+  let sxx = 0
+  let syy = 0
+  let sxy = 0
+  let n = 0
+  for (let i = 0; i < box.length; i++) {
+    const a = alphaBox[i] - alphaBlur[i]
+    if (Math.abs(a) < 8) continue
+    const y = box[i] - frameBlur[i]
+    sx += a
+    sy += y
+    sxx += a * a
+    syy += y * y
+    sxy += a * y
+    n++
+  }
+  if (n < 200) return null
+  const cov = sxy / n - (sx / n) * (sy / n)
+  const sd1 = Math.sqrt(Math.max(1e-9, sxx / n - (sx / n) ** 2))
+  const sd2 = Math.sqrt(Math.max(1e-9, syy / n - (sy / n) ** 2))
+  return sd1 * sd2 > 0 ? cov / (sd1 * sd2) : null
+}
+
 async function fitPlan(
   frame: Buffer,
   meta: { width: number; height: number },
@@ -197,14 +320,9 @@ async function fitPlan(
 ): Promise<Fit | null> {
   const assetMeta = await sharp(asset).metadata()
   if (!assetMeta.width || !assetMeta.height) return null
-  const factor = Math.min(1, ANALYSIS_WIDTH / meta.width)
-  const width = Math.max(16, Math.round(meta.width * factor))
-  const { data, info } = await sharp(frame)
-    .rotate()
-    .resize({ width })
-    .greyscale()
-    .raw()
-    .toBuffer({ resolveWithObject: true })
+  const info = await analysisFrame(frame, meta)
+  const data = info.data
+  const factor = info.width / meta.width
   const full: Frame = { width: meta.width, height: meta.height }
   const layerFull: Layer = {
     data: Buffer.alloc(0),
@@ -227,8 +345,24 @@ async function fitPlan(
   for (let i = 0; i < lw * lh; i++) if (layer.data[i * 4 + 3] > peak) peak = layer.data[i * 4 + 3]
   if (!peak) return null
 
-  // Фон: кадр без пикселей знака, размытый; в дырах знака значение берётся из
-  // окружения, поэтому вклад самого знака в оценку фона не попадает
+  // Тень — второй слой модели: та же альфа, но размытая и чёрная. Её размытие
+  // считается от ширины слоя, как при наложении, поэтому подгонка не зависит
+  // от размера кадра
+  const shadow = plan.shadow
+    ? await markLayer(asset, lw, plan.shadow.opacity, {
+      color: [0, 0, 0],
+      blur: Math.max(4, Math.round(lw * plan.shadow.blurRatio)),
+    })
+    : null
+  let shadowPeak = 0
+  if (shadow) {
+    for (let i = 0; i < shadow.width * shadow.height; i++) {
+      if (shadow.data[i * 4 + 3] > shadowPeak) shadowPeak = shadow.data[i * 4 + 3]
+    }
+  }
+
+  // Фон: кадр без пикселей знака и его тени, размытый; в дырах значение берётся
+  // из окружения, поэтому вклад самого знака в оценку фона не попадает
   const fw = info.width
   const fh = info.height
   const keep = new Uint8Array(fw * fh).fill(255)
@@ -238,7 +372,9 @@ async function fitPlan(
     for (let x = 0; x < lw; x++) {
       const ix = left + x
       if (ix < 0 || ix >= fw) continue
-      if (layer.data[(y * lw + x) * 4 + 3] > peak * 0.05) keep[iy * fw + ix] = 0
+      const a = layer.data[(y * lw + x) * 4 + 3]
+      const s = shadow ? shadow.data[(y * lw + x) * 4 + 3] : 0
+      if (a > peak * 0.05 || s > shadowPeak * 0.05) keep[iy * fw + ix] = 0
     }
   }
   const masked = Buffer.alloc(fw * fh)
@@ -250,6 +386,41 @@ async function fitPlan(
       .toBuffer()
   const [sum, weight] = await Promise.all([blur(masked), blur(Buffer.from(keep))])
 
+  // Пиксели для подгонки: штрихи знака и его тень. Собираем вклады обоих слоёв
+  // (predictor) и то, что видно на кадре (observed)
+  const samples: Array<{ am: number; as: number; x1: number; x2: number; y: number }> = []
+  for (let y = 0; y < bh; y++) {
+    const iy = top + y
+    for (let x = 0; x < bw; x++) {
+      const ix = left + x
+      const li = y * lw + x
+      const am = layer.data[li * 4 + 3] / 255
+      const as = shadow ? shadow.data[li * 4 + 3] / 255 : 0
+      if (am < (peak / 255) * 0.25 && as < (shadowPeak / 255) * 0.25) continue
+      const i = iy * fw + ix
+      // в дырах знака вес размытия меньше 255 — фон достраиваем по окружению
+      const background = weight[i] > 6 ? sum[i] / (weight[i] / 255) : data[i]
+      const color = average(layer.data[li * 4], layer.data[li * 4 + 1], layer.data[li * 4 + 2])
+      samples.push({
+        am,
+        as,
+        x1: am * (color - background),
+        x2: -as * background,
+        y: data[i] - background,
+      })
+    }
+  }
+  if (samples.length < 200) return null
+
+  // Отпечаток берём таким, каким он должен быть по образцу: множителей не
+  // подгоняем. На ровном фоне подгонка давала 1.07 вместо 1.00, а на живом
+  // кадре фон под знаком угадывается по окружению и врёт уже на десятки
+  // процентов: на кадре 1000573502 выходило p = 1.34, и очистка по такой
+  // подгонке оставляла на месте знака цветной след. Непрозрачности прежних
+  // версий известны точно (они записаны в плане), поэтому снимаем по ним
+  const q = shadow ? 1 : 0
+
+  // Сверка модели с кадром: корреляция предсказания и того, что видно
   let sx = 0
   let sy = 0
   let sxx = 0
@@ -257,35 +428,24 @@ async function fitPlan(
   let sxy = 0
   let amp = 0
   let n = 0
-  for (let y = 0; y < bh; y++) {
-    const iy = top + y
-    for (let x = 0; x < bw; x++) {
-      const ix = left + x
-      const li = y * lw + x
-      const a = layer.data[li * 4 + 3] / 255
-      if (a < (peak / 255) * 0.5) continue
-      const i = iy * fw + ix
-      // в дырах знака вес размытия меньше 255 — фон достраиваем по окружению
-      const background = weight[i] > 6 ? sum[i] / (weight[i] / 255) : data[i]
-      const color = luminance(layer.data[li * 4], layer.data[li * 4 + 1], layer.data[li * 4 + 2])
-      const predicted = a * (color - background)
-      const observed = data[i] - background
-      sx += predicted
-      sy += observed
-      sxx += predicted * predicted
-      syy += observed * observed
-      sxy += predicted * observed
-      amp += Math.abs(observed)
+  for (const s of samples) {
+    const predicted = s.x1 + q * s.x2 * (1 - s.am)
+    sx += predicted
+    sy += s.y
+    sxx += predicted * predicted
+    syy += s.y * s.y
+    sxy += predicted * s.y
+    if (s.am >= (peak / 255) * 0.5) {
+      amp += Math.abs(s.y)
       n++
     }
   }
-  if (n < 200) return null
-  const cov = sxy / n - (sx / n) * (sy / n)
-  const sd1 = Math.sqrt(Math.max(1e-9, sxx / n - (sx / n) ** 2))
-  const sd2 = Math.sqrt(Math.max(1e-9, syy / n - (sy / n) ** 2))
+  if (!n) return null
+  const cov = sxy / samples.length - (sx / samples.length) * (sy / samples.length)
+  const sd1 = Math.sqrt(Math.max(1e-9, sxx / samples.length - (sx / samples.length) ** 2))
+  const sd2 = Math.sqrt(Math.max(1e-9, syy / samples.length - (sy / samples.length) ** 2))
   return {
     era: plan.era,
-    scale: sxx ? sxy / sxx : 0,
     shape: sd1 * sd2 > 0 ? cov / (sd1 * sd2) : 0,
     amplitude: amp / n,
   }
@@ -294,7 +454,7 @@ async function fitPlan(
 /** Знак снят: кадр без прежнего отпечатка */
 export type LegacyStripResult =
   | { status: 'clean' }
-  | { status: 'stripped'; data: Buffer; eras: LegacyEra[]; fits: Fit[] }
+  | { status: 'stripped'; data: Buffer; eras: LegacyEra[] }
   | { status: 'unreadable' }
   | { status: 'skipped' }
 
@@ -324,17 +484,19 @@ export async function stripLegacyMarks(
     height: swapped ? meta.width : meta.height,
   }
 
-  const hits: Array<{ plan: LegacyPlan; asset: Buffer; fit: Fit; place: { left: number; top: number }; layer: Layer }> = []
+  const hits: Array<{ plan: LegacyPlan; asset: Buffer; place: { left: number; top: number }; layer: Layer }> = []
   for (const era of eras) {
     const plan = PLANS[era]
     const asset = readAsset(plan.asset)
     if (!asset) continue
     const fit = await fitPlan(input, frame, plan, asset).catch(() => null)
     if (!fit) continue
+    // Знак опознаётся по контуру и силе отпечатка: контур совпал с картинкой,
+    // а отпечаток заметно сильнее шума. Снятие пойдёт по паспортным
+    // непрозрачностям плана — подгонять их по кадру нельзя (см. заголовок)
     if (fit.shape < MIN_SHAPE || fit.amplitude < MIN_AMPLITUDE) continue
-    if (fit.scale < MIN_SCALE || fit.scale > MAX_SCALE) continue
     const layer = await layerAt(plan, asset, plan.width(frame))
-    hits.push({ plan, asset, fit, place: plan.place(frame, layer), layer })
+    hits.push({ plan, asset, place: plan.place(frame, layer), layer })
   }
   if (!hits.length) return { status: 'clean' }
 
@@ -345,7 +507,7 @@ export async function stripLegacyMarks(
     const fh = base.info.height
     const shadowCache = new Map<string, Layer | null>()
     for (const hit of hits) {
-      const { plan, layer, place, fit } = hit
+      const { plan, layer, place } = hit
       let shadow: Layer | null = null
       if (plan.shadow) {
         const blur = Math.max(4, Math.round(layer.width * plan.shadow.blurRatio))
@@ -356,7 +518,6 @@ export async function stripLegacyMarks(
         shadow = shadowCache.get(key) ?? null
       }
       // Обратная композиция по пикселям знака: obs = c_m·a_m + (1-a_sh)(1-a_m)·dst
-      const scale = fit.scale
       for (let y = 0; y < layer.height; y++) {
         const iy = place.top + y
         if (iy < 0 || iy >= fh) continue
@@ -364,8 +525,12 @@ export async function stripLegacyMarks(
           const ix = place.left + x
           if (ix < 0 || ix >= fw) continue
           const li = (y * layer.width + x) * 4
-          const am = Math.min(0.98, (layer.data[li + 3] / 255) * scale)
-          const as = shadow ? Math.min(0.98, (shadow.data[li + 3] / 255) * scale) : 0
+          // Непрозрачности берём из самого плана (в слое они уже учтены), а не
+          // из подгонки: подогнанные на живом фото врут — фон под знаком
+          // угадывается по окружению, и множитель уезжает (на кадре 1000573502
+          // выходило p=1.34, и очистка оставляла цветной след на месте знака)
+          const am = Math.min(0.98, layer.data[li + 3] / 255)
+          const as = shadow ? Math.min(0.98, shadow.data[li + 3] / 255) : 0
           if (am <= 0 && as <= 0) continue
           const den = (1 - as) * (1 - am)
           if (den <= 0.02) continue
@@ -378,7 +543,23 @@ export async function stripLegacyMarks(
       }
     }
     const encoded = await encodeRaw(data, fw, fh, format)
-    return { status: 'stripped', data: encoded, eras: hits.map((h) => h.plan.era), fits: hits.map((h) => h.fit) }
+    // Проверка снятия: подгоняем модель к тому, что получилось. Если контур
+    // знака всё ещё совпадает с картинкой и отпечаток остался заметным, снятие
+    // не удалось — отдаём кадр нетронутым: лучше чужой знак, чем следы подгонки
+    for (const hit of hits) {
+      const residue = await residueShape(encoded, frame, hit.plan, hit.asset).catch(() => null)
+      if (residue === null) continue
+      // Знак со знаком: узор на месте знака, но перевёрнутый (сняли «наизнанку»,
+      // на фото цветной след), — такая же порча кадра, как и недоснятый знак
+      if (Math.abs(residue) >= RESIDUE_SHAPE) {
+        console.error(
+          'watermark-legacy: снятие не прошло проверку', hit.plan.era,
+          'узор остался', residue.toFixed(2),
+        )
+        return { status: 'clean' }
+      }
+    }
+    return { status: 'stripped', data: encoded, eras: hits.map((h) => h.plan.era) }
   } catch (e) {
     console.error('watermark-legacy: не удалось снять прежний знак', e)
     return { status: 'skipped' }

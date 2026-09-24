@@ -6,10 +6,10 @@ import type { Sharp } from 'sharp'
 import { PHOTO_MIME_TYPES } from './photo-rules'
 
 /**
- * Водяной знак на фотографиях объектов — фирменный знак «Н15» в правом нижнем
- * углу кадра: ключик сверху, кириллические литеры «Н15», подпись
- * «НЕДВИЖИМОСТЬ» снизу и тонкая рамка (файл знака — public/img/watermark.png,
- * как он собран — см. комментарий к знаку ниже).
+ * Водяной знак на фотографиях объектов — фирменный знак «Н15» по центру кадра:
+ * ключик сверху, кириллические литеры «Н15», подпись «НЕДВИЖИМОСТЬ» снизу и
+ * тонкая рамка (файл знака — public/img/watermark.png, как он собран — см.
+ * комментарий к знаку ниже).
  *
  * Знак накладывает сервер, а не браузер: sharp уже есть в образе (им Payload
  * готовит размеры фото), поэтому один и тот же знак получают все снимки
@@ -17,14 +17,19 @@ import { PHOTO_MIME_TYPES } from './photo-rules'
  * же маршрут /api/upload), и любые будущие загрузки. Пока знак рисовался в
  * браузере, мимо него проходили все остальные пути загрузки.
  *
+ * Место — центр кадра, а не угол: в каталоге и на карточке объекта плитки
+ * обрезают снимок по краям (object-cover), поэтому угловой знак с плитки
+ * пропадал целиком, и на сайте фотографии выглядели чистыми, хотя знак лежал
+ * в файле. Центр обрезка не задевает никогда.
+ *
  * Размер и прозрачность одинаковы для всех фото: ширина знака — доля короткой
  * стороны кадра, поэтому на вертикальном и горизонтальном снимке знак выглядит
- * одинаково, а не раздувается на широких кадрах. Отступ от нижнего и правого
- * краёв — та же доля короткой стороны, то есть одинаковый со всех сторон.
+ * одинаково, а не раздувается на широких кадрах.
  *
  * Формат исходника сохраняется: JPEG и WebP пережимаются на 92, PNG остаётся
- * без потерь. Под знаком — мягкая тень: без неё знак пропадает на светлых
- * кадрах (белые стены, снег) и выглядит наклейкой на тёмных.
+ * без потерь. Читаемость на любом кадре держат два слоя под знаком: тёмный
+ * кант по контуру (на светлых стенах и на золотистых кадрах знак без него
+ * терялся) и мягкая тень вокруг него.
  */
 
 /**
@@ -34,16 +39,18 @@ import { PHOTO_MIME_TYPES } from './photo-rules'
  * вокруг них.
  */
 const MARK_WIDTH_RATIO = 0.24
-/** Отступ от краёв кадра — доля короткой стороны (4%) */
-const MARK_MARGIN_RATIO = 0.04
 /** Минимальная ширина знака в пикселях: на маленьких кадрах он не микроскопический */
 const MARK_MIN_WIDTH = 48
 /** Непрозрачность знака: аккуратно, но читаемо */
-const MARK_OPACITY = 0.72
+const MARK_OPACITY = 0.78
 /** Тень под знаком: размытая копия контура, тоже полупрозрачная */
 const SHADOW_OPACITY = 0.26
 /** Радиус размытия тени — доля ширины знака */
 const SHADOW_BLUR_RATIO = 0.035
+/** Тёмный кант по контуру знака: на светлом кадре без него знак не виден */
+const OUTLINE_OPACITY = 0.55
+/** Толщина канта (в обе стороны от контура) — доля ширины знака */
+const OUTLINE_WIDTH_RATIO = 0.006
 
 /**
  * Версия знака — попадает в поле wm коллекции media (см. Media.ts):
@@ -52,11 +59,28 @@ const SHADOW_BLUR_RATIO = 0.035
  *       или на файле прежний знак «Н15» без ключа и подписи — фото, загруженные
  *       21.09.2026, когда работала первая версия знака: второй знак поверх
  *       первого печатать нельзя;
- *   2 — фирменный знак с ключиком, подписью и рамкой — текущий.
+ *   2 — фирменный знак с ключиком, подписью и рамкой — текущий;
+ *  -1 — знак нужно переложить заново, см. WATERMARK_REDO.
  * По этому полю массовое обновление знака (см. src/app/api/watermark/route.ts)
  * понимает, какие фото ещё не размечены, и не накладывает знак дважды.
  */
 export const WATERMARK_VERSION = 2
+/**
+ * «Переложить знак заново»: на фото наш знак уже есть, но в прежнем месте —
+ * до 24.09.2026 он ложился в правый нижний угол, а плитки каталога обрезают
+ * кадр по краям (object-cover), и на сайте такие фото выходили без знака.
+ * Разметка берёт такие фото в очередь наравне с теми, где знака ещё нет, и
+ * кладёт знак по центру поверх текущего файла (см. media-marking.ts: чистый
+ * кадр не трогаем, чтобы не открыть след прежней разметки), после чего поле
+ * становится обычным WATERMARK_VERSION.
+ *
+ * Минус, а не 3 и не версия: значение должно быть непохоже на версию знака —
+ * по полю решают, размечено фото или нет, а «3» когда-нибудь станет очередной
+ * версией, и тогда пометка «переложить» превратилась бы в «уже размечено».
+ * Работающее приложение такую пометку не трогает: и разметка фото, и сборка
+ * размеров смотрят только на WATERMARK_VERSION.
+ */
+export const WATERMARK_REDO = -1
 /**
  * Портрет сотрудника (kind=avatar при загрузке): знака на нём быть не должно —
  * на маленьком портрете знак выглядит наклейкой. Массовая разметка такие фото
@@ -175,6 +199,37 @@ export async function markLayer(
   return { data: out, width: info.width, height: info.height }
 }
 
+/**
+ * Тёмный кант по контуру знака: чёрное кольцо вдоль края штрихов, наружу от
+ * них. Без канта знак теряется на светлых кадрах — белых стенах, снегу, — а на
+ * золотистых кадрах сливается с фоном совсем. Кольцо считается из альфы знака:
+ * размытая альфа даёт у края половину, удвоение доводит её до единицы, а
+ * умножение на (1 - альфа) убирает заливку внутри штрихов — кант остаётся
+ * только снаружи, самого знака не пачкает.
+ */
+export async function outlineLayer(
+  mark: Buffer,
+  width: number,
+  opacity: number,
+  blur: number,
+): Promise<{ data: Buffer; width: number; height: number }> {
+  const base = await markLayer(mark, width, 1)
+  const alpha = await sharp(base.data, {
+    raw: { width: base.width, height: base.height, channels: 4 },
+  })
+    .extractChannel('alpha')
+    .blur(blur)
+    .raw()
+    .toBuffer()
+  const out = Buffer.alloc(base.data.length)
+  for (let i = 0; i < base.width * base.height; i++) {
+    const a = base.data[i * 4 + 3] / 255
+    const ring = Math.min(1, (alpha[i] / 255) * 2.5) * (1 - a)
+    out[i * 4 + 3] = Math.round(ring * opacity * 255)
+  }
+  return { data: out, width: base.width, height: base.height }
+}
+
 /** Пережим в исходном формате: качество близко к исходнику, размер не растёт вдвое */
 function encode(image: Sharp, format: PhotoFormat): Promise<Buffer> {
   if (format === 'png') return image.png({ compressionLevel: 9 }).toBuffer()
@@ -226,23 +281,31 @@ export async function applyWatermark(
   try {
     const short = Math.min(width, height)
     const markWidth = Math.max(MARK_MIN_WIDTH, Math.round(short * MARK_WIDTH_RATIO))
-    const margin = Math.round(short * MARK_MARGIN_RATIO)
 
-    const layer = await markLayer(mark, markWidth, MARK_OPACITY)
-    const shadow = await markLayer(mark, markWidth, SHADOW_OPACITY, {
-      color: [0, 0, 0],
-      blur: Math.max(4, Math.round(markWidth * SHADOW_BLUR_RATIO)),
-    })
+    const [layer, shadow, outline] = await Promise.all([
+      markLayer(mark, markWidth, MARK_OPACITY),
+      markLayer(mark, markWidth, SHADOW_OPACITY, {
+        color: [0, 0, 0],
+        blur: Math.max(4, Math.round(markWidth * SHADOW_BLUR_RATIO)),
+      }),
+      outlineLayer(mark, markWidth, OUTLINE_OPACITY, Math.max(1, Math.round(markWidth * OUTLINE_WIDTH_RATIO))),
+    ])
 
-    const left = Math.max(0, width - layer.width - margin)
-    const top = Math.max(0, height - layer.height - margin)
+    // Центр кадра: плитки каталога обрезают края снимка (object-cover), и знак
+    // в углу с них пропадал целиком
+    const left = Math.max(0, Math.round((width - layer.width) / 2))
+    const top = Math.max(0, Math.round((height - layer.height) / 2))
     const raw = (l: { data: Buffer; width: number; height: number }) =>
       ({ input: l.data, raw: { width: l.width, height: l.height, channels: 4 as const } })
 
     const data = await encode(
       sharp(input)
         .rotate()
-        .composite([{ ...raw(shadow), left, top }, { ...raw(layer), left, top }]),
+        .composite([
+          { ...raw(shadow), left, top },
+          { ...raw(outline), left, top },
+          { ...raw(layer), left, top },
+        ]),
       format,
     )
 

@@ -4,7 +4,7 @@ import sharp from 'sharp'
 import type { Sharp } from 'sharp'
 import type { CollectionAfterChangeHook, CollectionBeforeChangeHook, Payload, PayloadRequest, Where } from 'payload'
 
-import { WATERMARK_AVATAR, WATERMARK_VERSION, applyWatermark, photoFormat } from './watermark'
+import { WATERMARK_AVATAR, WATERMARK_REDO, WATERMARK_VERSION, applyWatermark, photoFormat } from './watermark'
 import { legacyErasFor, stripLegacyMarks, type LegacyEra } from './watermark-legacy'
 
 /**
@@ -27,6 +27,9 @@ import { legacyErasFor, stripLegacyMarks, type LegacyEra } from './watermark-leg
  * него, поэтому повторный запуск не печатает знак вторым слоем. Из мастера же
  * заново собираются размеры — когда с кадра сняли прежний знак (см.
  * src/lib/watermark-legacy.ts) или когда в CRM поменяли фокусную точку кадра.
+ * Исключение — фото с пометкой «переложить знак заново» (WATERMARK_REDO):
+ * там знак ложится поверх текущего файла, потому что в самом чистом кадре
+ * остался след прежней разметки.
  *
  * Один и тот же путь разметки работает для всех загрузок: хук коллекции media
  * ловит и карточку CRM, и старую форму /admin-add, и загрузку через админку
@@ -126,10 +129,14 @@ export function sizeTarget(
   return { mime, quality }
 }
 
-/** Фото, ждущие разметки: нашего знака на них нет (портреты — отдельная версия wm=1) */
+/**
+ * Фото, ждущие разметки: нашего знака на них нет, либо его нужно переложить
+ * заново (WATERMARK_REDO — знак в прежнем, угловом месте). Портреты —
+ * отдельная версия wm=1, их разметка не берёт.
+ */
 export function pendingWhere(): Where {
   return {
-    or: [{ wm: { equals: 0 } }, { wm: { exists: false } }],
+    or: [{ wm: { equals: 0 } }, { wm: { exists: false } }, { wm: { equals: WATERMARK_REDO } }],
   }
 }
 
@@ -327,6 +334,34 @@ export async function processPhoto(options: ProcessOptions): Promise<PhotoOutcom
 
   const observed = await readFileOrNull(publicPath)
   if (!observed) return { status: 'missing', file, stripped: none, sizes: 0, reason: 'файла нет в хранилище' }
+
+  // Знак нужно переложить заново (WATERMARK_REDO) — фото размечено прежним,
+  // угловым расположением знака. Кладём новый знак поверх текущего файла и
+  // собираем размеры уже с него, а чистый кадр не трогаем: на части фото от
+  // прежней разметки в углу остался след (знак снимали с подгонкой множителей,
+  // см. заголовок watermark-legacy.ts), и сборка из чистого кадра открыла бы
+  // его на месте прежнего знака. Размеры собираем без знака: он уже в кадре.
+  if (doc.wm === WATERMARK_REDO) {
+    const marked = await applyWatermark(observed, doc.mimeType || '', file)
+    if (marked.status === 'unreadable') return { status: 'unreadable', file, stripped: none, sizes: 0 }
+    if (marked.status !== 'done') return { status: 'failed', file, stripped: none, sizes: 0, reason: 'знак не наложился' }
+    try {
+      await fs.writeFile(publicPath, marked.data)
+      const sizes = await rebuildSizes(marked.data, doc, dir, config, false)
+      const updated = await payload.update({
+        collection: 'media',
+        id,
+        data: { wm: WATERMARK_VERSION },
+        req: req ? childReq(req) : undefined,
+        overrideAccess: true,
+        depth: 0,
+      })
+      return { status: 'marked', file, stripped: none, sizes, doc: updated }
+    } catch (e) {
+      console.error('media-marking: не удалось переложить знак', file, e)
+      return { status: 'failed', file, stripped: none, sizes: 0, reason: 'сбой записи' }
+    }
+  }
 
   // Чистый кадр: свой мастер, копия прошлой разметки или сам файл (с него тогда
   // снимаем прежний знак — окна версий знака известны по дате загрузки)
