@@ -16,7 +16,13 @@
 import fs from 'node:fs/promises'
 import type { Payload, Where } from 'payload'
 import { boardToListItem, type BoardListItem, type BoardPhoto } from './board-list-item'
-import { BOARD_ACTIVE_STATUSES, boardPublicAddress, boardVisible, type BoardAddressLike } from './board'
+import {
+  BOARD_ACTIVE_STATUSES,
+  boardPublicAddress,
+  boardPublishIssue,
+  boardVisible,
+  type BoardAddressLike,
+} from './board'
 import { storedFilePath } from './upload-paths'
 
 /** Размер страницы выдачи — как в каталоге объектов */
@@ -346,6 +352,98 @@ export async function publishBoardAd(
     const message = error instanceof Error ? error.message : String(error)
     return { ok: false, error: message }
   }
+}
+
+/** Строка очереди модерации: всё, что нужно модератору для решения */
+export interface BoardQueueRow {
+  id: number
+  title: string
+  status: string
+  dealType: string
+  category: string
+  price: number | null
+  area: number | null
+  areaUnit: string
+  plotArea: number | null
+  rooms: number | null
+  floor: number | null
+  totalFloors: number | null
+  description: string
+  /** Полный адрес — модератору дом видно (на сайте он скрыт) */
+  address: string
+  authorName: string
+  authorPhone: string
+  authorEmail: string
+  authorKind: string
+  createdAt: string | null
+  publishedAt: string | null
+  expiresAt: string | null
+  moderationNote: string
+  moderatedBy: string
+  /** Почему нельзя опубликовать (null — можно) */
+  issue: string | null
+  /** Фотографии: до публикации — из закрытого хранилища, после — копии в media */
+  photos: BoardPhoto[]
+  videoLinks: string
+  log: { event: string; at: string; by: string }[]
+}
+
+/**
+ * Очередь модерации для раздела CRM «Доска»: свежие сверху, по умолчанию —
+ * те, что ждут проверки. Здесь отдаём всё, включая телефон, точный адрес
+ * и журнал: раздел открыт только команде Н15.
+ */
+export async function loadBoardQueue(payload: Payload, status?: string): Promise<BoardQueueRow[]> {
+  const where: Where = status ? { status: { equals: status } } : {}
+  const res = await payload.find({
+    collection: 'board-ads',
+    where,
+    sort: '-createdAt',
+    limit: 100,
+    depth: 1,
+    overrideAccess: true,
+  })
+
+  return (res.docs as unknown as Record<string, unknown>[]).map((doc) => {
+    const addr = (doc.address || {}) as BoardAddressLike & { house?: string | null }
+    return {
+      id: Number(doc.id),
+      title: str(doc.title),
+      status: str(doc.status),
+      dealType: str(doc.dealType),
+      category: str(doc.category),
+      price: num(doc.price),
+      area: num(doc.area),
+      areaUnit: str(doc.areaUnit) || 'sqm',
+      plotArea: num(doc.plotArea),
+      rooms: num(doc.rooms),
+      floor: num(doc.floor),
+      totalFloors: num(doc.totalFloors),
+      description: str(doc.description),
+      address: boardPublicAddress(addr, { house: addr.house, full: true }),
+      authorName: str(doc.contactName),
+      authorPhone: str(doc.phone),
+      authorEmail: str(doc.email),
+      authorKind: str(doc.authorKind) || 'private',
+      createdAt: str(doc.createdAt) || null,
+      publishedAt: str(doc.publishedAt) || null,
+      expiresAt: str(doc.expiresAt) || null,
+      moderationNote: str(doc.moderationNote),
+      moderatedBy: str(doc.moderatedBy),
+      issue: boardPublishIssue(doc as never),
+      // До публикации показываем присланные фото (они в закрытом хранилище),
+      // после — копии в media: модератору важно видеть то, что уже на сайте
+      photos: boardVisible(doc as never) ? photosOf(doc.publicPhotos) : photosOf(doc.photos),
+      videoLinks: str(doc.videoLinks),
+      log: Array.isArray(doc.log)
+        ? (doc.log as Record<string, unknown>[]).map((e) => ({
+            event: str(e.event),
+            at: str(e.at),
+            by: str(e.by),
+          }))
+        : [],
+    }
+  })
 }
 
 /** Сколько «живых» объявлений у автора — для квоты подачи (см. POST /api/board/ads) */

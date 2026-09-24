@@ -28,6 +28,9 @@ export function CrmShell({ user, t, active, children }: Props) {
     // сотрудникам CRM (объекты коллег — на чтение, редактирует их
     // ответственный агент или администратор, см. src/app/crm/agents)
     { id: 'agents', href: '/crm/agents', label: t.crm.navAgents },
+    // «Доска»: очередь модерации объявлений с сайта (src/lib/board.ts).
+    // Раздел открыт всей команде — объявлений со временем будет много
+    { id: 'board', href: '/crm/board', label: t.crm.navBoard },
     // «Новости на проверку»: официальные новости о недвижимости ждут
     // подтверждения перед публикацией в блоге (src/lib/news.ts)
     { id: 'news', href: '/crm/news', label: t.crm.navNews },
