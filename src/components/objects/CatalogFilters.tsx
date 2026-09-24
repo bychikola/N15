@@ -449,7 +449,7 @@ function DdArrow({ open, className = 'text-[10px]' }: { open: boolean; className
 /** Выпадающий список панели фильтров. Открытым его держит родитель (см.
  *  openId в CatalogFilters): одновременно открыт ровно один список, поэтому
  *  состояние «открыт» приходит пропом, а не живёт внутри */
-function Dropdown({ label, value, options, groups, onSelect, compactLabel, open, onToggle, onClose }: {
+export function Dropdown({ label, value, options, groups, onSelect, compactLabel, open, onToggle, onClose }: {
   label: string
   value: string
   /** Простые пункты без групп (сделка, тип, район…) */
@@ -771,7 +771,7 @@ type DropdownId = 'type' | 'category' | 'houseType' | 'commercialType' | 'purcha
 /** Переключатель-признак («Лифт», «Закрытый двор», «Индивидуальное
  *  отопление»): в базе это текстовые поля, а покупателю важен факт «есть».
  *  Нажатие ставит признак, повторное — снимает (условие см. в buildWhere) */
-function FeatureToggle({ label, on, onToggle }: { label: string; on: boolean; onToggle: () => void }) {
+export function FeatureToggle({ label, on, onToggle }: { label: string; on: boolean; onToggle: () => void }) {
   return (
     <button type="button" onClick={onToggle} aria-pressed={on}
       className={`px-3 py-2 text-xs tracking-wider uppercase border transition-all duration-300 cursor-pointer ${
@@ -788,7 +788,7 @@ function FeatureToggle({ label, on, onToggle }: { label: string; on: boolean; on
  *  и этажность выглядят и работают одинаково — разметка одна на всех */
 const rangeInputCls = 'w-full px-3 py-2 text-sm bg-[var(--n15-black)]/40 border border-[var(--n15-gold)]/20 text-[var(--n15-silver)] placeholder:text-[var(--n15-muted)] focus:outline-none focus:border-[var(--n15-gold)]/50'
 
-function RangeInputs({ from, to, onFrom, onTo, step = 'any', min = '0', fromHint = 'от', toHint = 'до' }: {
+export function RangeInputs({ from, to, onFrom, onTo, step = 'any', min = '0', fromHint = 'от', toHint = 'до' }: {
   from: string
   to: string
   onFrom: (v: string) => void

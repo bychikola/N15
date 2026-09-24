@@ -197,7 +197,9 @@ export const boardPublicAddress = (
   if (!address) return ''
   const parts = [
     adValue(address.snt),
-    adValue(address.locality),
+    // Населённый пункт, а без него город: у объявлений из Владикавказа
+    // населённый пункт обычно не заполняют
+    adValue(address.locality) || adValue(address.city),
     address.cityDistrict ? `${String(address.cityDistrict).trim()} район` : null,
     adValue(address.district),
     adValue(address.street),
