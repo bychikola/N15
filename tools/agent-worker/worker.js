@@ -43,7 +43,13 @@ const POLL_MS = 5000
 // SIGKILL) — CLI успевает дописать лог и прибрать за собой.
 const AGENT_TIMEOUT_MS = 45 * 60 * 1000
 const AGENT_KILL_GRACE_MS = 10 * 1000
-const DEPLOY_TIMEOUT_MS = 40 * 60 * 1000
+// Деплою нужен запас больше, чем кажется: сборка Next на этом VPS идёт 15-20
+// минут, а когда кэш BuildKit пуст и рядом работают сайт, Postgres, Caddy и
+// разметка фотографий — уходит за 40. Сборка при этом не «зависла»: Turbopack
+// просто ждёт свои внутренние процессы дольше, чем длился лимит, и воркер
+// убивал deploy.sh на середине (в задаче «Деплой упал (exit null)» — это
+// SIGKILL, а не код возврата). 90 минут — с запасом на холодную сборку.
+const DEPLOY_TIMEOUT_MS = 90 * 60 * 1000
 const AUTH_PROMPT = '__AUTH__' // спец-задача: авторизация ChatGPT (Codex) из CRM
 const AUTH_JSON = `${process.env.HOME || '/home/n15'}/.codex/auth.json`
 const AUTH_TIMEOUT_MS = 20 * 60 * 1000
