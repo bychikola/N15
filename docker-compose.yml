@@ -35,6 +35,13 @@ services:
       # Серверный ключ геокодера — только в рантайме контейнера, в клиент не попадает
       YANDEX_GEOCODER_API_KEY: ${YANDEX_GEOCODER_API_KEY:-}
       ADMIN_ROUTE: ${ADMIN_ROUTE:-/admin}
+      # Фоновая разметка уже загруженных фото знаком «Н15» (sharp — грузит
+      # процессор). off — выключить: например, чтобы освободить машину на
+      # время или если знак пока смотрят на нескольких снимках.
+      WATERMARK_BACKFILL: ${WATERMARK_BACKFILL:-}
+      # Пересобрать схему базы при старте, даже если отпечаток src/payload
+      # совпал (страховка, если таблицу уронили руками). 1 — включить.
+      FORCE_SCHEMA_PUSH: ${FORCE_SCHEMA_PUSH:-}
     volumes:
       - media:/app/media
     healthcheck:

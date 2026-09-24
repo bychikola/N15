@@ -63,54 +63,40 @@ if [ -n "$DATABASE_URI" ]; then
   # с NODE_ENV=development на время: Payload выполнит pushDevSchema и создаст
   # все таблицы. Затем восстанавливаем production-сборку из .next-prod.
   echo "Checking if schema is up to date..."
-  # Проверяем не просто наличие схемы, а актуальность: базовые таблицы + новые
-  # коллекции/колонки (tasks, customers, loss_reason в applications). Если чего-то
-  # нет — запускаем dev-push, который досоздаст недостающее без потери данных.
-  if ! node -e "
-    const { Client } = require('pg');
-    const c = new Client({ connectionString: process.env.DATABASE_URI });
-    (async () => {
-      await c.connect();
-      const o = await c.query(\"SELECT to_regclass('public.objects') AS t\");
-      const t = await c.query(\"SELECT to_regclass('public.tasks') AS t\");
-      const cu = await c.query(\"SELECT to_regclass('public.customers') AS t\");
-      const lr = await c.query(\"SELECT column_name FROM information_schema.columns WHERE table_name='applications' AND column_name='loss_reason'\");
-      const un = await c.query(\"SELECT column_name FROM information_schema.columns WHERE table_name='users' AND column_name='username'\");
-      const own = await c.query(\"SELECT column_name FROM information_schema.columns WHERE table_name='objects' AND column_name='owner_name'\");
-      const em = await c.query(\"SELECT to_regclass('public.emails') AS t\");
-      const ms = await c.query(\"SELECT to_regclass('public.mail_settings') AS t\");
-      const loc = await c.query(\"SELECT column_name FROM information_schema.columns WHERE table_name='objects_address' AND column_name='locality'\");
-      const at = await c.query(\"SELECT to_regclass('public.agent_tasks') AS t\");
-      const ma = await c.query(\"SELECT to_regclass('public.mail_attachments') AS t\");
-      const ag = await c.query(\"SELECT 1 FROM payload_globals WHERE slug = 'agent-settings' LIMIT 1\");
-      const aa = await c.query(\"SELECT column_name FROM information_schema.columns WHERE table_name='users' AND column_name='agent_access'\");
-      const cma = await c.query(\"SELECT column_name FROM information_schema.columns WHERE table_name='users' AND column_name='can_manage_agents'\");
-      // Новые разделы: новости (автосбор), реклама, юр-экспертиза, парсер рынка
-      const nw = await c.query(\"SELECT to_regclass('public.news') AS t\");
-      const ml = await c.query(\"SELECT to_regclass('public.market_listings') AS t\");
-      const ld = await c.query(\"SELECT to_regclass('public.legal_documents') AS t\");
-      const lrp = await c.query(\"SELECT to_regclass('public.legal_reports') AS t\");
-      const adv = await c.query(\"SELECT to_regclass('public.advertisers') AS t\");
-      const ads = await c.query(\"SELECT to_regclass('public.advertisements') AS t\");
-      const adr = await c.query(\"SELECT to_regclass('public.advertising_requests') AS t\");
-      const ns = await c.query(\"SELECT 1 FROM payload_globals WHERE slug = 'news-settings' LIMIT 1\");
-      // Межрегиональная недвижимость (регионы/населённые пункты) и
-      // «Интеграции площадок» (ключи Авито/ЦИАН/Домклика)
-      const rg = await c.query(\"SELECT to_regclass('public.regions') AS t\");
-      const st = await c.query(\"SELECT to_regclass('public.settlements') AS t\");
-      const ps = await c.query(\"SELECT 1 FROM payload_globals WHERE slug = 'platform-settings' LIMIT 1\");
-      // Новые колонки объектов: единица площади (сотки), район города, СНТ
-      const au = await c.query(\"SELECT column_name FROM information_schema.columns WHERE table_name='objects' AND column_name='area_unit'\");
-      const cd = await c.query(\"SELECT column_name FROM information_schema.columns WHERE table_name='objects_address' AND column_name='city_district'\");
-      const sn = await c.query(\"SELECT column_name FROM information_schema.columns WHERE table_name='objects_address' AND column_name='snt'\");
-      const ok = o.rows[0].t && t.rows[0].t && cu.rows[0].t && lr.rows.length > 0 && un.rows.length > 0 && own.rows.length > 0 && em.rows[0].t && ms.rows[0].t && loc.rows.length > 0 && at.rows[0].t && ma.rows[0].t && ag.rows.length > 0 && aa.rows.length > 0
-        && nw.rows[0].t && ml.rows[0].t && ld.rows[0].t && lrp.rows[0].t && adv.rows[0].t && ads.rows[0].t && adr.rows[0].t && ns.rows.length > 0
-        && rg.rows[0].t && st.rows[0].t && ps.rows.length > 0
-        && au.rows.length > 0 && cd.rows.length > 0 && sn.rows.length > 0 && cma.rows.length > 0;
-      await c.end();
-      process.exit(ok ? 0 : 1);
-    })().catch(() => process.exit(1));
-  "; then
+
+  # Нужен ли push, решаем по отпечатку схемы — хешу файлов src/payload, а не по
+  # списку таблиц, который надо было обновлять руками. Список уже подвёл: агент
+  # добавил коллекции site-visits и advertising-materials и колонку media.wm,
+  # список остался прежним, проверка сказала «схема на месте» — и приложение
+  # поднялось на базе без этих колонок. Payload выбирает media.wm в каждом
+  # запросе к фотографиям, поэтому отдавать перестал весь сайт, а не один раздел.
+  # Отпечаток меняется сам при любой правке схемы, отметка о разметке лежит в
+  # томе media и переживает перезапуск контейнера.
+  SCHEMA_HASH=$(node -e "
+    const fs = require('fs'), path = require('path'), crypto = require('crypto');
+    const walk = (d) => fs.readdirSync(d, { withFileTypes: true })
+      .flatMap((e) => (e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)]));
+    const files = walk('src/payload').filter((f) => f.endsWith('.ts')).sort();
+    const h = crypto.createHash('sha256');
+    for (const f of files) h.update(fs.readFileSync(f));
+    process.stdout.write(h.digest('hex').slice(0, 16));
+  " 2>/dev/null || echo "")
+  STAMP_FILE=/app/media/.schema-version
+  SAVED_HASH=$(cat "$STAMP_FILE" 2>/dev/null || echo none)
+
+  NEED_PUSH=0
+  if [ -n "$FORCE_SCHEMA_PUSH" ] && [ "$FORCE_SCHEMA_PUSH" != "0" ]; then
+    echo "  FORCE_SCHEMA_PUSH=$FORCE_SCHEMA_PUSH — пересобираю схему принудительно"
+    NEED_PUSH=1
+  elif [ -z "$SCHEMA_HASH" ]; then
+    echo "  отпечаток схемы не посчитался — пересобираю на всякий случай"
+    NEED_PUSH=1
+  elif [ "$SCHEMA_HASH" != "$SAVED_HASH" ]; then
+    echo "  схема изменилась: $SAVED_HASH → $SCHEMA_HASH"
+    NEED_PUSH=1
+  fi
+
+  if [ "$NEED_PUSH" = "1" ]; then
     echo "Schema missing — starting dev server to create tables..."
     # Бэкап production-сборки в рантайме (в образ не кладём): dev-сервер
     # перезапишет .next, после инициализации восстановим его из архива.
@@ -178,9 +164,13 @@ if [ -n "$DATABASE_URI" ]; then
       " 2>&1 >&2 || true
       exit 1
     fi
+    # Отметку ставим только после успешного push: если он не удался, следующий
+    # старт попробует снова — иначе отпечаток совпал бы, а схема осталась бы
+    # недоделанной
+    { echo "$SCHEMA_HASH" > "$STAMP_FILE"; } 2>/dev/null || echo "  ⨯ отпечаток схемы не сохранился — повторю при следующем старте"
     echo "Schema created."
   else
-    echo "Schema already exists."
+    echo "Schema already exists (отпечаток $SAVED_HASH)."
   fi
 fi
 
