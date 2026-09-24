@@ -24,6 +24,7 @@ import {
   type AdvertiserLike,
 } from '@/lib/advertising'
 import { AD_OPERATOR } from '@/lib/advertising-legal'
+import { storedFilePath } from '@/lib/upload-paths'
 import { contractNumber, renderAdContractPdf, rubText, rublesWords } from '@/lib/advertising-contract-pdf'
 
 /** Один синтаксически валидный адрес — без списков рассылки и инъекций в заголовки */
@@ -673,9 +674,15 @@ async function copyRequestPhotos(
     const source = file as { filename?: unknown; mimeType?: unknown }
     const filename = str(source.filename)
     if (!filename) continue
+    // Имя проверяет storedFilePath: файл читается по данным из формы заявки
+    // (папка закрытого хранилища — внутри тома media, см. AdvertisingMaterials)
+    const filePath = storedFilePath('ad-materials', filename)
+    if (!filePath) {
+      console.error(`Advertising: подозрительное имя файла фото — ${filename}`)
+      continue
+    }
     try {
-      // Папка закрытого хранилища — внутри тома media (см. AdvertisingMaterials)
-      const bytes = await fs.readFile(path.join(process.cwd(), 'media', 'ad-materials', filename))
+      const bytes = await fs.readFile(filePath)
       const created = await payload.create({
         collection: 'media',
         data: { alt: str(doc.name) || 'Фотография объекта' },

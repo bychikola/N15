@@ -14,10 +14,10 @@
  * выдачи (src/lib/board-list-item.ts) с явным списком публичных полей.
  */
 import fs from 'node:fs/promises'
-import path from 'node:path'
 import type { Payload, Where } from 'payload'
 import { boardToListItem, type BoardListItem, type BoardPhoto } from './board-list-item'
 import { BOARD_ACTIVE_STATUSES, boardPublicAddress, boardVisible, type BoardAddressLike } from './board'
+import { storedFilePath } from './upload-paths'
 
 /** Размер страницы выдачи — как в каталоге объектов */
 export const BOARD_PAGE_SIZE = 12
@@ -279,8 +279,13 @@ async function copyBoardPhotos(
     const source = item as { filename?: unknown; mimeType?: unknown }
     const filename = str(source.filename)
     if (!filename) continue
+    const filePath = storedFilePath('board-materials', filename)
+    if (!filePath) {
+      console.error(`Board: подозрительное имя файла фото — ${filename}`)
+      continue
+    }
     try {
-      const bytes = await fs.readFile(path.join(process.cwd(), 'media', 'board-materials', filename))
+      const bytes = await fs.readFile(filePath)
       const created = await payload.create({
         collection: 'media',
         data: { alt: str(doc.title) || 'Фотография объявления' },
