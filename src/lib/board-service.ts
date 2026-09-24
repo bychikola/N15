@@ -324,6 +324,13 @@ export async function publishBoardAd(
   id: number,
   user?: { id?: number | string; email?: string; name?: string; role?: string | null } | null,
 ): Promise<{ ok: boolean; error?: string }> {
+  // Публикует только команда: здесь, а не только в маршруте модерации —
+  // иначе функцию можно было бы позвать из другого места и выложить на сайт
+  // непроверенное объявление (ту же проверку повторяет хук коллекции)
+  if (user?.role !== 'agent' && user?.role !== 'admin') {
+    return { ok: false, error: 'Опубликовать объявление может только команда Н15' }
+  }
+
   const doc = (await payload
     .findByID({ collection: 'board-ads', id, depth: 1, overrideAccess: true })
     .catch(() => null)) as unknown as Record<string, unknown> | null
@@ -395,7 +402,17 @@ export interface BoardQueueRow {
  * те, что ждут проверки. Здесь отдаём всё, включая телефон, точный адрес
  * и журнал: раздел открыт только команде Н15.
  */
-export async function loadBoardQueue(payload: Payload, status?: string): Promise<BoardQueueRow[]> {
+export async function loadBoardQueue(
+  payload: Payload,
+  viewer: { role?: string | null } | null | undefined,
+  status?: string,
+): Promise<BoardQueueRow[]> {
+  // Проверка прав — здесь, а не только на странице: очередь содержит телефоны
+  // и точные адреса авторов, и функция не должна отдавать их тому, кто позвал
+  // её в обход раздела CRM (страница проверяет роль отдельно — см.
+  // src/app/crm/board/page.tsx)
+  if (viewer?.role !== 'agent' && viewer?.role !== 'admin') return []
+
   const where: Where = status ? { status: { equals: status } } : {}
   const res = await payload.find({
     collection: 'board-ads',
@@ -743,17 +760,32 @@ export async function resubmitBoardAdByAuthor(
   const doc = await ownBoardAd(payload, id, authorId)
   if (!doc) return { ok: false, error: 'Объявление не найдено' }
 
-  const data: Record<string, unknown> = {}
-  if (renew) {
-    const base = new Date(str(doc.expiresAt) || new Date().toISOString())
+  const status = str(doc.status)
+  const end = str(doc.expiresAt)
+  const expired = status === 'expired' || (Boolean(end) && new Date(end).getTime() <= Date.now())
+
+  // Срок продлеваем от текущего конца, если он ещё впереди, иначе от сегодня
+  const extend = (): string => {
+    const base = end ? new Date(end) : new Date()
     const from = base.getTime() > Date.now() ? base : new Date()
     from.setDate(from.getDate() + BOARD_RENEW_DAYS)
-    data.expiresAt = from.toISOString()
-    // Продление не меняет содержание — проверять заново нечего
-    data.status = 'published'
+    return from.toISOString()
+  }
+
+  const data: Record<string, unknown> = {}
+  if (renew) {
+    // Продление опубликованного: содержание не трогаем, проверять заново нечего
+    data.expiresAt = extend()
+    // А истёкшее объявление продлить «напрямую» нельзя: оно не на сайте, и
+    // вернуть его туда может только команда (проверка публикации в хуке
+    // BoardAds.ts). Поэтому оно уходит на проверку — как повторная подача
+    if (status !== 'published') data.status = 'pending'
   } else {
-    // Повторная подача — это проверка заново: ставим в очередь
+    // Повторная подача — проверка заново: ставим в очередь
     data.status = 'pending'
+    // Вышедший срок продлеваем сразу: иначе модератор не сможет опубликовать
+    // объявление — boardPublishIssue не пропускает просроченное
+    if (expired) data.expiresAt = extend()
   }
 
   try {

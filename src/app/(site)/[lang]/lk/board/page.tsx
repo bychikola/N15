@@ -130,8 +130,11 @@ function AdRow({ row, no, onAction, busy, t, lang }: Props) {
               </Link>
             </>
           ) : expired || row.status === 'rejected' || row.status === 'archived' || row.status === 'clarification' ? (
-            <button type="button" onClick={() => onAction(row.id, expired ? 'renew' : 'resubmit')} disabled={busy} style={btn}>
-              {expired ? t.board.myRenew : t.board.myResubmit}
+            // У истёкшего объявления кнопка «подать снова»: срок продлится,
+            // но объявление вернётся через проверку — вернуть его на сайт
+            // сам автор не может (см. resubmitBoardAdByAuthor)
+            <button type="button" onClick={() => onAction(row.id, 'resubmit')} disabled={busy} style={btn}>
+              {t.board.myResubmit}
             </button>
           ) : null}
           {busy && <span style={{ fontSize: 10, color: 'var(--n15-muted)', alignSelf: 'center' }}>{t.board.myBusy}</span>}

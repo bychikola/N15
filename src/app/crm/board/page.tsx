@@ -39,7 +39,7 @@ export default async function CrmBoardPage({ searchParams }: PageProps) {
   const filter = known ? String(status) : ''
 
   const payload = await getPayload({ config })
-  const rows = await loadBoardQueue(payload, filter || undefined)
+  const rows = await loadBoardQueue(payload, { role: user.role }, filter || undefined)
 
   return (
     <CrmShell user={user} t={t} active="board">
