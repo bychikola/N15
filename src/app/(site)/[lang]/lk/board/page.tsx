@@ -150,6 +150,7 @@ export default function LkBoardPage() {
   const [loading, setLoading] = useState(true)
   const [busyId, setBusyId] = useState<number | null>(null)
   const [error, setError] = useState('')
+  const [dialogs, setDialogs] = useState<{ adId: number; adTitle: string; otherId: number; lastText: string; unread: number }[]>([])
 
   const load = useCallback(() => {
     fetch('/api/board/ads/manage', { credentials: 'include' })
@@ -161,6 +162,10 @@ export default function LkBoardPage() {
 
   useEffect(() => {
     load()
+    fetch('/api/board/messages/dialogs', { credentials: 'include' })
+      .then((r) => r.json())
+      .then((d) => setDialogs(Array.isArray(d?.dialogs) ? d.dialogs : []))
+      .catch(() => setDialogs([]))
   }, [load])
 
   const act = async (id: number, action: string) => {
@@ -209,6 +214,37 @@ export default function LkBoardPage() {
       ) : (
         rows.map((row) => (
           <AdRow key={row.id} row={row} no={String(row.id)} onAction={act} busy={busyId === row.id} t={t} lang={lang} />
+        ))
+      )}
+
+      {/* Переписка по объявлениям: у покупателя — с авторами, у автора —
+          с покупателями. Строка на диалог, открывается отдельной страницей */}
+      <h2 style={{ margin: '26px 0 10px', fontFamily: "'New Standard', Georgia, serif", fontWeight: 400, fontSize: 19 }}>
+        {t.board.dialogsTitle}
+      </h2>
+      {dialogs.length === 0 ? (
+        <p style={{ color: 'var(--n15-muted)', fontSize: 12 }}>{t.board.dialogsEmpty}</p>
+      ) : (
+        dialogs.map((d) => (
+          <Link
+            key={`${d.adId}-${d.otherId}`}
+            href={`/${lang}/lk/board/messages/${d.adId}?with=${d.otherId}`}
+            style={{
+              display: 'flex', gap: 12, alignItems: 'baseline', flexWrap: 'wrap',
+              border: '1px solid rgba(167,129,78,.25)', borderRadius: 10, padding: '12px 14px',
+              marginBottom: 10, textDecoration: 'none', color: 'inherit',
+            }}
+          >
+            <strong style={{ fontFamily: "'New Standard', Georgia, serif", fontWeight: 400, fontSize: 15 }}>
+              {d.adTitle || `Объявление #${d.adId}`}
+            </strong>
+            <span style={{ fontSize: 11, color: 'var(--n15-muted)' }}>{d.lastText.slice(0, 80)}</span>
+            {d.unread > 0 && (
+              <span style={{ marginLeft: 'auto', background: 'var(--n15-gold)', color: '#1c1c1a', borderRadius: 999, padding: '2px 9px', fontSize: 10 }}>
+                {d.unread}
+              </span>
+            )}
+          </Link>
         ))
       )}
     </LkShell>

@@ -7,6 +7,7 @@ import { Header } from '@/components/layout/Header'
 import { Footer } from '@/components/layout/Footer'
 import { PhotoGrid } from '@/components/ui/PhotoGrid'
 import { BoardPhoneButton } from '@/components/board/BoardPhoneButton'
+import { BoardMessageForm } from '@/components/board/BoardMessageForm'
 import { getDictionary } from '@/i18n/dictionaries'
 import { loadBoardAd } from '@/lib/board-service'
 import { areaHuman, type AreaUnit } from '@/lib/area-format'
@@ -174,6 +175,15 @@ export default async function BoardAdPage({ params }: PageProps) {
                     {isAgency ? t.board.authorAgencyHint : t.board.authorPrivateHint}
                   </p>
                   <BoardPhoneButton t={t} adId={ad.id} />
+
+                  {/* Переписка: покупатель пишет автору, ответ приходит
+                      в личный кабинет. Автору своей же объявление писать
+                      не предлагаем — он и есть вторая сторона */}
+                  {!ad.viewerIsAuthor && (
+                    <div className="mt-4 pt-4 border-t border-[var(--n15-gold)]/15">
+                      <BoardMessageForm t={t} adId={ad.id} loggedIn={Boolean(user)} lang={lang} />
+                    </div>
+                  )}
                   <p className="mt-4 text-[11px] text-[var(--n15-muted)]">
                     {ad.publishedAt && <>{t.board.publishedAt}: {dateText(ad.publishedAt)}<br /></>}
                     {ad.expiresAt && !ad.preview && <>{t.board.expiresAt}: {dateText(ad.expiresAt)}</>}

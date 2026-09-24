@@ -192,6 +192,11 @@ export interface BoardAdDetail {
    * но его открыл автор или сотрудник. На странице это плашка «на модерации»
    */
   preview: boolean
+  /**
+   * Смотрит сам автор. Нужно странице: автору не предлагаем писать самому
+   * себе, а покупателю — форму сообщения (см. BoardMessageForm)
+   */
+  viewerIsAuthor: boolean
 }
 
 const str = (v: unknown): string => (typeof v === 'string' ? v.trim() : '')
@@ -254,6 +259,7 @@ export async function loadBoardAd(
     publishedAt: str(doc.publishedAt) || null,
     expiresAt: str(doc.expiresAt) || null,
     preview: !visible,
+    viewerIsAuthor: isAuthor,
   }
 }
 

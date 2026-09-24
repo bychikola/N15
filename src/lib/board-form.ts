@@ -28,9 +28,19 @@ const pick = (v: unknown, allowed: readonly string[]): string | undefined => {
   return allowed.includes(s) ? s : undefined
 }
 
-/** Число из формы: пусто, мусор и минус → undefined */
+/**
+ * Число из формы: пусто, мусор и минус → undefined.
+ *
+ * Пустая строка проверяется отдельно: Number('') — это 0, и без проверки
+ * незаполненное поле («Комнат», «Этаж») превращалось в ноль, а объявление
+ * не проходило проверку «Комнат: минимум 1» — форма с пустыми полями падала
+ * с общей ошибкой отправки.
+ */
 const number = (v: unknown): number | undefined => {
-  const n = Number(String(v ?? '').replace(',', '.').trim())
+  if (v == null) return undefined
+  const raw = String(v).trim().replace(',', '.')
+  if (!raw) return undefined
+  const n = Number(raw)
   return Number.isFinite(n) && n >= 0 ? n : undefined
 }
 
