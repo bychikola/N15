@@ -50,9 +50,10 @@ const escapeHtml = (value: string): string =>
  * оказывается вся выдача, а не только объекты с отмеченной точкой.
  *
  * Метки собираются в кластеры (ymaps.Clusterer): на выдаче в десятки
- * объектов соседние точки иначе перекрывают друг друга. В облачке метки —
- * фотография, тип объекта, адрес, цена и кнопка «Открыть объект»; на
- * внешние карты отсюда не уводим.
+ * объектов соседние точки иначе перекрывают друг друга. Клик (тап) по метке
+ * открывает её облачко — мини-карточку с фотографией, типом объекта, адресом,
+ * ценой и кнопкой «Подробнее» на карточку этого объекта; клик по кластеру
+ * приближает карту. На внешние карты отсюда не уводим.
  */
 export const CatalogMap: FC<Props> = ({ where, lang }) => {
   const { t } = useI18n()
@@ -196,8 +197,13 @@ export const CatalogMap: FC<Props> = ({ where, lang }) => {
             // одиночная метка остаётся обычной точкой (preset ниже)
             preset: 'islands#clusterSvgIcons',
             clusterIconColor: '#C8A44E',
+            // Клик по кластеру приближает карту — ymaps разводит слипшиеся
+            // метки, и до каждой можно добраться по отдельности. Облачко у
+            // самого кластера выключено: карточка есть у каждой метки, а у
+            // кластера ymaps показал бы свою разметку (openBalloonOnClick —
+            // это же имя опции кластера, clusterOpenBalloonOnClick в API нет)
             clusterDisableClickZoom: false,
-            clusterOpenBalloonOnClick: true,
+            openBalloonOnClick: false,
             groupByCoordinates: false,
           })
           map.geoObjects.add(clusterer)
@@ -205,14 +211,31 @@ export const CatalogMap: FC<Props> = ({ where, lang }) => {
         }
         clusterer.removeAll()
         clusterer.add(
-          prepared.map(
-            ({ point, balloon }) =>
-              new ymaps.Placemark(
-                [point.lat, point.lng],
-                { hintContent: point.title, balloonContent: balloon },
-                { preset: 'islands#circleIcon', iconColor: '#C8A44E' },
-              ),
-          ),
+          prepared.map(({ point, balloon }) => {
+            const placemark = new ymaps.Placemark(
+              [point.lat, point.lng],
+              { hintContent: point.title, balloonContent: balloon },
+              {
+                preset: 'islands#circleIcon',
+                iconColor: '#C8A44E',
+                // Облачко открывает наш обработчик (ниже), а не действие по
+                // умолчанию: клик по метке открывает карточку независимо от
+                // того, как ymaps обошёлся с нажатием
+                openBalloonOnClick: false,
+              },
+            )
+            // Клик или тап по метке открывает её мини-карточку, повторный —
+            // закрывает. preventDefault гасит действие по умолчанию: облачко
+            // открываем сами, чтобы нажатие срабатывало всегда
+            placemark.events.add('click', (e: Ymaps) => {
+              e.preventDefault()
+              const balloon = placemark.balloon
+              if (!balloon) return
+              if (balloon.isOpen()) balloon.close()
+              else balloon.open()
+            })
+            return placemark
+          }),
         )
 
         // Масштаб подбираем один раз на набор условий: сервер может добавить
