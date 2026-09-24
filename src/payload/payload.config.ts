@@ -27,6 +27,11 @@ import { Advertisers } from './collections/Advertisers'
 import { Advertisements } from './collections/Advertisements'
 import { AdvertisingRequests } from './collections/AdvertisingRequests'
 import { AdvertisingMaterials } from './collections/AdvertisingMaterials'
+// «Доска объявлений»: объявления частных лиц и агентства отдельно от каталога
+// (см. src/lib/board.ts) — открытые объявления и закрытое хранилище фото
+// до модерации
+import { BoardAds } from './collections/BoardAds'
+import { BoardMaterials } from './collections/BoardMaterials'
 // «Юридическая экспертиза объекта»: закрытые хранилища документов и отчётов —
 // доступ только через маршруты /api/objects/legal/* (см. src/lib/legal-service.ts)
 import { LegalDocuments } from './collections/LegalDocuments'
@@ -90,7 +95,7 @@ export default buildConfig({
     abortOnLimit: true,
     responseOnLimit: `Файл больше ${PHOTO_MAX_LABEL} — допустимы ${PHOTO_FORMATS_LABEL} до ${PHOTO_MAX_LABEL}`,
   },
-  collections: [Users, Media, Objects, Agents, Applications, Tasks, Messages, Blog, News, Pages, Customers, Emails, MailAttachments, AgentTasks, MarketListings, LegalDocuments, LegalReports, Advertisers, Advertisements, AdvertisingRequests, AdvertisingMaterials, Regions, Settlements, SiteVisits],
+  collections: [Users, Media, Objects, Agents, Applications, Tasks, Messages, Blog, News, Pages, Customers, Emails, MailAttachments, AgentTasks, MarketListings, LegalDocuments, LegalReports, Advertisers, Advertisements, AdvertisingRequests, AdvertisingMaterials, BoardAds, BoardMaterials, Regions, Settlements, SiteVisits],
   globals: [SiteSettings, MailSettings, AgentSettings, NewsSettings, PlatformSettings],
   editor: lexicalEditor(),
   i18n: {
