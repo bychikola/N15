@@ -233,11 +233,13 @@ export const Header: FC = () => {
   // Направление, чей второй уровень раскрыт сейчас
   const activeDir = serviceDirs.find((dir) => dir.key === servicesDir)
 
-  // Остальные разделы верхнего меню — плоским списком после выпадающих
+  // Остальные разделы верхнего меню — плоским списком после выпадающих.
+  // «Доска объявлений» идёт после «Контактов» — как последний пункт меню
   const navLinks = [
     { href: `/${lang}/about`, label: t.nav.about },
     { href: `/${lang}/blog`, label: t.nav.blog },
     { href: `/${lang}/contacts`, label: t.nav.contacts },
+    { href: `/${lang}/board`, label: t.nav.board },
   ]
 
   // Активный пункт меню — раздел текущей страницы. В адресах пунктов могут
