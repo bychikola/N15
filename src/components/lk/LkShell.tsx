@@ -80,6 +80,8 @@ export const LkShell: FC<{ children: ReactNode; active?: string }> = ({ children
     { href: `/${lang}/lk/favorites`, icon: 'favorite', label: t.lk.favorites, count: counts?.favorites },
     { href: `/${lang}/lk/applications`, icon: 'article', label: t.lk.applications, count: counts?.applications },
     { href: `/${lang}/lk/messages`, icon: 'forum', label: t.lk.messages, count: counts?.unread },
+    // «Мои объявления»: доска объявлений — свои записи, их статусы и правка
+    { href: `/${lang}/lk/board`, icon: 'sell', label: t.board.myTitle },
     { href: `/${lang}/lk/profile`, icon: 'person', label: t.lk.profile },
   ]
 

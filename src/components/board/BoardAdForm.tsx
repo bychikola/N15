@@ -93,9 +93,28 @@ const hintCls = 'block mt-1.5 text-[11px] leading-relaxed text-[var(--n15-muted)
 /** Категории с землёй: у них спрашиваем площадь участка */
 const PLOT_CODES = ['land', 'house', 'townhouse', 'cottage', 'dacha', 'part_house']
 
-export const BoardAdForm: FC<{ lang: string }> = ({ lang }) => {
+interface Props {
+  lang: string
+  /**
+   * Объявление для правки (личный кабинет). Без него форма создаёт новое.
+   * В правке согласия не спрашиваем: они уже приняты при подаче — дата
+   * и версия правил хранятся в объявлении и не переписываются.
+   */
+  initial?: {
+    id: number
+    status: string
+    fields: Record<string, string>
+    photos: { id: number; url: string; thumb: string }[]
+  } | null
+}
+
+export const BoardAdForm: FC<Props> = ({ lang, initial = null }) => {
   const { t } = useI18n()
-  const [form, setForm] = useState<Form>(EMPTY)
+  const editing = Boolean(initial)
+  const [form, setForm] = useState<Form>(() => (initial ? { ...EMPTY, ...initial.fields } as Form : EMPTY))
+  // Прежние фотографии (в правке) и новые файлы — отдельно: при сохранении
+  // важно передать, какие из прежних автор оставил
+  const [existingPhotos, setExistingPhotos] = useState(initial?.photos || [])
   // Файл и ссылка на превью — вместе: ссылку создаём один раз при выборе,
   // иначе при каждом удалении превью пересоздавались бы и мигали
   const [photos, setPhotos] = useState<{ file: File; url: string }[]>([])
@@ -126,11 +145,13 @@ export const BoardAdForm: FC<{ lang: string }> = ({ lang }) => {
   const addPhotos = (files: FileList | null) => {
     if (!files?.length) return
     const added = Array.from(files)
-      .slice(0, BOARD_MAX_PHOTOS - photos.length)
+      .slice(0, Math.max(0, BOARD_MAX_PHOTOS - photos.length - existingPhotos.length))
       .map((file) => ({ file, url: URL.createObjectURL(file) }))
     setPhotos((prev) => [...prev, ...added])
     setError('')
   }
+
+  const removeExisting = (id: number) => setExistingPhotos((prev) => prev.filter((p) => p.id !== id))
 
   const removePhoto = (index: number) => {
     setPhotos((prev) => {
@@ -142,7 +163,8 @@ export const BoardAdForm: FC<{ lang: string }> = ({ lang }) => {
 
   const requiredFilled =
     form.title.trim() && form.price.trim() && form.description.trim() && form.contactName.trim() && form.phone.trim()
-  const canSend = Boolean(requiredFilled) && photos.length > 0 && consentData && consentRules && !sending
+  const photoCount = photos.length + existingPhotos.length
+  const canSend = Boolean(requiredFilled) && photoCount > 0 && (editing || (consentData && consentRules)) && !sending
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -151,11 +173,11 @@ export const BoardAdForm: FC<{ lang: string }> = ({ lang }) => {
       setError(t.board.formRequired)
       return
     }
-    if (!photos.length) {
+    if (!photoCount) {
       setError(t.board.formNeedPhoto)
       return
     }
-    if (!consentData || !consentRules) {
+    if (!editing && (!consentData || !consentRules)) {
       setError(t.board.formConsentRequired)
       return
     }
@@ -164,11 +186,21 @@ export const BoardAdForm: FC<{ lang: string }> = ({ lang }) => {
     try {
       const body = new FormData()
       for (const [key, value] of Object.entries(form)) body.append(key, String(value).trim())
-      body.append('consent', String(consentData))
-      body.append('consentRules', String(consentRules))
       for (const photo of photos) body.append('photos', photo.file)
 
-      const res = await fetch('/api/board/ads', { method: 'POST', body })
+      let url = '/api/board/ads'
+      if (initial) {
+        // Правка: прежние фото, которые автор оставил, и служебные поля
+        body.append('id', String(initial.id))
+        body.append('action', 'update')
+        body.append('keepPhotos', existingPhotos.map((p) => p.id).join(','))
+        url = '/api/board/ads/manage'
+      } else {
+        body.append('consent', String(consentData))
+        body.append('consentRules', String(consentRules))
+      }
+
+      const res = await fetch(url, { method: 'POST', body })
       const data = (await res.json().catch(() => null)) as { error?: string } | null
       if (!res.ok) {
         setError(data?.error || t.board.formError)
@@ -186,9 +218,11 @@ export const BoardAdForm: FC<{ lang: string }> = ({ lang }) => {
     return (
       <div className="max-w-2xl">
         <h2 className="text-2xl font-[family-name:var(--font-display)] text-[var(--n15-white)] mb-3">
-          {t.board.sentTitle}
+          {editing ? t.board.resubmitTitle : t.board.sentTitle}
         </h2>
-        <p className="text-sm leading-relaxed text-[var(--n15-silver)] mb-6">{t.board.sentText}</p>
+        <p className="text-sm leading-relaxed text-[var(--n15-silver)] mb-6">
+          {editing ? t.board.resubmitText : t.board.sentText}
+        </p>
         <div className="flex flex-wrap gap-4">
           <Link href={`/${lang}/lk/board`} className="px-5 py-3 text-xs tracking-wider uppercase border border-[var(--n15-gold)] text-[var(--n15-gold)] hover:bg-[var(--n15-gold)]/8 transition-all duration-300">
             {t.board.sentMyAds}
@@ -203,7 +237,9 @@ export const BoardAdForm: FC<{ lang: string }> = ({ lang }) => {
 
   return (
     <form onSubmit={submit} className="max-w-3xl flex flex-col gap-8">
-      <p className="text-sm leading-relaxed text-[var(--n15-muted)]">{t.board.formIntro}</p>
+      <p className="text-sm leading-relaxed text-[var(--n15-muted)]">
+        {editing ? t.board.formEditIntro : t.board.formIntro}
+      </p>
 
       {/* --- Об объекте --- */}
       <section className="flex flex-col gap-4">
@@ -406,19 +442,35 @@ export const BoardAdForm: FC<{ lang: string }> = ({ lang }) => {
           <button
             type="button"
             onClick={() => fileRef.current?.click()}
-            disabled={photos.length >= BOARD_MAX_PHOTOS}
+            disabled={photos.length + existingPhotos.length >= BOARD_MAX_PHOTOS}
             className="px-4 py-2.5 text-xs tracking-wider uppercase border border-[var(--n15-gold)]/40 text-[var(--n15-gold)] hover:bg-[var(--n15-gold)]/8 transition-all duration-300 cursor-pointer disabled:opacity-40"
           >
             {t.board.formPhotoPick}
           </button>
           {photos.length > 0 && (
             <span className="text-[11px] text-[var(--n15-muted)]">
-              {t.board.formPhotosCount.replace('%d', String(photos.length))}
+              {t.board.formPhotosCount.replace('%d', String(photos.length + existingPhotos.length))}
             </span>
           )}
         </div>
-        {photos.length > 0 && (
+        {(existingPhotos.length > 0 || photos.length > 0) && (
           <div className="flex flex-wrap gap-3">
+            {/* Прежние фотографии: их видит автор (свои файлы из закрытого
+                хранилища), убрать можно крестиком — при сохранении список
+                оставленных уходит на сервер */}
+            {existingPhotos.map((photo) => (
+              <div key={`existing-${photo.id}`} className="relative w-24">
+                <img src={photo.thumb || photo.url} alt="" className="w-24 h-24 object-cover border border-[var(--n15-gold)]/20" />
+                <button
+                  type="button"
+                  onClick={() => removeExisting(photo.id)}
+                  aria-label={t.board.formPhotoRemove}
+                  className="absolute -top-2 -right-2 w-6 h-6 grid place-items-center bg-[var(--n15-black)] border border-[var(--n15-gold)]/40 text-[var(--n15-gold)] text-xs cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
             {photos.map((photo, index) => (
               <div key={`${photo.file.name}-${index}`} className="relative w-24">
                 {/* Превью из выбранного файла: на сервер он уйдёт только при отправке */}
@@ -467,7 +519,8 @@ export const BoardAdForm: FC<{ lang: string }> = ({ lang }) => {
         </div>
       </section>
 
-      {/* --- Согласия --- */}
+      {/* --- Согласия: при правке не спрашиваем, они уже приняты --- */}
+      {!editing && (
       <section className="flex flex-col gap-3">
         <ConsentCheckbox checked={consentData} onChange={setConsentData} />
         <label className="flex items-start gap-3 text-xs leading-relaxed text-[var(--n15-silver)]">
@@ -486,6 +539,7 @@ export const BoardAdForm: FC<{ lang: string }> = ({ lang }) => {
           </span>
         </label>
       </section>
+      )}
 
       {error && <p className="text-sm text-[var(--n15-burgundy-light)]">{error}</p>}
 
@@ -495,7 +549,7 @@ export const BoardAdForm: FC<{ lang: string }> = ({ lang }) => {
           disabled={!canSend}
           className="px-6 py-3.5 text-xs tracking-wider uppercase border border-[var(--n15-gold)]/40 n15-cta-green transition-all duration-300 cursor-pointer disabled:opacity-40"
         >
-          {sending ? t.board.formSending : t.board.formSend}
+          {sending ? t.board.formSending : editing ? t.board.formSaveEdit : t.board.formSend}
         </button>
         <Link href={`/${lang}/board`} className="text-xs tracking-wider uppercase text-[var(--n15-muted)] hover:text-[var(--n15-silver)]">
           {t.board.formCancel}

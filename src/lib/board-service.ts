@@ -18,11 +18,13 @@ import type { Payload, Where } from 'payload'
 import { boardToListItem, type BoardListItem, type BoardPhoto } from './board-list-item'
 import {
   BOARD_ACTIVE_STATUSES,
+  BOARD_RENEW_DAYS,
   boardPublicAddress,
   boardPublishIssue,
   boardVisible,
   type BoardAddressLike,
 } from './board'
+import { parseBoardAdForm } from './board-form'
 import { storedFilePath } from './upload-paths'
 
 /** Размер страницы выдачи — как в каталоге объектов */
@@ -444,6 +446,329 @@ export async function loadBoardQueue(payload: Payload, status?: string): Promise
         : [],
     }
   })
+}
+
+
+// ── Кабинет автора ────────────────────────────────────────────────────────────
+
+/** Строка «Мои объявления» в личном кабинете */
+export interface BoardMyAdRow {
+  id: number
+  title: string
+  status: string
+  dealType: string
+  category: string
+  price: number | null
+  createdAt: string | null
+  publishedAt: string | null
+  expiresAt: string | null
+  /** Пояснение модератора: что исправить (видит только автор) */
+  moderationNote: string
+  views: number
+  /** Обложка: у опубликованного — копия в media, до публикации — присланное фото */
+  photo?: BoardPhoto
+  /** Почему объявление сейчас не на сайте (null — всё в порядке) */
+  issue: string | null
+}
+
+/**
+ * Объявления автора для личного кабинета. Отдаём свои записи в любом статусе:
+ * черновик проверки, опубликованное, отклонённое, снятое и истёкшее — автору
+ * важно видеть и то, что не прошло, и причину.
+ */
+export async function loadMyBoardAds(payload: Payload, authorId: number): Promise<BoardMyAdRow[]> {
+  const res = await payload.find({
+    collection: 'board-ads',
+    where: { author: { equals: authorId } },
+    sort: '-createdAt',
+    limit: 100,
+    depth: 1,
+    overrideAccess: true,
+  })
+
+  return (res.docs as unknown as Record<string, unknown>[]).map((doc) => {
+    const visible = boardVisible(doc as never)
+    const photos = visible ? photosOf(doc.publicPhotos) : photosOf(doc.photos)
+    // «Почему не на сайте»: у неопубликованного — требования публикации,
+    // у опубликованного с истёкшим сроком — сам срок
+    const issue = visible
+      ? null
+      : str(doc.status) === 'published'
+        ? 'Срок размещения истёк — продлите объявление'
+        : boardPublishIssue(doc as never)
+    return {
+      id: Number(doc.id),
+      title: str(doc.title),
+      status: str(doc.status),
+      dealType: str(doc.dealType),
+      category: str(doc.category),
+      price: num(doc.price),
+      createdAt: str(doc.createdAt) || null,
+      publishedAt: str(doc.publishedAt) || null,
+      expiresAt: str(doc.expiresAt) || null,
+      moderationNote: str(doc.moderationNote),
+      views: num(doc.views) || 0,
+      photo: photos[0],
+      issue,
+    }
+  })
+}
+
+/** Объявление автора для правки: поля формы и уже загруженные фотографии */
+export interface BoardAdForEdit {
+  id: number
+  status: string
+  /** Поля в том виде, в каком их ждёт форма */
+  fields: Record<string, string>
+  photos: { id: number; url: string; thumb: string }[]
+}
+
+/**
+ * Объявление для формы правки. Отдаём только своё: чужое (или чужой id)
+ * вернёт null — маршрут ответит 404, и перебором id чужое объявление
+ * не открыть.
+ */
+export async function loadMyBoardAd(
+  payload: Payload,
+  id: number,
+  authorId: number,
+): Promise<BoardAdForEdit | null> {
+  const doc = (await payload
+    .findByID({ collection: 'board-ads', id, depth: 1, overrideAccess: true })
+    .catch(() => null)) as unknown as Record<string, unknown> | null
+  if (!doc) return null
+
+  const authorRaw = doc.author as { id?: number } | number | undefined
+  const ownerId = typeof authorRaw === 'object' && authorRaw ? Number(authorRaw.id) : Number(authorRaw)
+  if (ownerId !== authorId) return null
+
+  const addr = (doc.address || {}) as Record<string, unknown>
+  const photos = photosOf(doc.photos).map((p, index) => {
+    const file = (doc.photos as { id?: number }[] | undefined)?.[index]
+    return {
+      id: Number(file?.id) || 0,
+      url: p.url || '',
+      thumb: p.sizes?.thumbnail?.url || p.sizes?.card?.url || p.url || '',
+    }
+  })
+
+  return {
+    id: Number(doc.id),
+    status: str(doc.status),
+    fields: {
+      dealType: str(doc.dealType) || 'sale',
+      category: str(doc.category) || 'apartment',
+      houseType: str(doc.houseType),
+      commercialType: str(doc.commercialType),
+      title: str(doc.title),
+      price: num(doc.price) != null ? String(num(doc.price)) : '',
+      area: num(doc.area) != null ? String(num(doc.area)) : '',
+      areaUnit: str(doc.areaUnit) || 'sqm',
+      plotArea: num(doc.plotArea) != null ? String(num(doc.plotArea)) : '',
+      plotAreaUnit: str(doc.plotAreaUnit) || 'are',
+      rooms: num(doc.rooms) != null ? String(num(doc.rooms)) : '',
+      floor: num(doc.floor) != null ? String(num(doc.floor)) : '',
+      totalFloors: num(doc.totalFloors) != null ? String(num(doc.totalFloors)) : '',
+      description: str(doc.description),
+      videoLinks: str(doc.videoLinks),
+      city: str(addr.city) || 'Владикавказ',
+      district: str(addr.district),
+      cityDistrict: str(addr.cityDistrict),
+      locality: str(addr.locality),
+      snt: str(addr.snt),
+      street: str(addr.street),
+      house: str(addr.house),
+      contactName: str(doc.contactName),
+      phone: str(doc.phone),
+      email: str(doc.email),
+    },
+    photos,
+  }
+}
+
+/** Объявление автора (проверка владения) — общая для всех действий кабинета */
+async function ownBoardAd(
+  payload: Payload,
+  id: number,
+  authorId: number,
+): Promise<Record<string, unknown> | null> {
+  const doc = (await payload
+    .findByID({ collection: 'board-ads', id, depth: 1, overrideAccess: true })
+    .catch(() => null)) as unknown as Record<string, unknown> | null
+  if (!doc) return null
+  const authorRaw = doc.author as { id?: number } | number | undefined
+  const ownerId = typeof authorRaw === 'object' && authorRaw ? Number(authorRaw.id) : Number(authorRaw)
+  return ownerId === authorId ? doc : null
+}
+
+/**
+ * Правка объявления автором. Содержание меняется — и объявление снова уходит
+ * на проверку: после модерации текст нельзя подменить незаметно (см. правило
+ * в BoardAds.ts). Согласия и версия правил остаются прежними: они уже приняты.
+ *
+ * Копии фотографий в media, сделанные при прошлой публикации, удаляем: иначе
+ * после повторной публикации на сайте остались бы прежние снимки (см.
+ * publishBoardAd — он копирует заново, если копий нет).
+ */
+export async function updateBoardAdByAuthor(
+  payload: Payload,
+  id: number,
+  authorId: number,
+  form: FormData,
+): Promise<{ ok: boolean; error?: string }> {
+  const doc = await ownBoardAd(payload, id, authorId)
+  if (!doc) return { ok: false, error: 'Объявление не найдено' }
+
+  const parsed = parseBoardAdForm(form)
+  if (!parsed.ok) return { ok: false, error: parsed.error }
+
+  // Какие из прежних фотографий автор оставил
+  const keep = String(form.get('keepPhotos') || '')
+    .split(',')
+    .map((s) => Number(s.trim()))
+    .filter((n) => Number.isInteger(n) && n > 0)
+  const existing = Array.isArray(doc.photos) ? (doc.photos as { id?: number }[]) : []
+  const removed = existing.map((p) => Number(p?.id)).filter((pid) => pid && !keep.includes(pid))
+
+  // Новые фотографии из формы
+  const newFiles = form.getAll('photos').filter((f): f is File => f instanceof File && f.size > 0)
+  const newIds: number[] = []
+  for (const file of newFiles) {
+    try {
+      const buffer = Buffer.from(await file.arrayBuffer())
+      const created = await payload.create({
+        collection: 'board-materials',
+        data: { alt: String(parsed.data.title || ''), author: authorId },
+        file: { data: buffer, mimetype: file.type || 'image/jpeg', name: file.name, size: buffer.length },
+        depth: 0,
+        overrideAccess: true,
+      })
+      newIds.push(Number(created.id))
+    } catch (error) {
+      console.error('Board: фотография при правке не принята', error)
+      return { ok: false, error: 'Одна из фотографий не читается — выберите другую' }
+    }
+  }
+
+  const photos = [...keep, ...newIds]
+  if (!photos.length) return { ok: false, error: 'Оставьте хотя бы одну фотографию объекта' }
+
+  // Прежние копии для сайта: удаляем и очищаем — при публикации сделаются заново
+  const oldPublic = Array.isArray(doc.publicPhotos) ? (doc.publicPhotos as { id?: number }[]) : []
+  for (const p of oldPublic) {
+    if (p?.id) await payload.delete({ collection: 'media', id: Number(p.id), overrideAccess: true }).catch(() => null)
+  }
+  // Убранные автором снимки из закрытого хранилища тоже больше не нужны
+  for (const pid of removed) {
+    await payload.delete({ collection: 'board-materials', id: pid, overrideAccess: true }).catch(() => null)
+  }
+
+  try {
+    await payload.update({
+      collection: 'board-ads',
+      id,
+      data: {
+        ...parsed.data,
+        photos,
+        publicPhotos: [],
+        // Правка содержания возвращает объявление на проверку — и снимает
+        // прежнее пояснение модератора: оно относилось к прошлой редакции
+        status: 'pending',
+        moderationNote: null,
+      },
+      depth: 0,
+      overrideAccess: true,
+      ...(await actorOf(payload, authorId)),
+    })
+    return { ok: true }
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) }
+  }
+}
+
+/** Пользователь для локального API — по нему хук понимает, кто меняет запись */
+async function actorOf(
+  payload: Payload,
+  authorId: number,
+): Promise<{ user?: { id: number; email?: string; name?: string; role?: string; collection: string } }> {
+  const user = await payload
+    .findByID({ collection: 'users', id: authorId, depth: 0, overrideAccess: true })
+    .catch(() => null)
+  if (!user) return {}
+  return {
+    user: {
+      id: authorId,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      collection: 'users',
+    },
+  }
+}
+
+/** Снять объявление с публикации — автор убирает его сам (объект продан) */
+export async function archiveBoardAdByAuthor(
+  payload: Payload,
+  id: number,
+  authorId: number,
+): Promise<{ ok: boolean; error?: string }> {
+  const doc = await ownBoardAd(payload, id, authorId)
+  if (!doc) return { ok: false, error: 'Объявление не найдено' }
+  try {
+    await payload.update({
+      collection: 'board-ads',
+      id,
+      data: { status: 'archived' },
+      depth: 0,
+      overrideAccess: true,
+      ...(await actorOf(payload, authorId)),
+    })
+    return { ok: true }
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) }
+  }
+}
+
+/**
+ * Подать объявление снова: из «нужны уточнения», «отклонено» и «снято» —
+ * на проверку; из «срок истёк» — продлить на новый срок. Продление доступно
+ * и опубликованному объявлению, срок которого ещё идёт.
+ */
+export async function resubmitBoardAdByAuthor(
+  payload: Payload,
+  id: number,
+  authorId: number,
+  renew: boolean,
+): Promise<{ ok: boolean; error?: string }> {
+  const doc = await ownBoardAd(payload, id, authorId)
+  if (!doc) return { ok: false, error: 'Объявление не найдено' }
+
+  const data: Record<string, unknown> = {}
+  if (renew) {
+    const base = new Date(str(doc.expiresAt) || new Date().toISOString())
+    const from = base.getTime() > Date.now() ? base : new Date()
+    from.setDate(from.getDate() + BOARD_RENEW_DAYS)
+    data.expiresAt = from.toISOString()
+    // Продление не меняет содержание — проверять заново нечего
+    data.status = 'published'
+  } else {
+    // Повторная подача — это проверка заново: ставим в очередь
+    data.status = 'pending'
+  }
+
+  try {
+    await payload.update({
+      collection: 'board-ads',
+      id,
+      data,
+      depth: 0,
+      overrideAccess: true,
+      ...(await actorOf(payload, authorId)),
+    })
+    return { ok: true }
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) }
+  }
 }
 
 /** Сколько «живых» объявлений у автора — для квоты подачи (см. POST /api/board/ads) */
