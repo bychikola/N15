@@ -399,6 +399,12 @@ export interface BoardQueueRow {
   expiresAt: string | null
   moderationNote: string
   moderatedBy: string
+  /** Отметки согласий автора с формы подачи (см. BoardAds.ts) */
+  consent: boolean
+  consentRules: boolean
+  consentAt: string | null
+  /** Редакция правил доски, принятая автором при подаче */
+  rulesVersion: string
   /** Почему нельзя опубликовать (null — можно) */
   issue: string | null
   /** Фотографии: до публикации — из закрытого хранилища, после — копии в media */
@@ -459,6 +465,10 @@ export async function loadBoardQueue(
       expiresAt: str(doc.expiresAt) || null,
       moderationNote: str(doc.moderationNote),
       moderatedBy: str(doc.moderatedBy),
+      consent: doc.consent === true,
+      consentRules: doc.consentRules === true,
+      consentAt: str(doc.consentAt) || null,
+      rulesVersion: str(doc.rulesVersion),
       issue: boardPublishIssue(doc as never),
       // До публикации показываем присланные фото (они в закрытом хранилище),
       // после — копии в media: модератору важно видеть то, что уже на сайте

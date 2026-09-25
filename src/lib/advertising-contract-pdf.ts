@@ -366,5 +366,7 @@ export function renderAdContractPdf(data: AdContractData): Buffer {
     { size: 8.2, gapAfter: 0 },
   )
 
-  return pdf.build(`Договор № ${number}`)
+  // Подвал договора: оговорки экспертизы здесь быть не должно — договор
+  // печатает заказчик, и лишняя строка про проверку объекта его запутает
+  return pdf.build(`Договор № ${number}`, `Договор по заявке № ${data.requestId} с сайта ${AD_OPERATOR.site}`)
 }

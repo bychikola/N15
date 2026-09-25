@@ -6,6 +6,7 @@ import { useI18n } from '@/i18n/i18n-provider'
 import { Button } from '@/components/ui/Button'
 import { ConsentCheckbox } from '@/components/ui/ConsentCheckbox'
 import { AD_CONTACT_KIND_LABELS, AD_OBJECT_TYPE_LABELS } from '@/lib/advertising'
+import { legalDocLinks } from '@/lib/legal-docs'
 import { reachGoal } from '@/lib/metrika'
 import { AD_OFFER, AD_RULES, adDocHref } from '@/lib/advertising-legal'
 
@@ -410,11 +411,20 @@ export const AdRequestForm: FC<{ lang: string }> = ({ lang }) => {
           ]}
           docsLabel={t.advertising.consentDocs}
         />
+        {/* Права на объект и материалы: отметка подтверждает и разрешение
+            собственника на фото, видео и описание, и согласие на рекламное
+            размещение объекта — оба документа лежат в разделе «Документы» */}
         <Consent
           checked={consents.rights}
           onChange={(v) => setConsents((prev) => ({ ...prev, rights: v }))}
           text={t.advertising.consentRightsText}
-          links={[{ href: adDocHref(lang, AD_RULES.path), title: t.advertising.consentRulesDoc }]}
+          links={[
+            { href: adDocHref(lang, AD_RULES.path), title: t.advertising.consentRulesDoc },
+            ...legalDocLinks('owner-media-consent', 'ad-placement-consent').map((doc) => ({
+              href: `/${lang}${doc.path}`,
+              title: doc.short,
+            })),
+          ]}
           docsLabel={t.advertising.consentDocs}
         />
         {/* Обработка персональных данных — та же обязательная галочка со

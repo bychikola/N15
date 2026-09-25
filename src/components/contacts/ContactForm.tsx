@@ -3,7 +3,8 @@
 import { useState, type FC } from 'react'
 import { useI18n } from '@/i18n/i18n-provider'
 import { Button } from '@/components/ui/Button'
-import { ConsentCheckbox, MarketingConsent } from '@/components/ui/ConsentCheckbox'
+import { ConsentCheckbox, ConsentLine, MarketingConsent } from '@/components/ui/ConsentCheckbox'
+import { legalDocLinks } from '@/lib/legal-docs'
 import { reachGoal } from '@/lib/metrika'
 
 const inputCls =
@@ -15,10 +16,15 @@ const inputCls =
  * в «Неразобранное», агент видит её в разделе заявок. Туда же уходят заявки
  * с форм «Ваша реклама» и просмотра объекта.
  *
- * Перед кнопкой — обязательная галочка согласия на обработку персональных
- * данных: без отметки кнопка «Отправить» неактивна и форма не отправляется.
- * Согласие на рекламные сообщения — отдельная необязательная галочка,
- * на отправку не влияет.
+ * Перед кнопкой — две обязательные галочки: согласие на обработку персональных
+ * данных и согласие на обратный звонок (это единственная форма сайта, с
+ * которой действительно звонят, — см. «Согласие на обратный звонок и
+ * обработку номера телефона»). Без обеих отметок кнопка «Отправить» неактивна
+ * и форма не отправляется. Согласие на рекламные сообщения — отдельная
+ * необязательная галочка, на отправку не влияет.
+ *
+ * Обе отметки уходят в заявку вместе с данными формы (consent и consentCallback)
+ * и сохраняются в CRM: по ним видно, на что человек согласился.
  */
 export const ContactForm: FC = () => {
   const { t } = useI18n()
@@ -26,6 +32,7 @@ export const ContactForm: FC = () => {
   const [phone, setPhone] = useState('')
   const [message, setMessage] = useState('')
   const [agreed, setAgreed] = useState(false)
+  const [callbackAgreed, setCallbackAgreed] = useState(false)
   const [marketing, setMarketing] = useState(false)
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
@@ -35,7 +42,7 @@ export const ContactForm: FC = () => {
     e.preventDefault()
     if (sending) return
     // Та же проверка, что и у неактивной кнопки: отправка по Enter без отметки
-    if (!agreed) {
+    if (!agreed || !callbackAgreed) {
       setError(t.consent.required)
       return
     }
@@ -50,6 +57,10 @@ export const ContactForm: FC = () => {
           clientName: name,
           clientPhone: phone,
           message,
+          // Отметки согласий: их видно в заявке в CRM (дату и версию
+          // документов проставляет сервер при сохранении)
+          consent: agreed,
+          consentCallback: callbackAgreed,
           marketingConsent: marketing,
           status: 'unsorted',
           source: 'site',
@@ -107,10 +118,20 @@ export const ContactForm: FC = () => {
         className={`${inputCls} resize-none`}
       />
       <ConsentCheckbox checked={agreed} onChange={setAgreed} />
+      {/* Отдельная отметка на сам звонок: политика и согласие на обработку
+          данных не покрывают согласие на обратный звонок и обработку номера */}
+      <ConsentLine
+        checked={callbackAgreed}
+        onChange={setCallbackAgreed}
+        text={t.consent.callbackText}
+        docs={legalDocLinks('callback-consent')}
+      />
       <MarketingConsent checked={marketing} onChange={setMarketing} />
-      {!agreed && <p className="text-[11px] leading-relaxed text-[var(--n15-muted)]">{t.consent.hint}</p>}
+      {(!agreed || !callbackAgreed) && (
+        <p className="text-[11px] leading-relaxed text-[var(--n15-muted)]">{t.consent.hint}</p>
+      )}
       {error && <p className="text-xs text-[var(--n15-burgundy)]">{error}</p>}
-      <Button variant="primary" size="md" disabled={sending || !agreed}>
+      <Button variant="primary" size="md" disabled={sending || !agreed || !callbackAgreed}>
         {sending ? t.contacts.sending : t.contacts.send}
       </Button>
     </form>

@@ -33,6 +33,14 @@ interface LeadRow extends FunnelApplication {
   propertyType?: string
   budget?: number
   location?: string
+  // Отметки согласий из формы заявки (поля consent, consentCallback,
+  // marketingConsent — см. Applications.ts). Дата и версия документов
+  // проставлены сервером; у заявок, заведённых агентом вручную, их нет
+  consentData?: boolean
+  consentCallback?: boolean
+  marketingConsent?: boolean
+  consentAt?: string
+  legalVersion?: string
 }
 
 export default function LeadsList() {
@@ -95,6 +103,11 @@ export default function LeadsList() {
         propertyType: (a.propertyType as string) || undefined,
         budget: (a.budget as number) || undefined,
         location: (a.location as string) || undefined,
+        consentData: a.consent === true,
+        consentCallback: a.consentCallback === true,
+        marketingConsent: a.marketingConsent === true,
+        consentAt: (a.consentAt as string) || undefined,
+        legalVersion: (a.legalVersion as string) || undefined,
         unread: 0,
       }
     }))
@@ -259,6 +272,18 @@ export default function LeadsList() {
               a.budget ? money(a.budget) : '',
               a.location || '',
             ].filter(Boolean).join(' · ')
+            // Отметки согласий из формы: агент видит, на что клиент согласился.
+            // Подсказка — когда согласие дано и по какой редакции документов
+            const consents = [
+              a.consentData ? `${t.crm.consentsData} ✓` : '',
+              a.consentCallback ? `${t.crm.consentsCallback} ✓` : '',
+              a.marketingConsent ? `${t.crm.consentsMarketing} ✓` : '',
+            ].filter(Boolean).join(' · ')
+            const consentsHint = [
+              t.crm.consentsTitle,
+              a.consentAt ? new Date(a.consentAt).toLocaleString(t.locale) : '',
+              a.legalVersion ? t.documents.version.replace('%s', a.legalVersion) : '',
+            ].filter(Boolean).join(' · ')
             return (
               <div
                 key={a.id}
@@ -289,6 +314,9 @@ export default function LeadsList() {
                     <span className="crm-lead-sub">
                       <a href={`tel:${a.clientPhone.replace(/[^\d+]/g, '')}`} onClick={(e) => e.stopPropagation()}>{a.clientPhone}</a>
                     </span>
+                  )}
+                  {consents && (
+                    <span className="crm-lead-sub" title={consentsHint}>{consents}</span>
                   )}
                 </span>
 

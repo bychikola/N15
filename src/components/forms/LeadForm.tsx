@@ -91,6 +91,9 @@ export const LeadForm: FC<Props> = ({ kind, title, text, className = '' }) => {
           budget: withQuery && budget ? Number(budget) : undefined,
           location: withQuery && location.trim() ? location.trim() : undefined,
           message,
+          // Отметка согласия уходит в заявку и сохраняется в CRM вместе
+          // с датой и версией документов (их проставляет сервер)
+          consent: agreed,
           marketingConsent: marketing,
           status: 'unsorted',
           source: 'site',

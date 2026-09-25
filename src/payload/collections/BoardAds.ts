@@ -115,7 +115,13 @@ export const BoardAds: CollectionConfig = {
 
         // --- Согласия: дата, IP и редакция правил ставятся один раз ------------
         const isPrivate = data.authorKind === 'private' || (operation === 'create' && !data.authorKind)
-        if (isPrivate && (data.consent === true || data.consentRules === true)) {
+        if (
+          isPrivate &&
+          (data.consent === true ||
+            data.consentRules === true ||
+            data.consentOffer === true ||
+            data.consentMedia === true)
+        ) {
           if (!prev.consentAt) data.consentAt = new Date().toISOString()
           if (!prev.rulesVersion) data.rulesVersion = BOARD_RULES_VERSION
           if (!prev.ip && typeof data.ip === 'string') data.ip = data.ip.slice(0, 60)
@@ -450,6 +456,13 @@ export const BoardAds: CollectionConfig = {
               fields: [
                 { name: 'consent', type: 'checkbox', label: 'Согласие на обработку данных' },
                 { name: 'consentRules', type: 'checkbox', label: 'Правила доски приняты' },
+                // Отметки документов доски: договор-оферта (/documents/placement-offer)
+                // и согласие собственника на фото, видео и описание
+                // (/documents/owner-media-consent). Поля и хук ниже готовы,
+                // но форма подачи их пока не присылает — галочки в неё
+                // добавляются отдельной правкой
+                { name: 'consentOffer', type: 'checkbox', label: 'Договор-оферта принят' },
+                { name: 'consentMedia', type: 'checkbox', label: 'Согласие на фото, видео и описание' },
                 { name: 'consentAt', type: 'date', label: 'Когда приняты', admin: { readOnly: true } },
                 { name: 'rulesVersion', type: 'text', label: 'Версия правил', admin: { readOnly: true } },
                 { name: 'ip', type: 'text', label: 'IP при подаче', admin: { readOnly: true } },

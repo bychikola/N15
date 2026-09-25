@@ -1257,3 +1257,87 @@ html[data-theme='dark'] .lp-featured .object-card { border: 0; }
 .ir-region > summary::-webkit-details-marker { display: none; }
 .ir-region-plus { transition: transform .2s; }
 .ir-region[open] > summary .ir-region-plus { transform: rotate(45deg); }
+
+/* ── Печать правовых документов и страниц сайта ──
+   Требование владельца: документы должны печататься с телефона и с компьютера
+   как обычный лист А4. Кнопки «Распечатать», «Скачать PDF» и «Скачать DOCX» на
+   бумаге не нужны (класс .n15-no-print), а тёмное оформление сайта заменяется
+   белым листом: переопределяются токены темы, поэтому цвет заголовков, текста
+   и ссылок меняется сам — разметке страниц об этом знать не нужно. Шапка,
+   подвал и декоративные орнаменты не печатаются: в документе остаётся только
+   его текст. Размер страницы — А4 с полями 16 × 14 мм, как у печатной формы. */
+@media print {
+  @page {
+    size: A4;
+    margin: 16mm 14mm;
+  }
+
+  :root,
+  [data-theme='dark'] {
+    --n15-black: #ffffff;
+    --n15-charcoal: #ffffff;
+    --n15-white: #000000;
+    --n15-silver: #000000;
+    --n15-muted: #333333;
+    --n15-gold: #000000;
+    --n15-gold-light: #000000;
+    --n15-navy: #000000;
+    --n15-green: #ffffff;
+    --n15-green-light: #ffffff;
+    --n15-green-dark: #ffffff;
+    --n15-on-green: #000000;
+    --n15-on-green-muted: #333333;
+    --n15-green-gold: #000000;
+    --border: #cccccc;
+  }
+
+  html,
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  header,
+  footer,
+  nav,
+  .n15-header,
+  .n15-footer,
+  .n15-no-print {
+    display: none !important;
+  }
+
+  main {
+    padding-top: 0 !important;
+  }
+
+  .n15-section {
+    padding: 0 0 6mm !important;
+  }
+
+  .n15-container {
+    max-width: none !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+
+  /* Заголовок не отрывается от своего текста, абзац не оставляет одну строку
+     на новой странице */
+  h1,
+  h2,
+  h3,
+  h4 {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  p,
+  li {
+    orphans: 2;
+    widows: 2;
+  }
+
+  a {
+    color: #000000 !important;
+    text-decoration: underline;
+  }
+}

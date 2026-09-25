@@ -1,4 +1,7 @@
-import type { CollectionConfig } from 'payload'
+import { APIError, type CollectionConfig } from 'payload'
+// Редакция правовых документов, действующая на момент регистрации
+// (см. src/lib/legal-docs.ts): сохраняется в аккаунте
+import { LEGAL_VERSION } from '@/lib/legal-docs'
 
 export const Users: CollectionConfig = {
   slug: 'users',
@@ -32,7 +35,7 @@ export const Users: CollectionConfig = {
       // Первый созданный пользователь автоматически становится администратором,
       // иначе «Create First User» создаёт аккаунт с ролью 'user' и админка
       // отвечает «You are not allowed to perform this action».
-      async ({ data, req }) => {
+      async ({ data, req, operation }) => {
         // Привилегии (роль, доступ к ИИ-агенту) выставляет только администратор.
         // Не-админу роль не удаляем целиком: Payload валидирует данные ещё раз
         // после beforeChange, и отсутствие обязательной роли превратило бы
@@ -53,6 +56,23 @@ export const Users: CollectionConfig = {
           if (totalDocs === 0) {
             data.role = 'admin'
           }
+        }
+        // Согласие при регистрации с сайта. Дата и редакция документов
+        // проставляются сервером — из формы приходит только сама отметка.
+        // Без отметки аккаунт с сайта не заводим: регистрация собирает
+        // персональные данные (имя, телефон, почту). Аккаунты из админки
+        // (первый администратор при запуске, клиенты из CRM) не ограничиваем:
+        // там галочки нет, а доступ и так только у вошедшей команды.
+        if (operation === 'create' && !req.user && data?.consent !== true) {
+          const { totalDocs } = await req.payload.count({ collection: 'users' })
+          if (totalDocs > 0) {
+            // APIError, а не Error: текст причины должен дойти до формы
+            throw new APIError('Отметьте согласие с документами', 400)
+          }
+        }
+        if (operation === 'create' && data?.consent === true) {
+          data.consentAt = new Date().toISOString()
+          data.legalVersion = LEGAL_VERSION
         }
         // username = нормализованный телефон (логин по номеру)
         if (data?.phone) {
@@ -172,6 +192,38 @@ export const Users: CollectionConfig = {
       label: 'Избранное',
       relationTo: 'objects',
       hasMany: true,
+    },
+    // Отметка согласия с формы регистрации (/register): аккаунт заводится на
+    // персональных данных, поэтому без неё пользователя не создаём. Отметку
+    // видно в карточке пользователя, дату и редакцию документов ставит сервер
+    // (см. beforeChange) — из формы они не приходят
+    {
+      name: 'consent',
+      type: 'checkbox',
+      label: 'Согласие на обработку данных (регистрация)',
+      admin: {
+        readOnly: true,
+        description:
+          'Отметка с формы регистрации: пользовательский договор /documents/user-agreement и согласие /documents/personal-data-consent',
+      },
+    },
+    {
+      name: 'consentAt',
+      type: 'date',
+      label: 'Согласие принято (дата)',
+      admin: {
+        readOnly: true,
+        description: 'Проставляет сервер при регистрации',
+      },
+    },
+    {
+      name: 'legalVersion',
+      type: 'text',
+      label: 'Версия документов',
+      admin: {
+        readOnly: true,
+        description: 'Редакция правовых документов, действовавшая при регистрации',
+      },
     },
   ],
 }

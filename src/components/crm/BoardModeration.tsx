@@ -266,6 +266,21 @@ export const BoardModeration: FC<Props> = ({ t, rows, status }) => {
                 {row.expiresAt && <span style={{ color: '#817b70' }}>{t.board.expiresAt}: {dateText(row.expiresAt)}</span>}
               </div>
 
+              {/* Отметки согласий автора с формы подачи: без них объявление
+                  частного лица не публикуется (см. boardPublishIssue).
+                  В подписи — дата и принятая редакция правил доски */}
+              {(row.consent || row.consentRules) && (
+                <p style={{ margin: '0 0 10px', fontSize: 11, color: '#3f6b34' }}>
+                  {t.crm.consentsTitle}:{' '}
+                  {[
+                    row.consent ? `${t.crm.consentsData} ✓` : '',
+                    row.consentRules ? `${t.crm.consentsRules} ✓` : '',
+                    row.consentAt ? dateText(row.consentAt) : '',
+                    row.rulesVersion,
+                  ].filter(Boolean).join(' · ')}
+                </p>
+              )}
+
               {/* Почему нельзя опубликовать — тот же текст, что проверяет сервер */}
               {row.issue && (
                 <p style={{ margin: '0 0 10px', fontSize: 11, color: '#9b4e43' }}>{t.crm.boardIssue}: {row.issue}</p>

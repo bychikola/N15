@@ -1,8 +1,11 @@
 import type { Metadata } from 'next'
+import Link from 'next/link'
 import { Header } from '@/components/layout/Header'
 import { Footer } from '@/components/layout/Footer'
 import { SectionWrapper } from '@/components/ui/SectionWrapper'
+import { DocToolbar } from '@/components/legal/DocToolbar'
 import { getDictionary } from '@/i18n/dictionaries'
+import { LEGAL_DOCS } from '@/lib/legal-docs'
 
 interface PageProps {
   params: Promise<{ lang: string }>
@@ -15,10 +18,14 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 }
 
 /**
- * Политика конфиденциальности (/privacy) — документ, на который ссылается
- * согласие на обработку персональных данных в формах сайта (в том числе
- * «Обсудить размещение рекламы» на странице /advertising).
+ * Политики обработки персональных данных (/privacy) — документ, на который
+ * ссылается согласие на обработку персональных данных в формах сайта (в том
+ * числе «Обсудить размещение рекламы» на странице /advertising).
  * Текст — в словаре (ru/os), контакты оператора совпадают с разделом «Контакты».
+ *
+ * Страница входит в раздел «Документы»: в реестре (src/lib/legal-docs.ts) у неё
+ * своя запись с датой и версией, а здесь — кнопки печатной формы. Текст в PDF и
+ * DOCX приходит из словаря на языке открытой страницы (см. legal-docs-content).
  */
 export default async function PrivacyPage({ params }: PageProps) {
   const { lang } = await params
@@ -35,7 +42,10 @@ export default async function PrivacyPage({ params }: PageProps) {
           <h1 className="text-4xl md:text-5xl font-[family-name:var(--font-display)] text-[var(--n15-white)] mb-4">
             {t.privacy.title}
           </h1>
-          <p className="text-xs tracking-wider uppercase text-[var(--n15-muted)]">{t.privacy.updated}</p>
+          <p className="text-xs tracking-wider uppercase text-[var(--n15-muted)]">
+            {t.privacy.updated} · {t.documents.version.replace('%s', LEGAL_DOCS['privacy-policy'].version)}
+          </p>
+          <DocToolbar docId="privacy-policy" className="mt-6" />
         </SectionWrapper>
 
         <SectionWrapper variant="charcoal">
@@ -59,6 +69,21 @@ export default async function PrivacyPage({ params }: PageProps) {
                 {t.privacy.contactTitle}
               </h2>
               <p className="text-sm leading-relaxed text-[var(--n15-silver)]">{t.privacy.contactText}</p>
+            </div>
+
+            <div className="mt-8 flex flex-wrap gap-x-6 gap-y-3">
+              <Link
+                href={`/${lang}/documents`}
+                className="text-xs tracking-wider uppercase text-[var(--n15-gold)] hover:text-[var(--n15-gold-light)] n15-no-print"
+              >
+                {t.documents.backToDocuments}
+              </Link>
+              <Link
+                href={`/${lang}/documents/personal-data-consent`}
+                className="text-xs tracking-wider uppercase text-[var(--n15-muted)] hover:text-[var(--n15-gold)] n15-no-print"
+              >
+                {LEGAL_DOCS['personal-data-consent'].title}
+              </Link>
             </div>
           </div>
         </SectionWrapper>

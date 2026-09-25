@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { Header } from '@/components/layout/Header'
 import { Footer } from '@/components/layout/Footer'
 import { SectionWrapper } from '@/components/ui/SectionWrapper'
+import { DocToolbar } from '@/components/legal/DocToolbar'
 import { getDictionary } from '@/i18n/dictionaries'
 import { AD_LEGAL_UPDATED, adDocHref, type AdLegalDoc } from '@/lib/advertising-legal'
 
@@ -19,6 +20,17 @@ import { AD_LEGAL_UPDATED, adDocHref, type AdLegalDoc } from '@/lib/advertising-
 interface Props {
   lang: string
   doc: AdLegalDoc
+}
+
+/**
+ * Идентификаторы этих документов в реестре правовых документов: по ним
+ * страница получает кнопки печатной формы (см. src/lib/legal-docs.ts). Адреса
+ * и текст у страниц свои, а запись в реестре одна на документ — иначе у
+ * печатной формы и у страницы разошлись бы редакция и версия.
+ */
+const REGISTRY_ID: Record<AdLegalDoc['id'], string> = {
+  offer: 'advertising-offer',
+  rules: 'advertising-rules',
 }
 
 export const AdvertisingLegalPage: FC<Props> = ({ lang, doc }) => {
@@ -41,6 +53,9 @@ export const AdvertisingLegalPage: FC<Props> = ({ lang, doc }) => {
           <p className="mt-4 text-[11px] leading-relaxed text-[var(--n15-muted)]">
             {t.advertising.legalNote}
           </p>
+          {/* Печатная форма: кнопки «Распечатать», «Скачать PDF» и «Скачать DOCX»
+              — те же, что в разделе «Документы» (см. components/legal/DocToolbar) */}
+          <DocToolbar docId={REGISTRY_ID[doc.id]} className="mt-6" />
         </SectionWrapper>
 
         <SectionWrapper variant="charcoal">
@@ -74,6 +89,12 @@ export const AdvertisingLegalPage: FC<Props> = ({ lang, doc }) => {
               className="text-xs tracking-wider uppercase text-[var(--n15-muted)] hover:text-[var(--n15-gold)]"
             >
               {t.advertising.consentPrivacyDoc}
+            </Link>
+            <Link
+              href={`/${lang}/documents`}
+              className="text-xs tracking-wider uppercase text-[var(--n15-muted)] hover:text-[var(--n15-gold)]"
+            >
+              {t.documents.backToDocuments}
             </Link>
           </div>
         </SectionWrapper>

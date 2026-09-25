@@ -134,16 +134,63 @@ function loadFont(): ParsedFont {
 
 // --- Текст в глифы ----------------------------------------------------------
 
-/** hex-последовательность gid строки (Identity-H: код символа = gid) */
-function textToHex(font: ParsedFont, text: string, used: Set<number>): string {
+/**
+ * hex-последовательность gid строки (Identity-H: код символа = gid).
+ * Заодно копится карта «gid → код символа» (used): по ней в build собирается
+ * таблица ToUnicode, без которой текст в PDF не ищется и не копируется —
+ * читатель видит только номера глифов шрифта.
+ */
+function textToHex(font: ParsedFont, text: string, used: Map<number, number>): string {
   let hex = ''
   for (const ch of text) {
-    const gid = font.gidOf(ch.codePointAt(0)!)
+    const code = ch.codePointAt(0)!
+    const gid = font.gidOf(code)
     if (!gid) continue // нет глифа в шрифте — символ пропускаем
-    used.add(gid)
+    // Первое соответствие важнее: gid у разных кодов один и тот же
+    if (!used.has(gid)) used.set(gid, code)
     hex += gid.toString(16).padStart(4, '0')
   }
   return hex
+}
+
+/** Код символа → UTF-16BE (для bfchar в таблице ToUnicode) */
+function utf16Hex(code: number): string {
+  if (code <= 0xffff) return code.toString(16).padStart(4, '0')
+  const v = code - 0x10000
+  return (0xd800 + (v >> 10)).toString(16).padStart(4, '0') + (0xdc00 + (v & 0x3ff)).toString(16).padStart(4, '0')
+}
+
+/**
+ * Таблица ToUnicode (CMap) для встроенного шрифта: gid → код символа.
+ * В одном блоке beginbfchar по стандарту не больше 100 записей.
+ */
+function toUnicodeCMap(used: Map<number, number>): string {
+  const pairs = [...used.entries()].sort((a, b) => a[0] - b[0])
+  const blocks: string[] = []
+  for (let i = 0; i < pairs.length; i += 100) {
+    const chunk = pairs.slice(i, i + 100)
+    blocks.push(
+      `${chunk.length} beginbfchar`,
+      ...chunk.map(([gid, code]) => `<${gid.toString(16).padStart(4, '0')}> <${utf16Hex(code)}>`),
+      'endbfchar',
+    )
+  }
+  return [
+    '/CIDInit /ProcSet findresource begin',
+    '12 dict begin',
+    'begincmap',
+    '/CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def',
+    '/CMapName /Adobe-Identity-UCS def',
+    '/CMapType 2 def',
+    '1 begincodespacerange',
+    '<0000> <ffff>',
+    'endcodespacerange',
+    ...blocks,
+    'endcmap',
+    'CMapName currentdict /CMap defineresource pop',
+    'end',
+    'end',
+  ].join('\n')
 }
 
 /** Ширина строки в pt при заданном кегле */
@@ -224,8 +271,12 @@ export class PdfBuilder {
   private cur: PageSpec
   private x: number
   private y: number
-  /** gid, реально использованные в документе (для /W в дескрипторе шрифта) */
-  private usedGids = new Set<number>()
+  /**
+   * gid, реально использованные в документе: gid → код символа. Нужны и для
+   * /W в дескрипторе шрифта (ширины), и для таблицы ToUnicode (поиск и
+   * копирование текста в готовом PDF)
+   */
+  private usedGids = new Map<number, number>()
 
   constructor(size = 9.5, margin = 42) {
     this.size = size
@@ -335,33 +386,44 @@ export class PdfBuilder {
   }
 
   /**
-   * Колонтитулы всех страниц: внизу слева обязательная оговорка, справа —
+   * Колонтитулы всех страниц: внизу слева оговорка документа, справа —
    * подпись и номер страницы. Вызывается в build() — тогда известно число
    * страниц. Операции дописываются в конец потока каждой страницы (текст
    * документа никогда не доходит до этой зоны).
+   *
+   * Оговорка слева задаётся вызывающим: у отчёта юридической экспертизы она
+   * одна (см. legal-report-pdf.ts), у договора и правового документа — своя.
+   * Раньше строка была зашита в генератор и попадала в чужие файлы: договор
+   * на размещение рекламы уходил заказчику с оговоркой об экспертизе объекта.
    */
-  private applyFooters(caption: string) {
+  private applyFooters(caption: string, note: string) {
     const total = this.pages.length
     for (let i = 0; i < total; i++) {
       const page = this.pages[i]
       const size = 6.8
       const y = this.margin - 16
-      const left = 'Предварительная проверка. Не заменяет заключение юриста и официальные документы'
       const right = `${caption} · стр. ${i + 1} из ${total}`
       page.stream.push(`q 0.4 w 0.62 0.58 0.5 RG ${this.margin} ${(y + 5.5).toFixed(2)} m ${(PAGE_W - this.margin).toFixed(2)} ${(y + 5.5).toFixed(2)} l S Q`)
-      const leftHex = textToHex(this.font, left, this.usedGids)
-      page.stream.push(`BT /F1 ${size.toFixed(2)} Tf ${this.margin} ${y} Td <${leftHex}> Tj ET`)
+      if (note) {
+        const leftHex = textToHex(this.font, note, this.usedGids)
+        page.stream.push(`BT /F1 ${size.toFixed(2)} Tf ${this.margin} ${y} Td <${leftHex}> Tj ET`)
+      }
       const wR = textWidth(this.font, right, size)
       const rightHex = textToHex(this.font, right, this.usedGids)
       page.stream.push(`BT /F1 ${size.toFixed(2)} Tf ${(PAGE_W - this.margin - wR).toFixed(2)} ${y} Td <${rightHex}> Tj ET`)
     }
   }
 
-  /** Итоговая сборка файла. caption — подпись в правом нижнем углу страниц */
-  build(caption = ''): Buffer {
-    this.applyFooters(caption)
+  /**
+   * Итоговая сборка файла. caption — подпись в правом нижнем углу страниц,
+   * note — оговорка в левом нижнем углу (пустая строка — оговорки нет).
+   * Оговорку задаёт вызывающий: её текст зависит от документа, а не от
+   * генератора.
+   */
+  build(caption = '', note = ''): Buffer {
+    this.applyFooters(caption, note)
     const font = this.font
-    const usedGidsSorted = [...this.usedGids].sort((a, b) => a - b)
+    const usedGidsSorted = [...this.usedGids.keys()].sort((a, b) => a - b)
 
     // /W: сегменты подряд идущих gid с ширинами в 1/1000 em
     const widthSegments: string[] = []
@@ -377,10 +439,10 @@ export class PdfBuilder {
     const scale1000 = (v: number) => Math.round((v / font.upem) * 1000)
 
     // Объекты: 1 Catalog, 2 Pages, 3 Type0, 4 CIDFont, 5 FontDescriptor,
-    // 6 FontFile2, дальше на каждую страницу: N+1 Page, N+2 Contents
-    const objCount = 6 + this.pages.length * 2
-    const pageObjIds = this.pages.map((_, idx) => 7 + idx * 2)
-    const contentObjIds = this.pages.map((_, idx) => 8 + idx * 2)
+    // 6 FontFile2, 7 ToUnicode, дальше на каждую страницу: Page и Contents
+    const objCount = 7 + this.pages.length * 2
+    const pageObjIds = this.pages.map((_, idx) => 8 + idx * 2)
+    const contentObjIds = this.pages.map((_, idx) => 9 + idx * 2)
 
     const parts: Buffer[] = []
     const offsets = new Array<number>(objCount).fill(0)
@@ -401,7 +463,7 @@ export class PdfBuilder {
     const fontName = 'NewStandard'
     pushObj(
       3,
-      `<< /Type /Font /Subtype /Type0 /BaseFont /${fontName} /Encoding /Identity-H /DescendantFonts [4 0 R] >>`,
+      `<< /Type /Font /Subtype /Type0 /BaseFont /${fontName} /Encoding /Identity-H /DescendantFonts [4 0 R] /ToUnicode 7 0 R >>`,
     )
     pushObj(
       4,
@@ -416,6 +478,13 @@ export class PdfBuilder {
     pushRaw(`6 0 obj\n<< /Length1 ${font.data.length} /Length ${font.data.length} >>\nstream\n`)
     pushRaw(font.data)
     pushRaw('\nendstream\nendobj\n')
+
+    // Таблица ToUnicode: по ней читатель понимает, какие символы стоят за
+    // номерами глифов, — иначе текст в PDF не ищется, не копируется и не
+    // читается программами для незрячих
+    offsets[7] = total
+    const cmapStream = toUnicodeCMap(this.usedGids)
+    pushRaw(`7 0 obj\n<< /Length ${Buffer.byteLength(cmapStream, 'latin1')} >>\nstream\n${cmapStream}\nendstream\nendobj\n`)
 
     for (let idx = 0; idx < this.pages.length; idx++) {
       const stream = this.pages[idx].stream.join('')

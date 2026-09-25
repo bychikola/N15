@@ -198,5 +198,10 @@ export function renderLegalReportPdf(report: LegalReportData): Buffer {
     { size: 8.2, gapAfter: 0 },
   )
 
-  return pdf.build(`Юр. экспертиза №${report.objectId}`)
+  // Оговорка в подвале каждой страницы: та же, что в шапке отчёта (в подвале
+  // помещается только первая её часть — полный текст стоит в рамке выше)
+  return pdf.build(
+    `Юр. экспертиза №${report.objectId}`,
+    'Предварительная проверка. Не заменяет заключение юриста и официальные документы',
+  )
 }

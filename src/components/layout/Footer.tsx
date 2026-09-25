@@ -22,6 +22,9 @@ export const Footer: FC = () => {
     { href: `/${lang}/contacts`, label: t.footer.contacts },
     // Страница рекламы: тот же адрес, куда ведёт кнопка «Ваша реклама» в герое
     { href: `/${lang}/advertising`, label: t.footer.advertising },
+    // Раздел «Документы»: согласия, политика, оферта и правила с печатной
+    // формой — на них ссылаются галочки всех форм сайта
+    { href: `/${lang}/documents`, label: t.footer.documents },
   ]
 
   return (

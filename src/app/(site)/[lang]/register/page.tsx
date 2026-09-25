@@ -7,9 +7,21 @@ import { Footer } from '@/components/layout/Footer'
 import { SectionWrapper } from '@/components/ui/SectionWrapper'
 import { Button } from '@/components/ui/Button'
 import { OrnamentBorder } from '@/components/ui/OrnamentBorder'
+import { ConsentLine } from '@/components/ui/ConsentCheckbox'
+import { legalDocLinks } from '@/lib/legal-docs'
 import Link from 'next/link'
 import { useI18n } from '@/i18n/i18n-provider'
 
+/**
+ * Регистрация в личном кабинете. Аккаунт создаётся по номеру телефона
+ * (он же логин), почта необязательна.
+ *
+ * Перед кнопкой — обязательная отметка: аккаунт заводится на персональных
+ * данных, поэтому без согласия с пользовательским соглашением и согласием на
+ * обработку данных регистрация не проходит (та же проверка на сервере —
+ * см. Users.ts). Отметка сохраняется в аккаунте вместе с датой и редакцией
+ * документов.
+ */
 export default function RegisterPage() {
   const router = useRouter()
   const { lang, t } = useI18n()
@@ -17,12 +29,18 @@ export default function RegisterPage() {
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
   const [password, setPassword] = useState('')
+  const [agreed, setAgreed] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     setError('')
+    // Та же проверка, что и у неактивной кнопки: отправка по Enter без отметки
+    if (!agreed) {
+      setError(t.consent.registerHint)
+      return
+    }
     setLoading(true)
 
     try {
@@ -37,7 +55,9 @@ export default function RegisterPage() {
       const res = await fetch('/api/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, phone: normPhone, username: normPhone, password, role: 'user' }),
+        // consent — отметка согласия: дату и версию документов проставляет
+        // сервер при создании аккаунта (см. Users.ts)
+        body: JSON.stringify({ name, email, phone: normPhone, username: normPhone, password, role: 'user', consent: agreed }),
       })
 
       const data = await res.json()
@@ -112,7 +132,15 @@ export default function RegisterPage() {
                     placeholder="••••••••" />
                 </div>
 
-                <Button variant="primary" size="lg" className="w-full" disabled={loading}>
+                <ConsentLine
+                  checked={agreed}
+                  onChange={setAgreed}
+                  text={t.consent.registerText}
+                  docs={legalDocLinks('user-agreement', 'personal-data-consent')}
+                  note={t.consent.registerHint}
+                />
+
+                <Button variant="primary" size="lg" className="w-full" disabled={loading || !agreed}>
                   {loading ? t.auth.registering : t.auth.createAccount}
                 </Button>
 

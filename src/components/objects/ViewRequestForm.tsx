@@ -57,6 +57,9 @@ export const ViewRequestForm: FC<Props> = ({ objectId, lang }) => {
           clientName: name,
           clientPhone: phone,
           message,
+          // Отметка согласия сохраняется в заявке в CRM (дату и версию
+          // документов проставляет сервер при сохранении)
+          consent: agreed,
           marketingConsent: marketing,
           status: 'unsorted',
           source: 'site',

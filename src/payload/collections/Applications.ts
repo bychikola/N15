@@ -1,7 +1,11 @@
-import type { CollectionConfig, Where } from 'payload'
+import { APIError, type CollectionConfig, type Where } from 'payload'
 // Категории объектов — общий справочник: тип недвижимости в заявке на подбор
 // выбирается из тех же значений, что и категория объекта (см. object-categories)
 import { OBJECT_CATEGORIES } from '@/lib/object-categories'
+// Редакция правовых документов, действующая на момент отправки формы
+// (см. src/lib/legal-docs.ts): сохраняется в заявке, чтобы принятые условия
+// не менялись задним числом при обновлении текстов
+import { LEGAL_VERSION } from '@/lib/legal-docs'
 
 export const Applications: CollectionConfig = {
   slug: 'applications',
@@ -48,6 +52,25 @@ export const Applications: CollectionConfig = {
   },
   hooks: {
     beforeChange: [
+      // Отметки согласий с форм сайта: из формы приходит только сама галочка
+      // (consent, consentCallback, marketingConsent), а дату и редакцию
+      // документов ставит сервер — клиент их не присылает и не может
+      // подделать. Заявку без обязательной отметки сайт не принимает: галочка
+      // в форме обязательна, и то же правило проверяется здесь — запрос в обход
+      // формы получает отказ. Заявки, заведённые вручную из CRM (источник не
+      // «site»), не ограничиваем: агенту галочку поставить негде.
+      async ({ data, originalDoc, operation }) => {
+        if (data.consent === true || data.consentCallback === true) {
+          const prev = (originalDoc || {}) as Record<string, unknown>
+          data.legalVersion = LEGAL_VERSION
+          if (!prev.consentAt) data.consentAt = new Date().toISOString()
+        }
+        if (operation === 'create' && data.source === 'site' && data.consent !== true) {
+          // APIError, а не Error: текст причины должен дойти до формы
+          throw new APIError('Отметьте согласие на обработку персональных данных', 400)
+        }
+        return data
+      },
       // Автопривязка заявки к клиенту (customers) и пользователю (users)
       // по нормализованному номеру телефона. Работает для всех создателей
       // (гости не имеют доступа к коллекциям через REST — привязка на сервере).
@@ -176,6 +199,45 @@ export const Applications: CollectionConfig = {
       admin: {
         description:
           'Отдельная необязательная галочка с формы на сайте: согласие на обработку персональных данных её не заменяет и наоборот',
+      },
+    },
+    // Отметки согласий с формы: сохраняются вместе с заявкой, чтобы в CRM было
+    // видно, на что человек согласился. Дата и редакция документов —
+    // серверные (см. beforeChange), в форме их нет
+    {
+      name: 'consent',
+      type: 'checkbox',
+      label: 'Согласие на обработку персональных данных',
+      admin: {
+        description:
+          'Обязательная галочка формы на сайте. Подтверждает согласие на обработку персональных данных на условиях /documents/personal-data-consent и политики /privacy',
+      },
+    },
+    {
+      name: 'consentCallback',
+      type: 'checkbox',
+      label: 'Согласие на обратный звонок',
+      admin: {
+        description:
+          'Форма «Напишите нам» на /contacts: согласие на обратный звонок и обработку номера телефона (/documents/callback-consent)',
+      },
+    },
+    {
+      name: 'consentAt',
+      type: 'date',
+      label: 'Согласия приняты (дата)',
+      admin: {
+        readOnly: true,
+        description: 'Проставляет сервер при сохранении заявки с отметками согласий',
+      },
+    },
+    {
+      name: 'legalVersion',
+      type: 'text',
+      label: 'Версия документов',
+      admin: {
+        readOnly: true,
+        description: 'Редакция правовых документов, действовавшая на момент отправки формы',
       },
     },
     {
