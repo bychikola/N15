@@ -1,3 +1,4 @@
+import type { Metadata } from 'next'
 import { headers } from 'next/headers'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
@@ -8,8 +9,9 @@ import { Footer } from '@/components/layout/Footer'
 import { PhotoGrid } from '@/components/ui/PhotoGrid'
 import { BoardPhoneButton } from '@/components/board/BoardPhoneButton'
 import { BoardMessageForm } from '@/components/board/BoardMessageForm'
+import { BoardAdCard } from '@/components/board/BoardAdCard'
 import { getDictionary } from '@/i18n/dictionaries'
-import { loadBoardAd } from '@/lib/board-service'
+import { countBoardAdView, loadBoardAd, loadSimilarBoardAds } from '@/lib/board-service'
 import { areaHuman, type AreaUnit } from '@/lib/area-format'
 import { floorHuman } from '@/lib/floor-format'
 import { isHouseCategoryCode } from '@/lib/object-categories'
@@ -24,6 +26,23 @@ const dateText = (iso: string | null): string => {
   if (!iso) return ''
   const d = new Date(iso)
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })
+}
+
+/**
+ * Метаданные страницы для поисковиков: цена в заголовке, описание — из первых
+ * строк объявления. Читаем так же, как сама страница, но без смотрящего:
+ * неопубликованное и снятое в поиск не попадает (ему вернётся заглушка).
+ */
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  const { id } = await params
+  const payload = await getPayload({ config })
+  const ad = await loadBoardAd(payload, Number(id), null)
+  if (!ad) return { title: 'Объявление не найдено' }
+  const price = ad.price != null ? `${ad.price.toLocaleString('ru-RU')} ₽` : ''
+  return {
+    title: [ad.title, price].filter(Boolean).join(' — '),
+    description: [ad.address, ad.description.slice(0, 160)].filter(Boolean).join('. '),
+  }
 }
 
 /**
@@ -49,6 +68,14 @@ export default async function BoardAdPage({ params }: PageProps) {
     ? await loadBoardAd(payload, adId, user ? { id: user.id, role: user.role } : null)
     : null
   if (!ad) notFound()
+
+  // Просмотр засчитываем посетителю: автор и сотрудники свои же открытия
+  // не накручивают, в предпросмотре счётчик тоже не растёт
+  if (!ad.preview && !ad.viewerIsAuthor) {
+    await countBoardAdView(payload, ad.id, ad.views)
+  }
+
+  const similar = await loadSimilarBoardAds(payload, ad, 4)
 
   const areaFmt = (n: number) => n.toLocaleString(t.locale, { maximumFractionDigits: 3 })
   const areaWords = { are: t.catalog.areaUnits, ha: t.catalog.hectareUnits }
@@ -191,6 +218,22 @@ export default async function BoardAdPage({ params }: PageProps) {
                 </div>
               </aside>
             </div>
+
+            {/* Похожие объявления: та же категория и тип сделки. Показываем
+                после карточки — покупателю, которому не подошёл этот объект,
+                есть что посмотреть дальше, не возвращаясь в список */}
+            {similar.length > 0 && (
+              <div className="mt-12 pt-8 border-t border-[var(--n15-gold)]/15">
+                <h2 className="text-xl font-[family-name:var(--font-display)] text-[var(--n15-white)] mb-6">
+                  {t.board.similarTitle}
+                </h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-8">
+                  {similar.map((item) => (
+                    <BoardAdCard key={item.id} ad={item} lang={lang} t={t} />
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </section>
       </main>

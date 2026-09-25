@@ -21,7 +21,7 @@ export const LkShell: FC<{ children: ReactNode; active?: string }> = ({ children
   const router = useRouter()
   const pathname = usePathname()
   const [user, setUser] = useState<{ name?: string; email?: string; role?: string } | null>(null)
-  const [counts, setCounts] = useState<{ favorites: number; applications: number; unread: number } | null>(null)
+  const [counts, setCounts] = useState<{ favorites: number; applications: number; unread: number; boardUnread: number } | null>(null)
   // Сотрудникам (агент/администратор) в клиентском кабинете показываем
   // заметную кнопку в рабочий кабинет CRM
   const isStaff = user?.role === 'agent' || user?.role === 'admin'
@@ -55,11 +55,20 @@ export const LkShell: FC<{ children: ReactNode; active?: string }> = ({ children
         ])
         const appsData = await appsRes.json()
         const unreadData = await unreadRes.json()
+        // Непрочитанные по объявлениям доски считаем отдельно: сообщения
+        // доски не привязаны к заявке, в общий where они не попадают
+        const boardUnread = await fetch('/api/board/messages/dialogs', { credentials: 'include' })
+          .then((r) => r.json())
+          .then((d: { dialogs?: { unread?: number }[] }) =>
+            (Array.isArray(d?.dialogs) ? d.dialogs : []).reduce((sum, x) => sum + (x.unread || 0), 0),
+          )
+          .catch(() => 0)
         if (cancelled) return
         setCounts({
           favorites: favCount,
           applications: appsData.totalDocs ?? 0,
           unread: unreadData.totalDocs ?? 0,
+          boardUnread,
         })
       } catch {
         // остаёмся на странице, данные подтянутся при следующем рендере
@@ -81,7 +90,7 @@ export const LkShell: FC<{ children: ReactNode; active?: string }> = ({ children
     { href: `/${lang}/lk/applications`, icon: 'article', label: t.lk.applications, count: counts?.applications },
     { href: `/${lang}/lk/messages`, icon: 'forum', label: t.lk.messages, count: counts?.unread },
     // «Мои объявления»: доска объявлений — свои записи, их статусы и правка
-    { href: `/${lang}/lk/board`, icon: 'sell', label: t.board.myTitle },
+    { href: `/${lang}/lk/board`, icon: 'sell', label: t.board.myTitle, count: counts?.boardUnread },
     { href: `/${lang}/lk/profile`, icon: 'person', label: t.lk.profile },
   ]
 

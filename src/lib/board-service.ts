@@ -198,6 +198,8 @@ export interface BoardAdDetail {
    * себе, а покупателю — форму сообщения (см. BoardMessageForm)
    */
   viewerIsAuthor: boolean
+  /** Сколько раз объявление открывали (автору — ориентир, смотрят ли его) */
+  views: number
 }
 
 const str = (v: unknown): string => (typeof v === 'string' ? v.trim() : '')
@@ -261,6 +263,7 @@ export async function loadBoardAd(
     expiresAt: str(doc.expiresAt) || null,
     preview: !visible,
     viewerIsAuthor: isAuthor,
+    views: num(doc.views) || 0,
   }
 }
 
@@ -905,6 +908,63 @@ export async function runBoardExpirySweep(payload: Payload): Promise<BoardSweepR
   }
 
   return { expired, reminded }
+}
+
+
+/**
+ * Похожие объявления для страницы объявления: та же категория и тот же тип
+ * сделки, свежие сверху. Показываем их под карточкой — покупатель, которому
+ * не подошёл этот объект, тут же видит альтернативы, а не уходит с сайта
+ * (как в каталоге объектов, см. catalog/[slug]/page.tsx).
+ */
+export async function loadSimilarBoardAds(
+  payload: Payload,
+  ad: { id: number; category: string; dealType: string },
+  limit = 4,
+): Promise<BoardListItem[]> {
+  const res = await payload.find({
+    collection: 'board-ads',
+    where: {
+      and: [
+        { status: { equals: 'published' } },
+        {
+          or: [
+            { expiresAt: { greater_than: new Date().toISOString() } },
+            { expiresAt: { exists: false } },
+          ],
+        },
+        { dealType: { equals: ad.dealType } },
+        { category: { equals: ad.category } },
+        { id: { not_equals: ad.id } },
+      ],
+    },
+    sort: '-publishedAt',
+    limit,
+    depth: 1,
+    overrideAccess: true,
+  })
+  return (res.docs as unknown as Record<string, unknown>[]).map(boardToListItem)
+}
+
+/**
+ * Засчитать просмотр объявления. Вызывается со страницы объявления для
+ * посетителя — автор и сотрудники свои же просмотры не накручивают.
+ *
+ * Счётчик приблизительный (обновление страницы считается тоже) — так же
+ * считают и крупные площадки; точный учёт потребовал бы отдельного хранилища
+ * просмотров, а поле нужно автору только как ориентир: смотрят объявление
+ * или нет. Ошибку записи не показываем: счётчик не повод не отдать страницу.
+ */
+export async function countBoardAdView(payload: Payload, id: number, current: number): Promise<void> {
+  await payload
+    .update({
+      collection: 'board-ads',
+      id,
+      data: { views: (Number.isFinite(current) ? current : 0) + 1 },
+      depth: 0,
+      overrideAccess: true,
+    })
+    .catch(() => null)
 }
 
 /** Сколько «живых» объявлений у автора — для квоты подачи (см. POST /api/board/ads) */
