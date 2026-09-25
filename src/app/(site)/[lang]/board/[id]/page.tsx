@@ -166,11 +166,24 @@ export default async function BoardAdPage({ params }: PageProps) {
                 <h2 className="text-xl font-[family-name:var(--font-display)] text-[var(--n15-white)] mb-4">
                   {t.board.paramsTitle}
                 </h2>
+                {/* Характеристики — как в карточке объекта каталога: подпись
+                    мелким прописным с разрядкой, значение — засечным шрифтом
+                    покрупнее. Одинаковый кегль у подписи и значения слипался:
+                    строка читалась как одна фраза, а не «параметр — значение».
+                    По два столбца на широком экране, с разделительной линией
+                    между ними */}
                 <dl className="grid grid-cols-1 md:grid-cols-2 border-t border-[var(--n15-gold)]/15">
-                  {rows.map((p) => (
-                    <div key={p.label} className="flex justify-between gap-4 py-3 border-b border-[var(--n15-gold)]/15">
-                      <dt className="text-sm text-[var(--n15-muted)]">{p.label}</dt>
-                      <dd className="text-sm text-[var(--n15-white)] text-right">{p.value}</dd>
+                  {rows.map((p, i) => (
+                    <div
+                      key={p.label}
+                      className={`flex justify-between items-baseline gap-4 py-4 border-b border-[var(--n15-gold)]/15 ${
+                        i % 2 === 0 ? 'md:pr-5 md:border-r md:border-[var(--n15-gold)]/15' : 'md:pl-5'
+                      }`}
+                    >
+                      <dt className="text-xs uppercase tracking-[0.16em] text-[var(--n15-muted)] font-semibold">{p.label}</dt>
+                      <dd className="font-[family-name:var(--font-display)] font-semibold text-[var(--n15-white)] text-base text-right">
+                        {p.value}
+                      </dd>
                     </div>
                   ))}
                 </dl>
