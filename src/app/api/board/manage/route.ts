@@ -3,6 +3,7 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 import { canAccessCrm, getCrmUser } from '@/app/crm/auth'
 import { publishBoardAd } from '@/lib/board-service'
+import { sendBoardMail } from '@/lib/board-mail'
 import { BOARD_RENEW_DAYS, boardPublishIssue, type BoardAdLike } from '@/lib/board'
 
 /**
@@ -65,6 +66,13 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: result.error || 'Не удалось опубликовать' }, { status: 400 })
       }
       await markModerated(payload, id, by)
+      // Письмо — вспомогательный канал: автор видит то же в кабинете,
+      // поэтому неудачная отправка действие не отменяет
+      await sendBoardMail(payload, String(doc.email || ''), {
+        kind: 'published',
+        adId: id,
+        title: String(doc.title || ''),
+      })
       return NextResponse.json({ ok: true, status: 'published' })
     }
 
@@ -93,6 +101,17 @@ export async function POST(req: NextRequest) {
 
     await payload.update({ collection: 'board-ads', id, data, depth: 0, overrideAccess: true })
     await markModerated(payload, id, by)
+
+    // Автору — письмо о решении (у уточнений и отказа обязателен текст)
+    if (action === 'clarify' || action === 'reject') {
+      await sendBoardMail(payload, String(doc.email || ''), {
+        kind: action === 'clarify' ? 'clarification' : 'rejected',
+        adId: id,
+        title: String(doc.title || ''),
+        note,
+      })
+    }
+
     return NextResponse.json({ ok: true, status: update.status })
   } catch (error) {
     console.error('Board manage error:', error)

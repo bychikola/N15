@@ -87,6 +87,31 @@ export const BoardModeration: FC<Props> = ({ t, rows, status }) => {
   const [notes, setNotes] = useState<Record<number, string>>({})
   const [busy, setBusy] = useState<number | null>(null)
   const [error, setError] = useState('')
+  const [sweeping, setSweeping] = useState(false)
+  const [sweepNote, setSweepNote] = useState('')
+
+  /** Ручной проход по срокам: тот же код, что у таймера (раз в час) */
+  const sweep = async () => {
+    if (sweeping) return
+    setSweeping(true)
+    setError('')
+    try {
+      const res = await fetch('/api/board/expire-sweep', { method: 'POST', credentials: 'include' })
+      const data = (await res.json().catch(() => null)) as { expired?: number; reminded?: number; error?: string } | null
+      if (!res.ok) {
+        setError(data?.error || t.crm.boardActionFailed)
+        return
+      }
+      setSweepNote(
+        t.crm.boardSweepDone.replace('%d', String(data?.expired || 0)).replace('%d', String(data?.reminded || 0)),
+      )
+      router.refresh()
+    } catch {
+      setError(t.crm.boardActionFailed)
+    } finally {
+      setSweeping(false)
+    }
+  }
 
   const act = async (id: number, action: string, note?: string) => {
     if (busy) return
@@ -146,12 +171,24 @@ export const BoardModeration: FC<Props> = ({ t, rows, status }) => {
             </a>
           )
         })}
-        <span style={{ marginLeft: 'auto', fontSize: 10, color: '#817b70', textTransform: 'uppercase', letterSpacing: '.08em', alignSelf: 'center' }}>
+        {/* Проход по срокам запускается сам раз в час (см. src/instrumentation.ts),
+            кнопка нужна, чтобы не ждать: она напоминает авторам о скором конце
+            срока и снимает просроченные объявления */}
+        <button
+          type="button"
+          onClick={() => void sweep()}
+          disabled={sweeping}
+          style={{ ...btnStyle, marginLeft: 'auto' }}
+        >
+          {sweeping ? t.crm.boardSweeping : t.crm.boardSweep}
+        </button>
+        <span style={{ fontSize: 10, color: '#817b70', textTransform: 'uppercase', letterSpacing: '.08em', alignSelf: 'center' }}>
           {t.crm.boardFound.replace('%d', String(rows.length))}
         </span>
       </div>
 
       {error && <p style={{ margin: '0 0 12px', color: '#9b4e43', fontSize: 12 }}>{error}</p>}
+      {sweepNote && <p style={{ margin: '0 0 12px', color: '#4e7a3a', fontSize: 12 }}>{sweepNote}</p>}
 
       {!rows.length ? (
         <div style={{ ...cardStyle, padding: 30, textAlign: 'center' }}>

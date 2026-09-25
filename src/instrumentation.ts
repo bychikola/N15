@@ -60,4 +60,29 @@ export async function register() {
   // Первый проход — через минуту после старта, дальше по расписанию
   setTimeout(() => void newsRun(), 90_000)
   setInterval(() => void newsRun(), NEWS_CHECK_INTERVAL_MINUTES * 60_000)
+
+  // --- «Доска объявлений»: срок размещения (см. src/lib/board.ts) -------------
+  // Напоминаем автору, что объявление скоро снимется (за три дня), и снимаем
+  // просроченные: статус «Срок истёк» и письмо. Проход идемпотентен — отметка
+  // о напоминании лежит в журнале объявления, поэтому повторный запуск
+  // (в том числе вручную кнопкой в CRM) лишних писем не отправит.
+  // В разработке таймер не работает — там проход запускают маршрутом
+  // /api/board/expire-sweep из раздела CRM «Доска».
+  const boardRun = async () => {
+    try {
+      const { getPayload } = await import('payload')
+      const config = (await import('@payload-config')).default
+      const { runBoardExpirySweep } = await import('@/lib/board-service')
+      const payload = await getPayload({ config })
+      const result = await runBoardExpirySweep(payload)
+      if (result.expired > 0 || result.reminded > 0) {
+        console.log(`[board] сроки: снято — ${result.expired}, напоминаний — ${result.reminded}`)
+      }
+    } catch (e) {
+      console.error('[board] проверка сроков не удалась:', e)
+    }
+  }
+
+  setTimeout(() => void boardRun(), 120_000)
+  setInterval(() => void boardRun(), 60 * 60_000)
 }

@@ -25,6 +25,7 @@ import {
   type BoardAddressLike,
 } from './board'
 import { parseBoardAdForm } from './board-form'
+import { sendBoardMail } from './board-mail'
 import { storedFilePath } from './upload-paths'
 
 /** Размер страницы выдачи — как в каталоге объектов */
@@ -807,6 +808,103 @@ export async function resubmitBoardAdByAuthor(
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) }
   }
+}
+
+
+// ── Срок размещения ───────────────────────────────────────────────────────────
+
+/** За сколько дней до конца срока напоминаем автору */
+const BOARD_REMIND_DAYS = 3
+
+export interface BoardSweepResult {
+  /** Сколько объявлений снято по сроку */
+  expired: number
+  /** Сколько писем-напоминаний отправлено */
+  reminded: number
+}
+
+/** Было ли уже такое событие в журнале — по нему понимаем, писали ли автору */
+const hasLogEvent = (doc: Record<string, unknown>, event: string): boolean =>
+  Array.isArray(doc.log) && (doc.log as { event?: string }[]).some((e) => str(e.event) === event)
+
+/**
+ * Проход по срокам размещения. Делает две вещи:
+ *
+ * 1. Напоминает автору, что объявление скоро снимется (за три дня), — один раз
+ *    на объявление: отметка о письме лежит в журнале, поэтому лишних писем
+ *    не будет, даже если проход запускается каждый час.
+ * 2. Снимает объявления с вышедшим сроком: статус «Срок истёк», письмо автору.
+ *
+ * Объявление при этом остаётся в кабинете автора — его можно продлить или
+ * подать заново (см. /lk/board), и в выдаче сайта просроченное не показывается
+ * сразу, не дожидаясь прохода: условие по сроку стоит в loadBoardList.
+ */
+export async function runBoardExpirySweep(payload: Payload): Promise<BoardSweepResult> {
+  const now = Date.now()
+  const remindBefore = new Date(now + BOARD_REMIND_DAYS * 86_400_000).toISOString()
+
+  // Берём опубликованные с заполненным сроком — остальные не могут истечь
+  const res = await payload.find({
+    collection: 'board-ads',
+    where: {
+      and: [{ status: { equals: 'published' } }, { expiresAt: { exists: true } }],
+    },
+    sort: 'expiresAt',
+    limit: 200,
+    depth: 0,
+    overrideAccess: true,
+  })
+
+  let expired = 0
+  let reminded = 0
+
+  for (const raw of res.docs as unknown as Record<string, unknown>[]) {
+    const end = str(raw.expiresAt)
+    if (!end) continue
+    const endMs = new Date(end).getTime()
+    if (!Number.isFinite(endMs)) continue
+
+    const email = str(raw.email)
+    const title = str(raw.title)
+    const id = Number(raw.id)
+
+    if (endMs <= now) {
+      // Срок вышел: снимаем и пишем автору
+      try {
+        await payload.update({
+          collection: 'board-ads',
+          id,
+          data: { status: 'expired' },
+          depth: 0,
+          overrideAccess: true,
+        })
+        expired++
+        if (email) await sendBoardMail(payload, email, { kind: 'expired', adId: id, title })
+      } catch (error) {
+        console.error('Board: не удалось снять объявление по сроку', id, error)
+      }
+      continue
+    }
+
+    // Срок ещё идёт, но близко: напоминаем один раз
+    if (endMs <= new Date(remindBefore).getTime() && !hasLogEvent(raw, 'reminder')) {
+      const daysLeft = Math.max(1, Math.ceil((endMs - now) / 86_400_000))
+      if (email) await sendBoardMail(payload, email, { kind: 'expiring', adId: id, title, daysLeft })
+      // Отметка в журнале: даже если почты нет, второй раз не проверяем
+      await payload
+        .update({
+          collection: 'board-ads',
+          id,
+          data: { log: [...(Array.isArray(raw.log) ? (raw.log as unknown[]) : []), { event: 'reminder', at: new Date().toISOString(), by: 'система' }] },
+          depth: 0,
+          overrideAccess: true,
+        })
+        .catch(() => null)
+      reminded++
+    }
+  }
+
+  return { expired, reminded }
 }
 
 /** Сколько «живых» объявлений у автора — для квоты подачи (см. POST /api/board/ads) */
