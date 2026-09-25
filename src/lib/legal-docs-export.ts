@@ -29,7 +29,11 @@ export interface LegalDocFile {
 
 /** Дата выгрузки словами: «26 сентября 2026 года» — как на страницах сайта */
 const todayText = (): string =>
-  new Date().toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })
+  new Date()
+    .toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })
+    // toLocaleDateString обрывает дату на «г.»: в предложении это давало
+    // двойную точку («выгружен 26 сентября 2026 г..»), поэтому год пишем словом
+    .replace(/\s*г\.$/, ' года')
 
 /** Строка «Редакция … версия …» — одинаковая на странице, в PDF и в DOCX */
 export const legalDocRevisionText = (doc: LegalDoc): string =>
