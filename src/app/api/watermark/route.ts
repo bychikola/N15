@@ -4,7 +4,7 @@ import config from '@payload-config'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { canAccessCrm, getCrmUser } from '@/app/crm/auth'
-import { WATERMARK_AVATAR, WATERMARK_VERSION, applyWatermark } from '@/lib/watermark'
+import { WATERMARK_AVATAR, WATERMARK_PREVIOUS, WATERMARK_VERSION, applyWatermark } from '@/lib/watermark'
 import {
   BACKUP_DIR,
   MASTER_DIR,
@@ -30,7 +30,8 @@ import {
  * знак на конкретном фото и повторять разметку вручную:
  *
  *   GET  /api/watermark                   — отчёт: сколько фото со знаком,
- *                                           сколько ждёт разметки, сколько
+ *                                           сколько ждёт разметки, сколько ещё
+ *                                           со знаком прошлой версии, сколько
  *                                           занимают чистые кадры, сколько
  *                                           места на диске;
  *   GET  /api/watermark?preview=<id|файл> — как знак ляжет на это фото
@@ -38,10 +39,13 @@ import {
  *   POST /api/watermark { mode, limit }   — разметка порцией:
  *     mode: 'apply'   — разметить limit фото, ждущих знака (со снятием
  *                       прежних знаков — см. src/lib/watermark-legacy.ts);
+ *                       сюда же попадают фото со знаком прошлой версии: знак
+ *                       ложится заново из чистого кадра, поэтому подпись под
+ *                       монограммой меняется без следа прежней;
  *     mode: 'repair'  — пересобрать размеры (thumbnail/card/hero) из чистых
- *                       кадров у фото, размеченных прошлой версией знака:
- *                       знак в углу оригинала в кроп размера не попадал, и
- *                       на сайте такие размеры выходили без знака;
+ *                       кадров у фото, чьи размеры остались без знака (знак
+ *                       ложился только в оригинал, а размеры Payload собирает
+ *                       из оригинала кадрированием);
  *     mode: 'restore' — вернуть limit фото к прежнему виду (чистый кадр из
  *                       закрытой папки, размеры заново, wm=0).
  *
@@ -105,10 +109,11 @@ export async function GET(req: NextRequest) {
     })
   }
 
-  const [total, marked, waiting, avatars, masters, backup, disk] = await Promise.all([
+  const [total, marked, waiting, previous, avatars, masters, backup, disk] = await Promise.all([
     payload.count({ collection: 'media', overrideAccess: true }),
     payload.count({ collection: 'media', where: markedWhere(), overrideAccess: true }),
     payload.find({ collection: 'media', where: pendingWhere(), limit: 0, overrideAccess: true }),
+    payload.count({ collection: 'media', where: { wm: { equals: WATERMARK_PREVIOUS } }, overrideAccess: true }),
     payload.count({ collection: 'media', where: { wm: { equals: WATERMARK_AVATAR } }, overrideAccess: true }),
     dirStats(path.join(dir, MASTER_DIR)),
     dirStats(path.join(dir, BACKUP_DIR)),
@@ -120,6 +125,9 @@ export async function GET(req: NextRequest) {
     total: total.totalDocs,
     marked: marked.totalDocs,
     waiting: waiting.totalDocs,
+    // Сколько фото ещё со знаком прошлой версии: по этому числу видно, дошли
+    // ли руки фоновой разметки до всех (у остальных знак нынешний)
+    previous: previous.totalDocs,
     avatars: avatars.totalDocs,
     masters,
     backup,

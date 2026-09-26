@@ -7,9 +7,16 @@ import { PHOTO_MIME_TYPES } from './photo-rules'
 
 /**
  * Водяной знак на фотографиях объектов — фирменный знак «Н15» по центру кадра:
- * ключик сверху, кириллические литеры «Н15», подпись «НЕДВИЖИМОСТЬ» снизу и
- * тонкая рамка (файл знака — public/img/watermark.png, как он собран — см.
- * комментарий к знаку ниже).
+ * ключик сверху, кириллические литеры «Н15», подпись адресом сайта снизу и
+ * тонкая рамка. Файл знака — public/img/watermark.png, собирается скриптом
+ * scripts/build-watermark.mjs: ключик, монограмма и рамка берутся из прошлого
+ * знака (public/img/watermark-v2.png), меняется только подпись под монограммой.
+ *
+ * Подпись — адрес сайта, а не прежнее слово «НЕДВИЖИМОСТЬ»: адрес на фото и
+ * объясняет, чей это кадр, и куда идти за остальными. Набрана тем же шрифтом,
+ * что и монограмма, и заметно крупнее прежней подписи (170 px против 87 px на
+ * той же ширине знака) — на плитке каталога прежняя подпись читалась как
+ * серая полоса.
  *
  * Знак накладывает сервер, а не браузер: sharp уже есть в образе (им Payload
  * готовит размеры фото), поэтому один и тот же знак получают все снимки
@@ -59,18 +66,31 @@ const OUTLINE_WIDTH_RATIO = 0.006
  *       или на файле прежний знак «Н15» без ключа и подписи — фото, загруженные
  *       21.09.2026, когда работала первая версия знака: второй знак поверх
  *       первого печатать нельзя;
- *   2 — фирменный знак с ключиком, подписью и рамкой — текущий;
+ *   2 — фирменный знак с ключиком и рамкой, подпись «НЕДВИЖИМОСТЬ»;
+ *   3 — тот же знак, но с адресом сайта вместо слова — текущий;
  *  -1 — знак нужно переложить заново, см. WATERMARK_REDO.
  * По этому полю массовое обновление знака (см. src/app/api/watermark/route.ts)
  * понимает, какие фото ещё не размечены, и не накладывает знак дважды.
  */
-export const WATERMARK_VERSION = 2
+export const WATERMARK_VERSION = 3
+/**
+ * Прежняя версия знака — та, с которой фото ждут переразметки: файлы размечены
+ * знаком с подписью «НЕДВИЖИМОСТЬ», и его нужно заменить на нынешний с адресом
+ * сайта (см. WATERMARK_VERSION). Разметка берёт такие фото в очередь наравне с
+ * неразмеченными (см. pendingWhere в src/lib/media-marking.ts) и собирает файлы
+ * заново из чистого кадра — снятия знака при этом не требуется.
+ *
+ * Версия растёт вместе со знаком: сменили подпись — подняли WATERMARK_VERSION,
+ * и прежняя версия сама попала сюда. Отдельного поля «что переразметить» не
+ * нужно: файл с прежним знаком уже не считается размеченным.
+ */
+export const WATERMARK_PREVIOUS = 2
 /**
  * «Переложить знак заново»: на фото наш знак уже есть, но в прежнем месте —
  * до 24.09.2026 он ложился в правый нижний угол, а плитки каталога обрезают
  * кадр по краям (object-cover), и на сайте такие фото выходили без знака.
  * Разметка берёт такие фото в очередь наравне с теми, где знака ещё нет,
- * снимает с текущего файла прежний угловой знак (см. stripOldCornerMark) и
+ * снимает с текущего файла прежний знак (см. stripPreviousMark) и
  * кладёт нынешний по центру кадра; чистый кадр при этом не трогается — в нём
  * остался след прежней разметки (см. media-marking.ts). После разметки поле
  * становится обычным WATERMARK_VERSION.
@@ -112,21 +132,36 @@ const MIME_BY_FORMAT: Record<PhotoFormat, string> = {
 
 /** Путь к знаку: public/ лежит рядом с приложением и в образе, и на сервере */
 const MARK_PATH = path.join(process.cwd(), 'public', 'img', 'watermark.png')
+/**
+ * Прежний знак — тот же рисунок с подписью «НЕДВИЖИМОСТЬ» (на фотографиях до
+ * 26.09.2026). Нужен, чтобы опознать и снять его с кадров, размеченных прошлой
+ * версией: снимать знак можно только тем же слоем, каким он положен.
+ */
+const PREV_MARK_PATH = path.join(process.cwd(), 'public', 'img', 'watermark-v2.png')
 
-// Файл знака читаем один раз на процесс: он нужен каждой загрузке, а меняется
+// Файлы знака читаем один раз на процесс: они нужны каждой загрузке, а меняются
 // только вместе с деплоем. null — файла нет (знак не накладываем, фото важнее).
 let markSource: Buffer | null | undefined
+let prevMarkSource: Buffer | null | undefined
 
 function readMark(): Buffer | null {
-  if (markSource === undefined) {
-    try {
-      markSource = readFileSync(MARK_PATH)
-    } catch (e) {
-      console.error('watermark: не читается файл знака', MARK_PATH, e)
-      markSource = null
-    }
-  }
+  if (markSource === undefined) markSource = readMarkFile(MARK_PATH)
   return markSource
+}
+
+/** Прежний знак: им опознаётся и снимается разметка прошлой версии */
+function readPrevMark(): Buffer | null {
+  if (prevMarkSource === undefined) prevMarkSource = readMarkFile(PREV_MARK_PATH)
+  return prevMarkSource
+}
+
+function readMarkFile(file: string): Buffer | null {
+  try {
+    return readFileSync(file)
+  } catch (e) {
+    console.error('watermark: не читается файл знака', file, e)
+    return null
+  }
 }
 
 /**
@@ -232,32 +267,41 @@ export async function outlineLayer(
 }
 
 /**
- * Прежний знак — тот же «Н15», но наложенный угловой версией кода: до 24.09.2026
- * он ложился в правый нижний угол кадра, и плитки каталога (object-cover) его
- * срезали. Числа ниже — паспорт той версии: ширина 24% короткой стороны, отступ
- * 4% от правого и нижнего края, знак 0.72, тень 0.26, канта ещё не было. Снять
- * знак можно только тем же слоем, каким он положен, поэтому паспорт берётся из
- * того кода, а не из нынешнего.
+ * Прежний знак — тот же «Н15», но с подписью «НЕДВИЖИМОСТЬ» (его рисунок лежит
+ * в public/img/watermark-v2.png): им размечены фотографии до 26.09.2026. Ложился
+ * он двумя версиями кода, и у каждой свой паспорт:
+ *   • по центру кадра — тем же кодом, что и нынешний знак, поэтому паспорт у
+ *     него нынешний (MARK_* выше): ширина 24% короткой стороны, знак 0.78,
+ *     тень 0.26, кант 0.55 — так его кладут с 24.09.2026;
+ *   • в правый нижний угол — до 24.09.2026: ширина та же, но знак 0.72 и без
+ *     канта, отступ 4% от правого и нижнего края.
+ * Снять знак можно только тем же слоем, каким он положен, поэтому угловой
+ * паспорт берётся из того кода, а не из нынешнего.
  */
-const OLD_MARK_WIDTH_RATIO = 0.24
-/** Отступ прежнего знака от правого и нижнего края — доля короткой стороны */
-const OLD_MARK_MARGIN_RATIO = 0.04
-/** Непрозрачность прежнего знака */
-const OLD_MARK_OPACITY = 0.72
-/** Тень прежнего знака */
-const OLD_MARK_SHADOW_OPACITY = 0.26
+/** Отступ прежнего углового знака от правого и нижнего края — доля короткой стороны */
+const OLD_CORNER_MARGIN_RATIO = 0.04
+/** Непрозрачность прежнего углового знака */
+const OLD_CORNER_OPACITY = 0.72
+/** Тень прежнего углового знака */
+const OLD_CORNER_SHADOW_OPACITY = 0.26
 /** Радиус размытия тени прежнего знака — доля ширины знака */
-const OLD_MARK_SHADOW_BLUR_RATIO = 0.035
+const OLD_CORNER_SHADOW_BLUR_RATIO = 0.035
 /**
  * Порог опознания прежнего знака: совпадение узора с моделью (fit) и сила слоя
  * (scale, 1 — ровно как в паспорте). Измерено на живых фото: у размеченных
  * кадров совпадение 0.62–1.0 и сила 0.83–1.27, у чистых — до 0.2 и 0.3.
  * Порог стоит между ними, и это главная защита: вычесть золото из чистого
  * кадра значит поделить его на 0.2 и оставить на фото тёмный отпечаток знака.
+ *
+ * Одного порога мало: у прежнего и нынешнего знаков общая монограмма и ключик,
+ * различает их только подпись. По замеру на живых фото кадр с нынешним знаком
+ * даёт по прежнему шаблону 0.55–0.72 — выше порога, то есть порог принял бы
+ * нынешний знак за прежний. Поэтому рядом с порогом стоит сравнение с нынешним
+ * узором (см. markRecognized).
  */
-const OLD_MARK_MIN_FIT = 0.5
+const MARK_MIN_FIT = 0.5
 /** Ниже этой силы слоя узор считаем чужим (снятый знак, фактура кадра) */
-const OLD_MARK_MIN_SCALE = 0.5
+const MARK_MIN_SCALE = 0.5
 
 /** Кадр, разобранный в пиксели: с ним работает снятие прежнего знака */
 export type RawPhoto = {
@@ -267,32 +311,82 @@ export type RawPhoto = {
   channels: number
 }
 
-/** Слои прежнего знака, наложенные на кадр таких размеров, и их место в кадре */
-type OldMarkModel = {
-  layer: { data: Buffer; width: number; height: number }
-  shadow: { data: Buffer; width: number; height: number }
+/** Слой знака: цвет с альфой. Все слои одной модели — одного размера */
+type MarkLayer = { data: Buffer; width: number; height: number }
+
+/** Слои знака на кадре таких размеров и место этих слоёв в кадре */
+type MarkModel = {
+  layer: MarkLayer
+  shadow: MarkLayer
+  /** Кант по контуру; у прежнего углового знака канта не было — слой пустой */
+  outline: MarkLayer
   left: number
   top: number
 }
 
-/** Слой прежнего знака для кадра таких размеров — геометрия угловой версии */
-async function oldCornerModel(mark: Buffer, width: number, height: number): Promise<OldMarkModel> {
+/** Пустой слой: у знака без канта он не меняет ни кадр, ни опознание */
+function emptyLayer(width: number, height: number): MarkLayer {
+  return { data: Buffer.alloc(width * height * 4), width, height }
+}
+
+/**
+ * Слой знака по центру кадра. Паспорт тот же, что у нынешнего знака (MARK_*):
+ * прежний знак по центру рисовался этими же числами, отличается только рисунок
+ * подписи. Поэтому им описывают и прежний знак (рисунок watermark-v2.png), и
+ * нынешний — чтобы понять, который из двух лежит на кадре (см. markRecognized).
+ */
+async function centerModel(mark: Buffer, width: number, height: number): Promise<MarkModel> {
   const short = Math.min(width, height)
-  const markWidth = Math.max(MARK_MIN_WIDTH, Math.round(short * OLD_MARK_WIDTH_RATIO))
-  const margin = Math.round(short * OLD_MARK_MARGIN_RATIO)
-  const [layer, shadow] = await Promise.all([
-    markLayer(mark, markWidth, OLD_MARK_OPACITY),
-    markLayer(mark, markWidth, OLD_MARK_SHADOW_OPACITY, {
+  const markWidth = Math.max(MARK_MIN_WIDTH, Math.round(short * MARK_WIDTH_RATIO))
+  const [layer, shadow, outline] = await Promise.all([
+    markLayer(mark, markWidth, MARK_OPACITY),
+    markLayer(mark, markWidth, SHADOW_OPACITY, {
       color: [0, 0, 0],
-      blur: Math.max(4, Math.round(markWidth * OLD_MARK_SHADOW_BLUR_RATIO)),
+      blur: Math.max(4, Math.round(markWidth * SHADOW_BLUR_RATIO)),
+    }),
+    outlineLayer(mark, markWidth, OUTLINE_OPACITY, Math.max(1, Math.round(markWidth * OUTLINE_WIDTH_RATIO))),
+  ])
+  return {
+    layer,
+    shadow,
+    outline,
+    left: Math.max(0, Math.round((width - layer.width) / 2)),
+    top: Math.max(0, Math.round((height - layer.height) / 2)),
+  }
+}
+
+/** Слой прежнего углового знака — паспорт версии до 24.09.2026 (OLD_CORNER_*) */
+async function previousCornerModel(mark: Buffer, width: number, height: number): Promise<MarkModel> {
+  const short = Math.min(width, height)
+  const markWidth = Math.max(MARK_MIN_WIDTH, Math.round(short * MARK_WIDTH_RATIO))
+  const margin = Math.round(short * OLD_CORNER_MARGIN_RATIO)
+  const [layer, shadow] = await Promise.all([
+    markLayer(mark, markWidth, OLD_CORNER_OPACITY),
+    markLayer(mark, markWidth, OLD_CORNER_SHADOW_OPACITY, {
+      color: [0, 0, 0],
+      blur: Math.max(4, Math.round(markWidth * OLD_CORNER_SHADOW_BLUR_RATIO)),
     }),
   ])
   return {
     layer,
     shadow,
+    outline: emptyLayer(layer.width, layer.height),
     left: Math.max(0, width - layer.width - margin),
     top: Math.max(0, height - layer.height - margin),
   }
+}
+
+/**
+ * Общая непрозрачность слоёв знака в пикселе: sharp кладёт кант, тень и золото
+ * друг под друга, поэтому непрозрачности перемножаются, а не складываются.
+ * Снятие знака считает по этой же величине — иначе обратный ход не сойдётся с
+ * тем, что лежит в файле.
+ */
+function markAlpha(model: MarkModel, index: number): number {
+  const shade = model.shadow.data[index * 4 + 3] / 255
+  const outline = model.outline.data[index * 4 + 3] / 255
+  const mark = model.layer.data[index * 4 + 3] / 255
+  return 1 - (1 - shade) * (1 - outline) * (1 - mark)
 }
 
 /**
@@ -303,11 +397,8 @@ async function oldCornerModel(mark: Buffer, width: number, height: number): Prom
  * фактура кадра даёт разброс, — поэтому у размеченных кадров совпадение и не
  * доходит до единицы (0.62–1.0 на живых фото).
  */
-async function fitOldCornerMark(
-  photo: RawPhoto,
-  model: OldMarkModel,
-): Promise<{ fit: number; scale: number } | null> {
-  const { layer, shadow, left, top } = model
+async function fitMark(photo: RawPhoto, model: MarkModel): Promise<{ fit: number; scale: number } | null> {
+  const { layer, left, top } = model
   const background = [0, 0, 0]
   let backgroundN = 0
   const inside = (x: number, y: number): boolean =>
@@ -332,13 +423,12 @@ async function fitOldCornerMark(
     for (let x = 0; x < layer.width; x++) {
       const li = (y * layer.width + x) * 4
       const mark = layer.data[li + 3] / 255
-      const shade = shadow.data[li + 3] / 255
       // Слабые пиксели (край тени) дают больше шума, чем сигнала: узор знака —
       // это штрихи, по ним и опознаём
       if (mark <= 0.3) continue
       if (!inside(left + x, top + y)) continue
       const at = ((top + y) * photo.width + left + x) * photo.channels
-      const a = 1 - (1 - shade) * (1 - mark)
+      const a = markAlpha(model, y * layer.width + x)
       for (let c = 0; c < 3; c++) {
         const observed = photo.data[at + c] - background[c]
         const expected = layer.data[li + c] * mark - a * background[c]
@@ -356,12 +446,12 @@ async function fitOldCornerMark(
 }
 
 /**
- * Снять один слой прежнего знака: sharp рисует его как base*(1-a) + цвет*a,
- * поэтому обратный ход возвращает кадр под знаком. Тень в кадр ничего не
- * добавляет (она чёрная), знак добавляет свой цвет, умноженный на альфу.
+ * Снять один слой прежнего знака: sharp рисует слои как base*(1-a) + цвет*a,
+ * поэтому обратный ход возвращает кадр под знаком. Тень и кант в кадр цвета не
+ * добавляют (они чёрные), знак добавляет своё золото, умноженное на альфу.
  */
-function removeOldCornerLayer(photo: RawPhoto, model: OldMarkModel): Buffer {
-  const { layer, shadow, left, top } = model
+function removeMarkLayer(photo: RawPhoto, model: MarkModel): Buffer {
+  const { layer, left, top } = model
   const out = Buffer.from(photo.data)
   for (let y = 0; y < layer.height; y++) {
     const gy = top + y
@@ -371,8 +461,7 @@ function removeOldCornerLayer(photo: RawPhoto, model: OldMarkModel): Buffer {
       if (gx < 0 || gx >= photo.width) continue
       const li = (y * layer.width + x) * 4
       const mark = layer.data[li + 3] / 255
-      const shade = shadow.data[li + 3] / 255
-      const a = 1 - (1 - shade) * (1 - mark)
+      const a = markAlpha(model, y * layer.width + x)
       if (a < 0.002 || mark <= 0) continue
       const at = (gy * photo.width + gx) * photo.channels
       for (let c = 0; c < 3; c++) {
@@ -385,30 +474,87 @@ function removeOldCornerLayer(photo: RawPhoto, model: OldMarkModel): Buffer {
 }
 
 /**
- * Снять с кадра прежний угловой знак «Н15» (см. OLD_MARK_* выше) — один слой,
- * тот, которым знак и положен. Работает только там, где знак опознан: кадр, на
- * котором модели нет, возвращается нетронутым.
+ * Место прежнего знака на кадре и — если место спорное — нынешний знак на том
+ * же месте для сравнения. Спорно только центральное место: нынешний знак лежит
+ * там же и нарисован почти так же. В правом нижнем углу нынешнего знака не
+ * бывает (он там был у знака до 24.09.2026), сравнивать не с чем.
+ */
+type MarkPlacement = { model: MarkModel; rival?: MarkModel }
+
+async function previousModels(mark: Buffer, width: number, height: number): Promise<MarkPlacement[]> {
+  const now = readMark()
+  return [
+    {
+      model: await centerModel(mark, width, height),
+      rival: now ? await centerModel(now, width, height) : undefined,
+    },
+    { model: await previousCornerModel(mark, width, height) },
+  ]
+}
+
+/**
+ * Опознан ли знак на этом месте: совпадение узора и сила слоя — не ниже порогов,
+ * а если рядом есть нынешний знак (rival), то прежний должен объяснять кадр
+ * строго лучше него. Иначе на кадре нынешний знак: он совпадает с прежним
+ * шаблоном по монограмме и ключику, а снимать его прежним шаблоном нельзя —
+ * подпись прежнего шире и ниже, и по ней вышло бы размазанное пятно.
+ */
+async function markRecognized(photo: RawPhoto, model: MarkModel, rival?: MarkModel): Promise<boolean> {
+  const fit = await fitMark(photo, model)
+  if (!fit || fit.fit < MARK_MIN_FIT || fit.scale < MARK_MIN_SCALE) return false
+  if (!rival) return true
+  const other = await fitMark(photo, rival)
+  return !other || other.fit < fit.fit
+}
+
+/**
+ * Сколько мест кадра занято прежним знаком «Н15» (0 — знака нет). Опознание без
+ * снятия: по нему вызывающий решает, снимать ли знак вовсе (см.
+ * src/lib/media-marking.ts), и только потом зовёт applyWatermark со снятием —
+ * снять знак дважды значит испортить кадр.
+ */
+export async function previousMarkLayers(photo: RawPhoto): Promise<number> {
+  const mark = readPrevMark()
+  // Чёрно-белый кадр разбирать нечем: модель цветная, а один канал не даёт
+  // понять, золото под штрихами или нет
+  if (!mark || photo.channels < 3) return 0
+  let layers = 0
+  for (const { model, rival } of await previousModels(mark, photo.width, photo.height)) {
+    if (await markRecognized(photo, model, rival)) layers++
+  }
+  return layers
+}
+
+/**
+ * Снять с кадра прежний знак «Н15» (рисунок public/img/watermark-v2.png) — по
+ * одному слою на каждом из двух мест, где знак лежал: по центру кадра и в
+ * правом нижнем углу. Работает только там, где знак опознан: кадр, на котором
+ * модели нет, возвращается нетронутым.
  *
  * Слой снимается ровно один, даже если знак в кадре опознаётся и после снятия:
  * у четырёх фото (media 936–939) он лёг дважды, но под вторым слоем от кадра
  * остаётся меньше пятой части, и обратный ход вытаскивает вместо кадра шум
  * пережима (проверено — на месте штрихов цветные пятна). Один снятый слой
- * оставляет такие фото с прежним знаком в углу: это лучше, чем испорченный кадр.
+ * оставляет такие фото с прежним знаком: это лучше, чем испорченный кадр.
  *
  * Кадр возвращается в пикселях: вызывающий накладывает поверх новый знак и
  * пережимает файл один раз, а не дважды.
  */
-export async function stripOldCornerMark(photo: RawPhoto): Promise<{ data: Buffer; layers: number }> {
-  const mark = readMark()
-  // Чёрно-белый кадр разбирать нечем: модель цветная, а один канал не даёт
-  // понять, золото под штрихами или нет
+export async function stripPreviousMark(photo: RawPhoto): Promise<{ data: Buffer; layers: number }> {
+  const mark = readPrevMark()
   if (!mark || photo.channels < 3) return { data: photo.data, layers: 0 }
-  const model = await oldCornerModel(mark, photo.width, photo.height)
-  const fit = await fitOldCornerMark(photo, model)
-  if (!fit || fit.fit < OLD_MARK_MIN_FIT || fit.scale < OLD_MARK_MIN_SCALE) {
-    return { data: photo.data, layers: 0 }
+
+  let data = photo.data
+  let layers = 0
+  for (const { model, rival } of await previousModels(mark, photo.width, photo.height)) {
+    // Опознаём на уже снятом кадре: если знак лежал дважды, второй слой виден
+    // точнее, когда первый снят
+    const frame = { ...photo, data }
+    if (!(await markRecognized(frame, model, rival))) continue
+    data = removeMarkLayer(frame, model)
+    layers++
   }
-  return { data: removeOldCornerLayer(photo, model), layers: 1 }
+  return { data: layers ? data : photo.data, layers }
 }
 
 /** Пережим в исходном формате: качество близко к исходнику, размер не растёт вдвое */
@@ -430,12 +576,12 @@ export type WatermarkOutcome =
 
 export type WatermarkOptions = {
   /**
-   * Снять прежний угловой знак перед наложением нынешнего — так перекладывают
-   * знак у фото, помеченных WATERMARK_REDO: второй знак поверх первого на
-   * кадре выглядел бы двойным, а в кропе плитки их было бы видно сразу два.
-   * Снятие идёт в пикселях, поэтому файл пережимается один раз, а не дважды.
+   * Снять прежний знак перед наложением нынешнего — так перекладывают знак у
+   * фото, помеченных WATERMARK_REDO: второй знак поверх первого на кадре
+   * выглядел бы двойным, а в кропе плитки их было бы видно сразу два. Снятие
+   * идёт в пикселях, поэтому файл пережимается один раз, а не дважды.
    */
-  replaceOldCorner?: boolean
+  replacePrevious?: boolean
 }
 
 /**
@@ -490,12 +636,12 @@ export async function applyWatermark(
     const raw = (l: { data: Buffer; width: number; height: number }) =>
       ({ input: l.data, raw: { width: l.width, height: l.height, channels: 4 as const } })
 
-    // Кадр с прежним угловым знаком (WATERMARK_REDO): сперва снимаем тот знак,
-    // иначе на фото легли бы два — и в файле, и в кропе плитки
+    // Кадр с прежним знаком (WATERMARK_REDO): сперва снимаем тот знак, иначе на
+    // фото легли бы два — и в файле, и в кропе плитки
     let base: Sharp = sharp(input).rotate()
-    if (options.replaceOldCorner) {
+    if (options.replacePrevious) {
       const decoded = await sharp(input).rotate().raw().toBuffer({ resolveWithObject: true })
-      const stripped = await stripOldCornerMark({
+      const stripped = await stripPreviousMark({
         data: decoded.data,
         width: decoded.info.width,
         height: decoded.info.height,

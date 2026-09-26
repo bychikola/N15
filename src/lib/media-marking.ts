@@ -4,7 +4,16 @@ import sharp from 'sharp'
 import type { Sharp } from 'sharp'
 import type { CollectionAfterChangeHook, CollectionBeforeChangeHook, Payload, PayloadRequest, Where } from 'payload'
 
-import { WATERMARK_AVATAR, WATERMARK_REDO, WATERMARK_VERSION, applyWatermark, photoFormat } from './watermark'
+import {
+  WATERMARK_AVATAR,
+  WATERMARK_PREVIOUS,
+  WATERMARK_REDO,
+  WATERMARK_VERSION,
+  applyWatermark,
+  photoFormat,
+  previousMarkLayers,
+  type RawPhoto,
+} from './watermark'
 import { legacyErasFor, stripLegacyMarks, type LegacyEra } from './watermark-legacy'
 
 /**
@@ -27,9 +36,14 @@ import { legacyErasFor, stripLegacyMarks, type LegacyEra } from './watermark-leg
  * него, поэтому повторный запуск не печатает знак вторым слоем. Из мастера же
  * заново собираются размеры — когда с кадра сняли прежний знак (см.
  * src/lib/watermark-legacy.ts) или когда в CRM поменяли фокусную точку кадра.
- * Исключение — фото с пометкой «переложить знак заново» (WATERMARK_REDO): у
- * них прежний угловой знак снимается с текущего файла, а чистый кадр не
- * трогается — в нём остался след прежней разметки.
+ * Исключение — фото без чистого кадра вовсе: у них прежний знак снимается с
+ * текущего файла и новый ложится тем же пережимом (см. markOverPrevious), а
+ * чистый кадр не заводится — в снятом кадре остался след прежней разметки.
+ *
+ * Смена рисунка знака — такая же разметка: поле wm хранит версию знака, и фото
+ * с прошлой версией (WATERMARK_PREVIOUS) очередь берёт наравне с неразмеченными
+ * (см. pendingWhere). Знак ложится из чистого кадра, поэтому подпись на нём
+ * меняется целиком, без следов прежней.
  *
  * Один и тот же путь разметки работает для всех загрузок: хук коллекции media
  * ловит и карточку CRM, и старую форму /admin-add, и загрузку через админку
@@ -65,6 +79,12 @@ export type PhotoDoc = {
   sizes?: Record<string, SizeInfo> | null
 }
 
+/**
+ * Что снято с кадра: эры прежних знаков (см. watermark-legacy.ts) и наш прежний
+ * знак — тот, чей рисунок сменился (см. stripPreviousMark в watermark.ts).
+ */
+export type StrippedMark = LegacyEra | 'previous'
+
 /** Чем закончилась разметка одного фото */
 export type PhotoOutcome = {
   status:
@@ -81,7 +101,7 @@ export type PhotoOutcome = {
   /** Имя файла в хранилище */
   file: string
   /** Прежние знаки, снятые с кадра */
-  stripped: LegacyEra[]
+  stripped: StrippedMark[]
   /** Сколько размеров получили знак */
   sizes: number
   /** Обновлённый документ media — чтобы вызывающий вернул актуальные данные */
@@ -130,13 +150,19 @@ export function sizeTarget(
 }
 
 /**
- * Фото, ждущие разметки: нашего знака на них нет, либо его нужно переложить
- * заново (WATERMARK_REDO — знак в прежнем, угловом месте). Портреты —
- * отдельная версия wm=1, их разметка не берёт.
+ * Фото, ждущие разметки: нашего знака на них нет, знак на них прошлой версии
+ * (WATERMARK_PREVIOUS — сменился рисунок, подпись под монограммой) или его
+ * нужно переложить заново (WATERMARK_REDO — знак в прежнем, угловом месте).
+ * Портреты — отдельная версия wm=1, их разметка не берёт.
  */
 export function pendingWhere(): Where {
   return {
-    or: [{ wm: { equals: 0 } }, { wm: { exists: false } }, { wm: { equals: WATERMARK_REDO } }],
+    or: [
+      { wm: { equals: 0 } },
+      { wm: { exists: false } },
+      { wm: { equals: WATERMARK_PREVIOUS } },
+      { wm: { equals: WATERMARK_REDO } },
+    ],
   }
 }
 
@@ -151,23 +177,6 @@ async function readFileOrNull(file: string): Promise<Buffer | null> {
   } catch {
     return null
   }
-}
-
-/**
- * Чистый кадр фото: свой мастер из закрытой папки или копия прошлой разметки.
- * null — чистого кадра нет вовсе: так выглядят фото, размеченные прошлой
- * версией знака, когда рядом не осталось ни мастера, ни копии.
- */
-export async function cleanFramePath(dir: string, file: string): Promise<string | null> {
-  for (const candidate of [path.join(dir, MASTER_DIR, file), path.join(dir, BACKUP_DIR, file)]) {
-    try {
-      await fs.access(candidate)
-      return candidate
-    } catch {
-      /* файла нет — смотрим следующее место */
-    }
-  }
-  return null
 }
 
 /** Прямоугольник кропа: цель не выходит за кадр, при нехватке места прижимается к краю */
@@ -263,6 +272,69 @@ async function rebuildSizes(
  * Разметить размеры на месте: файлы уже собраны из чистого кадра, знак в них не
  * впечатан — накладываем поверх самих файлов (дешевле, чем пересобирать кроп).
  */
+/**
+ * Кадр в пикселях: с ним работает опознание прежнего знака (см. предыдущий
+ * слой в watermark.ts) — снятие идёт по пикселям, а не по файлу.
+ */
+async function decodePhoto(bytes: Buffer): Promise<RawPhoto> {
+  const decoded = await sharp(bytes).rotate().raw().toBuffer({ resolveWithObject: true })
+  return {
+    data: decoded.data,
+    width: decoded.info.width,
+    height: decoded.info.height,
+    channels: decoded.info.channels,
+  }
+}
+
+/** Сколько слоёв прежнего знака лежит на файле (0 — знака нет) */
+async function previousLayersIn(frame: Buffer): Promise<number> {
+  return previousMarkLayers(await decodePhoto(frame))
+}
+
+/**
+ * Переложить знак на готовом кадре: снять прежний и наложить нынешний одним
+ * пережимом, затем пересобрать размеры из этого же кадра — знак в них уже есть,
+ * второй раз печатать не нужно.
+ *
+ * Так размечется фото, у которого чистого кадра не осталось: мастер и копия
+ * пропали, а на самом файле знак прошлой версии. Чистый кадр здесь намеренно не
+ * заводится: снятие оставляет на кадре слабый след (тонкие штрихи подписи
+ * пережим размывает по цветности), и сборка размеров из такого кадра разнесла
+ * бы след по всему каталогу.
+ */
+async function markOverPrevious(
+  payload: Payload,
+  doc: PhotoDoc,
+  frame: Buffer,
+  req: PayloadRequest | undefined,
+  layers: number,
+): Promise<PhotoOutcome> {
+  const file = doc.filename ? String(doc.filename) : ''
+  // Замена идёт только если прежний знак на кадре опознан: вычесть золото из
+  // чистого кадра значит оставить на фото тёмный отпечаток знака
+  const marked = await applyWatermark(frame, doc.mimeType || '', file, { replacePrevious: layers > 0 })
+  if (marked.status === 'unreadable') return { status: 'unreadable', file, stripped: [], sizes: 0 }
+  if (marked.status !== 'done') return { status: 'failed', file, stripped: [], sizes: 0, reason: 'знак не наложился' }
+
+  const dir = mediaDir(payload)
+  try {
+    await fs.writeFile(path.join(dir, file), marked.data)
+    const sizes = await rebuildSizes(marked.data, doc, dir, sizeConfig(payload), false)
+    const updated = await payload.update({
+      collection: 'media',
+      id: doc.id,
+      data: { wm: WATERMARK_VERSION },
+      req: req ? childReq(req) : undefined,
+      overrideAccess: true,
+      depth: 0,
+    })
+    return { status: 'marked', file, stripped: layers ? ['previous'] : [], sizes, doc: updated }
+  } catch (e) {
+    console.error('media-marking: не удалось переложить знак', file, e)
+    return { status: 'failed', file, stripped: [], sizes: 0, reason: 'сбой записи' }
+  }
+}
+
 async function markSizesInPlace(
   doc: PhotoDoc,
   dir: string,
@@ -321,7 +393,7 @@ export type ProcessOptions = {
  */
 export async function processPhoto(options: ProcessOptions): Promise<PhotoOutcome> {
   const { payload, doc, legacy = false, rebuild = false, req } = options
-  const none: LegacyEra[] = []
+  const none: StrippedMark[] = []
   const id = doc.id
   const file = doc.filename ? String(doc.filename) : ''
   if (!file) return { status: 'missing', file, stripped: none, sizes: 0, reason: 'у документа нет файла' }
@@ -335,43 +407,24 @@ export async function processPhoto(options: ProcessOptions): Promise<PhotoOutcom
   const observed = await readFileOrNull(publicPath)
   if (!observed) return { status: 'missing', file, stripped: none, sizes: 0, reason: 'файла нет в хранилище' }
 
-  // Знак нужно переложить заново (WATERMARK_REDO) — фото размечено прежним,
-  // угловым расположением знака. Прежний знак снимаем тем же слоем, каким он
-  // положен (см. stripOldCornerMark в watermark.ts): второй знак поверх первого
-  // выглядел бы двойным, а в кропе плитки их было бы видно сразу два. Чистый
-  // кадр не трогаем: на части фото от прежней разметки в углу остался след
-  // (знак снимали с подгонкой множителей, см. заголовок watermark-legacy.ts),
-  // и сборка из чистого кадра открыла бы его на месте прежнего знака. Размеры
-  // собираем уже с готового кадра — знак в нём есть, печатать второй не нужно.
+  // Знак нужно переложить заново (WATERMARK_REDO) — фото размечено прежним
+  // знаком, и чистого кадра для него нет. Прежний знак снимаем тем же слоем,
+  // каким он положен: второй знак поверх первого выглядел бы двойным, а в
+  // кропе плитки их было бы видно сразу два.
   if (doc.wm === WATERMARK_REDO) {
-    const marked = await applyWatermark(observed, doc.mimeType || '', file, { replaceOldCorner: true })
-    if (marked.status === 'unreadable') return { status: 'unreadable', file, stripped: none, sizes: 0 }
-    if (marked.status !== 'done') return { status: 'failed', file, stripped: none, sizes: 0, reason: 'знак не наложился' }
-    try {
-      await fs.writeFile(publicPath, marked.data)
-      const sizes = await rebuildSizes(marked.data, doc, dir, config, false)
-      const updated = await payload.update({
-        collection: 'media',
-        id,
-        data: { wm: WATERMARK_VERSION },
-        req: req ? childReq(req) : undefined,
-        overrideAccess: true,
-        depth: 0,
-      })
-      return { status: 'marked', file, stripped: none, sizes, doc: updated }
-    } catch (e) {
-      console.error('media-marking: не удалось переложить знак', file, e)
-      return { status: 'failed', file, stripped: none, sizes: 0, reason: 'сбой записи' }
-    }
+    return await markOverPrevious(payload, doc, observed, req, await previousLayersIn(observed))
   }
 
   // Чистый кадр: свой мастер, копия прошлой разметки или сам файл (с него тогда
   // снимаем прежний знак — окна версий знака известны по дате загрузки)
   let master = await readFileOrNull(masterPath)
   const reused = !!master
-  const stripped: LegacyEra[] = []
+  let copied = false
+  const stripped: StrippedMark[] = []
   if (!master) {
-    master = (await readFileOrNull(path.join(dir, BACKUP_DIR, file))) ?? observed
+    const copy = await readFileOrNull(path.join(dir, BACKUP_DIR, file))
+    copied = !!copy
+    master = copy ?? observed
     if (legacy) {
       const eras = legacyErasFor(doc.createdAt ?? undefined)
       const result = await stripLegacyMarks(master, doc.mimeType || '', file, eras, photoFormat(doc.mimeType || '', file))
@@ -386,6 +439,15 @@ export async function processPhoto(options: ProcessOptions): Promise<PhotoOutcom
         stripped.push(...result.eras)
       }
     }
+  }
+
+  // Кадр взят не из закрытой папки (копия прежней разметки или сам файл): на нём
+  // мог остаться знак прошлой версии. Опознаём и снимаем его до разметки, иначе
+  // новый знак лёг бы вторым слоем. Свежая загрузка сюда не попадает: файл
+  // только что пришёл из браузера, знака на нём быть не может.
+  if (!reused && (legacy || rebuild)) {
+    const layers = await previousLayersIn(master)
+    if (layers) return await markOverPrevious(payload, doc, master, req, layers)
   }
 
   // Чистый кадр — в закрытую папку, до разметки: если разметка сорвётся,
@@ -408,11 +470,12 @@ export async function processPhoto(options: ProcessOptions): Promise<PhotoOutcom
 
   try {
     await fs.writeFile(publicPath, marked.data)
-    // Размеры пересобираем, если кадр чистили или размеры уже размечены: знак
-    // на них лёг бы вторым слоем. Свежая загрузка — файлы собраны из чистого
-    // кадра, знак накладываем поверх них
+    // Размеры пересобираем, если кадр чистили или фото уже размечено: в
+    // хранилище лежат размеры прошлой разметки, и знак лёг бы на них вторым
+    // слоем. Свежая загрузка — файлы собраны из чистого кадра, знак накладываем
+    // поверх них
     const sizes =
-      rebuild || stripped.length || reused
+      rebuild || reused || copied || stripped.length
         ? await rebuildSizes(master, doc, dir, config, true)
         : await markSizesInPlace(doc, dir, config)
     const updated = await payload.update({
@@ -436,7 +499,7 @@ export async function processPhoto(options: ProcessOptions): Promise<PhotoOutcom
  * остаются на месте: разметку можно включить снова, не теряя исходники.
  */
 export async function restorePhoto(payload: Payload, doc: PhotoDoc): Promise<PhotoOutcome> {
-  const none: LegacyEra[] = []
+  const none: StrippedMark[] = []
   const file = doc.filename ? String(doc.filename) : ''
   if (!file) return { status: 'missing', file, stripped: none, sizes: 0, reason: 'у документа нет файла' }
 

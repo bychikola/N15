@@ -1,7 +1,10 @@
+import fs from 'node:fs/promises'
+import path from 'node:path'
 import type { Payload } from 'payload'
 
 import {
-  cleanFramePath,
+  BACKUP_DIR,
+  MASTER_DIR,
   diskSpace,
   markedWhere,
   mediaDir,
@@ -24,8 +27,8 @@ import {
  * заказчик смотрит вид знака на своих фото) — при следующем старте задача
  * просто не начнётся.
  *
- * Перед очередью задача один раз за запуск обходит фото прошлой разметки —
- * те, чьи размеры на сайте остались без знака (см. sweepMarkedWithoutMaster).
+ * Перед очередью задача один раз за запуск обходит фото, у которых нет чистого
+ * кадра, — их разметку не починить из очереди (см. sweepWithoutMaster).
  */
 
 /** Сколько фото берём за раз: одна порция — минута-две работы sharp */
@@ -86,9 +89,10 @@ export function startWatermarkBackfill(payload: Payload): void {
 
 async function run(payload: Payload): Promise<void> {
   await sleep(START_PAUSE)
-  // Сначала — фото прошлой разметки: очередь их не берёт, а на сайте они без знака
+  // Сначала — фото без чистого кадра: очередь их не берёт, а разметить их можно
+  // только из копии прежней разметки (см. ниже)
   try {
-    await sweepMarkedWithoutMaster(payload)
+    await sweepWithoutMaster(payload)
   } catch (e) {
     console.error('media-marking: обход прошлой разметки не удался', e)
   }
@@ -103,22 +107,33 @@ async function run(payload: Payload): Promise<void> {
   }
 }
 
+/** Есть ли файл в хранилище (мастер или копия прежней разметки) */
+async function stored(dir: string, folder: string, file: string): Promise<boolean> {
+  try {
+    await fs.access(path.join(dir, folder, file))
+    return true
+  } catch {
+    return false
+  }
+}
+
 /**
- * Обход прошлой разметки — по разу за запуск, до очереди.
+ * Обход фото без чистого кадра — по разу за запуск, до очереди.
  *
- * Фото, размеченные прошлой версией знака, в базе уже помечены текущей версией
- * (wm=2), но чистого кадра у них нет: знак ложился только в сам оригинал, а
- * Payload собирает размеры из оригинала кадрированием — в размерах знака не
- * было (см. src/lib/media-marking.ts). Ждущими такие фото не считаются (очередь
- * смотрит на wm 0), поэтому сами они не починятся никогда: на сайте их размеры
- * так и останутся чистыми. Чистый кадр у них лежит в копии прошлой разметки
- * (media/.wm-backup) — из него фото и размечается заново, как в режиме repair
- * маршрута /api/watermark.
+ * У фото, размеченного прошлой версией знака, мастера может не быть: раньше знак
+ * ложился только в сам оригинал, а Payload собирает размеры из оригинала
+ * кадрированием — в размерах знака не было (см. src/lib/media-marking.ts).
+ * Ждущими такие фото не считаются (очередь смотрит на версию знака в поле wm),
+ * поэтому сами они не починятся никогда. Чистый кадр у них лежит в копии прошлой
+ * разметки (media/.wm-backup) — из неё фото и размечается заново, вместе с
+ * размерами, как в режиме repair маршрута /api/watermark. После разметки в
+ * закрытой папке появляется мастер, и фото этот обход больше не берёт.
  *
- * Если чистого кадра нет вовсе, фото не трогаем: второй знак поверх первого
- * печатать нельзя, а снять его будет нечем.
+ * Фото, у которого нет ни мастера, ни копии, не трогаем: знак пришлось бы
+ * печатать поверх знака, а снять его нечем. Такие фото видны в отчёте
+ * /api/watermark: мастеров в хранилище меньше, чем размеченных фото.
  */
-async function sweepMarkedWithoutMaster(payload: Payload): Promise<void> {
+async function sweepWithoutMaster(payload: Payload): Promise<void> {
   if (!(await enoughSpace(payload))) return
   const dir = mediaDir(payload)
   const failed = new Set<number>()
@@ -142,15 +157,17 @@ async function sweepMarkedWithoutMaster(payload: Payload): Promise<void> {
     for (const doc of docs) {
       const file = doc.filename ? String(doc.filename) : ''
       if (!file) continue
-      // Чистый кадр на месте — фото размечала текущая версия, оно ни при чём
-      if (await cleanFramePath(dir, file)) continue
+      // Мастер на месте — фото размечено из чистого кадра, оно ни при чём
+      if (await stored(dir, MASTER_DIR, file)) continue
+      // Мастера нет, а копия прежней разметки есть — из неё и размечем заново
+      if (!(await stored(dir, BACKUP_DIR, file))) continue
 
-      const result = await processPhoto({ payload, doc, rebuild: true })
+      const result = await processPhoto({ payload, doc, legacy: true, rebuild: true })
       if (result.status === 'marked') {
         repaired++
       } else {
         failed.add(doc.id)
-        console.error('media-marking: фото прошлой разметки не починено', file, result.status, result.reason || '')
+        console.error('media-marking: фото без мастера не размечено', file, result.status, result.reason || '')
       }
       await sleep(STEP_PAUSE)
     }
@@ -158,8 +175,8 @@ async function sweepMarkedWithoutMaster(payload: Payload): Promise<void> {
     if (failed.size >= MAX_FAIL || disabled()) break
   }
 
-  if (repaired) console.log(`media-marking: размечено заново после прошлой разметки — ${repaired}`)
-  if (failed.size) console.error(`media-marking: осталось без разметки после прошлой разметки — ${failed.size}`)
+  if (repaired) console.log(`media-marking: размечено заново из копии прежней разметки — ${repaired}`)
+  if (failed.size) console.error(`media-marking: осталось без разметки без мастера — ${failed.size}`)
 }
 
 /** Один проход: размечаем всё, что ждёт знака, неудачное в этом проходе не трогаем */
