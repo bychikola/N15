@@ -126,6 +126,50 @@ interface DuplicateInfo {
   strength: 'strong' | 'weak'
 }
 
+/**
+ * Пересекающийся объект в просмотре («Посмотреть пересекающийся объект»).
+ * Поля приходят с сервера по белому списку — без данных собственника,
+ * кадастровых номеров, внутренних комментариев и служебных отметок
+ * (см. /api/objects/duplicate-view): просмотр ничего не раскрывает сверх
+ * того, что нужно для сверки, и правки не открывает.
+ */
+interface DuplicateViewObject {
+  id: number
+  title: string
+  type: string | null
+  category: string | null
+  status: string | null
+  price: number | null
+  area: number | null
+  areaUnit: string | null
+  plotArea: number | null
+  plotAreaUnit: string | null
+  rooms: number | null
+  floor: number | null
+  totalFloors: number | null
+  address: {
+    city?: string | null
+    locality?: string | null
+    snt?: string | null
+    street?: string | null
+    house?: string | null
+    corpus?: string | null
+    apartment?: string | null
+    fullAddress?: string | null
+  }
+  description: string
+  photos: string[]
+  agentName: string | null
+}
+
+/** Ответ /api/objects/duplicate-view: объект, совпавшие признаки и «мой ли он» */
+interface DuplicateViewInfo {
+  object: DuplicateViewObject
+  matches: string[]
+  strength: 'strong' | 'weak'
+  mine: boolean
+}
+
 // --- Блок «Где размещён объект» ------------------------------------------------
 // Привязанные к объекту объявления площадок и метки проверок живут в скрытой
 // группе placements объекта (заполняет сервер, см. src/lib/placements-service.ts).
@@ -918,6 +962,16 @@ export const CrmObjects: FC<{
   const filtersRef = useRef<ObjectListFilters>({ agent: '', status: '' })
   // Найденные дубли объекта (модалка подтверждения)
   const [duplicates, setDuplicates] = useState<DuplicateInfo[] | null>(null)
+  // Просмотр пересекающегося объекта из этой модалки: сам объект (открыт
+  // только на чтение), занятость запроса, ошибка и отметка «сообщено
+  // администратору». Просмотр — отдельным слоем поверх уведомления, чтобы
+  // после закрытия вернуться к списку дублей
+  const [dupView, setDupView] = useState<DuplicateViewInfo | null>(null)
+  const [dupViewId, setDupViewId] = useState<number | null>(null)
+  const [dupViewErr, setDupViewErr] = useState('')
+  const [dupNotice, setDupNotice] = useState('')
+  const [dupReported, setDupReported] = useState(false)
+  const [dupReportBusy, setDupReportBusy] = useState(false)
   // Адрес менялся с момента открытия формы — для авто-поиска метки на карте
   const [addrTouched, setAddrTouched] = useState(false)
   // Адрес с карты расходится с уже заполненными полями — ждём решения агента
@@ -1118,6 +1172,11 @@ export const CrmObjects: FC<{
     setHasPlot(true)
     setSaveError('')
     setDuplicates(null)
+    // Просмотр пересекающегося объекта закрывается вместе с уведомлением
+    setDupView(null)
+    setDupViewErr('')
+    setDupNotice('')
+    setDupReported(false)
     // Карточка нового объекта только открылась — несохранённых правок нет
     openCardMark()
     setAddrTouched(false)
@@ -1152,6 +1211,11 @@ export const CrmObjects: FC<{
   const startEdit = useCallback((o: Record<string, unknown>) => {
     setModalOpen(true)
     setDuplicates(null)
+    // Просмотр пересекающегося объекта — к прежнему уведомлению: закрываем
+    setDupView(null)
+    setDupViewErr('')
+    setDupNotice('')
+    setDupReported(false)
     setSaveError('')
     setAddrTouched(false)
     setPendingAddr(null)
@@ -1533,6 +1597,112 @@ export const CrmObjects: FC<{
     })
   }
 
+  /**
+   * Признаки проверяемой карточки — одним набором для проверки дублей и для
+   * просмотра пересекающегося объекта: сервер по ним же убеждается, что
+   * объект действительно совпадает, и только тогда открывает просмотр
+   * (см. /api/objects/duplicate-view). Признаки собственника и кадастровый
+   * номер шлёт только администратор — у остальных их нет в форме, и сервер
+   * эти поля от неадминистраторов не принимает.
+   */
+  const duplicateSignals = () => ({
+    ownerName: isAdmin ? form.ownerName : '',
+    ownerPhone: isAdmin ? form.ownerPhone : '',
+    cadastralNumber: isAdmin ? form.cadastralNumber : '',
+    address: { city: form.city, street: form.street, house: form.house, apartment: form.apartment },
+    excludeId: editId ?? undefined,
+  })
+
+  /**
+   * «Посмотреть пересекающийся объект»: запрашиваем просмотр у сервера.
+   * Права проверяет сервер — он отдаёт объект только по совпадающим
+   * признакам и только на чтение; в ответе нет данных собственника,
+   * кадастра и служебных полей.
+   */
+  const openDupView = async (id: number) => {
+    if (dupViewId != null) return
+    setDupViewId(id)
+    setDupViewErr('')
+    setDupNotice('')
+    setDupReported(false)
+    try {
+      const res = await fetch('/api/objects/duplicate-view', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ id, ...duplicateSignals() }),
+      })
+      const data = (await res.json().catch(() => null)) as DuplicateViewInfo | { error?: string } | null
+      if (!res.ok) {
+        setDupViewErr((data as { error?: string } | null)?.error || t.crm.dupViewErr)
+        return
+      }
+      setDupView(data as DuplicateViewInfo)
+    } catch {
+      setDupViewErr(t.crm.dupViewErr)
+    } finally {
+      setDupViewId(null)
+    }
+  }
+
+  /** Закрыть просмотр и вернуться к списку найденных дублей */
+  const closeDupView = () => {
+    setDupView(null)
+    setDupViewErr('')
+    setDupNotice('')
+    setDupReported(false)
+  }
+
+  /**
+   * «Это мой объект»: пересечение настоящее, объект уже заведён — новый
+   * не создаём (duplicates закрываем, save не вызываем). Если объект
+   * и правда за сотрудником, открываем его карточку; чужой объект открывать
+   * нельзя, поэтому в этом случае остаёмся в просмотре и предлагаем
+   * сообщить администратору.
+   */
+  const acceptDupMine = () => {
+    if (!dupView) return
+    if (!dupView.mine) {
+      setDupNotice(t.crm.dupMineForeign)
+      return
+    }
+    const id = dupView.object.id
+    setDupView(null)
+    setDuplicates(null)
+    void openObject(id)
+  }
+
+  /** «Это другой объект»: пересечение ложное — сохраняем как обычно (force) */
+  const acceptDupOther = () => {
+    setDupView(null)
+    setDuplicates(null)
+    void save(true)
+  }
+
+  /** «Сообщить администратору»: задача в CRM первому администратору */
+  const reportDuplicate = async () => {
+    if (!dupView || dupReportBusy) return
+    setDupReportBusy(true)
+    setDupViewErr('')
+    try {
+      const res = await fetch('/api/objects/duplicate-report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ id: dupView.object.id, ...duplicateSignals() }),
+      })
+      if (!res.ok) {
+        setDupViewErr(t.crm.dupViewReportErr)
+        return
+      }
+      setDupReported(true)
+    } catch {
+      setDupViewErr(t.crm.dupViewReportErr)
+    } finally {
+      setDupReportBusy(false)
+    }
+  }
+
   // save возвращает true при успешном сохранении — этим пользуется перенос
   // в архив (см. runArchive): он сохраняет карточку вместе со сменой статуса
   // и данными архива, поэтому несохранённые правки формы не теряются
@@ -1714,15 +1884,7 @@ export const CrmObjects: FC<{
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
-          body: JSON.stringify({
-            // Признаки собственника шлёт только администратор — у сотрудников
-            // их нет в форме, а сервер эти поля от неадминистраторов не принимает
-            ownerName: isAdmin ? form.ownerName : '',
-            ownerPhone: isAdmin ? form.ownerPhone : '',
-            cadastralNumber: isAdmin ? form.cadastralNumber : '',
-            address: { city: form.city, street: form.street, house: form.house, apartment: form.apartment },
-            excludeId: editId ?? undefined,
-          }),
+          body: JSON.stringify(duplicateSignals()),
         })
         if (dupRes.ok) {
           const dupData = await dupRes.json()
@@ -3158,12 +3320,26 @@ export const CrmObjects: FC<{
                     {d.matches.map((m) => t.crm[`dupMatch${m.charAt(0).toUpperCase()}${m.slice(1)}` as keyof Dict['crm']] || m).join(' · ')}
                   </div>
                 </div>
-                <a href={`/ru/catalog/${d.id}`} target="_blank" rel="noopener"
-                  style={{ border: '1px solid #d9d1c4', borderRadius: 7, color: '#8d6b40', padding: '8px 12px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', textDecoration: 'none', whiteSpace: 'nowrap' }}>
-                  {t.crm.dupOpen}
-                </a>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'stretch' }}>
+                  {/* Просмотр пересекающегося объекта: карточка откроется
+                      только на чтение и только по совпадающим признакам —
+                      права и поля проверяет сервер (duplicate-view) */}
+                  <button type="button" onClick={() => void openDupView(d.id)} disabled={dupViewId != null}
+                    style={{ border: 0, borderRadius: 7, background: '#a7814e', color: '#fff', padding: '8px 12px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', cursor: 'pointer', whiteSpace: 'nowrap', opacity: dupViewId != null ? 0.7 : 1 }}>
+                    {t.crm.dupViewBtn}
+                  </button>
+                  <a href={`/ru/catalog/${d.id}`} target="_blank" rel="noopener"
+                    style={{ border: '1px solid #d9d1c4', borderRadius: 7, color: '#8d6b40', padding: '8px 12px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', textDecoration: 'none', whiteSpace: 'nowrap', textAlign: 'center' }}>
+                    {t.crm.dupOpen}
+                  </a>
+                </div>
               </div>
             ))}
+            {/* Просмотр не открылся (объект удалён, пересечение не подтвердилось
+                на сервере): показываем причину здесь — карточки просмотра ещё нет */}
+            {!dupView && dupViewErr && (
+              <p style={{ margin: '12px 0 0', color: '#9b4e43', fontSize: 11 }}>{dupViewErr}</p>
+            )}
             <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
               <button type="button" onClick={() => { setDuplicates(null); void save(true) }}
                 style={{ flex: 1, border: 0, borderRadius: 8, background: '#a7814e', color: '#fff', padding: '12px 16px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', cursor: 'pointer' }}>
@@ -3176,6 +3352,26 @@ export const CrmObjects: FC<{
             </div>
           </div>
         </div>
+      )}
+
+      {/* Просмотр пересекающегося объекта — слоем поверх уведомления о дублях:
+          после закрытия сотрудник возвращается к списку найденных объектов.
+          Карточка только для чтения: полей собственника, кадастра, внутренних
+          комментариев и служебных отметок в ответе сервера нет вовсе
+          (см. /api/objects/duplicate-view) */}
+      {dupView && (
+        <DupViewCard
+          t={t}
+          view={dupView}
+          err={dupViewErr}
+          notice={dupNotice}
+          reported={dupReported}
+          reportBusy={dupReportBusy}
+          onClose={closeDupView}
+          onMine={acceptDupMine}
+          onOther={acceptDupOther}
+          onReport={() => void reportDuplicate()}
+        />
       )}
 
       {/* Блок «Проверить размещение»: поиск этого же объекта на площадках по
@@ -3507,6 +3703,163 @@ function PlacementRow({
             </>
           )}
         </span>
+      </div>
+    </div>
+  )
+}
+
+interface DupViewCardProps {
+  t: Dict
+  view: DuplicateViewInfo
+  err: string
+  notice: string
+  reported: boolean
+  reportBusy: boolean
+  onClose: () => void
+  onMine: () => void
+  onOther: () => void
+  onReport: () => void
+}
+
+/**
+ * Карточка пересекающегося объекта из уведомления о дублях — только чтение.
+ *
+ * Данные приходят с сервера по белому списку: тип, фото, адрес, площадь,
+ * цена, описание, статус и ответственный агент. Данных собственника,
+ * кадастровых номеров, внутренних комментариев, комиссии и служебных
+ * отметок в ответе нет (см. /api/objects/duplicate-view), полей ввода
+ * и кнопок правки в карточке тоже нет — чужой объект сотрудник не меняет.
+ *
+ * Внизу — решение по пересечению: «Это мой объект», «Это другой объект»
+ * и «Сообщить администратору» (задача в CRM). Просмотр открывается слоем
+ * поверх уведомления, закрытие возвращает к списку найденных объектов.
+ */
+function DupViewCard({ t, view, err, notice, reported, reportBusy, onClose, onMine, onOther, onReport }: DupViewCardProps) {
+  const o = view.object
+  const typeLabel = o.type === 'rent' ? t.typeLabels.rent : o.type === 'sale' ? t.typeLabels.sale : null
+  const categoryLabel = o.category
+    ? t.categoryLabels[o.category as keyof typeof t.categoryLabels] ?? o.category
+    : null
+  const statusLabel =
+    o.status === 'published' ? t.crm.statusPublished : o.status === 'archived' ? t.crm.statusArchived : t.crm.statusDraft
+  // Адрес — тем же разбором, что и в карточке объекта (normalizeHouseAddress):
+  // сохранённый полный адрес, а если его нет — собранный из частей
+  const composed = normalizeHouseAddress({
+    city: o.address.city || '',
+    locality: o.address.locality || '',
+    snt: o.address.snt || '',
+    street: o.address.street || '',
+    house: o.address.house || '',
+    corpus: o.address.corpus || '',
+  }).display
+  const apartment = (o.address.apartment || '').trim()
+  const addressLine = [
+    (o.address.fullAddress || '').trim() || composed,
+    apartment ? `${t.crm.objApartment} ${apartment}` : '',
+  ].filter(Boolean).join(', ')
+  const areaText = (v: number | null, unit?: string | null): string | null => {
+    if (v == null) return null
+    const u = areaUnitOf(unit)
+    const label = u === 'are' ? t.catalog.areName : u === 'ha' ? t.catalog.hectareName : t.catalog.sqm
+    return `${areaNumberText(u === 'sqm' ? v : sqmToUnit(v, u))} ${label}`
+  }
+  const money = (v: number | null) => (v != null ? `${rub(v)} ₽` : '—')
+  const floors = [
+    o.floor != null ? `${t.crm.objFloor}: ${o.floor}` : '',
+    o.totalFloors != null ? `${t.crm.objTotalFloors}: ${o.totalFloors}` : '',
+    o.rooms != null ? `${t.crm.objRooms}: ${o.rooms}` : '',
+  ].filter(Boolean).join(' · ')
+  const small: React.CSSProperties = { fontSize: 11, color: '#6f6a61', lineHeight: 1.6 }
+  const fieldStyle: React.CSSProperties = { background: '#fff', border: '1px solid #e5dfd3', borderRadius: 9, padding: '10px 12px', minWidth: 0 }
+  const fieldLabel: React.CSSProperties = { fontSize: 9, color: '#8a857b', textTransform: 'uppercase', letterSpacing: '.08em' }
+  const action: React.CSSProperties = {
+    border: '1px solid #e1d8ca', borderRadius: 8, background: '#fff', color: '#716b62',
+    padding: '11px 14px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', cursor: 'pointer',
+  }
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 130, background: 'rgba(32,33,30,.55)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 16px', overflowY: 'auto' }}
+      onClick={onClose}>
+      <div style={{ background: '#faf8f4', border: '1px solid #ded5c7', borderRadius: 12, width: 'min(100%, 640px)', padding: 22 }}
+        onClick={(e) => e.stopPropagation()}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 10 }}>
+          <h2 style={{ margin: 0, fontFamily: "'New Standard', Georgia, serif", fontWeight: 400, fontSize: 20 }}>
+            {t.crm.dupViewTitle}
+          </h2>
+          <button type="button" onClick={onClose} aria-label={t.crm.close} title={t.crm.close}
+            style={{ border: '1px solid #e1d8ca', borderRadius: 7, background: '#fff', color: '#716b62', padding: '8px 12px', cursor: 'pointer', fontSize: 12 }}>
+            ✕
+          </button>
+        </div>
+        {/* Уведомление о том, что карточка только для чтения и закрытые поля
+            в неё не попадают: сотрудник сразу видит границы просмотра */}
+        <p style={{ margin: '0 0 14px', padding: '10px 12px', border: '1px solid #e8dfd0', borderRadius: 8, background: '#fbf8f1', color: '#8a857b', fontSize: 11, lineHeight: 1.55 }}>
+          {t.crm.dupViewHint}
+        </p>
+        <div style={{ fontWeight: 600, fontSize: 15, color: '#25241f' }}>{o.title || `#${o.id}`}</div>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+          {typeLabel && <span style={{ padding: '4px 8px', borderRadius: 999, background: '#f2eadf', color: '#8d6b40', fontSize: 9, textTransform: 'uppercase', letterSpacing: '.08em' }}>{typeLabel}</span>}
+          {categoryLabel && <span style={{ padding: '4px 8px', borderRadius: 999, background: '#f2eadf', color: '#8d6b40', fontSize: 9, textTransform: 'uppercase', letterSpacing: '.08em' }}>{categoryLabel}</span>}
+          <span style={{ padding: '4px 8px', borderRadius: 999, background: '#eee9e1', color: '#6f6a61', fontSize: 9, textTransform: 'uppercase', letterSpacing: '.08em' }}>{statusLabel}</span>
+        </div>
+        {/* Фото объекта — из карточки, только на просмотр */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(96px, 1fr))', gap: 8, marginTop: 14 }}>
+          {o.photos.length ? (
+            o.photos.slice(0, 6).map((src) => (
+              <div key={src} style={{ aspectRatio: '4 / 3', borderRadius: 8, overflow: 'hidden', background: '#f2eadf' }}>
+                <img src={src} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              </div>
+            ))
+          ) : (
+            <p style={{ ...small, margin: 0 }}>{t.crm.dupViewNoPhotos}</p>
+          )}
+        </div>
+        <div className="crm-property-form" style={{ marginTop: 14 }}>
+          <div style={fieldStyle}>
+            <div style={fieldLabel}>{t.crm.objAddress}</div>
+            <div style={{ ...small, color: '#25241f', marginTop: 3 }}>{addressLine || '—'}</div>
+          </div>
+          <div style={fieldStyle}>
+            <div style={fieldLabel}>{t.crm.objArea}</div>
+            <div style={{ ...small, color: '#25241f', marginTop: 3 }}>
+              {[areaText(o.area, o.areaUnit), o.plotArea != null ? `${t.crm.objPlotBlock}: ${areaText(o.plotArea, o.plotAreaUnit)}` : ''].filter(Boolean).join(' · ') || '—'}
+            </div>
+          </div>
+          <div style={fieldStyle}>
+            <div style={fieldLabel}>{t.crm.objPrice}</div>
+            <div style={{ ...small, color: '#25241f', marginTop: 3 }}>{money(o.price)}</div>
+          </div>
+          <div style={fieldStyle}>
+            <div style={fieldLabel}>{t.crm.objAgent}</div>
+            <div style={{ ...small, color: '#25241f', marginTop: 3 }}>{o.agentName || '—'}</div>
+          </div>
+          {floors && (
+            <div style={fieldStyle}>
+              <div style={fieldLabel}>{t.crm.objRooms}</div>
+              <div style={{ ...small, color: '#25241f', marginTop: 3 }}>{floors}</div>
+            </div>
+          )}
+          <div style={{ ...fieldStyle, gridColumn: '1 / -1' }}>
+            <div style={fieldLabel}>{t.crm.objDescription}</div>
+            <div style={{ ...small, color: '#25241f', marginTop: 3, whiteSpace: 'pre-line' }}>{o.description || '—'}</div>
+          </div>
+        </div>
+        {/* Совпавшие признаки — те же подписи, что в уведомлении о дублях */}
+        <div style={{ fontSize: 10, color: view.strength === 'strong' ? '#9b4e43' : '#9b958a', marginTop: 12 }}>
+          {view.matches.map((m) => t.crm[`dupMatch${m.charAt(0).toUpperCase()}${m.slice(1)}` as keyof Dict['crm']] || m).join(' · ')}
+        </div>
+        {notice && <p style={{ margin: '12px 0 0', color: '#9b4e43', fontSize: 11, lineHeight: 1.55 }}>{notice}</p>}
+        {err && <p style={{ margin: '12px 0 0', color: '#9b4e43', fontSize: 11 }}>{err}</p>}
+        {reported && <p style={{ margin: '12px 0 0', color: '#3f6b4a', fontSize: 11 }}>{t.crm.dupViewReported}</p>}
+        <div style={{ display: 'flex', gap: 8, marginTop: 16, flexWrap: 'wrap' }}>
+          {/* «Это мой объект» — пересечение настоящее: дубль не создаём */}
+          <button type="button" onClick={onMine} style={{ ...action, flex: 1, minWidth: 150 }}>{t.crm.dupViewMine}</button>
+          {/* «Это другой объект» — пересечение ложное: сохраняем как обычно */}
+          <button type="button" onClick={onOther} style={{ ...action, flex: 1, minWidth: 150 }}>{t.crm.dupViewOther}</button>
+          <button type="button" onClick={onReport} disabled={reportBusy}
+            style={{ ...action, flex: 1, minWidth: 150, opacity: reportBusy ? 0.7 : 1 }}>
+            {t.crm.dupViewReport}
+          </button>
+        </div>
       </div>
     </div>
   )

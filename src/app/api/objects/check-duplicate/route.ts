@@ -3,29 +3,20 @@ import type { Where } from 'payload'
 import config from '@payload-config'
 import { NextRequest, NextResponse } from 'next/server'
 import { canAccessCrm, getCrmUser } from '@/app/crm/auth'
-import { formatRuPhone } from '@/lib/phone'
-import { cleanCadastral } from '@/lib/cadastral'
-
-// Телефон и кадастровый — в том же виде, в каком они лежат в объекте:
-// иначе поиск по базе (равенство значений) не найдёт уже сохранённую карточку
-// с тем же номером: см. beforeChange коллекции Objects
-const normPhone = (v?: string) => formatRuPhone(v || '')
-const normCadastral = (v?: string) => cleanCadastral(v)
-const normName = (v?: string) => (v || '').trim().toLowerCase()
-const normAddress = (a?: { city?: string; street?: string; house?: string; apartment?: string } | null) => {
-  // Город сам по себе слишком общий — совпадение адреса считаем только
-  // когда указана улица или дом
-  if (!a?.street && !a?.house) return ''
-  return `${a?.city || ''}${a?.street || ''}${a?.house || ''}${a?.apartment || ''}`
-    .toLowerCase()
-    .replace(/[^a-zа-яё0-9]/g, '')
-}
+import {
+  duplicateMatches,
+  duplicateStrength,
+  hasSignals,
+  normalizeSignals,
+  type DuplicateAddress,
+  type DuplicateSignals,
+} from '@/lib/object-duplicates'
 
 interface Duplicate {
   id: number
   title?: string
   price?: number | null
-  address?: { city?: string; street?: string; house?: string; apartment?: string } | null
+  address?: DuplicateAddress | null
   ownerName?: string | null
   ownerPhone?: string | null
   cadastralNumber?: string | null
@@ -35,6 +26,8 @@ interface Duplicate {
 
 // Проверка дублей объекта перед сохранением: телефон и кадастровый — жёсткие
 // признаки, адрес — сильный, имя — слабый (только имя не блокирует).
+// Нормализация признаков и сравнение — общие с просмотром пересекающегося
+// объекта, см. src/lib/object-duplicates.ts
 //
 // Маршрут внутренний: доступен только сотрудникам CRM (агент и администратор).
 // Данные собственника и кадастровый номер объекта — закрытые сведения, поэтому
@@ -50,25 +43,16 @@ export async function POST(req: NextRequest) {
     const isAdmin = user.role === 'admin'
 
     const body = await req.json()
-    const { ownerName, ownerPhone, address, cadastralNumber, excludeId } = body as {
-      ownerName?: string
-      ownerPhone?: string
-      address?: { city?: string; street?: string; house?: string; apartment?: string }
-      cadastralNumber?: string
-      excludeId?: number
-    }
-
-    const phone = isAdmin ? normPhone(ownerPhone) : ''
-    const cad = isAdmin ? normCadastral(cadastralNumber) : ''
-    const addr = normAddress(address)
-    const name = isAdmin ? normName(ownerName) : ''
+    const { excludeId } = body as DuplicateSignals & { excludeId?: number }
+    // Нормализуем признаки один раз: и поиск в базе, и сравнение идут по ним
+    const signals = normalizeSignals(body as DuplicateSignals, isAdmin)
 
     const payload = await getPayload({ config })
 
     // 1. Жёсткие признаки — поиск в БД по нормализованным значениям
     const or: Where[] = []
-    if (phone) or.push({ ownerPhone: { equals: phone } })
-    if (cad) or.push({ cadastralNumber: { equals: cad } })
+    if (signals.phone) or.push({ ownerPhone: { equals: signals.phone } })
+    if (signals.cadastral) or.push({ cadastralNumber: { equals: signals.cadastral } })
 
     let candidates: Record<string, unknown>[] = []
     if (or.length) {
@@ -81,7 +65,7 @@ export async function POST(req: NextRequest) {
         overrideAccess: true,
       })
       candidates = docs as Record<string, unknown>[]
-    } else if (addr || name) {
+    } else if (hasSignals(signals)) {
       // 2. Нет жёстких признаков — берём свежие объекты и фильтруем в JS
       const { docs } = await payload.find({
         collection: 'objects',
@@ -96,13 +80,7 @@ export async function POST(req: NextRequest) {
     const duplicates: Duplicate[] = []
     for (const o of candidates) {
       if (excludeId && o.id === excludeId) continue
-      const oAddr = normAddress(o.address as { city?: string; street?: string; house?: string; apartment?: string } | null)
-      const oName = normName(o.ownerName as string | undefined)
-      const matches: string[] = []
-      if (phone && normPhone(o.ownerPhone as string | undefined) === phone) matches.push('phone')
-      if (cad && normCadastral(o.cadastralNumber as string | undefined) === cad) matches.push('cadastral')
-      if (addr && oAddr === addr) matches.push('address')
-      if (name && oName === name) matches.push('name')
+      const matches = duplicateMatches(o, signals)
       if (matches.length) {
         duplicates.push({
           id: o.id as number,
@@ -114,8 +92,7 @@ export async function POST(req: NextRequest) {
           ownerPhone: isAdmin ? (o.ownerPhone as string | null | undefined) : null,
           cadastralNumber: isAdmin ? (o.cadastralNumber as string | null | undefined) : null,
           matches,
-          // Только имя — слабое совпадение, не блокирует сохранение
-          strength: matches.some((m) => m !== 'name') ? 'strong' : 'weak',
+          strength: duplicateStrength(matches),
         })
       }
     }
