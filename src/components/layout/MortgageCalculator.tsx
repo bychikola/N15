@@ -4,36 +4,27 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { createPortal } from 'react-dom'
 import { useI18n } from '@/i18n/i18n-provider'
+// Счёт аннуитета и разбор чисел в полях — общие со страницами ипотеки
+// (см. src/lib/mortgage-calc.ts): раньше здесь лежала своя копия
+import {
+  cleanDecimal,
+  displayPercent,
+  formatMoney as formatResult,
+  formatMoneyInput,
+  mortgagePayment,
+  parseMoney,
+} from '@/lib/mortgage-calc'
 
 // Ипотечный калькулятор. Большой блок на главной убран — калькулятор
 // открывается компактным модальным окном по кнопке «Ипотечный калькулятор»
-// в шапке (десктоп и мобильное меню). Вся логика и поля — как в прежнем
-// блоке: стоимость, первоначальный взнос (в рублях и процентах, синхронно),
+// в шапке (десктоп и мобильное меню). Поля те же, что были в блоке:
+// стоимость, первоначальный взнос (в рублях и процентах, синхронно),
 // ставка, срок, ежемесячный платёж, общая выплата и переплата.
-
-const formatResult = (value: number) =>
-  new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(
-    Number.isFinite(value) ? Math.max(0, value) : 0,
-  )
-
-const parseMoney = (value: string) => Number(value.replace(/\s/g, '').replace(/[^\d]/g, '')) || 0
-
-const formatMoneyInput = (value: string | number) => {
-  const digits = String(value).replace(/[^\d]/g, '').replace(/^0+(?=\d)/, '')
-  if (!digits) return ''
-  return digits.replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
-}
-
-const cleanDecimal = (value: string) => {
-  const normalized = value.replace(',', '.').replace(/[^\d.]/g, '')
-  const [whole, ...fraction] = normalized.split('.')
-  return fraction.length ? `${whole}.${fraction.join('').slice(0, 2)}` : whole
-}
-
-const displayPercent = (value: number) => {
-  if (!Number.isFinite(value)) return ''
-  return Math.round(value * 10) / 10 + ''
-}
+//
+// Ставка не подставлена: её называет банк в индивидуальном предложении,
+// поэтому поле пустое, а пока ставку не ввели, вместо платежа и итогов
+// стоит прочерк — расчёт не выглядит обещанием конкретной ставки.
+// Прежнее значение по умолчанию (18%) убрано 27.09.2026.
 
 export default function MortgageCalculator({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { t, lang } = useI18n()
@@ -41,12 +32,16 @@ export default function MortgageCalculator({ open, onClose }: { open: boolean; o
   const [downPaymentText, setDownPaymentText] = useState('1 800 000')
   const [downPercentText, setDownPercentText] = useState('20')
   const [yearsText, setYearsText] = useState('20')
-  const [rateText, setRateText] = useState('18')
+  const [rateText, setRateText] = useState('')
 
   const price = parseMoney(priceText)
   const downPayment = Math.min(parseMoney(downPaymentText), price)
   const years = Number(yearsText) || 0
   const rate = Number(rateText.replace(',', '.')) || 0
+  // Ставка введена — итоги считаем; иначе показываем прочерк: значения,
+  // зависящие от ставки, без неё были бы выдуманными
+  const rateSet = rateText.trim() !== ''
+  const money = (value: number) => (rateSet ? `${formatResult(value)} ₽` : '—')
 
   const changePrice = (raw: string) => {
     const formatted = formatMoneyInput(raw)
@@ -78,20 +73,10 @@ export default function MortgageCalculator({ open, onClose }: { open: boolean; o
     setDownPaymentText(formatMoneyInput(Math.round((price * percent) / 100)))
   }
 
-  const result = useMemo(() => {
-    const principal = Math.max(0, price - downPayment)
-    const months = Math.max(1, Math.round(years * 12))
-    const monthlyRate = Math.max(0, rate) / 100 / 12
-    const factor = Math.pow(1 + monthlyRate, months)
-    const payment =
-      principal === 0
-        ? 0
-        : monthlyRate === 0
-          ? principal / months
-          : (principal * monthlyRate * factor) / (factor - 1)
-    const total = payment * months
-    return { principal, payment, total, overpayment: total - principal }
-  }, [price, downPayment, years, rate])
+  const result = useMemo(
+    () => mortgagePayment(price, downPayment, years, rate),
+    [price, downPayment, years, rate],
+  )
 
   // Пока окно открыто: Esc закрывает его, фон страницы не прокручивается
   useEffect(() => {
@@ -166,11 +151,11 @@ export default function MortgageCalculator({ open, onClose }: { open: boolean; o
               </label>
             </div>
             <div className="lp-mortgage-results">
-              <div><span>{t.landing.calcMonthly}</span><strong>{formatResult(result.payment)} ₽</strong></div>
+              <div><span>{t.landing.calcMonthly}</span><strong>{money(result.payment)}</strong></div>
               <div><span>{t.landing.calcDownSum}</span><b>{formatResult(downPayment)} ₽ · {downPercentText || '0'}%</b></div>
               <div><span>{t.landing.calcCredit}</span><b>{formatResult(result.principal)} ₽</b></div>
-              <div><span>{t.landing.calcTotal}</span><b>{formatResult(result.total)} ₽</b></div>
-              <div><span>{t.landing.calcOverpay}</span><b>{formatResult(result.overpayment)} ₽</b></div>
+              <div><span>{t.landing.calcTotal}</span><b>{money(result.total)}</b></div>
+              <div><span>{t.landing.calcOverpay}</span><b>{money(result.overpayment)}</b></div>
               {/* «Получить консультацию» — якорь контактов главной страницы:
                   окно закрывается, страница прокручивается к форме заявки */}
               <Link href={`/${lang}#contact`} onClick={onClose}>{t.landing.calcConsult} <span aria-hidden="true">→</span></Link>

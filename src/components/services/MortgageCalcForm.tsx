@@ -44,7 +44,12 @@ export const MortgageCalcForm: FC = () => {
     const downPayment = Math.min(parseMoney(downText), price)
     const years = Number(yearsText) || 0
     const rate = Number(rateText.replace(',', '.')) || 0
-    if (price <= 0 || years <= 0 || rateText.trim() === '') return
+    if (price <= 0 || years <= 0 || rateText.trim() === '') {
+      // Считать нечего (нет ставки, суммы или срока): прежний расчёт убираем,
+      // чтобы старые числа не выглядели ответом на новые данные
+      setResult(null)
+      return
+    }
     setResult(mortgagePayment(price, downPayment, years, rate))
   }
 
