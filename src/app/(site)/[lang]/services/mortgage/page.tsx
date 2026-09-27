@@ -5,17 +5,16 @@ import { SectionWrapper } from '@/components/ui/SectionWrapper'
 import { Button } from '@/components/ui/Button'
 import { MortgageCalcForm } from '@/components/services/MortgageCalcForm'
 import { getDictionary, type Dict } from '@/i18n/dictionaries'
+// Банки, программы которых рассматриваем: список общий со страницей
+// /mortgage, партнёрство ни с одним из них не заявлено (см. src/lib)
+import { MORTGAGE_BANKS } from '@/lib/mortgage-banks'
 
 interface PageProps {
   params: Promise<{ lang: string }>
 }
 
-// Банки, программы которых рассматриваем: единый список для одноимённого блока.
-// Партнёрство ни с одним из них не заявлено — формулировки нейтральные.
-const banks = ['Сбербанк', 'ВТБ', 'ДОМ.РФ', 'Альфа-Банк', 'Россельхозбанк', 'ПСБ']
-
 // Расчётный блок услуги «Расчёт ипотечных программ»: перечень банков
-// и форма калькулятора. Форма без отправки — расчёт в браузере клиента
+// и калькулятор. Форма без отправки — расчёт в браузере клиента
 // (см. MortgageCalcForm: перед кнопкой — обязательная галочка согласия).
 function MortgageCalcPanel({ t }: { t: Dict }) {
   const m = t.services.mortgage
@@ -25,7 +24,7 @@ function MortgageCalcPanel({ t }: { t: Dict }) {
       <div className="p-6 md:p-8 bg-[var(--n15-black)]/40 border border-[var(--n15-gold)]/10">
         <h3 className="text-sm tracking-wider uppercase text-[var(--n15-gold)] mb-5">{m.banksTitle}</h3>
         <div className="flex flex-wrap gap-3">
-          {banks.map((bank) => (
+          {MORTGAGE_BANKS.map((bank) => (
             <span key={bank} className="text-xs px-3 py-1.5 border border-[var(--n15-gold)]/20 text-[var(--n15-muted)]">
               {bank}
             </span>
@@ -95,6 +94,11 @@ export default async function MortgageServicesPage({ params }: PageProps) {
           <div className="mt-12 flex flex-wrap justify-center gap-4">
             <Button variant="primary" href={`/${lang}/contacts`}>
               {t.services.ctaConsult}
+            </Button>
+            {/* Страница с программами покупки (семейная, военная, IT-ипотека,
+                материнский капитал) и калькулятором платежа */}
+            <Button variant="outline" href={`/${lang}/mortgage`}>
+              {t.purchase.mortgage.title}
             </Button>
             {/* «Ипотечный брокер» — отдельная услуга раздела со своей страницей */}
             <Button variant="outline" href={`/${lang}/services/broker`}>

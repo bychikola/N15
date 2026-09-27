@@ -60,17 +60,27 @@ const MORTGAGE_OPTIONS: readonly PurchaseOption[] = ['mortgage', 'familyMortgage
 
 /**
  * Варианты, у которых есть значок на обложке: код подписи в словаре
- * (t.object.purchaseBadges). Материнского капитала и покупки без взноса
- * здесь нет: на обложке они не значатся, их видно в списке вариантов на
- * странице объекта (обложка не перегружается).
+ * (t.object.purchaseBadges). Покупки без взноса здесь нет: такой вариант
+ * виден в списке вариантов на странице объекта (обложка не перегружается).
+ *
+ * «Гражданская ипотека» — значок точного варианта mortgage, а «Ипотека» —
+ * обобщённый значок свёртки (см. purchaseBadges ниже): два разных кода,
+ * потому что за одним значком стоят разные вещи.
  */
-export type PurchaseBadge = 'mortgage' | 'familyMortgage' | 'militaryMortgage' | 'installment'
+export type PurchaseBadge =
+  | 'mortgage'
+  | 'civilMortgage'
+  | 'familyMortgage'
+  | 'militaryMortgage'
+  | 'installment'
+  | 'maternityCapital'
 
 const COVER_BADGE: Partial<Record<PurchaseOption, PurchaseBadge>> = {
-  mortgage: 'mortgage',
+  mortgage: 'civilMortgage',
   familyMortgage: 'familyMortgage',
   militaryMortgage: 'militaryMortgage',
   installment: 'installment',
+  maternityCapital: 'maternityCapital',
 }
 
 /**

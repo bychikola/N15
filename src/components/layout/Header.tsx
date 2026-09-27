@@ -176,6 +176,10 @@ export const Header: FC = () => {
       key: 'ipoteka',
       label: t.services.menu.ipoteka,
       items: [
+        // Страницы покупки в кредит — первыми: с них начинается выбор
+        // программы, дальше уже сопровождение и документы
+        { href: `/${lang}/mortgage`, label: t.nav.mortgage },
+        { href: `/${lang}/installment`, label: t.nav.installment },
         { href: `/${lang}/services/mortgage`, label: t.services.mortgage.title },
         { href: `/${lang}/services/broker`, label: t.services.broker.title },
         { href: `/${lang}/services/mortgage#raschet`, label: t.services.mortgage.raschet.title },
@@ -240,6 +244,17 @@ export const Header: FC = () => {
     { href: `/${lang}/blog`, label: t.nav.blog },
     { href: `/${lang}/contacts`, label: t.nav.contacts },
     { href: `/${lang}/board`, label: t.nav.board },
+  ]
+
+  // Страницы покупки в кредит — «Ипотека и выгодные условия» и «Рассрочка».
+  // Отдельными пунктами они стоят только в мобильном меню: это вертикальный
+  // список, место в нём есть, и до страниц один тап. В десктопной шапке два
+  // новых пункта распирали бы меню (в нём уже нет запаса ширины — см. историю
+  // кнопки «Ипотечный калькулятор»), поэтому там они подпунктами первого
+  // уровня в «Услуги» → «Ипотека» (см. serviceDirs выше)
+  const creditLinks = [
+    { href: `/${lang}/mortgage`, label: t.nav.mortgage },
+    { href: `/${lang}/installment`, label: t.nav.installment },
   ]
 
   // Активный пункт меню — раздел текущей страницы. В адресах пунктов могут
@@ -726,6 +741,19 @@ export const Header: FC = () => {
                 </div>
               )}
             </div>
+
+            {/* Ипотека и Рассрочка — сразу после «Услуг», до остальных
+                разделов: это страницы, с которых приходит заявка */}
+            {creditLinks.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                className={`py-2 ${navItemClass(isActivePath(link.href))}`}
+                onClick={() => setIsOpen(false)}
+              >
+                {link.label}
+              </Link>
+            ))}
 
             {navLinks.map((link) => (
               <Link

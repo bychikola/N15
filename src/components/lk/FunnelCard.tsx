@@ -40,6 +40,8 @@ export const APPLICATION_TYPE_LABELS: Record<string, string> = {
   viewing: 'Просмотр', callback: 'Обратный звонок', mortgage: 'Ипотека', consultation: 'Консультация',
   // Заявки форм раздела «Услуги» и каталога (см. LeadForm)
   valuation: 'Оценка объекта', sale: 'Продажа объекта', selection: 'Подбор недвижимости', search: 'Заявка на поиск',
+  // Форма страницы «Рассрочка» (/installment)
+  installment: 'Рассрочка',
 }
 
 interface Props {

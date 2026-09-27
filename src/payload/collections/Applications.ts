@@ -7,6 +7,17 @@ import { OBJECT_CATEGORIES } from '@/lib/object-categories'
 // не менялись задним числом при обновлении текстов
 import { LEGAL_VERSION } from '@/lib/legal-docs'
 
+/**
+ * Источники заявок, которые приходят с форм сайта: у них обязательна галочка
+ * согласия на обработку персональных данных, и это проверяет beforeChange
+ * (запрос в обход формы получает отказ).
+ *
+ * 'site' — общие формы сайта (карточка объекта, контакты, услуги).
+ * «Ипотека» и «Рассрочка» — страницы /mortgage и /installment: там форма
+ * своя, а источником в CRM видно, с какой страницы пришёл человек.
+ */
+const SITE_SOURCES = ['site', 'Ипотека', 'Рассрочка']
+
 export const Applications: CollectionConfig = {
   slug: 'applications',
   labels: { singular: 'Заявка', plural: 'Заявки' },
@@ -57,15 +68,15 @@ export const Applications: CollectionConfig = {
       // документов ставит сервер — клиент их не присылает и не может
       // подделать. Заявку без обязательной отметки сайт не принимает: галочка
       // в форме обязательна, и то же правило проверяется здесь — запрос в обход
-      // формы получает отказ. Заявки, заведённые вручную из CRM (источник не
-      // «site»), не ограничиваем: агенту галочку поставить негде.
+      // формы получает отказ. Заявки, заведённые вручную из CRM (источника
+      // сайта нет), не ограничиваем: агенту галочку поставить негде.
       async ({ data, originalDoc, operation }) => {
         if (data.consent === true || data.consentCallback === true) {
           const prev = (originalDoc || {}) as Record<string, unknown>
           data.legalVersion = LEGAL_VERSION
           if (!prev.consentAt) data.consentAt = new Date().toISOString()
         }
-        if (operation === 'create' && data.source === 'site' && data.consent !== true) {
+        if (operation === 'create' && SITE_SOURCES.includes(String(data.source)) && data.consent !== true) {
           // APIError, а не Error: текст причины должен дойти до формы
           throw new APIError('Отметьте согласие на обработку персональных данных', 400)
         }
@@ -159,6 +170,9 @@ export const Applications: CollectionConfig = {
         { label: 'Продажа объекта', value: 'sale' },
         { label: 'Подбор недвижимости', value: 'selection' },
         { label: 'Заявка на поиск', value: 'search' },
+        // Форма страницы «Рассрочка» (/installment): заявка на расчёт
+        // условий рассрочки у застройщика
+        { label: 'Рассрочка', value: 'installment' },
       ],
       required: true,
     },
@@ -308,6 +322,8 @@ export const Applications: CollectionConfig = {
       label: 'Источник',
       admin: {
         position: 'sidebar',
+        description:
+          'Откуда пришла заявка: «site» — формы сайта, «Ипотека» и «Рассрочка» — страницы /mortgage и /installment, «manual» — заведена агентом из CRM',
       },
     },
     {

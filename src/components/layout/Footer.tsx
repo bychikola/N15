@@ -27,6 +27,15 @@ export const Footer: FC = () => {
     { href: `/${lang}/documents`, label: t.footer.documents },
   ]
 
+  // Страницы покупки в кредит: программы, калькулятор и форма заявки
+  // (см. /mortgage и /installment). Отдельной колонкой — в мобильном меню
+  // это же соседние пункты, а в шапке на десктопе они лежат в «Услуги» →
+  // «Ипотека»: место в верхнем меню занято, а из футера страницы видны
+  const purchaseItems: FooterItem[] = [
+    { href: `/${lang}/mortgage`, label: t.nav.mortgage },
+    { href: `/${lang}/installment`, label: t.nav.installment },
+  ]
+
   return (
     // n15-footer — глубокий зелёный футера (см. globals.css): внутри него
     // прежние «тёмные» токены читаются как кремовый с золотом на зелёном
@@ -37,7 +46,10 @@ export const Footer: FC = () => {
       <div className="n15-container pb-8">
         <OrnamentDivider variant="woven" className="my-10" />
 
-        <div className="grid grid-cols-1 md:grid-cols-[1.6fr_1fr] gap-x-14 gap-y-12 items-start">
+        {/* Три колонки с lg: до него колонка «Покупка» переносится на
+            вторую строку под блоком N15 — так на планшете не сжимается
+            ни девиз, ни список ссылок */}
+        <div className="grid grid-cols-1 md:grid-cols-[1.6fr_1fr] lg:grid-cols-[1.6fr_1fr_1fr] gap-x-14 gap-y-12 items-start">
           {/* Блок N15: описание агентства, девиз и строка о работе */}
           <div className="min-w-0">
             <a href={`/${lang}`} className="inline-flex" aria-label="Н15 — на главную">
@@ -73,6 +85,25 @@ export const Footer: FC = () => {
             </h4>
             <ul className="flex flex-col gap-4">
               {companyItems.map((item) => (
+                <li key={item.label} className="min-w-0">
+                  <Link
+                    href={item.href}
+                    className="inline-block max-w-full text-base leading-relaxed text-[var(--n15-gold)] hover:text-[var(--n15-gold-light)] hover:underline underline-offset-4 transition-colors duration-300"
+                  >
+                    {item.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Колонка «Покупка» — страницы ипотеки и рассрочки */}
+          <div className="min-w-0">
+            <h4 className="text-sm tracking-[0.2em] uppercase mb-6">
+              {t.footer.purchase}
+            </h4>
+            <ul className="flex flex-col gap-4">
+              {purchaseItems.map((item) => (
                 <li key={item.label} className="min-w-0">
                   <Link
                     href={item.href}
