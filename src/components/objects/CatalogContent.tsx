@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useI18n } from '@/i18n/i18n-provider'
 import ObjectCard, { type ObjectListItem } from '@/components/objects/ObjectCard'
-import CatalogFilters, { buildWhere, cityValuesFor, regionValuesFor, emptyFilters, purchaseValues, AGENT_URL_PARAM, OBJECT_TYPES, OBJECT_CATEGORIES, OBJECT_HEATING, OBJECT_ROOMS, OBJECT_BUILDING, OBJECT_GAS, OBJECT_PARKING, type FiltersState } from '@/components/objects/CatalogFilters'
+import CatalogFilters, { buildWhere, cityValuesFor, regionValuesFor, emptyFilters, purchaseValues, OBJECT_TYPES, OBJECT_CATEGORIES, OBJECT_HEATING, OBJECT_ROOMS, OBJECT_BUILDING, OBJECT_GAS, OBJECT_PARKING, type FiltersState } from '@/components/objects/CatalogFilters'
 import { HOUSE_TYPE_VALUES, houseTypeCategory } from '@/lib/object-categories'
 import { COMMERCIAL_TYPE_VALUES } from '@/lib/commercial-types'
 import CategoryChips from '@/components/objects/CategoryChips'
@@ -60,7 +60,6 @@ const URL_PARAM: Record<keyof FiltersState, string> = {
   commercialType: 'commercial_type',
   // Кадастровый номер участка (см. cadastral в FiltersState)
   cadastral: 'cadastral',
-  agent: AGENT_URL_PARAM,
   purchase: 'purchase',
 }
 
@@ -151,9 +150,6 @@ function filtersFromParams(sp: URLSearchParams, cityRegions: readonly CityFilter
     // Регион фильтра «Город» («все населённые пункты»): ключ сверяем со списком
     // регионов для категории — у участков регионов, кроме Осетии, нет
     cityRegion: isKnown(cityRegionParam, regionValuesFor(category, cityRegions)) ? cityRegionParam : '',
-    // Фильтр «Объекты агента» приходит только ссылкой (карточки команды,
-    // страница агентства) — допустимость id проверяет buildWhere
-    agent: sp.get(AGENT_URL_PARAM) ?? '',
     // Варианты покупки — множественный выбор: в ссылке коды через запятую.
     // Чужие значения отбрасываем, порядок приводим к порядку списка (см.
     // purchaseValues) — ссылка с теми же отметками читается одинаково
@@ -167,15 +163,12 @@ interface CatalogContentProps {
   cityRegions: CityFilterRegion[]
   /** Допустимые значения фильтра «Город» — для сверки ссылок */
   knownCities: string[]
-  /** Имя агента для чипа «Объекты агента» (читает серверная страница
-   *  каталога из параметра agent, см. catalog/page.tsx) */
-  agentName?: string
 }
 
 /** Выдача каталога: поиск, фильтры, карточки объектов и подгрузка следующих
  *  страниц. Данные — клиентские запросы к /api/objects; справочник фильтра
  *  «Город» приходит с сервера (см. страницу каталога) */
-export default function CatalogContent({ cityRegions, knownCities, agentName }: CatalogContentProps) {
+export default function CatalogContent({ cityRegions, knownCities }: CatalogContentProps) {
   const searchParams = useSearchParams()
   const router = useRouter()
   const { lang, t } = useI18n()
@@ -379,24 +372,11 @@ export default function CatalogContent({ cityRegions, knownCities, agentName }: 
     { href: `/${lang}/foreign`, label: t.nav.foreign },
   ]
 
-  // Фильтр «Объекты агента»: ссылка с карточек команды (см. about/page.tsx).
-  // Панель фильтров его не показывает — снимается чипом над выдачей, поэтому
-  // сброс «всех фильтров» удаляет и его (удалить одиночный параметр из URL
-  // надёжнее, чем собрать ссылку из состояния: в URL могут быть легаси-ключи)
-  const removeAgent = useCallback(() => {
-    setFilters((prev) => ({ ...prev, agent: '' }))
-    setLoading(true)
-    const params = new URLSearchParams(searchParams.toString())
-    params.delete(AGENT_URL_PARAM)
-    router.replace(`/${lang}/catalog?${params.toString()}`, { scroll: false })
-  }, [lang, router, searchParams])
-
   const clearAll = useCallback(() => {
     setFilters(emptyFilters)
     setQ('')
     setSort('')
-    removeAgent()
-  }, [removeAgent])
+  }, [])
 
   return (
     <section className="bg-[var(--n15-charcoal)] py-8">
@@ -425,25 +405,6 @@ export default function CatalogContent({ cityRegions, knownCities, agentName }: 
       <CatalogFilters state={filters} onChange={onChangeFilters} t={t}
         cityRegions={cityRegions} knownCities={knownCities}
         onSubmit={scrollToResults} onShowMap={showMap} />
-
-      {/* Фильтр, пришедший ссылкой с карточек команды (страница агентства):
-          у остальных фильтров есть поля в панели, у этого — только чип */}
-      {filters.agent && agentName && (
-        <div className="flex flex-wrap items-center gap-2 mt-4">
-          <span className="inline-flex items-center gap-2 px-3 py-1.5 text-xs text-[var(--n15-silver)] border border-[var(--n15-gold)]/30 bg-[var(--n15-black)]/40">
-            <span className="text-[10px] tracking-[0.2em] uppercase text-[var(--n15-muted)]">
-              {t.catalog.agentFilterLabel}
-            </span>
-            {agentName}
-            <button type="button" onClick={removeAgent}
-              className="text-[var(--n15-gold)] hover:text-[var(--n15-white)] transition-colors cursor-pointer"
-              aria-label={t.catalog.resetFilters}
-              title={t.catalog.resetFilters}>
-              ×
-            </button>
-          </span>
-        </div>
-      )}
 
       {/* Сброс фильтров + вид выдачи и сортировка. Числа найденных объектов
           здесь нет: общее количество объектов компании на сайте не показываем */}

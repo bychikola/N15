@@ -9,7 +9,6 @@ import { loadCatalogCityFilter } from '@/lib/interregional-service'
 
 interface PageProps {
   params: Promise<{ lang: string }>
-  searchParams: Promise<Record<string, string | string[] | undefined>>
 }
 
 // Справочник фильтра «Город» (регионы → населённые пункты, счётчики объектов)
@@ -18,32 +17,16 @@ interface PageProps {
 export const dynamic = 'force-dynamic'
 
 /**
- * Каталог объектов: серверная часть — только шапка, иерархия фильтра «Город»
- * (регионы с населёнными пунктами и счётчиками, см. loadCatalogCityFilter) и
- * имя агента для фильтра «Объекты агента» (кнопка на странице агентства ведёт
- * в /catalog?agent=…); сама выдача и фильтры — клиентские (см. CatalogContent),
- * данные тянутся из /api/objects.
+ * Каталог объектов: серверная часть — только шапка и иерархия фильтра «Город»
+ * (регионы с населёнными пунктами и счётчиками, см. loadCatalogCityFilter);
+ * сама выдача и фильтры — клиентские (см. CatalogContent), данные тянутся
+ * из /api/objects.
  */
-export default async function CatalogPage({ params, searchParams }: PageProps) {
+export default async function CatalogPage({ params }: PageProps) {
   const { lang } = await params
   const t = getDictionary(lang)
   const payload = await getPayload({ config })
   const { regions: cityRegions, cities: knownCities } = await loadCatalogCityFilter(payload)
-
-  // Имя агента подписи фильтра: ссылки с карточек команды передают id в
-  // параметре agent — читаем его из базы, чтобы показать фамилию в подписи
-  const sp = await searchParams
-  const agentRaw = sp.agent
-  const agentId = Number(Array.isArray(agentRaw) ? agentRaw[0] : agentRaw)
-  let agentName: string | undefined
-  if (Number.isInteger(agentId) && agentId > 0) {
-    try {
-      const agent = await payload.findByID({ collection: 'agents', id: agentId, depth: 0 })
-      agentName = agent?.name || undefined
-    } catch {
-      // Агент не найден (или запрос упал) — фильтр просто не показываем
-    }
-  }
 
   return (
     <>
@@ -56,7 +39,7 @@ export default async function CatalogPage({ params, searchParams }: PageProps) {
           </div>
         </section>
         <Suspense fallback={<section className="bg-[var(--n15-charcoal)] py-8"><p className="text-[var(--n15-muted)] text-center py-20">{t.catalog.loading}</p></section>}>
-          <CatalogContent cityRegions={cityRegions} knownCities={knownCities} agentName={agentName} />
+          <CatalogContent cityRegions={cityRegions} knownCities={knownCities} />
         </Suspense>
       </main>
       <Footer />

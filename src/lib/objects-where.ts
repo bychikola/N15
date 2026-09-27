@@ -42,7 +42,6 @@ const ALLOWED_FIELDS = new Set([
   'elevator',
   'yard',
   'purchaseOptions',
-  'agent',
   // Адрес — поля группы address.*
   'address.city',
   'address.district',

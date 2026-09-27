@@ -118,10 +118,6 @@ const ELEVATOR_MATCHES = ['сть', 'ифт']
 const CLOSED_YARD_MATCHES = ['акрыт']
 const INDIVIDUAL_HEATING_MATCHES = ['ндивидуальн', 'втономн']
 
-/** Имя URL-параметра фильтра «Объекты агента» — ссылки с карточек команды
- *  на странице агентства ведут в /catalog?agent=<id> */
-export const AGENT_URL_PARAM = 'agent'
-
 export interface FiltersState {
   type: string
   category: string
@@ -193,10 +189,6 @@ export interface FiltersState {
   /** Подкатегория коммерции — код COMMERCIAL_TYPES (готовый бизнес, офис,
    *  торговое помещение…). Категория у неё одна — «коммерческая» */
   commercialType: string
-  /** id агента: показываем только его объекты. Постоянного поля в панели
-   *  фильтров у него нет — фильтр приходит ссылкой с карточек команды,
-   *  а снимается чипом «Объекты агента» над выдачей */
-  agent: string
   /** Варианты покупки — множественный выбор: коды (purchase-options.ts)
    *  через запятую. Пусто — фильтр не выбран; объект подходит, если у него
    *  отмечен любой из выбранных вариантов. Взаимоисключается с арендой и
@@ -208,7 +200,7 @@ export const emptyFilters: FiltersState = {
   type: '', category: '', rooms: '', floorMin: '', floorMax: '', floorsMin: '', floorsMax: '', heating: '', parking: '', building: '', gas: '',
   individualHeating: '', elevator: '', closedYard: '', street: '', cadastral: '', livingAreaMin: '', livingAreaMax: '', kitchenAreaMin: '', kitchenAreaMax: '',
   priceMin: '', priceMax: '', areaMin: '', areaMax: '', areaUnit: '', district: '', cityDistrict: '', locality: '', snt: '', city: '', cityRegion: '',
-  houseType: '', commercialType: '', agent: '', purchase: '',
+  houseType: '', commercialType: '', purchase: '',
 }
 
 /**
@@ -405,17 +397,8 @@ export function buildWhere(
   // любой из выбранных вариантов (в базе поле хранится списком)
   const purchase = purchaseValues(f.purchase)
   if (purchase.length) conds.push({ purchaseOptions: { in: purchase } })
-  const agent = agentId(f.agent)
-  if (agent != null) conds.push({ agent: { equals: agent } })
   if (q) conds.push({ or: [{ title: { contains: q } }, { 'address.street': { contains: q } }] })
   return conds.length ? { and: conds } : {}
-}
-
-// id агента: только целое положительное число (в базе они такие). Мусорные
-// значения из ссылки отбрасываем — серверный where с нецелым id падает
-function agentId(v: string): number | null {
-  const n = Number(v)
-  return Number.isInteger(n) && n > 0 ? n : null
 }
 
 /**

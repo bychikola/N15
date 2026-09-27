@@ -6,6 +6,9 @@ import { SectionWrapper } from '@/components/ui/SectionWrapper'
 import { OrnamentBorder } from '@/components/ui/OrnamentBorder'
 import { getDictionary } from '@/i18n/dictionaries'
 import { compareAgents } from '@/lib/agents-sort'
+// Биография агента — richText (lexical): в карточку команды уходит плоский
+// текст, тем же способом, что в выгрузках на площадки (см. publish-service)
+import { richTextToPlainText } from '@/lib/publish-service'
 
 export const dynamic = 'force-dynamic'
 
@@ -120,6 +123,8 @@ interface AboutData {
     position?: string
     initials: string
     photoUrl?: string
+    /** Описание специалиста (биография из карточки агента) — показываем, если заполнено */
+    description?: string
   }[]
 }
 
@@ -138,12 +143,21 @@ async function getAboutData(): Promise<AboutData> {
     depth: 1,
   })
 
-  const agentList = (agents as unknown as { id: number; name: string; position?: string; photo?: { url?: string; alt?: string } }[])
+  const agentList = (agents as unknown as {
+    id: number
+    name: string
+    position?: string
+    bio?: unknown
+    photo?: { url?: string; alt?: string }
+  }[])
     .map((a) => ({
       id: a.id,
       name: a.name,
-      position: a.position,
+      position: a.position?.trim(),
       photoUrl: a.photo?.url,
+      // Описание специалиста — «Биография» карточки агента: пустая остаётся пустой,
+      // в карточке команды такой агент показывается без описания
+      description: richTextToPlainText(a.bio) || undefined,
       initials: a.name.split(' ').map((n) => n[0]).join('').slice(0, 2),
     }))
     // Агенты в алфавитном порядке по фамилии (единый порядок со страницей «Наши агенты» и CRM)
@@ -296,8 +310,10 @@ export default async function AboutPage({ params }: PageProps) {
           </div>
         </SectionWrapper>
 
-        {/* Команда: компактные карточки — фото, имя, должность и переход
-            к объектам агента (каталог с фильтром ?agent=<id>) */}
+        {/* Команда: компактные карточки — фото (или инициалы), имя, должность
+            и описание специалиста. Объектов агента и перехода к выборке по
+            агенту здесь нет: подборка объектов — рабочий инструмент CRM,
+            доступный сотрудникам и администраторам по их правам */}
         <SectionWrapper variant="dark">
           <div className="mb-6">
             <h2 className="text-2xl font-[family-name:var(--font-display)] text-[var(--n15-white)] mb-2">
@@ -322,14 +338,11 @@ export default async function AboutPage({ params }: PageProps) {
                   )}
                 </div>
                 <h3 className="text-sm text-[var(--n15-white)] mb-1">{agent.name}</h3>
-                {agent.position && <p className="text-xs text-[var(--n15-muted)] mb-3">{agent.position}</p>}
-                {agent.id && (
-                  <a
-                    href={`/${lang}/catalog?agent=${agent.id}`}
-                    className="mt-auto text-xs tracking-wider uppercase text-[var(--n15-gold)] border-b border-[var(--n15-gold)]/30 pb-0.5 hover:border-[var(--n15-gold)] transition-colors"
-                  >
-                    {t.about.viewObjects}
-                  </a>
+                {agent.position && <p className="text-xs text-[var(--n15-muted)]">{agent.position}</p>}
+                {agent.description && (
+                  <p className="mt-3 text-xs text-[var(--n15-muted)] leading-relaxed whitespace-pre-line">
+                    {agent.description}
+                  </p>
                 )}
               </div>
             ))}
