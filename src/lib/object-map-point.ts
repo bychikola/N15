@@ -1,45 +1,55 @@
 /**
- * Объект Payload → точка на карте каталога (режим «На карте», см. CatalogMap).
+ * Объект Payload → область на публичной карте (режим «На карте», см. CatalogMap).
  *
- * Точку берём из координат объекта (objects.coordinates — их ставит карта
- * в форме CRM). Объекты без координат показываем по адресу: адрес строкой
- * определяет геокодер (src/lib/geocode-server.ts), поэтому объект попадает
- * на карту, даже если агент не отмечал точку руками.
+ * Координаты объекта (objects.coordinates — их ставит карта в форме CRM) или
+ * точка, найденная геокодером по адресу, превращаются в примерную область
+ * (src/lib/object-approx-point.ts), а объекты одной области собираются вместе:
+ * на карте рисуется круг области, в облачке — объекты этой области списком.
+ * Точных меток у объектов нет: по области нельзя определить ни дом, ни улицу.
  *
  * Модуль общий для сервера (маршрут /api/objects/map его и наполняет) и
- * клиента (тип ObjectMapPoint). Строки адреса собираются здесь же, чтобы
- * подпись в облачке карты и адрес карточки объекта читались одинаково
- * (порядок полей — как в ObjectCard).
- *
- * Точка публичная: номер дома и корпус в подпись не попадают, а координаты
- * смещаются на приблизительную область — этим занимается маршрут карты
- * (см. src/lib/object-approx-point.ts). Точная строка адреса (mapGeocodeText)
- * нужна только серверу — по ней ищется точка, в браузер она не уходит.
+ * клиента (типы ObjectMapArea и ObjectMapPoint). Подпись области собирается
+ * здесь же: район, город или населённый пункт — без улицы, дома и корпуса
+ * (см. src/lib/object-public-address.ts). Точная строка адреса
+ * (mapGeocodeText) нужна только серверу — по ней ищется точка, в браузер она
+ * не уходит.
  */
 
-import { publicAddressOf, publicAddressText } from './object-public-address'
+import { publicAddressOf, publicAreaText } from './object-public-address'
 import type { ApproxPoint } from './object-approx-point'
 
-/** Точка объекта для карты каталога */
+/** Объект внутри области: из этого собирается облачко области на карте */
 export interface ObjectMapPoint {
   id: number
-  /** Координаты приблизительные — настоящая точка рядом, внутри области radius */
-  lat: number
-  lng: number
-  /** Радиус области вокруг метки, метры: точный адрес дома по ней не определить */
-  radius?: number
   title: string
   /** Вид сделки: sale | rent */
   type?: string
   /** Категория объекта (apartment, house, land…) */
   category?: string
   price?: number
-  /** Адрес одной строкой — как на карточке объекта */
-  address?: string
   /** Обложка: размер card, иначе уменьшенный, иначе оригинал */
   image?: string
-  /** Точка определена по адресу геокодером, а не координатами объекта */
-  byAddress?: boolean
+}
+
+/** Примерная область карты и объекты, которые в неё попали */
+export interface ObjectMapArea {
+  /** Клетка сетки (см. approximatePoint) — одна область на всех её объектов */
+  key: string
+  /** Центр круга области: центр клетки, а не координаты объекта */
+  lat: number
+  lng: number
+  /** Радиус области, метры: точный адрес дома по ней не определить */
+  radius: number
+  /** Подпись области: район, город или населённый пункт */
+  label?: string
+  /** Объекты области — по возрастанию id */
+  points: ObjectMapPoint[]
+}
+
+/** Найденная точка объекта вместе с его документом: до сборки областей */
+export interface FoundObject {
+  area: ApproxPoint
+  doc: Record<string, unknown>
 }
 
 interface AddressLike {
@@ -75,16 +85,13 @@ export function validCoordinates(coordinates: unknown): [number, number] | null 
 }
 
 /**
- * Адрес для подписи на карте: товарищество, район города (или район
- * республики), населённый пункт, улица — тот же порядок, что на карточке
- * каталога, и без номера дома: точный адрес на публичной карте не показываем
- * (см. src/lib/object-public-address.ts). Города в карточном порядке полей нет
- * (его заменяет населённый пункт) — но если у объекта, кроме города, ничего не
- * заполнено, подписью идёт он: облачко метки должно объяснять, где объект.
+ * Подпись области на карте: район, город или населённый пункт. Тот же порядок
+ * частей, что в адресной строке страницы объекта, но без улицы: вместо точной
+ * точки на публичной карте стоит область, и подпись называет район, а не
+ * улицу (см. src/lib/object-public-address.ts).
  */
-export function mapAddressText(doc: Record<string, unknown>): string {
-  const a = addressOf(doc)
-  return publicAddressText(publicAddressOf(a)) || text(a.city)
+export function mapAreaLabel(doc: Record<string, unknown>): string {
+  return publicAreaText(publicAddressOf(addressOf(doc)))
 }
 
 /**
@@ -93,9 +100,10 @@ export function mapAddressText(doc: Record<string, unknown>): string {
  * записать дом, корпус и населённый пункт как удобно), поэтому он в приоритете.
  * Населённый пункт совпал с городом — не повторяем.
  *
- * Номер дома здесь нужен: точка ищется по дому, а на публичную часть она
- * уходит уже смещённой и с областью вокруг — см. src/lib/object-approx-point.ts.
- * Подписью метки эта строка быть не может (в облачке — mapAddressText).
+ * Номер дома здесь нужен: геокодер ищет дом, а точнее искать и не надо —
+ * результат всё равно показывается примерной областью, и точная строка в
+ * браузер не уходит (см. object-approx-point.ts). Подписью области она быть
+ * не может (в облачке — mapAreaLabel).
  */
 export function mapGeocodeText(doc: Record<string, unknown>): string {
   const a = addressOf(doc)
@@ -118,32 +126,53 @@ function imageOf(doc: Record<string, unknown>): string | undefined {
   return media.sizes?.card?.url || media.sizes?.thumbnail?.url || media.url || undefined
 }
 
-/**
- * Документ объекта + точка → точка карты (null — объект нельзя показать).
- * Точка — уже приблизительная (см. object-approx-point): точные координаты
- * объекта на публичную карту не уходят.
- */
-export function mapPointOf(
-  doc: Record<string, unknown>,
-  point: ApproxPoint,
-  byAddress: boolean,
-): ObjectMapPoint | null {
+/** Документ объекта → объект для облачка области (null — объекта нет) */
+function mapPointOf(doc: Record<string, unknown>): ObjectMapPoint | null {
   const id = Number(doc.id)
   if (!Number.isInteger(id)) return null
   const price = Number(doc.price)
   return {
     id,
-    lat: point.lat,
-    lng: point.lng,
-    radius: point.radius,
     title: text(doc.title),
     type: text(doc.type) || undefined,
     category: text(doc.category) || undefined,
     price: Number.isFinite(price) && price > 0 ? price : undefined,
-    // Подпись метки — публичный адрес (mapAddressText). Строку, по которой
-    // определялась точка, в облачко не отдаём: в ней есть номер дома
-    address: mapAddressText(doc) || undefined,
     image: imageOf(doc),
-    byAddress: byAddress || undefined,
   }
+}
+
+/**
+ * Найденные точки объектов → области карты. Объекты одной клетки сетки
+ * собираются в одну область: подпись (район, город) у них общая, а отдельные
+ * круги на соседних точках нарисовались бы друг на друге.
+ *
+ * Порядок обхода — по id: и объекты в облачке, и подпись области (её берём у
+ * первого объекта) не должны зависеть от порядка выдачи фильтров.
+ */
+export function mapAreasOf(found: FoundObject[]): ObjectMapArea[] {
+  const points = found
+    .map(({ area, doc }) => ({ area, doc, point: mapPointOf(doc) }))
+    .filter(
+      (entry): entry is { area: ApproxPoint; doc: Record<string, unknown>; point: ObjectMapPoint } =>
+        entry.point !== null,
+    )
+    .sort((a, b) => a.point.id - b.point.id)
+
+  const areas = new Map<string, ObjectMapArea>()
+  for (const { area, doc, point } of points) {
+    let group = areas.get(area.key)
+    if (!group) {
+      group = {
+        key: area.key,
+        lat: area.lat,
+        lng: area.lng,
+        radius: area.radius,
+        label: mapAreaLabel(doc) || undefined,
+        points: [],
+      }
+      areas.set(area.key, group)
+    }
+    group.points.push(point)
+  }
+  return [...areas.values()]
 }

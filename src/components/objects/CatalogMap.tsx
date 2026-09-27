@@ -4,7 +4,8 @@ import { useEffect, useMemo, useRef, useState, type FC } from 'react'
 import { useI18n } from '@/i18n/i18n-provider'
 import { loadYmaps, type Ymaps } from '@/lib/ymaps'
 import { categoryLabel } from '@/lib/object-categories'
-import type { ObjectMapPoint } from '@/lib/object-map-point'
+import type { ObjectMapArea, ObjectMapPoint } from '@/lib/object-map-point'
+import { APPROX_MAX_ZOOM } from '@/lib/object-approx-point'
 
 interface Props {
   /**
@@ -17,9 +18,9 @@ interface Props {
 
 /** Ответ маршрута /api/objects/map (см. его описание). Числа найденных
  *  объектов в ответе нет: общее количество объектов компании сайт не
- *  показывает, а сколько точек пришло — видно по самому массиву */
+ *  показывает, а сколько объектов в области — видно по списку в облачке */
 interface MapData {
-  points: ObjectMapPoint[]
+  areas: ObjectMapArea[]
   /** В выдаче больше объектов, чем помещается на карту */
   truncated: boolean
   /** Сколько адресов сервер ещё определяет — за ними стоит повторить запрос */
@@ -37,32 +38,35 @@ const PENDING_RETRIES = 3
 /** Пауза перед повторным запросом: геокодер отвечает за десятые доли секунды */
 const PENDING_RETRY_MS = 2_500
 
+/** Приближение одинокой области: показываем её окрестность, а не дом */
+const SINGLE_AREA_ZOOM = 15
+
 const escapeHtml = (value: string): string =>
   value.replace(/[&<>"']/g, (c) =>
     c === '&' ? '&amp;' : c === '<' ? '&lt;' : c === '>' ? '&gt;' : c === '"' ? '&quot;' : '&#39;',
   )
 
 /**
- * Режим «На карте» каталога: все объекты выдачи метками на встроенной карте.
+ * Режим «На карте» каталога: выдача показывается областями на встроенной карте.
  *
- * Точки отдаёт сервер (/api/objects/map): координаты объекта, а объектам без
- * координат точку определяет геокодер по адресу — поэтому на карте
- * оказывается вся выдача, а не только объекты с отмеченной точкой.
+ * Области отдаёт сервер (/api/objects/map): у каждого объекта есть координаты
+ * (их ставит карта в форме CRM) или их определяет геокодер по адресу — поэтому
+ * на карте оказывается вся выдача, а не только объекты с отмеченной точкой.
+ * Точных меток у объектов нет: объект показан кругом примерной области, в
+ * которой он находится (см. src/lib/object-approx-point.ts), а объекты одной
+ * области собраны вместе.
  *
- * Метки собираются в кластеры (ymaps.Clusterer): на выдаче в десятки
- * объектов соседние точки иначе перекрывают друг друга. Клик (тап) по метке
- * открывает её облачко — мини-карточку с фотографией, типом объекта, адресом,
- * ценой и кнопкой «Подробнее» на карточку этого объекта; клик по кластеру
- * приближает карту. На внешние карты отсюда не уводим.
+ * Клик (тап) по кругу открывает облачко области — подпись «район, город или
+ * населённый пункт» и объекты этой области списком: фотография, тип, название,
+ * цена и кнопка «Подробнее» на карточку объекта. Улицы и номера дома в облачке
+ * нет, на внешние карты отсюда не уводим. Приближение карты ограничено
+ * (APPROX_MAX_ZOOM) — ближе объект становится виден по домам.
  */
 export const CatalogMap: FC<Props> = ({ where, lang }) => {
   const { t } = useI18n()
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<Ymaps | null>(null)
-  const clustererRef = useRef<Ymaps | null>(null)
-  /** Область одиночной точки: круг один и переставляется вместе с точкой */
-  const approxRef = useRef<Ymaps | null>(null)
-  /** Условия, под которые карта уже подобрала масштаб: добавление меток
+  /** Условия, под которые карта уже подобрала масштаб: добавление областей
    *  (сервер доопределил адреса) не должно сбрасывать вид пользователя */
   const fittedRef = useRef<string | null>(null)
   const apiKey = process.env.NEXT_PUBLIC_YANDEX_MAPS_API_KEY
@@ -77,11 +81,11 @@ export const CatalogMap: FC<Props> = ({ where, lang }) => {
 
   const failed = !apiKey || failedKey === whereKey
   // Данные показываем, только когда они получены для текущих условий: иначе
-  // после смены фильтров на карте оставались бы метки прошлой выдачи
+  // после смены фильтров на карте оставались бы области прошлой выдачи
   const data = !failed && loaded?.key === whereKey ? loaded : null
   // useMemo: пустой массив в зависимостях эффекта карты менял бы ссылку на
-  // каждом рендере и переставлял метки без нужды
-  const points = useMemo(() => data?.points ?? [], [data])
+  // каждом рендере и переставлял области без нужды
+  const areas = useMemo(() => data?.areas ?? [], [data])
 
   useEffect(() => {
     if (!apiKey) return
@@ -103,14 +107,14 @@ export const CatalogMap: FC<Props> = ({ where, lang }) => {
         if (cancelled) return
         const next: LoadedMap = {
           key: whereKey,
-          points: payload.points || [],
+          areas: payload.areas || [],
           truncated: !!payload.truncated,
           pending: payload.pending ?? 0,
         }
         setLoaded(next)
         setFailedKey((prev) => (prev === whereKey ? null : prev))
         // Адреса объектов сервер определяет и после ответа: повторяем запрос,
-        // чтобы точки появились без перезагрузки страницы
+        // чтобы области появились без перезагрузки страницы
         if (next.pending > 0 && retries < PENDING_RETRIES) {
           retries++
           retryTimer = setTimeout(() => void load(), PENDING_RETRY_MS)
@@ -129,14 +133,12 @@ export const CatalogMap: FC<Props> = ({ where, lang }) => {
     }
   }, [apiKey, whereKey])
 
-  // Карта создаётся один раз и живёт до ухода со страницы: метки при смене
+  // Карта создаётся один раз и живёт до ухода со страницы: области при смене
   // фильтров переставляются в уже открытой карте
   useEffect(() => {
     return () => {
       mapRef.current?.destroy()
       mapRef.current = null
-      clustererRef.current = null
-      approxRef.current = null
     }
   }, [])
 
@@ -145,15 +147,18 @@ export const CatalogMap: FC<Props> = ({ where, lang }) => {
     if (!apiKey || !el) return
 
     let cancelled = false
-    // Разметку облачка собираем до загрузки API карт: ymaps нужен только
-    // для самих меток (ниже)
-    const prepared = points.map((point) => {
+
+    /**
+     * Облачко — обычная разметка внутри страницы: подпись области и объекты
+     * этой области (фотография, тип, название, цена и кнопка на карточку).
+     * Улицы и номера дома в облачке нет — на публичной карте объект показан
+     * областью, а точный адрес клиент уточняет у агента. Значения экранируем:
+     * название вводит агент, а сервер отдаёт его как есть
+     */
+    const balloonItem = (point: ObjectMapPoint): string => {
       const price = point.price
         ? `${point.price.toLocaleString(t.locale)} ${point.type === 'rent' ? t.catalog.perMonth : t.catalog.currency}`
         : ''
-      // Облачко — обычная разметка внутри страницы: фотография, тип, адрес,
-      // цена и кнопка на карточку объекта. Значения экранируем: заголовок и
-      // адрес вводит агент, а сервер отдаёт их как есть
       const kind = [
         point.type === 'rent' ? t.object.rent : t.object.sale,
         point.category ? categoryLabel(point.category) : '',
@@ -161,117 +166,100 @@ export const CatalogMap: FC<Props> = ({ where, lang }) => {
         .filter(Boolean)
         .join(' · ')
 
-      const balloon = [
-        '<div class="n15-map-balloon">',
+      return [
+        '<div class="n15-map-balloon__item">',
         point.image ? `<img class="n15-map-balloon__photo" src="${escapeHtml(point.image)}" alt="">` : '',
         '<div class="n15-map-balloon__text">',
         kind ? `<span class="n15-map-balloon__kind">${escapeHtml(kind)}</span>` : '',
         point.title ? `<div class="n15-map-balloon__title">${escapeHtml(point.title)}</div>` : '',
-        point.address ? `<div class="n15-map-balloon__addr">${escapeHtml(point.address)}</div>` : '',
-        point.byAddress ? `<div class="n15-map-balloon__note">${escapeHtml(t.catalog.mapByAddress)}</div>` : '',
         price ? `<div class="n15-map-balloon__price">${escapeHtml(price)}</div>` : '',
         `<a class="n15-map-balloon__link" href="/${lang}/catalog/${point.id}">${escapeHtml(t.catalog.mapOpenObject)}</a>`,
         '</div>',
         '</div>',
       ].join('')
+    }
 
-      return { point, balloon }
-    })
+    // Разметку облачков собираем до загрузки API карт: ymaps нужен только
+    // для самих областей (ниже)
+    const balloons = new Map(
+      areas.map((area) => [
+        area.key,
+        [
+          '<div class="n15-map-balloon">',
+          area.label ? `<div class="n15-map-balloon__area">${escapeHtml(area.label)}</div>` : '',
+          '<div class="n15-map-balloon__list">',
+          area.points.map(balloonItem).join(''),
+          '</div>',
+          '</div>',
+        ].join(''),
+      ]),
+    )
 
     loadYmaps(apiKey)
       .then((ymaps: Ymaps) => {
         if (cancelled) return
+        // Области рисуются только кругами: без модуля Circle показывать нечего,
+        // и честнее сказать об этом, чем оставить пустую карту
+        if (areas.length && typeof ymaps.Circle !== 'function') {
+          throw new Error('ymaps.Circle is not loaded')
+        }
+
         let map = mapRef.current
         if (!map) {
           map = new ymaps.Map(el, {
-            center: [points[0]?.lat ?? 43.0367, points[0]?.lng ?? 44.6678],
+            center: [areas[0]?.lat ?? 43.0367, areas[0]?.lng ?? 44.6678],
             zoom: 12,
             controls: ['zoomControl'],
           })
+          // Ближе областей карта не приближается: точного адреса по карте не
+          // должно быть видно, и номера домов не должны читаться. Предел
+          // ставим после создания карты: в опциях конструктора ymaps его не
+          // принимает — проверено на живом API, options.get('maxZoom') там
+          // возвращает своё умолчание (23), а setZoom уходит за предел
+          map.options.set('maxZoom', APPROX_MAX_ZOOM)
           mapRef.current = map
         }
 
-        // Метки переставляем целиком: состав выдачи после фильтров меняется
-        // полностью, а кластеру важно видеть актуальный набор
-        let clusterer = clustererRef.current
-        if (!clusterer) {
-          clusterer = new ymaps.Clusterer({
-            // Кластер — золотой кружок фирменного цвета с числом объектов;
-            // одиночная метка остаётся обычной точкой (preset ниже)
-            preset: 'islands#clusterSvgIcons',
-            clusterIconColor: '#C8A44E',
-            // Клик по кластеру приближает карту — ymaps разводит слипшиеся
-            // метки, и до каждой можно добраться по отдельности. Облачко у
-            // самого кластера выключено: карточка есть у каждой метки, а у
-            // кластера ymaps показал бы свою разметку (openBalloonOnClick —
-            // это же имя опции кластера, clusterOpenBalloonOnClick в API нет)
-            clusterDisableClickZoom: false,
-            openBalloonOnClick: false,
-            groupByCoordinates: false,
-          })
-          map.geoObjects.add(clusterer)
-          clustererRef.current = clusterer
-        }
-        clusterer.removeAll()
-        clusterer.add(
-          prepared.map(({ point, balloon }) => {
-            const placemark = new ymaps.Placemark(
-              [point.lat, point.lng],
-              { hintContent: point.title, balloonContent: balloon },
-              {
-                preset: 'islands#circleIcon',
-                iconColor: '#C8A44E',
-                // Облачко открывает наш обработчик (ниже), а не действие по
-                // умолчанию: клик по метке открывает карточку независимо от
-                // того, как ymaps обошёлся с нажатием
-                openBalloonOnClick: false,
-              },
-            )
-            // Клик или тап по метке открывает её мини-карточку, повторный —
-            // закрывает. preventDefault гасит действие по умолчанию: облачко
-            // открываем сами, чтобы нажатие срабатывало всегда
-            placemark.events.add('click', (e: Ymaps) => {
-              e.preventDefault()
-              const balloon = placemark.balloon
-              if (!balloon) return
-              if (balloon.isOpen()) balloon.close()
-              else balloon.open()
-            })
-            return placemark
-          }),
-        )
-
-        // Метка стоит в стороне от дома, а настоящая точка — внутри области
-        // вокруг неё (см. object-approx-point). У одиночной точки область
-        // рисуем: на выдаче из десятков объектов круги слились бы в пятно.
-        // Модуль Circle может не прийти со списком загрузки карт — тогда
-        // карта просто остаётся с метками
-        if (approxRef.current) {
-          map.geoObjects.remove(approxRef.current)
-          approxRef.current = null
-        }
-        const single = prepared.length === 1 ? points[0] : null
-        if (single?.radius && typeof ymaps.Circle === 'function') {
-          const area = new ymaps.Circle(
-            [[single.lat, single.lng], single.radius],
-            {},
-            { fillColor: '#C8A44E26', strokeColor: '#C8A44E', strokeOpacity: 0.7, strokeWidth: 1 },
+        // Области переставляем целиком: состав выдачи после фильтров меняется
+        // полностью
+        map.geoObjects.removeAll()
+        for (const area of areas) {
+          const circle = new ymaps.Circle(
+            [[area.lat, area.lng], area.radius],
+            { balloonContent: balloons.get(area.key) },
+            {
+              fillColor: '#C8A44E26',
+              strokeColor: '#C8A44E',
+              strokeOpacity: 0.7,
+              strokeWidth: 1,
+              // Облачко открывает наш обработчик (ниже), а не действие по
+              // умолчанию: клик по области открывает список её объектов
+              // независимо от того, как ymaps обошёлся с нажатием
+              openBalloonOnClick: false,
+            },
           )
-          map.geoObjects.add(area)
-          approxRef.current = area
+          // Клик или тап по области открывает облачко, повторный — закрывает.
+          // preventDefault гасит действие по умолчанию: облачко открываем сами,
+          // чтобы нажатие срабатывало всегда
+          circle.events.add('click', (e: Ymaps) => {
+            e.preventDefault()
+            const balloon = circle.balloon
+            if (!balloon) return
+            if (balloon.isOpen()) balloon.close()
+            else balloon.open()
+          })
+          map.geoObjects.add(circle)
         }
 
         // Масштаб подбираем один раз на набор условий: сервер может добавить
-        // точки позже (определил адреса), но карту пользователю не дёргаем
-        if (prepared.length && fittedRef.current !== whereKey) {
+        // области позже (определил адреса), но карту пользователю не дёргаем
+        if (areas.length && fittedRef.current !== whereKey) {
           fittedRef.current = whereKey
-          if (prepared.length > 1) {
-            map.setBounds(clusterer.getBounds(), { checkZoomRange: true, zoomMargin: 40 })
-          } else {
-            // Одиночная точка — окрестность, а не дом: точку показываем
-            // приблизительной, на дом карту не наводим
-            map.setCenter([points[0].lat, points[0].lng], 15)
-          }
+          const bounds = areas.length > 1 ? map.geoObjects.getBounds() : null
+          // Несколько областей — показываем всю выдачу; одна — её окрестность
+          // (на дом карту не наводим)
+          if (bounds) map.setBounds(bounds, { checkZoomRange: true, zoomMargin: 40 })
+          else map.setCenter([areas[0].lat, areas[0].lng], SINGLE_AREA_ZOOM)
         }
       })
       .catch(() => {
@@ -281,18 +269,18 @@ export const CatalogMap: FC<Props> = ({ where, lang }) => {
     return () => {
       cancelled = true
     }
-  }, [apiKey, points, whereKey, lang, t])
+  }, [apiKey, areas, whereKey, lang, t])
 
   return (
     <div>
       <div className="relative">
         {/* Контейнер карты не размонтируем: карта переживает смену фильтров,
-            меняются только метки */}
+            меняются только области */}
         <div
           ref={containerRef}
           className="w-full h-[380px] md:h-[560px] bg-[var(--n15-charcoal)] border border-[var(--n15-gold)]/20"
         />
-        {/* Состояния — поверх карты: подсказка не должна уносить с неё метки */}
+        {/* Состояния — поверх карты: подсказка не должна уносить с неё области */}
         {!data && !failed && (
           <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none bg-[var(--n15-charcoal)]/70 text-xs tracking-wider uppercase text-[var(--n15-muted)]">
             {t.catalog.mapLoading}
@@ -306,9 +294,9 @@ export const CatalogMap: FC<Props> = ({ where, lang }) => {
             <p className="text-sm text-[var(--n15-muted)]">{t.catalog.mapError}</p>
           </div>
         )}
-        {/* Точек нет не всегда по вине карты: у объекта может не быть ни
+        {/* Областей нет не всегда по вине карты: у объекта может не быть ни
             адреса, ни координат — тогда ему негде стоять */}
-        {data && points.length === 0 && (
+        {data && areas.length === 0 && (
           <div className="absolute inset-0 z-10 flex items-center justify-center px-6 text-center bg-[var(--n15-charcoal)]/90">
             <p className="text-sm text-[var(--n15-muted)]">{t.catalog.mapEmpty}</p>
           </div>
@@ -316,8 +304,8 @@ export const CatalogMap: FC<Props> = ({ where, lang }) => {
       </div>
       {/* Подсказка под картой — без числа объектов: сколько объектов нашлось
           и сколько попало на карту, на сайте не показываем (см. CatalogContent).
-          Метки приблизительные: точный адрес дома по ним не определить */}
-      {points.length > 0 && (
+          Объекты показаны примерными областями: точный адрес по ним не определить */}
+      {areas.length > 0 && (
         <p className="mt-3 text-xs text-[var(--n15-muted)]">
           {t.catalog.mapOnMap} {data?.truncated ? t.catalog.mapTruncated : t.catalog.mapHint}
         </p>

@@ -4,19 +4,21 @@ import { useEffect, useRef, useState, type FC } from 'react'
 import { useI18n } from '@/i18n/i18n-provider'
 import { loadYmaps, type Ymaps } from '@/lib/ymaps'
 import { geocodeAddress } from '@/lib/geocode'
+import { APPROX_MAX_ZOOM, approximatePoint, type ApproxPoint } from '@/lib/object-approx-point'
 
 interface ObjectMapProps {
-  /** Адрес для геокодирования — улица без номера дома. */
+  /**
+   * Адрес для геокодирования — улица без номера дома. Нужен, только если
+   * координат объекта нет: тогда точку ищет геокодер.
+   */
   address: string
   /**
-   * Координаты точки — уже приблизительные (смещение от дома считает сервер,
-   * см. src/lib/object-approx-point.ts): точных координат на публичной части
-   * нет ни у страницы, ни у карты.
+   * Примерная область объекта по его координатам: точной метки на публичной
+   * карте нет, объект показан кругом области (см. src/lib/object-approx-point.ts)
    */
-  lat?: number
-  lng?: number
-  /** Радиус области вокруг метки, метры: настоящая точка объекта внутри неё */
-  radius?: number
+  area?: ApproxPoint | null
+  /** Подпись области: район, город или населённый пункт */
+  label?: string
 }
 
 type Status = 'loading' | 'ready' | 'error'
@@ -32,19 +34,25 @@ async function resolveCoords(address: string): Promise<[number, number]> {
   return coords
 }
 
-function isValidCoord(value: number | undefined, min: number, max: number): value is number {
-  return typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max
-}
-
-export const ObjectMap: FC<ObjectMapProps> = ({ address, lat, lng, radius }) => {
+/**
+ * Карта объекта: примерная область, в которой объект находится.
+ *
+ * Точки-метки у объекта нет: круг области — единственное, что отмечает объект
+ * на карте, а по кругу нельзя определить ни дом, ни сторону улицы. Подпись
+ * области (район, город или населённый пункт) идёт под картой, приближение
+ * ограничено (APPROX_MAX_ZOOM) — точный адрес клиент уточняет у агента.
+ *
+ * Область приходит готовой от страницы (координаты объекта); если координат
+ * нет, её считает геокодер по публичному адресу без номера дома.
+ */
+export const ObjectMap: FC<ObjectMapProps> = ({ address, area, label }) => {
   const { t } = useI18n()
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<Ymaps | null>(null)
   const apiKey = process.env.NEXT_PUBLIC_YANDEX_MAPS_API_KEY
 
-  const hasManualCoords = isValidCoord(lat, -90, 90) && isValidCoord(lng, -180, 180)
   const canGeocode = address.trim().length > 0
-  const showFallback = !apiKey || (!hasManualCoords && !canGeocode)
+  const showFallback = !apiKey || (!area && !canGeocode)
 
   const [status, setStatus] = useState<Status>(showFallback ? 'error' : 'loading')
 
@@ -58,36 +66,34 @@ export const ObjectMap: FC<ObjectMapProps> = ({ address, lat, lng, radius }) => 
     loadYmaps(apiKey!)
       .then(async (ymaps: Ymaps) => {
         if (cancelled) return
-        const coords: [number, number] = hasManualCoords
-          ? [lat!, lng!]
-          : await resolveCoords(address)
+        // Область считает сервер по координатам объекта; координат нет —
+        // точку ищет геокодер по публичному адресу, и она тоже превращается в
+        // примерную область: точных меток на публичной карте нет
+        const point = area || approximatePoint(await resolveCoords(address))
         if (cancelled) return
+        if (!point) throw new Error('no area')
 
-        // Масштаб показывает округу целиком: по метке не должно быть видно,
-        // какой это дом (точку на дом не наводим)
+        // Масштаб показывает округу целиком, а приближение ограничено: по
+        // области не должно быть видно, какой это дом. Предел ставим после
+        // создания карты: в опциях конструктора ymaps его не принимает —
+        // проверено на живом API (см. CatalogMap)
         const map = new ymaps.Map(el, {
-          center: coords,
-          zoom: 15,
+          center: [point.lat, point.lng],
+          zoom: 14,
           controls: ['zoomControl'],
         })
-        // Область, в которой находится объект: метка смещена от дома, а
-        // настоящая точка — внутри круга. Модуль Circle может не прийти вместе
-        // со списком загрузки: без него карта просто остаётся с меткой
-        if (radius && typeof ymaps.Circle === 'function') {
+        map.options.set('maxZoom', APPROX_MAX_ZOOM)
+        // Область вокруг объекта — круг. Модуль Circle может не прийти вместе
+        // со списком загрузки: без него карта остаётся пустой
+        if (typeof ymaps.Circle === 'function') {
           map.geoObjects.add(
             new ymaps.Circle(
-              [coords, radius],
+              [[point.lat, point.lng], point.radius],
               {},
               { fillColor: '#C8A44E26', strokeColor: '#C8A44E', strokeOpacity: 0.7, strokeWidth: 1 },
             ),
           )
         }
-        const placemark = new ymaps.Placemark(
-          coords,
-          { hintContent: address, balloonContent: address },
-          { preset: 'islands#circleIcon', iconColor: '#C8A44E' },
-        )
-        map.geoObjects.add(placemark)
         mapRef.current = map
         setStatus('ready')
       })
@@ -100,11 +106,11 @@ export const ObjectMap: FC<ObjectMapProps> = ({ address, lat, lng, radius }) => 
       mapRef.current?.destroy()
       mapRef.current = null
     }
-  }, [apiKey, address, lat, lng, radius, hasManualCoords, canGeocode, showFallback])
+  }, [apiKey, address, area, showFallback])
 
   // Фолбэк: нет ключа / ошибка скрипта / геокод не нашёл / нет адреса.
-  // На сторонние карты не уводим: показываем адрес — его довольно, чтобы
-  // найти объект, а объект со страницы виден и списком характеристик
+  // На сторонние карты не уводим: показываем адрес — по нему клиент спросит
+  // объект у агента, а сам объект со страницы виден списком характеристик
   if (showFallback || status === 'error') {
     return (
       <div className="w-full h-[320px] md:h-[380px] flex flex-col items-center justify-center gap-3 bg-[var(--n15-charcoal)] border border-[var(--n15-gold)]/20 px-6 text-center">
@@ -125,10 +131,13 @@ export const ObjectMap: FC<ObjectMapProps> = ({ address, lat, lng, radius }) => 
           {t.common.loading}
         </div>
       )}
-      {/* Подпись под картой: метка стоит в стороне от дома — объясняем это
-          клиенту, чтобы он не искал объект по нарисованной точке */}
+      {/* Подпись под картой: объект показан областью, а не точкой — объясняем
+          это клиенту, чтобы он не искал объект по нарисованному кругу */}
       {status === 'ready' && (
-        <p className="mt-3 text-xs text-[var(--n15-muted)]">{t.map.approx}</p>
+        <p className="mt-3 text-xs text-[var(--n15-muted)]">
+          {label ? `${label}. ` : ''}
+          {t.map.approx}
+        </p>
       )}
     </div>
   )

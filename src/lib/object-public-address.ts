@@ -8,7 +8,7 @@
  * коллекции Objects (см. exactAddressAccess в Objects.ts).
  *
  * Модуль общий для сервера и клиента: карточка каталога, страница объекта,
- * подпись точки на карте, главная и межрегиональная выдача собирают адрес
+ * подпись области на карте, главная и межрегиональная выдача собирают адрес
  * одним и тем же порядком полей.
  */
 
@@ -79,4 +79,31 @@ export function publicAddressParts(address?: PublicAddress | null): string[] {
 /** Адрес одной строкой для подписи: части через запятую */
 export function publicAddressText(address?: PublicAddress | null): string {
   return publicAddressParts(address).join(', ')
+}
+
+/**
+ * Адрес области — то, чем подписана примерная область объекта на публичной
+ * карте: город или населённый пункт и район. Улицы здесь нет намеренно:
+ * точную точку на карте заменяет область (см. src/lib/object-approx-point.ts),
+ * и подпись называет район, а не улицу — по улице объект ищут у агента.
+ *
+ * Порядок частей тот же, что в адресной строке страницы объекта: город,
+ * населённый пункт (если он не совпал с городом), район города или
+ * муниципальный район.
+ */
+export function publicAreaParts(address?: PublicAddress | null): string[] {
+  if (!address) return []
+  const city = text(address.city)
+  const locality = text(address.locality)
+  const cityDistrict = text(address.cityDistrict)
+  return [
+    city || locality,
+    city && locality && locality !== city ? locality : '',
+    cityDistrict ? `${cityDistrict} район` : text(address.district),
+  ].filter(Boolean)
+}
+
+/** Адрес области одной строкой для подписи области на карте */
+export function publicAreaText(address?: PublicAddress | null): string {
+  return publicAreaParts(address).join(', ')
 }

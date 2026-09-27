@@ -26,7 +26,7 @@ import { purchaseOptionsApply } from '@/lib/purchase-options'
 import { isHouseCategoryCode } from '@/lib/object-categories'
 // Публичный адрес: улица, район и населённый пункт — номер дома, корпус и
 // полный адрес на сайте не показываем (src/lib/object-public-address.ts)
-import { publicAddressOf } from '@/lib/object-public-address'
+import { publicAddressOf, publicAreaText } from '@/lib/object-public-address'
 // Карта: точные координаты объекта на публичную часть не уходят — точка
 // показывается приблизительной областью (src/lib/object-approx-point.ts)
 import { approximatePoint } from '@/lib/object-approx-point'
@@ -231,11 +231,14 @@ export default async function ObjectPage({ params }: PageProps) {
   const publicAddress = publicAddressOf(obj.address)
 
   // Map inputs: manual coordinates (priority) or geocode by address.
-  // Точка на карте — приблизительная: смещение от дома считает сервер по
-  // секрету приложения (см. src/lib/object-approx-point.ts). Без координат
-  // точку определяет геокодер по адресу — тоже без номера дома, значит по
-  // улице; этим занимается клиент карты (ObjectMap)
-  const approxPoint = approximatePoint(validCoordinates(obj.coordinates), obj.id)
+  // Точки-метки у объекта на публичной карте нет: карта показывает примерную
+  // область, в которой объект находится (см. src/lib/object-approx-point.ts).
+  // Без координат область считает клиент карты по точке геокодера — тоже без
+  // номера дома, значит по улице; этим занимается ObjectMap
+  const approxPoint = approximatePoint(validCoordinates(obj.coordinates))
+  // Подпись области — район, город или населённый пункт: улицы в ней нет,
+  // точный адрес клиент уточняет у агента (см. publicAreaText)
+  const areaLabel = publicAreaText(publicAddress)
   // district excluded — it can reduce geocode accuracy.
   const mapAddress = [
     publicAddress?.city,
@@ -434,9 +437,8 @@ export default async function ObjectPage({ params }: PageProps) {
                   <h2 className="text-xl font-[family-name:var(--font-display)] text-[var(--n15-white)] mb-4">{t.map.title}</h2>
                   <ObjectMap
                     address={mapAddress}
-                    lat={approxPoint?.lat}
-                    lng={approxPoint?.lng}
-                    radius={approxPoint?.radius}
+                    area={approxPoint}
+                    label={areaLabel}
                   />
                 </div>
               )}

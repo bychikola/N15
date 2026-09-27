@@ -26,17 +26,16 @@ export function loadYmaps(apiKey: string): Promise<Ymaps> {
       }, LOAD_TIMEOUT_MS)
 
       const script = document.createElement('script')
-      // Clusterer — модуль кластеризации: на карте каталога меток десятки,
-      // без него они сливаются в одно пятно (см. CatalogMap).
-      // geoObject.addon.balloon — облачко метки: в список модулей по
-      // умолчанию он не входит, и без него у метки нет свойства balloon —
-      // нажатие на метку ничего не открывает. Карточку объекта в облачке
-      // собирает и открывает CatalogMap.
-      // Circle — область вокруг метки на карте объекта: точку публичной части
-      // показываем приблизительной (см. src/lib/object-approx-point.ts).
-      // Модуль перечислен здесь один раз на всё приложение: список загрузки
-      // фиксируется первым вызовом loadYmaps
-      script.src = `https://api-maps.yandex.ru/2.1/?apikey=${encodeURIComponent(apiKey)}&lang=ru_RU&load=Map,Placemark,Circle,Clusterer,geocode,control.ZoomControl,geoObject.addon.balloon`
+      // Placemark — метка карты в форме объекта CRM (точку ставит агент).
+      // Circle — примерная область объекта на публичных картах: вместо метки
+      // показывается круг, в котором объект находится (см.
+      // src/lib/object-approx-point.ts). Модуль перечислен здесь один раз на
+      // всё приложение: список загрузки фиксируется первым вызовом loadYmaps.
+      // geoObject.addon.balloon — облачко области: в список модулей по
+      // умолчанию он не входит, и без него у круга нет свойства balloon —
+      // нажатие на область ничего не открывает. Список объектов области в
+      // облачке собирает и открывает CatalogMap
+      script.src = `https://api-maps.yandex.ru/2.1/?apikey=${encodeURIComponent(apiKey)}&lang=ru_RU&load=Map,Placemark,Circle,geocode,control.ZoomControl,geoObject.addon.balloon`
       script.async = true
       script.onload = () => {
         if (win.ymaps?.ready) {
