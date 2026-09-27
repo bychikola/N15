@@ -7,7 +7,7 @@
  * и маршрут выдачи отдаёт этот объект, а не документ (см.
  * src/app/api/board/ads/route.ts).
  */
-import { boardPublicAddress, type BoardAddressLike } from './board'
+import { boardAdAddress, type BoardAddressLike } from './board'
 
 /** Фотография объявления — копия в media, созданная при публикации */
 export interface BoardPhoto {
@@ -33,7 +33,10 @@ export interface BoardListItem {
   rooms: number | null
   floor: number | null
   totalFloors: number | null
-  /** Адрес без номера дома — его на доске не показываем (см. boardPublicAddress) */
+  /**
+   * Адрес для показа: улица, район, город — а с домом он только тогда, когда
+   * собственник дал согласие (см. boardAdAddress)
+   */
   address: string
   /** Район или район города — для фильтров и подписи */
   district: string
@@ -53,6 +56,8 @@ const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFi
 /** Документ объявления (Payload) → карточка выдачи */
 export function boardToListItem(doc: Record<string, unknown>): BoardListItem {
   const addr = (doc.address || {}) as BoardAddressLike & { house?: string | null }
+  // Смотрящего нет: карточку выдачи видят только посетители сайта, и адрес
+  // в ней собирается по согласию собственника (см. boardAdAddress)
   // Фото берём из копий в media (publicPhotos): они появляются при публикации,
   // поэтому непроверенные снимки из закрытого хранилища на сайт не попадают
   const photos = Array.isArray(doc.publicPhotos) ? (doc.publicPhotos as BoardPhoto[]) : []
@@ -71,7 +76,7 @@ export function boardToListItem(doc: Record<string, unknown>): BoardListItem {
     rooms: num(doc.rooms),
     floor: num(doc.floor),
     totalFloors: num(doc.totalFloors),
-    address: boardPublicAddress(addr),
+    address: boardAdAddress(doc as never),
     district: str(addr.cityDistrict) || str(addr.district),
     locality: str(addr.locality) || str(addr.city),
     authorKind: str(doc.authorKind) || 'private',

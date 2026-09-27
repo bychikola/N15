@@ -19,6 +19,7 @@ import { boardToListItem, type BoardListItem, type BoardPhoto } from './board-li
 import {
   BOARD_ACTIVE_STATUSES,
   BOARD_RENEW_DAYS,
+  boardAdAddress,
   boardPublicAddress,
   boardPublishIssue,
   boardVisible,
@@ -179,8 +180,23 @@ export interface BoardAdDetail {
   floor: number | null
   totalFloors: number | null
   description: string
-  /** Адрес без номера дома (см. boardPublicAddress) */
+  /**
+   * Адрес для показа: улица, район, город, а с домом — только когда это
+   * разрешено (см. boardAdAddress): согласие собственника, автор, команда
+   */
   address: string
+  /**
+   * Адрес для карты. С домом он только при согласии собственника: без него
+   * карта показывает примерную область по улице (см. src/lib/board.ts).
+   * У автора и сотрудников адрес в шапке может быть с домом — карта от этого
+   * точнее не становится: страница публичная, и метку на ней увидят все
+   */
+  mapAddress: string
+  /**
+   * Согласие собственника показывать точный адрес: с ним на сайте видны дом
+   * и точная метка на карте, без него — только улица и примерная область
+   */
+  showExactAddress: boolean
   locality: string
   /** Фотографии для показа: у опубликованного — копии в media, у предпросмотра — присланные */
   photos: BoardPhoto[]
@@ -235,6 +251,11 @@ export async function loadBoardAd(
   if (!visible && !isAuthor && !isStaff) return null
 
   const addr = (doc.address || {}) as BoardAddressLike & { house?: string | null }
+  // Согласие собственника — единственное, что открывает на сайте номер дома
+  // и точную метку (см. boardShowsExactAddress). Автору и команде адрес
+  // показывается целиком и без него: автор смотрит своё объявление,
+  // сотрудники — по работе (модерация, показ объекта)
+  const consent = doc.showExactAddress === true
 
   return {
     id: Number(doc.id),
@@ -252,7 +273,11 @@ export async function loadBoardAd(
     floor: num(doc.floor),
     totalFloors: num(doc.totalFloors),
     description: str(doc.description),
-    address: boardPublicAddress(addr),
+    address: boardAdAddress(doc as never, { isStaff, isAuthor }),
+    // Адрес для карты — только по согласию: без него в геокодер уходит улица,
+    // а не дом, и вместо точной метки рисуется примерная область
+    mapAddress: boardPublicAddress(addr, { house: addr.house, full: consent }),
+    showExactAddress: consent,
     locality: str(addr.locality) || str(addr.city),
     // На сайте — копии проверенных фото; до публикации показываем присланные
     // (их видит только автор и команда, см. доступ к board-materials)
@@ -388,8 +413,15 @@ export interface BoardQueueRow {
   floor: number | null
   totalFloors: number | null
   description: string
-  /** Полный адрес — модератору дом видно (на сайте он скрыт) */
+  /** Полный адрес — модератору дом видно всегда (на сайте он скрыт) */
   address: string
+  /**
+   * Согласие собственника показывать точный адрес на сайте (номер дома
+   * и точную метку на карте): модератору важно видеть, дал ли его автор
+   */
+  showExactAddress: boolean
+  /** Когда собственник дал это согласие (null — не давал или отозвал) */
+  addressConsentAt: string | null
   authorName: string
   authorPhone: string
   authorEmail: string
@@ -456,6 +488,8 @@ export async function loadBoardQueue(
       totalFloors: num(doc.totalFloors),
       description: str(doc.description),
       address: boardPublicAddress(addr, { house: addr.house, full: true }),
+      showExactAddress: doc.showExactAddress === true,
+      addressConsentAt: str(doc.addressConsentAt) || null,
       authorName: str(doc.contactName),
       authorPhone: str(doc.phone),
       authorEmail: str(doc.email),
@@ -615,6 +649,9 @@ export async function loadMyBoardAd(
       snt: str(addr.snt),
       street: str(addr.street),
       house: str(addr.house),
+      // Галочка согласия — в том виде, в каком её ждёт форма: в правке
+      // собственник может её снять, и тогда дом снова закроется
+      showExactAddress: doc.showExactAddress === true ? 'true' : '',
       contactName: str(doc.contactName),
       phone: str(doc.phone),
       email: str(doc.email),

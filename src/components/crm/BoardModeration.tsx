@@ -281,6 +281,19 @@ export const BoardModeration: FC<Props> = ({ t, rows, status }) => {
                 </p>
               )}
 
+              {/* Что видно из адреса на сайте: без разрешения собственника
+                  дом и точная метка закрыты (см. boardShowsExactAddress).
+                  Разрешение снимается вместе с галочкой в форме автора —
+                  дата рядом с «разрешил» это подтверждает */}
+              <p style={{ margin: '0 0 10px', fontSize: 11, color: row.showExactAddress ? '#3f6b34' : '#817b70' }}>
+                {t.crm.addressConsentTitle}:{' '}
+                {row.showExactAddress
+                  ? [t.crm.addressConsentYes, row.addressConsentAt ? dateText(row.addressConsentAt) : '']
+                      .filter(Boolean)
+                      .join(' · ')
+                  : t.crm.addressConsentNo}
+              </p>
+
               {/* Почему нельзя опубликовать — тот же текст, что проверяет сервер */}
               {row.issue && (
                 <p style={{ margin: '0 0 10px', fontSize: 11, color: '#9b4e43' }}>{t.crm.boardIssue}: {row.issue}</p>

@@ -19,6 +19,19 @@ interface ObjectMapProps {
   area?: ApproxPoint | null
   /** Подпись области: район, город или населённый пункт */
   label?: string
+  /**
+   * Показывать точную метку, а не примерную область. Ставится только тогда,
+   * когда точный адрес разрешён: у объектов каталога этого не бывает вовсе
+   * (номер дома закрыт, см. src/lib/object-public-address.ts), у объявлений
+   * доски — по согласию собственника (см. boardShowsExactAddress).
+   * Метка ставится по переданному адресу, поэтому в него должен входить дом.
+   */
+  exact?: boolean
+  /**
+   * Подпись под картой. У доски она своя: точный адрес уточняет автор
+   * объявления, а не агент агентства
+   */
+  caption?: string
 }
 
 type Status = 'loading' | 'ready' | 'error'
@@ -45,7 +58,7 @@ async function resolveCoords(address: string): Promise<[number, number]> {
  * Область приходит готовой от страницы (координаты объекта); если координат
  * нет, её считает геокодер по публичному адресу без номера дома.
  */
-export const ObjectMap: FC<ObjectMapProps> = ({ address, area, label }) => {
+export const ObjectMap: FC<ObjectMapProps> = ({ address, area, label, exact = false, caption }) => {
   const { t } = useI18n()
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<Ymaps | null>(null)
@@ -66,6 +79,28 @@ export const ObjectMap: FC<ObjectMapProps> = ({ address, area, label }) => {
     loadYmaps(apiKey!)
       .then(async (ymaps: Ymaps) => {
         if (cancelled) return
+
+        // Точный адрес разрешён — ставим метку. Предела приближения
+        // (APPROX_MAX_ZOOM) здесь нет: он нужен только примерной области,
+        // чтобы по кругу нельзя было угадать дом
+        if (exact) {
+          const coords = await resolveCoords(address)
+          if (cancelled) return
+          const map = new ymaps.Map(el, {
+            center: coords,
+            zoom: 17,
+            controls: ['zoomControl'],
+          })
+          // Модуль Placemark может не прийти вместе со списком загрузки:
+          // без него карта осталась бы без метки (см. src/lib/ymaps.ts)
+          if (typeof ymaps.Placemark === 'function') {
+            map.geoObjects.add(new ymaps.Placemark(coords, {}, { preset: 'islands#goldIcon' }))
+          }
+          mapRef.current = map
+          setStatus('ready')
+          return
+        }
+
         // Область считает сервер по координатам объекта; координат нет —
         // точку ищет геокодер по публичному адресу, и она тоже превращается в
         // примерную область: точных меток на публичной карте нет
@@ -106,7 +141,7 @@ export const ObjectMap: FC<ObjectMapProps> = ({ address, area, label }) => {
       mapRef.current?.destroy()
       mapRef.current = null
     }
-  }, [apiKey, address, area, showFallback])
+  }, [apiKey, address, area, exact, showFallback])
 
   // Фолбэк: нет ключа / ошибка скрипта / геокод не нашёл / нет адреса.
   // На сторонние карты не уводим: показываем адрес — по нему клиент спросит
@@ -132,11 +167,13 @@ export const ObjectMap: FC<ObjectMapProps> = ({ address, area, label }) => {
         </div>
       )}
       {/* Подпись под картой: объект показан областью, а не точкой — объясняем
-          это клиенту, чтобы он не искал объект по нарисованному кругу */}
-      {status === 'ready' && (
+          это клиенту, чтобы он не искал объект по нарисованному кругу.
+          У точной метки подписи нет: её место занимает строка о разрешении
+          собственника в самой карточке (см. /board/<id>) */}
+      {status === 'ready' && !exact && (
         <p className="mt-3 text-xs text-[var(--n15-muted)]">
           {label ? `${label}. ` : ''}
-          {t.map.approx}
+          {caption || t.map.approx}
         </p>
       )}
     </div>

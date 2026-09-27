@@ -64,6 +64,12 @@ export interface BoardAdInput {
   floor?: number
   totalFloors?: number
   videoLinks?: string
+  /**
+   * Согласие собственника показывать на сайте точный адрес (номер дома
+   * и точную метку на карте) — см. boardShowsExactAddress. false по умолчанию:
+   * без галочки в форме объявление выходит на сайт без номера дома.
+   */
+  showExactAddress: boolean
   address: {
     city: string
     district?: string
@@ -127,6 +133,9 @@ export function parseBoardAdForm(form: FormData): { ok: true; data: BoardAdInput
       floor: number(form.get('floor')),
       totalFloors: number(form.get('totalFloors')),
       videoLinks: text(form.get('videoLinks'), 1000),
+      // Галочка согласия: в форме она приходит строкой, отсутствие поля —
+      // это «выключено» (номер дома на сайте остаётся закрытым)
+      showExactAddress: String(form.get('showExactAddress') ?? '') === 'true',
       address: {
         city: text(form.get('city'), BOARD_TEXT_LIMITS.address) || 'Владикавказ',
         district: pick(form.get('district'), DISTRICT_OPTIONS),

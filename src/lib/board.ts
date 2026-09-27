@@ -113,6 +113,10 @@ export interface BoardAdLike {
   authorKind?: string | null
   publishedAt?: string | null
   expiresAt?: string | null
+  /** Согласие собственника показывать точный адрес (см. boardShowsExactAddress) */
+  showExactAddress?: boolean | null
+  /** Адрес объявления вместе с домом (публичная строка собирается из него) */
+  address?: (BoardAddressLike & { house?: string | null }) | null
 }
 
 /** Адрес объявления — общий вид с объектами каталога */
@@ -185,10 +189,31 @@ export const boardDaysLeft = (ad: BoardAdLike, now: number = Date.now()): number
 }
 
 /**
- * Адрес для публикации. Номер дома и квартиры на доске не показываем:
- * объявления размещают частные лица, и точный адрес — это в первую очередь
- * их безопасность; улицу и район покупатель видит, номер уточняет у автора.
- * Полный адрес (с домом) доступен модератору в CRM и автору в личном кабинете.
+ * Показывать точный адрес объявления — номер дома и точную метку на карте.
+ *
+ * Решает собственник: галочка «Показывать точный адрес на сайте» в форме
+ * подачи (поле showExactAddress) — это его согласие, и без неё дом и точная
+ * метка закрыты на сайте для всех. Автор объявления и команда Н15 (агент,
+ * администратор) видят полный адрес всегда: автор — своё же объявление,
+ * сотрудники — по работе (модерация, показ объекта, письмо собственнику).
+ *
+ * Функция одна на всех: по ней и адресную строку собирает страница, и карта
+ * выбирает между точной меткой и примерной областью (см. boardPublicAddress
+ * и ObjectMap) — разойдись эти решения, точный адрес утёк бы по одному
+ * из путей, а другой показывал бы улицу.
+ */
+export const boardShowsExactAddress = (
+  ad: Pick<BoardAdLike, 'showExactAddress'>,
+  viewer?: { isStaff?: boolean; isAuthor?: boolean } | null,
+): boolean => ad.showExactAddress === true || viewer?.isStaff === true || viewer?.isAuthor === true
+
+/**
+ * Адрес объявления для показа. Номер дома на доске по умолчанию не показываем:
+ * объявления размещают частные лица, и точный адрес — это в первую очередь их
+ * безопасность; улицу и район покупатель видит, номер уточняет у автора.
+ * Полный адрес (с домом) показывается только тогда, когда это разрешено
+ * (см. boardShowsExactAddress): согласие собственника, автор объявления
+ * или сотрудник Н15.
  */
 export const boardPublicAddress = (
   address: BoardAddressLike | null | undefined,
@@ -203,8 +228,25 @@ export const boardPublicAddress = (
     address.cityDistrict ? `${String(address.cityDistrict).trim()} район` : null,
     adValue(address.district),
     adValue(address.street),
-    // Дом — только когда адрес показывают модератору или автору
+    // Дом — только когда точный адрес разрешён (см. boardShowsExactAddress)
     opts.full ? adValue(opts.house) : null,
   ]
   return parts.filter(Boolean).join(', ')
+}
+
+/**
+ * Адрес объявления строкой — с домом или без него, по правилу выше
+ * (см. boardShowsExactAddress). Одна точка входа для страницы, карточки
+ * выдачи и метаданных: разойдись они, номер дома показался бы на сайте
+ * там, где его быть не должно.
+ */
+export const boardAdAddress = (
+  ad: BoardAdLike,
+  viewer?: { isStaff?: boolean; isAuthor?: boolean } | null,
+): string => {
+  const address = ad.address || null
+  return boardPublicAddress(address, {
+    house: address?.house,
+    full: boardShowsExactAddress(ad, viewer),
+  })
 }
