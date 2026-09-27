@@ -6,6 +6,8 @@ import { Header } from '@/components/layout/Header'
 import { Footer } from '@/components/layout/Footer'
 import { LkShell } from '@/components/lk/LkShell'
 import ObjectCard, { type ObjectListItem } from '@/components/objects/ObjectCard'
+// Документ объекта из REST → карточка каталога: адрес без номера дома
+import { objectToListItem } from '@/lib/object-list-item'
 import { useI18n } from '@/i18n/i18n-provider'
 
 export default function FavoritesPage() {
@@ -42,28 +44,10 @@ export default function FavoritesPage() {
       )
       const data = await res.json()
       if (cancelled) return
-      setItems(
-        ((data.docs || []) as Record<string, unknown>[]).map((f) => ({
-          id: f.id as number,
-          slug: f.slug as string | undefined,
-          title: f.title as string,
-          type: f.type as 'sale' | 'rent',
-          category: f.category as string,
-          price: f.price as number,
-          area: f.area as number | undefined,
-          areaUnit: f.areaUnit as ObjectListItem['areaUnit'],
-          plotArea: f.plotArea as number | undefined,
-          plotAreaUnit: f.plotAreaUnit as ObjectListItem['plotAreaUnit'],
-          rooms: f.rooms as number | undefined,
-          floor: f.floor as number | undefined,
-          totalFloors: f.totalFloors as number | undefined,
-          // Варианты покупки — значки на обложке карточки (см. purchaseBadges)
-          purchaseOptions: f.purchaseOptions as string[] | undefined,
-          address: f.address as ObjectListItem['address'],
-          primaryImage: f.primaryImage as ObjectListItem['primaryImage'],
-          agent: f.agent as ObjectListItem['agent'],
-        })),
-      )
+      // Общий преобразователь каталога: избранное — та же карточка, а адрес
+      // он отдаёт без номера дома (см. objectToListItem). Избранное клиента —
+      // подборка внешнего пользователя, точный адрес ему не показываем
+      setItems(((data.docs || []) as Record<string, unknown>[]).map(objectToListItem))
       setLoading(false)
     }
     void load()

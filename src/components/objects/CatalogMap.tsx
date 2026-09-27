@@ -60,6 +60,8 @@ export const CatalogMap: FC<Props> = ({ where, lang }) => {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<Ymaps | null>(null)
   const clustererRef = useRef<Ymaps | null>(null)
+  /** Область одиночной точки: круг один и переставляется вместе с точкой */
+  const approxRef = useRef<Ymaps | null>(null)
   /** Условия, под которые карта уже подобрала масштаб: добавление меток
    *  (сервер доопределил адреса) не должно сбрасывать вид пользователя */
   const fittedRef = useRef<string | null>(null)
@@ -134,6 +136,7 @@ export const CatalogMap: FC<Props> = ({ where, lang }) => {
       mapRef.current?.destroy()
       mapRef.current = null
       clustererRef.current = null
+      approxRef.current = null
     }
   }, [])
 
@@ -238,6 +241,26 @@ export const CatalogMap: FC<Props> = ({ where, lang }) => {
           }),
         )
 
+        // Метка стоит в стороне от дома, а настоящая точка — внутри области
+        // вокруг неё (см. object-approx-point). У одиночной точки область
+        // рисуем: на выдаче из десятков объектов круги слились бы в пятно.
+        // Модуль Circle может не прийти со списком загрузки карт — тогда
+        // карта просто остаётся с метками
+        if (approxRef.current) {
+          map.geoObjects.remove(approxRef.current)
+          approxRef.current = null
+        }
+        const single = prepared.length === 1 ? points[0] : null
+        if (single?.radius && typeof ymaps.Circle === 'function') {
+          const area = new ymaps.Circle(
+            [[single.lat, single.lng], single.radius],
+            {},
+            { fillColor: '#C8A44E26', strokeColor: '#C8A44E', strokeOpacity: 0.7, strokeWidth: 1 },
+          )
+          map.geoObjects.add(area)
+          approxRef.current = area
+        }
+
         // Масштаб подбираем один раз на набор условий: сервер может добавить
         // точки позже (определил адреса), но карту пользователю не дёргаем
         if (prepared.length && fittedRef.current !== whereKey) {
@@ -245,7 +268,9 @@ export const CatalogMap: FC<Props> = ({ where, lang }) => {
           if (prepared.length > 1) {
             map.setBounds(clusterer.getBounds(), { checkZoomRange: true, zoomMargin: 40 })
           } else {
-            map.setCenter([points[0].lat, points[0].lng], 16)
+            // Одиночная точка — окрестность, а не дом: точку показываем
+            // приблизительной, на дом карту не наводим
+            map.setCenter([points[0].lat, points[0].lng], 15)
           }
         }
       })
@@ -291,7 +316,7 @@ export const CatalogMap: FC<Props> = ({ where, lang }) => {
       </div>
       {/* Подсказка под картой — без числа объектов: сколько объектов нашлось
           и сколько попало на карту, на сайте не показываем (см. CatalogContent).
-          Точка — координаты объекта или определённый по адресу геокодер */}
+          Метки приблизительные: точный адрес дома по ним не определить */}
       {points.length > 0 && (
         <p className="mt-3 text-xs text-[var(--n15-muted)]">
           {t.catalog.mapOnMap} {data?.truncated ? t.catalog.mapTruncated : t.catalog.mapHint}

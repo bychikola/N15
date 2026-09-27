@@ -7,6 +7,9 @@ import { purchaseBadges, purchaseOptionsApply } from '@/lib/purchase-options'
 // Домовые категории — дом, таунхаус, коттедж, дача, часть дома
 // (см. src/lib/object-categories.ts)
 import { isHouseCategoryCode } from '@/lib/object-categories'
+// Публичный адрес объекта: улица без номера дома, район, город или населённый
+// пункт (см. src/lib/object-public-address.ts)
+import { publicAddressParts, type PublicAddress } from '@/lib/object-public-address'
 
 export interface ObjectListItem {
   id: number
@@ -28,7 +31,9 @@ export interface ObjectListItem {
   /** Подтверждённые варианты покупки — коды из src/lib/purchase-options.ts.
    *  На обложке показываются значками (до двух, см. purchaseBadges) */
   purchaseOptions?: string[]
-  address?: { city?: string; district?: string; cityDistrict?: string; locality?: string; snt?: string; street?: string; house?: string }
+  /** Адрес без номера дома, корпуса и квартиры — их на сайте не показываем
+   *  (см. src/lib/object-public-address.ts) */
+  address?: PublicAddress
   /** Координаты точки объекта (ставятся картой в форме CRM). Нужны режиму
    *  «На карте» каталога: без координат объект на карту не попадает */
   coordinates?: { lat?: number; lng?: number }
@@ -146,16 +151,9 @@ export default function ObjectCard({ obj, lang, t }: ObjectCardProps) {
         </h3>
         <p className="object-card__addr text-xs text-[var(--n15-muted)] mb-1.5">
           {/* Адрес карточки: товарищество, район города (или район республики),
-              населённый пункт, улица и дом. Населённый пункт — перед районом:
-              у объекта в селе без него адрес читался бы как городской */}
-          {[
-            obj.address?.snt,
-            obj.address?.cityDistrict && `${obj.address.cityDistrict} район`,
-            obj.address?.locality,
-            obj.address?.district,
-            obj.address?.street,
-            obj.address?.house,
-          ].filter(Boolean).join(', ')}
+              населённый пункт, улица. Номера дома в карточке нет — точный
+              адрес объекта уточняет агент (см. publicAddressParts) */}
+          {publicAddressParts(obj.address).join(', ')}
         </p>
         {meta && <p className="object-card__meta text-[10px] tracking-[0.18em] uppercase text-[var(--n15-muted)] mb-2">{meta}</p>}
         {obj.agent?.name && (

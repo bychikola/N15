@@ -1,4 +1,7 @@
 import type { ObjectListItem } from '@/components/objects/ObjectCard'
+// Публичный адрес: из документа берём улицу, район и населённый пункт,
+// номер дома и корпус в карточку не пускаем (src/lib/object-public-address.ts)
+import { publicAddressOf } from './object-public-address'
 
 /**
  * Документ объекта из Payload → карточка каталога (ObjectCard). Общий
@@ -24,7 +27,7 @@ export function objectToListItem(doc: Record<string, unknown>): ObjectListItem {
     totalFloors: doc.totalFloors as number | undefined,
     // Варианты покупки — значки на обложке карточки (см. purchaseBadges)
     purchaseOptions: doc.purchaseOptions as string[] | undefined,
-    address: doc.address as ObjectListItem['address'],
+    address: publicAddressOf(doc.address),
     // Координаты точки объекта (их ставит карта в форме CRM). Карточке они
     // не нужны: она показывает адрес, а точки для режима «На карте» каталог
     // берёт у сервера (см. /api/objects/map)

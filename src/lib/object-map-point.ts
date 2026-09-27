@@ -10,13 +10,24 @@
  * клиента (тип ObjectMapPoint). Строки адреса собираются здесь же, чтобы
  * подпись в облачке карты и адрес карточки объекта читались одинаково
  * (порядок полей — как в ObjectCard).
+ *
+ * Точка публичная: номер дома и корпус в подпись не попадают, а координаты
+ * смещаются на приблизительную область — этим занимается маршрут карты
+ * (см. src/lib/object-approx-point.ts). Точная строка адреса (mapGeocodeText)
+ * нужна только серверу — по ней ищется точка, в браузер она не уходит.
  */
+
+import { publicAddressOf, publicAddressText } from './object-public-address'
+import type { ApproxPoint } from './object-approx-point'
 
 /** Точка объекта для карты каталога */
 export interface ObjectMapPoint {
   id: number
+  /** Координаты приблизительные — настоящая точка рядом, внутри области radius */
   lat: number
   lng: number
+  /** Радиус области вокруг метки, метры: точный адрес дома по ней не определить */
+  radius?: number
   title: string
   /** Вид сделки: sale | rent */
   type?: string
@@ -65,28 +76,26 @@ export function validCoordinates(coordinates: unknown): [number, number] | null 
 
 /**
  * Адрес для подписи на карте: товарищество, район города (или район
- * республики), населённый пункт, улица и дом — тот же порядок, что на
- * карточке каталога.
+ * республики), населённый пункт, улица — тот же порядок, что на карточке
+ * каталога, и без номера дома: точный адрес на публичной карте не показываем
+ * (см. src/lib/object-public-address.ts). Города в карточном порядке полей нет
+ * (его заменяет населённый пункт) — но если у объекта, кроме города, ничего не
+ * заполнено, подписью идёт он: облачко метки должно объяснять, где объект.
  */
 export function mapAddressText(doc: Record<string, unknown>): string {
   const a = addressOf(doc)
-  const cityDistrict = text(a.cityDistrict)
-  return [
-    text(a.snt),
-    cityDistrict && `${cityDistrict} район`,
-    text(a.locality),
-    text(a.district),
-    text(a.street),
-    text(a.house),
-  ]
-    .filter(Boolean)
-    .join(', ')
+  return publicAddressText(publicAddressOf(a)) || text(a.city)
 }
 
 /**
- * Адрес для геокодера. Готовый «Полный адрес» из формы CRM точнее сборки из
- * полей (агент мог записать дом, корпус и населённый пункт как удобно),
- * поэтому он в приоритете. Населённый пункт совпал с городом — не повторяем.
+ * Адрес для геокодера — строка для запроса к Яндексу, живёт только на сервере.
+ * Готовый «Полный адрес» из формы CRM точнее сборки из полей (агент мог
+ * записать дом, корпус и населённый пункт как удобно), поэтому он в приоритете.
+ * Населённый пункт совпал с городом — не повторяем.
+ *
+ * Номер дома здесь нужен: точка ищется по дому, а на публичную часть она
+ * уходит уже смещённой и с областью вокруг — см. src/lib/object-approx-point.ts.
+ * Подписью метки эта строка быть не может (в облачке — mapAddressText).
  */
 export function mapGeocodeText(doc: Record<string, unknown>): string {
   const a = addressOf(doc)
@@ -109,10 +118,14 @@ function imageOf(doc: Record<string, unknown>): string | undefined {
   return media.sizes?.card?.url || media.sizes?.thumbnail?.url || media.url || undefined
 }
 
-/** Документ объекта + точка → точка карты (null — объект нельзя показать) */
+/**
+ * Документ объекта + точка → точка карты (null — объект нельзя показать).
+ * Точка — уже приблизительная (см. object-approx-point): точные координаты
+ * объекта на публичную карту не уходят.
+ */
 export function mapPointOf(
   doc: Record<string, unknown>,
-  coords: [number, number],
+  point: ApproxPoint,
   byAddress: boolean,
 ): ObjectMapPoint | null {
   const id = Number(doc.id)
@@ -120,17 +133,16 @@ export function mapPointOf(
   const price = Number(doc.price)
   return {
     id,
-    lat: coords[0],
-    lng: coords[1],
+    lat: point.lat,
+    lng: point.lng,
+    radius: point.radius,
     title: text(doc.title),
     type: text(doc.type) || undefined,
     category: text(doc.category) || undefined,
     price: Number.isFinite(price) && price > 0 ? price : undefined,
-    // Адрес карточки может быть и пустым: в форме заполняют только город или
-    // населённый пункт, и в карточный порядок полей они не попадают. Тогда
-    // подписью идёт строка, по которой определялась точка — облачко метки
-    // должно объяснять, где объект
-    address: mapAddressText(doc) || mapGeocodeText(doc) || undefined,
+    // Подпись метки — публичный адрес (mapAddressText). Строку, по которой
+    // определялась точка, в облачко не отдаём: в ней есть номер дома
+    address: mapAddressText(doc) || undefined,
     image: imageOf(doc),
     byAddress: byAddress || undefined,
   }

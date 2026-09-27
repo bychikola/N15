@@ -5,6 +5,7 @@ import { rateLimited, clientIp } from '@/lib/rate-limit'
 import { geocodeAddressCached } from '@/lib/geocode-server'
 import { sanitizeObjectsWhere, type ObjectsWhere } from '@/lib/objects-where'
 import { mapGeocodeText, mapPointOf, validCoordinates, type ObjectMapPoint } from '@/lib/object-map-point'
+import { approximatePoint } from '@/lib/object-approx-point'
 
 /**
  * Точки объектов для карты каталога (режим «На карте», см. CatalogMap).
@@ -20,7 +21,9 @@ import { mapGeocodeText, mapPointOf, validCoordinates, type ObjectMapPoint } fro
  * закрытые поля в обход полевой проверки коллекции.
  *
  * Картинка, цена и адрес объекта едут вместе с точкой — из них собирается
- * облачко метки, отдельный запрос за карточкой не нужен.
+ * облачко метки, отдельный запрос за карточкой не нужен. Адрес публичный
+ * (улица без номера дома), координаты — приблизительные: точный адрес дома
+ * на карте определить нельзя (см. src/lib/object-approx-point.ts).
  */
 
 // Лимит как у геокодера: карта ходит сюда при каждом изменении фильтров,
@@ -84,7 +87,10 @@ export async function GET(req: NextRequest) {
 
     for (const rawDoc of docs) {
       const doc = rawDoc as unknown as Record<string, unknown>
-      const coords = validCoordinates(doc.coordinates)
+      // Точку показываем приблизительной: метка смещается от дома, вокруг неё
+      // рисуется область (см. object-approx-point). Точные координаты объекта
+      // и адрес с номером дома из этого маршрута не уходят
+      const coords = approximatePoint(validCoordinates(doc.coordinates), Number(doc.id))
       if (coords) {
         const point = mapPointOf(doc, coords, false)
         if (point) points.push(point)
@@ -103,7 +109,11 @@ export async function GET(req: NextRequest) {
           try {
             const coords = await geocodeAddressCached(address)
             if (!coords) return
-            const point = mapPointOf(doc, coords, true)
+            // Точка по адресу тоже приблизительная: геокодер ищет дом, а на
+            // карту уходит смещённая метка с областью вокруг
+            const approx = approximatePoint(coords, Number(doc.id))
+            if (!approx) return
+            const point = mapPointOf(doc, approx, true)
             if (point) points.push(point)
           } finally {
             pending--

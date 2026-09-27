@@ -18,6 +18,8 @@ import { GoalLink } from '@/components/analytics/GoalLink'
 // Звонок в подвале главной — тем же номером, что в шапке: tel:-ссылка
 // собирается из номера настроек (см. src/lib/call-routing.ts)
 import { phoneHref } from '@/lib/call-routing'
+// Публичный адрес объекта в карточках главной (src/lib/object-public-address.ts)
+import { publicAddressOf } from '@/lib/object-public-address'
 // Справочники допустимых значений фильтров: where-запрос по select-полю
 // принимает только значения из его опций — чужое значение роняет страницу
 // серверной ошибкой («This page couldn't load»)
@@ -98,8 +100,9 @@ export default async function HomePage({ params, searchParams }: PageProps) {
     : undefined
 
   // Карточки «как в каталоге»: ObjectCard ждёт полный набор полей —
-  // тип сделки, адрес улицы/дома и изображение с Payload-размерами.
-  // Общий для всех блоков объектов на главной.
+  // тип сделки, адрес (улица без номера дома, см. publicAddressOf)
+  // и изображение с Payload-размерами. Общий для всех блоков объектов
+  // на главной.
   const toListItem = (d: { id: number | string }): ObjectListItem => {
     const o = d as unknown as Record<string, unknown>
     const img = o.primaryImage as
@@ -110,7 +113,7 @@ export default async function HomePage({ params, searchParams }: PageProps) {
           sizes?: { thumbnail?: { url?: string }; card?: { url?: string } }
         }
       | undefined
-    const addr = o.address as ObjectListItem['address'] | undefined
+    const addr = publicAddressOf(o.address)
     return {
       id: o.id as number,
       title: o.title as string,

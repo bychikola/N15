@@ -6,11 +6,17 @@ import { loadYmaps, type Ymaps } from '@/lib/ymaps'
 import { geocodeAddress } from '@/lib/geocode'
 
 interface ObjectMapProps {
-  /** Адрес для геокодирования (город, улица, дом). */
+  /** Адрес для геокодирования — улица без номера дома. */
   address: string
-  /** Ручные координаты из админки — приоритет над геокодированием. */
+  /**
+   * Координаты точки — уже приблизительные (смещение от дома считает сервер,
+   * см. src/lib/object-approx-point.ts): точных координат на публичной части
+   * нет ни у страницы, ни у карты.
+   */
   lat?: number
   lng?: number
+  /** Радиус области вокруг метки, метры: настоящая точка объекта внутри неё */
+  radius?: number
 }
 
 type Status = 'loading' | 'ready' | 'error'
@@ -30,7 +36,7 @@ function isValidCoord(value: number | undefined, min: number, max: number): valu
   return typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max
 }
 
-export const ObjectMap: FC<ObjectMapProps> = ({ address, lat, lng }) => {
+export const ObjectMap: FC<ObjectMapProps> = ({ address, lat, lng, radius }) => {
   const { t } = useI18n()
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<Ymaps | null>(null)
@@ -57,11 +63,25 @@ export const ObjectMap: FC<ObjectMapProps> = ({ address, lat, lng }) => {
           : await resolveCoords(address)
         if (cancelled) return
 
+        // Масштаб показывает округу целиком: по метке не должно быть видно,
+        // какой это дом (точку на дом не наводим)
         const map = new ymaps.Map(el, {
           center: coords,
-          zoom: 16,
+          zoom: 15,
           controls: ['zoomControl'],
         })
+        // Область, в которой находится объект: метка смещена от дома, а
+        // настоящая точка — внутри круга. Модуль Circle может не прийти вместе
+        // со списком загрузки: без него карта просто остаётся с меткой
+        if (radius && typeof ymaps.Circle === 'function') {
+          map.geoObjects.add(
+            new ymaps.Circle(
+              [coords, radius],
+              {},
+              { fillColor: '#C8A44E26', strokeColor: '#C8A44E', strokeOpacity: 0.7, strokeWidth: 1 },
+            ),
+          )
+        }
         const placemark = new ymaps.Placemark(
           coords,
           { hintContent: address, balloonContent: address },
@@ -80,7 +100,7 @@ export const ObjectMap: FC<ObjectMapProps> = ({ address, lat, lng }) => {
       mapRef.current?.destroy()
       mapRef.current = null
     }
-  }, [apiKey, address, lat, lng, hasManualCoords, canGeocode, showFallback])
+  }, [apiKey, address, lat, lng, radius, hasManualCoords, canGeocode, showFallback])
 
   // Фолбэк: нет ключа / ошибка скрипта / геокод не нашёл / нет адреса.
   // На сторонние карты не уводим: показываем адрес — его довольно, чтобы
@@ -104,6 +124,11 @@ export const ObjectMap: FC<ObjectMapProps> = ({ address, lat, lng }) => {
         <div className="absolute inset-0 z-10 flex items-center justify-center bg-[var(--n15-charcoal)]/70 text-xs tracking-wider uppercase text-[var(--n15-muted)]">
           {t.common.loading}
         </div>
+      )}
+      {/* Подпись под картой: метка стоит в стороне от дома — объясняем это
+          клиенту, чтобы он не искал объект по нарисованной точке */}
+      {status === 'ready' && (
+        <p className="mt-3 text-xs text-[var(--n15-muted)]">{t.map.approx}</p>
       )}
     </div>
   )

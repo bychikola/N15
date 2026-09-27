@@ -31,8 +31,12 @@ export function loadYmaps(apiKey: string): Promise<Ymaps> {
       // geoObject.addon.balloon — облачко метки: в список модулей по
       // умолчанию он не входит, и без него у метки нет свойства balloon —
       // нажатие на метку ничего не открывает. Карточку объекта в облачке
-      // собирает и открывает CatalogMap
-      script.src = `https://api-maps.yandex.ru/2.1/?apikey=${encodeURIComponent(apiKey)}&lang=ru_RU&load=Map,Placemark,Clusterer,geocode,control.ZoomControl,geoObject.addon.balloon`
+      // собирает и открывает CatalogMap.
+      // Circle — область вокруг метки на карте объекта: точку публичной части
+      // показываем приблизительной (см. src/lib/object-approx-point.ts).
+      // Модуль перечислен здесь один раз на всё приложение: список загрузки
+      // фиксируется первым вызовом loadYmaps
+      script.src = `https://api-maps.yandex.ru/2.1/?apikey=${encodeURIComponent(apiKey)}&lang=ru_RU&load=Map,Placemark,Circle,Clusterer,geocode,control.ZoomControl,geoObject.addon.balloon`
       script.async = true
       script.onload = () => {
         if (win.ymaps?.ready) {

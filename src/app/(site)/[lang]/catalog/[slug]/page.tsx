@@ -24,6 +24,15 @@ import { floorHuman, floorLabel } from '@/lib/floor-format'
 import { purchaseOptionsApply } from '@/lib/purchase-options'
 // Домовые категории и категории с участком — общий справочник
 import { isHouseCategoryCode } from '@/lib/object-categories'
+// Публичный адрес: улица, район и населённый пункт — номер дома, корпус и
+// полный адрес на сайте не показываем (src/lib/object-public-address.ts)
+import { publicAddressOf } from '@/lib/object-public-address'
+// Карта: точные координаты объекта на публичную часть не уходят — точка
+// показывается приблизительной областью (src/lib/object-approx-point.ts)
+import { approximatePoint } from '@/lib/object-approx-point'
+import { validCoordinates } from '@/lib/object-map-point'
+// Документ объекта → карточка каталога: адрес без номера дома (см. модуль)
+import { objectToListItem } from '@/lib/object-list-item'
 
 interface PageProps {
   params: Promise<{ lang: string; slug: string }>
@@ -90,7 +99,9 @@ export default async function ObjectPage({ params }: PageProps) {
     // Подкатегория коммерции (готовый бизнес, офис, торговое помещение…):
     // у остальных категорий поля нет (см. src/lib/commercial-types.ts)
     commercialType?: string
-    address?: { city?: string; district?: string; cityDistrict?: string; locality?: string; snt?: string; street?: string; house?: string; apartment?: string }
+    // Адрес документа целиком (в базе у него есть и номер дома, и корпус);
+    // на страницу берём только публичные части — см. publicAddress ниже
+    address?: unknown
     coordinates?: { lat?: number; lng?: number }
     description?: { root?: { children?: unknown[] } }
     features?: { feature?: string }[]
@@ -207,34 +218,31 @@ export default async function ObjectPage({ params }: PageProps) {
     limit: 3,
     depth: 1,
   })
-  const similar: ObjectListItem[] = (similarDocs || []).map((d) => ({
-    id: d.id as number,
-    slug: (d as Record<string, unknown>).slug as string | undefined,
-    title: d.title as string,
-    type: d.type as 'sale' | 'rent',
-    category: d.category as string,
-    price: d.price as number,
-    area: d.area as number | undefined,
-    areaUnit: d.areaUnit as ObjectListItem['areaUnit'],
-    plotArea: d.plotArea as number | undefined,
-    plotAreaUnit: d.plotAreaUnit as ObjectListItem['plotAreaUnit'],
-    rooms: d.rooms as number | undefined,
-    floor: d.floor as number | undefined,
-    totalFloors: d.totalFloors as number | undefined,
-    address: d.address as ObjectListItem['address'],
-    primaryImage: d.primaryImage as ObjectListItem['primaryImage'],
-    agent: d.agent as ObjectListItem['agent'],
-  }))
+  // Похожие объекты — тем же преобразователем, что каталог: адрес в карточку
+  // приходит без номера дома (см. objectToListItem)
+  const similar: ObjectListItem[] = (similarDocs || []).map((d) =>
+    objectToListItem(d as unknown as Record<string, unknown>),
+  )
+
+  // Публичный адрес страницы: город, населённый пункт, район города (или
+  // район республики), товарищество, улица. Номер дома и корпус сюда не
+  // попадают — их на сайте не показываем, точный адрес клиент уточняет
+  // у агента (см. src/lib/object-public-address.ts)
+  const publicAddress = publicAddressOf(obj.address)
 
   // Map inputs: manual coordinates (priority) or geocode by address.
-  const mapLat = obj.coordinates?.lat
-  const mapLng = obj.coordinates?.lng
+  // Точка на карте — приблизительная: смещение от дома считает сервер по
+  // секрету приложения (см. src/lib/object-approx-point.ts). Без координат
+  // точку определяет геокодер по адресу — тоже без номера дома, значит по
+  // улице; этим занимается клиент карты (ObjectMap)
+  const approxPoint = approximatePoint(validCoordinates(obj.coordinates), obj.id)
   // district excluded — it can reduce geocode accuracy.
-  const mapAddress = [obj.address?.city, obj.address?.street, obj.address?.house].filter(Boolean).join(', ')
-  const hasValidCoords =
-    typeof mapLat === 'number' && Number.isFinite(mapLat) && mapLat >= -90 && mapLat <= 90 &&
-    typeof mapLng === 'number' && Number.isFinite(mapLng) && mapLng >= -180 && mapLng <= 180
-  const showMap = mapAddress.length > 0 || hasValidCoords
+  const mapAddress = [
+    publicAddress?.city,
+    publicAddress?.locality && publicAddress.locality !== publicAddress.city ? publicAddress.locality : '',
+    publicAddress?.street,
+  ].filter(Boolean).join(', ')
+  const showMap = mapAddress.length > 0 || Boolean(approxPoint)
 
   return (
     <>
@@ -284,14 +292,15 @@ export default async function ObjectPage({ params }: PageProps) {
                 {/* Район города (объект в черте Владикавказа) заменяет в строке
                     муниципальный район — округ и так ясен из города.
                     Населённый пункт республики идёт отдельным звеном: у объекта
-                    в селе адрес без него читался бы как городской */}
+                    в селе адрес без него читался бы как городской. Номера дома
+                    в строке нет: точный адрес знает только агент, клиент
+                    уточняет его при просмотре (publicAddressOf) */}
                 {[
-                  obj.address?.city,
-                  obj.address?.locality,
-                  obj.address?.cityDistrict ? `${obj.address.cityDistrict} район` : obj.address?.district,
-                  obj.address?.snt,
-                  obj.address?.street,
-                  obj.address?.house,
+                  publicAddress?.city,
+                  publicAddress?.locality,
+                  publicAddress?.cityDistrict ? `${publicAddress.cityDistrict} район` : publicAddress?.district,
+                  publicAddress?.snt,
+                  publicAddress?.street,
                 ].filter(Boolean).join(', ')}
               </p>
 
@@ -423,7 +432,12 @@ export default async function ObjectPage({ params }: PageProps) {
               {showMap && (
                 <div className="mb-8">
                   <h2 className="text-xl font-[family-name:var(--font-display)] text-[var(--n15-white)] mb-4">{t.map.title}</h2>
-                  <ObjectMap address={mapAddress} lat={mapLat} lng={mapLng} />
+                  <ObjectMap
+                    address={mapAddress}
+                    lat={approxPoint?.lat}
+                    lng={approxPoint?.lng}
+                    radius={approxPoint?.radius}
+                  />
                 </div>
               )}
 
