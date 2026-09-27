@@ -4,6 +4,7 @@ import { useState, type FC } from 'react'
 import { useI18n } from '@/i18n/i18n-provider'
 import { Button } from '@/components/ui/Button'
 import { ConsentCheckbox, ConsentLine, MarketingConsent } from '@/components/ui/ConsentCheckbox'
+import { HoneypotField, readServerError, useSpamGuard } from '@/components/ui/SpamGuard'
 import { legalDocLinks } from '@/lib/legal-docs'
 import { reachGoal } from '@/lib/metrika'
 
@@ -25,10 +26,14 @@ const inputCls =
  *
  * Обе отметки уходят в заявку вместе с данными формы (consent и consentCallback)
  * и сохраняются в CRM: по ним видно, на что человек согласился.
+ *
+ * Обязательное поле одно — телефон: по нему и перезванивают. Имя не
+ * спрашиваем (в CRM заявка видна по номеру), сообщение — необязательное.
+ * От спама форму защищает невидимая ловушка с временем заполнения (SpamGuard).
  */
 export const ContactForm: FC = () => {
   const { t } = useI18n()
-  const [name, setName] = useState('')
+  const { honeypot, setHoneypot, spamFields } = useSpamGuard()
   const [phone, setPhone] = useState('')
   const [message, setMessage] = useState('')
   const [agreed, setAgreed] = useState(false)
@@ -54,7 +59,6 @@ export const ContactForm: FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           type: 'callback',
-          clientName: name,
           clientPhone: phone,
           message,
           // Отметки согласий: их видно в заявке в CRM (дату и версию
@@ -64,10 +68,14 @@ export const ContactForm: FC = () => {
           marketingConsent: marketing,
           status: 'unsorted',
           source: 'site',
+          // Невидимая защита от спама: ловушка и время заполнения формы
+          ...spamFields(),
         }),
       })
       if (!res.ok) {
-        setError(t.contacts.sendError)
+        // Причину отказа объясняет сервер: «Слишком много отправок…»,
+        // «Проверьте номер телефона…» — показываем её как есть
+        setError(await readServerError(res, t.contacts.sendError))
         return
       }
       // Цели Метрики: заявка отправлена (lead_form) и, отдельно, что это
@@ -95,14 +103,6 @@ export const ContactForm: FC = () => {
   return (
     <form onSubmit={(e) => void submit(e)} className="flex flex-col gap-4">
       <input
-        type="text"
-        required
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        placeholder={t.contacts.namePlaceholder}
-        className={inputCls}
-      />
-      <input
         type="tel"
         required
         value={phone}
@@ -127,6 +127,8 @@ export const ContactForm: FC = () => {
         docs={legalDocLinks('callback-consent')}
       />
       <MarketingConsent checked={marketing} onChange={setMarketing} />
+      {/* Невидимая защита от спама: поле-ловушка, человек его не видит */}
+      <HoneypotField value={honeypot} onChange={setHoneypot} />
       {(!agreed || !callbackAgreed) && (
         <p className="text-[11px] leading-relaxed text-[var(--n15-muted)]">{t.consent.hint}</p>
       )}

@@ -6,6 +6,8 @@ import { OBJECT_CATEGORIES } from '@/lib/object-categories'
 // (см. src/lib/legal-docs.ts): сохраняется в заявке, чтобы принятые условия
 // не менялись задним числом при обновлении текстов
 import { LEGAL_VERSION } from '@/lib/legal-docs'
+// Невидимая защита форм от спама (поле-ловушка, время заполнения, лимит по IP)
+import { FILL_TIME_FIELD, HONEYPOT_FIELD, MAX_MESSAGE, checkSpam } from '@/lib/form-guard'
 
 /**
  * Источники заявок, которые приходят с форм сайта: у них обязательна галочка
@@ -24,7 +26,9 @@ export const Applications: CollectionConfig = {
   admin: {
     useAsTitle: 'clientName',
     group: 'Агентство',
-    defaultColumns: ['clientName', 'type', 'status', 'createdAt'],
+    // Телефон рядом с именем: у заявок с сайта имя пустое (формы его не
+    // спрашивают), и клиента в списке админки видно по номеру
+    defaultColumns: ['clientName', 'clientPhone', 'type', 'status', 'createdAt'],
   },
   access: {
     read: ({ req: { user } }) => {
@@ -63,6 +67,28 @@ export const Applications: CollectionConfig = {
   },
   hooks: {
     beforeChange: [
+      // Невидимая защита публичных форм от спама (см. src/lib/form-guard.ts).
+      // Проверяются только анонимные создания: заявки, заведённые сотрудником
+      // из CRM (там req.user), и правки уже сохранённых заявок защита не
+      // касается — иначе живой агент упёрся бы в лимит на своей же работе.
+      async ({ data, operation, req }) => {
+        if (operation !== 'create' || req.user) return data
+        const failure = checkSpam(data as Record<string, unknown>, req.headers)
+        // APIError, а не Error: текст причины должен дойти до формы
+        if (failure) throw new APIError(failure.message, failure.status)
+
+        // Дальше заявка живёт без полей защиты: ловушка и время заполнения
+        // были нужны только проверке, в CRM и базе им делать нечего
+        const doc = data as Record<string, unknown>
+        delete doc[HONEYPOT_FIELD]
+        delete doc[FILL_TIME_FIELD]
+        // «Простыню» в сообщении обрезаем: в карточке заявки её не прочитать,
+        // а лишние килобайты остаются в базе
+        if (typeof doc.message === 'string' && doc.message.length > MAX_MESSAGE) {
+          doc.message = doc.message.slice(0, MAX_MESSAGE)
+        }
+        return data
+      },
       // Отметки согласий с форм сайта: из формы приходит только сама галочка
       // (consent, consentCallback, marketingConsent), а дату и редакцию
       // документов ставит сервер — клиент их не присылает и не может
@@ -183,10 +209,16 @@ export const Applications: CollectionConfig = {
       relationTo: 'objects',
     },
     {
+      // Поле необязательное: формы сайта имя не спрашивают (клиенту проще
+      // оставить телефон, а агент узнаёт имя в разговоре). Заявка с сайта
+      // приходит без имени — в CRM её видно по номеру телефона
       name: 'clientName',
       type: 'text',
       label: 'Имя клиента',
-      required: true,
+      admin: {
+        description:
+          'У заявок с сайта пусто: формы имя не спрашивают. Заполняется, когда агент узнаёт имя в разговоре',
+      },
     },
     {
       name: 'clientPhone',
@@ -340,6 +372,29 @@ export const Applications: CollectionConfig = {
       type: 'relationship',
       label: 'Клиент',
       relationTo: 'customers',
+    },
+    // --- Поля невидимой защиты от спама (см. src/lib/form-guard.ts) ---------
+    // Объявлены в коллекции, чтобы Payload принял их из тела запроса и отдал
+    // хуку; в CRM не показываются, а из прошедшей проверку заявки их удаляет
+    // beforeChange — в базе и карточке остаются только данные клиента
+    {
+      // Ловушка для ботов: скрытый input формы. Человек его не видит и не
+      // заполняет, спам-боты заполняют все поля подряд — непустое значение
+      // здесь означает бота, такую заявку сервер не принимает
+      name: HONEYPOT_FIELD,
+      type: 'text',
+      admin: {
+        hidden: true,
+        description: 'Скрытая ловушка формы: заполнена — заявку прислал бот, сервер её не принимает',
+      },
+    },
+    {
+      // Сколько миллисекунд человек заполнял форму (считает сама форма).
+      // Слишком быстрая отправка — признак бота; отсутствие значения —
+      // не признак: у старых страниц из кэша поля нет
+      name: FILL_TIME_FIELD,
+      type: 'number',
+      admin: { hidden: true },
     },
   ],
 }

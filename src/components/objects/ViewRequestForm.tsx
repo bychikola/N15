@@ -4,6 +4,7 @@ import { useState, type FC } from 'react'
 import { useI18n } from '@/i18n/i18n-provider'
 import { Button } from '@/components/ui/Button'
 import { ConsentCheckbox, MarketingConsent } from '@/components/ui/ConsentCheckbox'
+import { HoneypotField, readServerError, useSpamGuard } from '@/components/ui/SpamGuard'
 import { reachGoal } from '@/lib/metrika'
 import Link from 'next/link'
 
@@ -12,9 +13,16 @@ interface Props {
   lang: string
 }
 
+/**
+ * Заявка на просмотр объекта с карточки каталога. Обязательное поле одно —
+ * телефон (по нему агент перезвонит), имя не спрашиваем: в CRM заявку видно
+ * по номеру, а имя агент узнаёт в разговоре. От спама форму защищает
+ * невидимая ловушка с временем заполнения (см. SpamGuard).
+ */
+
 export const ViewRequestForm: FC<Props> = ({ objectId, lang }) => {
   const { t } = useI18n()
-  const [name, setName] = useState('')
+  const { honeypot, setHoneypot, spamFields } = useSpamGuard()
   const [phone, setPhone] = useState('')
   const [message, setMessage] = useState('')
   const [agreed, setAgreed] = useState(false)
@@ -54,7 +62,6 @@ export const ViewRequestForm: FC<Props> = ({ objectId, lang }) => {
         body: JSON.stringify({
           type: 'viewing',
           object: objectId,
-          clientName: name,
           clientPhone: phone,
           message,
           // Отметка согласия сохраняется в заявке в CRM (дату и версию
@@ -64,10 +71,14 @@ export const ViewRequestForm: FC<Props> = ({ objectId, lang }) => {
           status: 'unsorted',
           source: 'site',
           ...(userId ? { user: userId } : {}),
+          // Невидимая защита от спама: ловушка и время заполнения формы
+          ...spamFields(),
         }),
       })
       if (!res.ok) {
-        setError(t.lkProfile.save + ' ✕')
+        // Причину отказа объясняет сервер: «Слишком много отправок…»,
+        // «Проверьте номер телефона…» — показываем её как есть
+        setError(await readServerError(res, t.lkProfile.save + ' ✕'))
         return
       }
       const appData = await res.json()
@@ -121,13 +132,14 @@ export const ViewRequestForm: FC<Props> = ({ objectId, lang }) => {
 
   return (
     <form onSubmit={(e) => void submit(e)} className="flex flex-col gap-3">
-      <input type="text" required value={name} onChange={(e) => setName(e.target.value)} placeholder={t.object.namePlaceholder} className={inputCls} />
       <input type="tel" required value={phone} onChange={(e) => setPhone(e.target.value)} placeholder={t.object.phonePlaceholder} className={inputCls} />
       <textarea value={message} onChange={(e) => setMessage(e.target.value)} placeholder={t.object.messagePlaceholder} rows={3} className={`${inputCls} resize-none`} />
       {/* Согласие на обработку данных обязательно, рекламная рассылка —
           отдельная необязательная галочка (см. ConsentCheckbox) */}
       <ConsentCheckbox checked={agreed} onChange={setAgreed} />
       <MarketingConsent checked={marketing} onChange={setMarketing} />
+      {/* Невидимая защита от спама: поле-ловушка, человек его не видит */}
+      <HoneypotField value={honeypot} onChange={setHoneypot} />
       {!agreed && <p className="text-[11px] leading-relaxed text-[var(--n15-muted)]">{t.consent.hint}</p>}
       {error && <p className="text-xs text-red-400">{error}</p>}
       {/* цвет текста как у кнопки «Позвонить» — светлый на золотом */}

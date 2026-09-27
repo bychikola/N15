@@ -4,6 +4,7 @@ import { useState, type FC } from 'react'
 import { useI18n } from '@/i18n/i18n-provider'
 import { Button } from '@/components/ui/Button'
 import { ConsentCheckbox, MarketingConsent } from '@/components/ui/ConsentCheckbox'
+import { HoneypotField, readServerError, useSpamGuard } from '@/components/ui/SpamGuard'
 import { reachGoal } from '@/lib/metrika'
 
 const inputCls =
@@ -19,8 +20,12 @@ interface Props {
 
 /**
  * Единственная форма страниц «Ипотека и выгодные условия» и «Рассрочка»:
- * имя, телефон, программа, сообщение и обязательная галочка согласия
+ * телефон, программа, сообщение и обязательная галочка согласия
  * (со ссылками на согласие и политику — см. ConsentCheckbox).
+ *
+ * Обязательное поле одно — телефон: по нему перезванивают. Имя не спрашиваем
+ * (в CRM заявку видно по номеру), программа и сообщение — необязательные.
+ * От спама форму защищает невидимая ловушка с временем заполнения (SpamGuard).
  *
  * Отправка — POST /api/applications (Payload REST, коллекция applications),
  * заявка сразу появляется в CRM в разделе «Заявки», в «Неразобранном».
@@ -35,7 +40,7 @@ interface Props {
 export const PurchaseLeadForm: FC<Props> = ({ kind, className = '' }) => {
   const { t } = useI18n()
   const f = t.purchase.common.form
-  const [name, setName] = useState('')
+  const { honeypot, setHoneypot, spamFields } = useSpamGuard()
   const [phone, setPhone] = useState('')
   const [program, setProgram] = useState('')
   const [comment, setComment] = useState('')
@@ -71,7 +76,6 @@ export const PurchaseLeadForm: FC<Props> = ({ kind, className = '' }) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           type: kind === 'installment' ? 'installment' : 'mortgage',
-          clientName: name,
           clientPhone: phone,
           message,
           // Отметки согласий сохраняются в заявке вместе с датой и версией
@@ -81,10 +85,14 @@ export const PurchaseLeadForm: FC<Props> = ({ kind, className = '' }) => {
           status: 'unsorted',
           // Источник в CRM — раздел сайта, с которого пришла заявка
           source: kind === 'installment' ? 'Рассрочка' : 'Ипотека',
+          // Невидимая защита от спама: ловушка и время заполнения формы
+          ...spamFields(),
         }),
       })
       if (!res.ok) {
-        setError(f.error)
+        // Причину отказа объясняет сервер: «Слишком много отправок…»,
+        // «Проверьте номер телефона…» — показываем её как есть
+        setError(await readServerError(res, f.error))
         return
       }
       // Цель Метрики «заявка отправлена» — без персональных данных из формы
@@ -116,15 +124,6 @@ export const PurchaseLeadForm: FC<Props> = ({ kind, className = '' }) => {
           {kind === 'installment' ? t.purchase.installment.formText : t.purchase.mortgage.formText}
         </p>
       </div>
-      <input
-        type="text"
-        required
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        placeholder={f.namePlaceholder}
-        aria-label={f.namePlaceholder}
-        className={inputCls}
-      />
       <input
         type="tel"
         required
@@ -159,6 +158,8 @@ export const PurchaseLeadForm: FC<Props> = ({ kind, className = '' }) => {
       />
       <ConsentCheckbox checked={agreed} onChange={setAgreed} />
       <MarketingConsent checked={marketing} onChange={setMarketing} />
+      {/* Невидимая защита от спама: поле-ловушка, человек его не видит */}
+      <HoneypotField value={honeypot} onChange={setHoneypot} />
       {!agreed && <p className="text-[11px] leading-relaxed text-[var(--n15-muted)]">{t.consent.hint}</p>}
       {error && <p className="text-xs text-[var(--n15-burgundy)]">{error}</p>}
       {/* Ссылки на согласие и политику — в тексте галочки выше: здесь только

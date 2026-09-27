@@ -4,6 +4,7 @@ import { useState, type FC } from 'react'
 import { useI18n } from '@/i18n/i18n-provider'
 import { Button } from '@/components/ui/Button'
 import { ConsentCheckbox, MarketingConsent } from '@/components/ui/ConsentCheckbox'
+import { HoneypotField, readServerError, useSpamGuard } from '@/components/ui/SpamGuard'
 // Тип недвижимости в заявке на подбор — категории каталога: заявку и объект
 // агент читает одними и теми же словами (см. src/lib/object-categories.ts)
 import { OBJECT_CATEGORIES } from '@/lib/object-categories'
@@ -41,10 +42,15 @@ interface Props {
  * данных: без отметки кнопка неактивна и форма не отправляется. Согласие на
  * рекламные сообщения — отдельная необязательная галочка, на отправку не
  * влияет.
+ *
+ * Обязательное поле одно — телефон: по нему перезванивают, а имя клиента
+ * агент узнаёт в разговоре (в CRM заявка видна по номеру). Остальные поля
+ * необязательные. От спама форму защищает невидимая ловушка с временем
+ * заполнения (см. SpamGuard) — вопрос-«капчи» в форме нет.
  */
 export const LeadForm: FC<Props> = ({ kind, title, text, className = '' }) => {
   const { t } = useI18n()
-  const [name, setName] = useState('')
+  const { honeypot, setHoneypot, spamFields } = useSpamGuard()
   const [phone, setPhone] = useState('')
   const [address, setAddress] = useState('')
   const [propertyType, setPropertyType] = useState('')
@@ -83,7 +89,6 @@ export const LeadForm: FC<Props> = ({ kind, title, text, className = '' }) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           type: kind,
-          clientName: name,
           clientPhone: phone,
           // Запрос подбора: тип недвижимости, бюджет и место поиска — в свои
           // поля заявки (в CRM их видно отдельно от сообщения)
@@ -97,10 +102,14 @@ export const LeadForm: FC<Props> = ({ kind, title, text, className = '' }) => {
           marketingConsent: marketing,
           status: 'unsorted',
           source: 'site',
+          // Невидимая защита от спама: ловушка и время заполнения формы
+          ...spamFields(),
         }),
       })
       if (!res.ok) {
-        setError(t.lead.error)
+        // Причину отказа объясняет сервер: «Слишком много отправок…»,
+        // «Проверьте номер телефона…» — показываем её как есть
+        setError(await readServerError(res, t.lead.error))
         return
       }
       // Цель Метрики «заявка отправлена» — без персональных данных из формы
@@ -135,14 +144,6 @@ export const LeadForm: FC<Props> = ({ kind, title, text, className = '' }) => {
           {text && <p className="text-sm text-[var(--n15-muted)] leading-relaxed">{text}</p>}
         </div>
       )}
-      <input
-        type="text"
-        required
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        placeholder={t.lead.namePlaceholder}
-        className={inputCls}
-      />
       <input
         type="tel"
         required
@@ -206,6 +207,8 @@ export const LeadForm: FC<Props> = ({ kind, title, text, className = '' }) => {
       />
       <ConsentCheckbox checked={agreed} onChange={setAgreed} />
       <MarketingConsent checked={marketing} onChange={setMarketing} />
+      {/* Невидимая защита от спама: поле-ловушка, человек его не видит */}
+      <HoneypotField value={honeypot} onChange={setHoneypot} />
       {!agreed && <p className="text-[11px] leading-relaxed text-[var(--n15-muted)]">{t.consent.hint}</p>}
       {error && <p className="text-xs text-[var(--n15-burgundy)]">{error}</p>}
       <Button variant="primary" size="md" disabled={sending || !agreed}>
