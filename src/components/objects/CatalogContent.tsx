@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useI18n } from '@/i18n/i18n-provider'
 import ObjectCard, { type ObjectListItem } from '@/components/objects/ObjectCard'
-import CatalogFilters, { buildWhere, cityValuesFor, regionValuesFor, emptyFilters, purchaseValues, AGENT_URL_PARAM, OBJECT_TYPES, OBJECT_CATEGORIES, OBJECT_HEATING, OBJECT_ROOMS, OBJECT_BUILDING, OBJECT_GAS, type FiltersState } from '@/components/objects/CatalogFilters'
+import CatalogFilters, { buildWhere, cityValuesFor, regionValuesFor, emptyFilters, purchaseValues, AGENT_URL_PARAM, OBJECT_TYPES, OBJECT_CATEGORIES, OBJECT_HEATING, OBJECT_ROOMS, OBJECT_BUILDING, OBJECT_GAS, OBJECT_PARKING, type FiltersState } from '@/components/objects/CatalogFilters'
 import { HOUSE_TYPE_VALUES, houseTypeCategory } from '@/lib/object-categories'
 import { COMMERCIAL_TYPE_VALUES } from '@/lib/commercial-types'
 import CategoryChips from '@/components/objects/CategoryChips'
@@ -42,6 +42,7 @@ const URL_PARAM: Record<keyof FiltersState, string> = {
   floorsMin: 'floors_min',
   floorsMax: 'floors_max',
   heating: 'heating',
+  parking: 'parking',
   // Характеристики объекта (второй ряд панели фильтров): улица, жилая площадь,
   // площадь кухни, материал дома, газ и признаки «есть»
   street: 'street',
@@ -139,6 +140,7 @@ function filtersFromParams(sp: URLSearchParams, cityRegions: readonly CityFilter
     livingAreaMax: sp.get(URL_PARAM.livingAreaMax) ?? '',
     kitchenAreaMin: sp.get(URL_PARAM.kitchenAreaMin) ?? '',
     kitchenAreaMax: sp.get(URL_PARAM.kitchenAreaMax) ?? '',
+    parking: isKnown(sp.get(URL_PARAM.parking) ?? '', OBJECT_PARKING) ? (sp.get(URL_PARAM.parking) as string) : '',
     building: isKnown(sp.get(URL_PARAM.building) ?? '', OBJECT_BUILDING) ? (sp.get(URL_PARAM.building) as string) : '',
     gas: isKnown(sp.get(URL_PARAM.gas) ?? '', OBJECT_GAS) ? (sp.get(URL_PARAM.gas) as string) : '',
     individualHeating: sp.get(URL_PARAM.individualHeating) === '1' ? '1' : '',

@@ -48,6 +48,19 @@ import { PURCHASE_OPTIONS, isPurchaseOption, purchaseOptionsApply } from '@/lib/
 // общий справочник со схемой коллекции и фильтром каталога
 // (см. src/lib/commercial-types.ts)
 import { COMMERCIAL_TYPES } from '@/lib/commercial-types'
+// Варианты характеристик (ремонт, отопление, лифт, парковка) и правила их
+// применимости по категории объекта — общий справочник с фильтрами каталога
+// и карточкой сайта (см. src/lib/object-characteristics.ts)
+import {
+  CONDITION_OPTIONS,
+  ELEVATOR_OPTIONS,
+  HEATING_OPTIONS,
+  PARKING_OPTIONS,
+  conditionAppliesTo,
+  elevatorAppliesTo,
+  heatingAppliesTo,
+  parkingAppliesTo,
+} from '@/lib/object-characteristics'
 import { LegalCheckBlock, type LegalFocus } from '@/components/crm/LegalCheckBlock'
 import { PlacementCheckBlock } from '@/components/crm/PlacementCheckBlock'
 import { HouseDataBlock } from '@/components/crm/HouseDataBlock'
@@ -321,8 +334,9 @@ const emptyForm = {
   commercialType: '',
   kitchenArea: '', rooms: '', floor: '', totalFloors: '', buildingType: '', condition: '',
   // Признаки объекта: лифт, двор и парковка — свободный ввод с подсказками
-  // («Есть», «Закрытый», «Подземный паркинг»): по лифту и двору есть фильтры
-  // в каталоге, поэтому значение лучше писать узнаваемым словом
+  // («Есть», «Закрытый», «Подземный паркинг»): по лифту, двору и парковке
+  // есть фильтры в каталоге, поэтому значение лучше писать узнаваемым словом
+  // (варианты подсказок — src/lib/object-characteristics.ts)
   elevator: '', yard: '', parking: '',
   // Этажность дома (только дом и таунхаус, см. save): выбор из списка «1/2/3
   // этажа» либо своё число («другое значение»). У остальных категорий
@@ -1803,8 +1817,11 @@ export const CrmObjects: FC<{
       commercialType: isCommercial ? form.commercialType || undefined : undefined,
       condition: form.condition || undefined,
       heating: form.heating || undefined,
-      // Признаки объекта: лифт, двор, парковка — свободный ввод, по лифту и
-      // двору есть фильтры в каталоге (см. ELEVATOR_MATCHES)
+      // Признаки объекта: лифт, двор, парковка — свободный ввод, по лифту,
+      // двору и парковке есть фильтры в каталоге (см. ELEVATOR_MATCHES).
+      // Значение отправляем всегда, даже если поля нет у категории (у дома
+      // лифта не бывает): у старой карточки оно уже сохранено, и молча
+      // стирать его при сохранении нельзя — как у площади участка выше
       elevator: form.elevator || undefined,
       yard: form.yard || undefined,
       parking: form.parking || undefined,
@@ -2553,12 +2570,20 @@ export const CrmObjects: FC<{
           <Field label={t.crm.objBuildingType}>
             <input value={form.buildingType} onChange={(e) => set('buildingType', e.target.value)} style={inputStyle} list="crm-building-type" />
           </Field>
-          <Field label={t.crm.objCondition}>
-            <input value={form.condition} onChange={(e) => set('condition', e.target.value)} style={inputStyle} list="crm-condition" />
-          </Field>
-          <Field label={t.crm.objHeating}>
-            <input value={form.heating} onChange={(e) => set('heating', e.target.value)} style={inputStyle} list="crm-heating" />
-          </Field>
+          {/* Состояние (ремонт) и отопление — только у объектов со строением
+              (см. conditionAppliesTo): у земельного участка ремонта и
+              отопления не бывает. Подсказки — из справочника
+              (src/lib/object-characteristics.ts) */}
+          {conditionAppliesTo(form.category) && (
+            <Field label={t.crm.objCondition}>
+              <input value={form.condition} onChange={(e) => set('condition', e.target.value)} style={inputStyle} list="crm-condition" />
+            </Field>
+          )}
+          {heatingAppliesTo(form.category) && (
+            <Field label={t.crm.objHeating}>
+              <input value={form.heating} onChange={(e) => set('heating', e.target.value)} style={inputStyle} list="crm-heating" />
+            </Field>
+          )}
           <Field label={t.crm.objBalcony}>
             <input value={form.balcony} onChange={(e) => set('balcony', e.target.value)} style={inputStyle} list="crm-balcony" />
           </Field>
@@ -2578,26 +2603,35 @@ export const CrmObjects: FC<{
             <input value={form.internet} onChange={(e) => set('internet', e.target.value)} style={inputStyle} list="crm-internet" />
           </Field>
           {/* Лифт, двор и парковка: свободный ввод с подсказками. По лифту
-              («Есть», «Лифт пассажирский») и двору («Закрытый») ищет фильтр
-              каталога, поэтому подсказки — те же слова, что он узнаёт */}
-          <Field label={t.crm.objElevator}>
-            <input value={form.elevator} onChange={(e) => set('elevator', e.target.value)} style={inputStyle} list="crm-elevator" />
-          </Field>
+              («Есть», «Лифт пассажирский»), двору («Закрытый») и парковке
+              («Во дворе») ищет фильтр каталога, поэтому подсказки — те же
+              слова, что он узнаёт. Лифт показываем только там, где он
+              бывает (квартира, комната, коммерция), парковку — везде, кроме
+              участка и гаража (см. src/lib/object-characteristics.ts) */}
+          {elevatorAppliesTo(form.category) && (
+            <Field label={t.crm.objElevator}>
+              <input value={form.elevator} onChange={(e) => set('elevator', e.target.value)} style={inputStyle} list="crm-elevator" />
+            </Field>
+          )}
           <Field label={t.crm.objYard}>
             <input value={form.yard} onChange={(e) => set('yard', e.target.value)} style={inputStyle} list="crm-yard" />
           </Field>
-          <Field label={t.crm.objParking}>
-            <input value={form.parking} onChange={(e) => set('parking', e.target.value)} style={inputStyle} list="crm-parking" />
-          </Field>
+          {parkingAppliesTo(form.category) && (
+            <Field label={t.crm.objParking}>
+              <input value={form.parking} onChange={(e) => set('parking', e.target.value)} style={inputStyle} list="crm-parking" />
+            </Field>
+          )}
 
           <datalist id="crm-building-type">
             <option value="Кирпичный" /><option value="Монолитный" /><option value="Панельный" />
           </datalist>
+          {/* Варианты характеристик — общий справочник (список и зачем в коде,
+              а не в схеме, — см. src/lib/object-characteristics.ts) */}
           <datalist id="crm-condition">
-            <option value="Новое" /><option value="Хорошее" /><option value="Требует ремонта" />
+            {CONDITION_OPTIONS.map((v) => <option key={v} value={v} />)}
           </datalist>
           <datalist id="crm-heating">
-            <option value="Центральное" /><option value="Автономное" /><option value="Газовое" />
+            {HEATING_OPTIONS.map((v) => <option key={v} value={v} />)}
           </datalist>
           <datalist id="crm-balcony">
             <option value="Есть" /><option value="Лоджия" /><option value="Несколько" />
@@ -2618,13 +2652,13 @@ export const CrmObjects: FC<{
             <option value="Есть" /><option value="Нет" />
           </datalist>
           <datalist id="crm-elevator">
-            <option value="Есть" /><option value="Нет" /><option value="Лифт пассажирский" />
+            {ELEVATOR_OPTIONS.map((v) => <option key={v} value={v} />)}
           </datalist>
           <datalist id="crm-yard">
             <option value="Закрытый" /><option value="Охраняемый" /><option value="Благоустроенный" />
           </datalist>
           <datalist id="crm-parking">
-            <option value="Подземный паркинг" /><option value="Гостевая" /><option value="Нет" />
+            {PARKING_OPTIONS.map((v) => <option key={v} value={v} />)}
           </datalist>
 
           {/* Адрес: широкие поля, удобные для заполнения с телефона */}

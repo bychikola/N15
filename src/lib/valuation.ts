@@ -268,7 +268,7 @@ function conditionFactor(raw?: string | null): number {
   if (/(без отделки|без ремонта|чернов|требует ремонт|требуется ремонт|нужен ремонт|нужна ремонт|убит\w*|аварийн\w*|ветх\w*|плох\w*)/.test(c)) return 0.91
   // Хорошие варианты (точные формы «новое/новый», чтобы «новостройка» не матчилась)
   if (/^(нов|новое|новый|новая)$/.test(c)) return 1.05
-  if (/(отличн\w*|качественн\w*|евроремонт|элитн\w*|люкс|идеальн\w*|после ремонт\w*|сделан хорош\w*)/.test(c)) return 1.05
+  if (/(отличн\w*|качественн\w*|евроремонт|дизайнерск\w* ремонт|элитн\w*|люкс|идеальн\w*|после ремонт\w*|сделан хорош\w*)/.test(c)) return 1.05
   if (/^хорош\w*$|^нормальн\w*$|после косметич\w*/.test(c)) return 1
   return 1
 }
@@ -320,7 +320,9 @@ function elevatorFactor(elevator?: string | null, floor?: number | null, totalFl
   const f = num(floor)
   const tf = num(totalFloors)
   if (!tf || tf < 5) return 1
-  const has = e && e !== 'нет' && e !== 'no'
+  // «Отсутствует» — то же, что «Нет»: без этой проверки новый вариант
+  // справочника считался бы лифтом (см. src/lib/object-characteristics.ts)
+  const has = e && e !== 'нет' && e !== 'no' && !e.includes('отсутств')
   if (has && f && f >= 4) return 1.015
   if (!has && f && f >= 4) return 0.975
   return has ? 1.005 : 1
@@ -438,13 +440,17 @@ function comfortFactor(raw?: string | null): number {
   return 1
 }
 
-/** Парковка: явное «нет» — небольшой минус, крытый паркинг — плюс; пусто — нейтрально */
+/**
+ * Парковка: явное «нет» — небольшой минус, крытый паркинг — плюс; пусто —
+ * нейтрально. «Отсутствует» — то же, что «Нет», а «Гараж» — такое же место
+ * для машины, как машиноместо (см. src/lib/object-characteristics.ts)
+ */
 function parkingFactor(raw?: string | null): number {
   const c = norm(raw)
   if (!c) return 1
-  if (c === 'нет' || c === 'no') return 0.985
+  if (c === 'нет' || c === 'no' || c.includes('отсутств')) return 0.985
   if (c.includes('подземн') || c.includes('закрыт') || c.includes('охраняем') || c.includes('паркинг')) return 1.03
-  if (/(гостев|стоянка|место|есть)/.test(c)) return 1.01
+  if (/(гостев|стоянка|место|гараж|есть)/.test(c)) return 1.01
   return 1
 }
 

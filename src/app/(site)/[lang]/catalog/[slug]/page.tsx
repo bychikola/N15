@@ -83,6 +83,9 @@ export default async function ObjectPage({ params }: PageProps) {
     // «1 этаж — кухня-гостиная, санузел, спальня», «2 этаж — …»
     floorDescriptions?: { floorNumber?: number; description?: string }[]
     buildingType?: string; condition?: string; heating?: string; balcony?: string
+    // Лифт и парковка — свободный текст из CRM (варианты справочника —
+    // src/lib/object-characteristics.ts), показываем значение как записано
+    elevator?: string; parking?: string
     water?: string; sewerage?: string; electricity?: string; gas?: string; internet?: string
     // Подкатегория коммерции (готовый бизнес, офис, торговое помещение…):
     // у остальных категорий поля нет (см. src/lib/commercial-types.ts)
@@ -326,6 +329,11 @@ export default async function ObjectPage({ params }: PageProps) {
                     { label: t.object.gas, value: obj.gas ? (t.object.utilityOptions[obj.gas as keyof typeof t.object.utilityOptions] ?? obj.gas) : null },
                     { label: t.object.internet, value: obj.internet ? (t.object.utilityOptions[obj.internet as keyof typeof t.object.utilityOptions] ?? obj.internet) : null },
                     { label: t.object.balcony, value: obj.balcony ? (t.object.balconyOptions[obj.balcony as keyof typeof t.object.balconyOptions] ?? obj.balcony) : null },
+                    // Лифт и парковка: значения — свободный текст из CRM
+                    // («Есть», «Лифт грузопассажирский», «Во дворе»), поэтому
+                    // показываем их как записано
+                    { label: t.object.elevator, value: obj.elevator ?? null },
+                    { label: t.object.parking, value: obj.parking ?? null },
                   ].filter((f) => f.value).map((f, i) => (
                     <div key={f.label}
                       className={`flex justify-between items-baseline gap-4 py-4 border-b border-[var(--n15-gold)]/15 ${

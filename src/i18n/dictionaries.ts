@@ -272,6 +272,17 @@ export const ru = {
     individualHeatingLabel: 'Индивидуальное отопление',
     elevatorLabel: 'Лифт',
     closedYardLabel: 'Закрытый двор',
+    // Парковка — список значений поля parking (в базе текстовое, совпадение
+    // ищем по фрагменту, см. PARKING_FILTERS). Пункта «Наземная во дворе»
+    // отдельно нет: его находят пункты «Наземная» и «Во дворе»
+    parkingLabel: 'Парковка',
+    parkingOptions: {
+      ground: 'Наземная',
+      yard: 'Во дворе',
+      underground: 'Подземная',
+      garage: 'Гараж',
+      space: 'Машиноместо',
+    },
     // Кнопки панели фильтров: показать выдачу, свернуть/раскрыть второй ряд,
     // посмотреть на карте
     submitFilters: 'Подобрать',
@@ -511,6 +522,10 @@ export const ru = {
     buildingType: 'Тип дома',
     condition: 'Состояние',
     heating: 'Отопление',
+    // Лифт и парковка в карточке объекта: значения — свободный текст из CRM
+    // (варианты подсказок — src/lib/object-characteristics.ts)
+    elevator: 'Лифт',
+    parking: 'Парковка',
     water: 'Вода',
     sewerage: 'Канализация',
     electricity: 'Электричество',
@@ -534,6 +549,9 @@ export const ru = {
       autonomous: 'Автономное',
       gas: 'Газовое',
       electric: 'Электрическое',
+      // Печное отопление — новый вариант справочника (см.
+      // src/lib/object-characteristics.ts); пункт фильтра каталога
+      stove: 'Печное',
     },
     yourAgent: 'Ваш агент',
     leadingExpert: 'Ведущий эксперт',
@@ -3058,6 +3076,15 @@ const os: Dict = {
     individualHeatingLabel: 'Индивидуалон хъармгæнæн',
     elevatorLabel: 'Лифт',
     closedYardLabel: 'Сæхгæд къуыри',
+    // Парковка — parking-ы номхыгъд (базы текстон, фрагментмæ гæсгæ)
+    parkingLabel: 'Парковкæ',
+    parkingOptions: {
+      ground: 'Зæххон',
+      yard: 'Къуырийы',
+      underground: 'Дæлзæххон',
+      garage: 'Гараж',
+      space: 'Машинæйы бынат',
+    },
     submitFilters: 'Равзарын',
     filtersMore: 'Маддæр фильтртæ æвдисын',
     filtersHide: 'Фильтртæ байуарын',
@@ -3283,6 +3310,8 @@ const os: Dict = {
     buildingType: 'Хæдзары тип',
     condition: 'Уавæр',
     heating: 'Хъармгæнæн',
+    elevator: 'Лифт',
+    parking: 'Парковкæ',
     water: 'Дон',
     sewerage: 'Канализаци',
     electricity: 'Электрикон',
@@ -3306,6 +3335,8 @@ const os: Dict = {
       autonomous: 'Автономон',
       gas: 'Газаг',
       electric: 'Электронон',
+      // Печное отопление — новый вариант справочника
+      stove: 'Печон',
     },
     yourAgent: 'Уæ агент',
     leadingExpert: 'Сæйраг эксперт',

@@ -47,10 +47,32 @@ export const HEATING_FILTERS = [
   { value: 'autonomous', match: 'втономн' },
   { value: 'gas', match: 'азов' },
   { value: 'electric', match: 'лектрич' },
+  // Печное отопление — вариант справочника CRM
+  // (src/lib/object-characteristics.ts): «Печное», «печь», «печное отопление»
+  { value: 'stove', match: 'ечное' },
 ] as const
 
 /** Значения фильтра «Отопление» — коды HEATING_FILTERS */
 export const OBJECT_HEATING = HEATING_FILTERS.map((h) => h.value) as readonly string[]
+
+/**
+ * Фильтр «Парковка»: поле parking — такое же текстовое, как отопление, и
+ * фрагменты те же узнаваемые («Наземная», «наземная во дворе»). «Наземная во
+ * дворе» отдельным пунктом не выносим: его находят и «Наземная», и «Во
+ * дворе» — выбирать одно из двух покупателю не нужно. «Нет» и «Отсутствует»
+ * пункта не имеют: покупатель ищет парковку, а не её отсутствие (как у
+ * лифта); подписи — из словаря (t.catalog.parkingOptions)
+ */
+export const PARKING_FILTERS = [
+  { value: 'ground', match: 'аземн' },
+  { value: 'yard', match: 'двор' },
+  { value: 'underground', match: 'одземн' },
+  { value: 'garage', match: 'араж' },
+  { value: 'space', match: 'машиномест' },
+] as const
+
+/** Значения фильтра «Парковка» — коды PARKING_FILTERS */
+export const OBJECT_PARKING = PARKING_FILTERS.map((p) => p.value) as readonly string[]
 const isKnown = (v: string, options: readonly string[]) => options.includes(v)
 
 /**
@@ -114,6 +136,9 @@ export interface FiltersState {
   /** Отопление — код из HEATING_FILTERS: в базе поле текстовое, совпадение
    *  ищем по узнаваемому фрагменту значения (см. buildWhere) */
   heating: string
+  /** Парковка — код из PARKING_FILTERS: в базе текстовое поле parking,
+   *  совпадение ищем по узнаваемому фрагменту значения (см. buildWhere) */
+  parking: string
   /** Материал дома — код из BUILDING_FILTERS (в базе текстовое поле
    *  buildingType, ищем фрагмент значения) */
   building: string
@@ -180,7 +205,7 @@ export interface FiltersState {
 }
 
 export const emptyFilters: FiltersState = {
-  type: '', category: '', rooms: '', floorMin: '', floorMax: '', floorsMin: '', floorsMax: '', heating: '', building: '', gas: '',
+  type: '', category: '', rooms: '', floorMin: '', floorMax: '', floorsMin: '', floorsMax: '', heating: '', parking: '', building: '', gas: '',
   individualHeating: '', elevator: '', closedYard: '', street: '', cadastral: '', livingAreaMin: '', livingAreaMax: '', kitchenAreaMin: '', kitchenAreaMax: '',
   priceMin: '', priceMax: '', areaMin: '', areaMax: '', areaUnit: '', district: '', cityDistrict: '', locality: '', snt: '', city: '', cityRegion: '',
   houseType: '', commercialType: '', agent: '', purchase: '',
@@ -189,7 +214,8 @@ export const emptyFilters: FiltersState = {
 /**
  * Фильтры второго ряда панели («Показать ещё фильтры»): характеристики
  * объекта — улица, жилая площадь, площадь кухни, этаж, этажность, отопление,
- * материал дома, газ, индивидуальное отопление, лифт и закрытый двор.
+ * парковка, материал дома, газ, индивидуальное отопление, лифт и закрытый
+ * двор.
  * В первом ряду им тесно: покупатель ищет по сделке, категории, месту и цене,
  * а эти поля уточняют выбор. Ряд показывается по кнопке; если хоть один из
  * фильтров задан (в том числе ссылкой из каталога или блока на главной),
@@ -197,7 +223,7 @@ export const emptyFilters: FiltersState = {
  */
 export const MORE_FILTER_KEYS = [
   'street', 'cadastral', 'livingAreaMin', 'livingAreaMax', 'kitchenAreaMin', 'kitchenAreaMax',
-  'floorMin', 'floorMax', 'floorsMin', 'floorsMax', 'heating', 'building', 'gas',
+  'floorMin', 'floorMax', 'floorsMin', 'floorsMax', 'heating', 'parking', 'building', 'gas',
   'individualHeating', 'elevator', 'closedYard',
 ] as const satisfies readonly (keyof FiltersState)[]
 
@@ -342,6 +368,9 @@ export function buildWhere(
   // значения (см. HEATING_FILTERS) — «Центральное», «центральное отопление»
   const heating = HEATING_FILTERS.find((h) => h.value === f.heating)
   if (heating) conds.push({ heating: { contains: heating.match } })
+  // Парковка — такое же текстовое поле (см. PARKING_FILTERS)
+  const parking = PARKING_FILTERS.find((p) => p.value === f.parking)
+  if (parking) conds.push({ parking: { contains: parking.match } })
   // Материал дома и газ — такие же текстовые поля (см. BUILDING_FILTERS)
   const building = BUILDING_FILTERS.find((b) => b.value === f.building)
   if (building) conds.push(matchesAny('buildingType', [building.match]))
@@ -766,7 +795,7 @@ interface CatalogFiltersProps {
 /** Ключи выпадающих списков панели — по одному на фильтр. Открытым может быть
  *  только один: ключ лежит в openId, остальные списки закрыты */
 type DropdownId = 'type' | 'category' | 'houseType' | 'commercialType' | 'purchase' | 'city' | 'district'
-  | 'cityDistrict' | 'locality' | 'snt' | 'heating' | 'building' | 'gas'
+  | 'cityDistrict' | 'locality' | 'snt' | 'heating' | 'parking' | 'building' | 'gas'
 
 /** Переключатель-признак («Лифт», «Закрытый двор», «Индивидуальное
  *  отопление»): в базе это текстовые поля, а покупателю важен факт «есть».
@@ -1212,13 +1241,21 @@ export default function CatalogFilters({ state, onChange, t, cityRegions, knownC
             <RangeInputs from={state.floorsMin} to={state.floorsMax} step="1" min="1"
               onFrom={(v) => apply({ floorsMin: v })} onTo={(v) => apply({ floorsMax: v })} />
           </div>
-          {/* Отопление: список из четырёх значений словаря (t.object.heatingOptions),
+          {/* Отопление: список значений словаря (t.object.heatingOptions),
               в базе поле текстовое — совпадение ищется по фрагменту (HEATING_FILTERS) */}
           <div className="w-48">
             <Dropdown label={t.catalog.heatingLabel} value={state.heating} compactLabel
               options={HEATING_FILTERS.map((h) => ({ value: h.value, label: t.object.heatingOptions[h.value] }))}
               open={openId === 'heating'} onToggle={() => toggle('heating')} onClose={close}
               onSelect={(v) => apply({ heating: v })} />
+          </div>
+          {/* Парковка: тот же приём, что у отопления (t.catalog.parkingOptions,
+              PARKING_FILTERS) */}
+          <div className="w-48">
+            <Dropdown label={t.catalog.parkingLabel} value={state.parking} compactLabel
+              options={PARKING_FILTERS.map((p) => ({ value: p.value, label: t.catalog.parkingOptions[p.value] }))}
+              open={openId === 'parking'} onToggle={() => toggle('parking')} onClose={close}
+              onSelect={(v) => apply({ parking: v })} />
           </div>
           {/* Материал дома и газ — такие же текстовые поля (BUILDING_FILTERS,
               GAS_FILTERS): «кирпич» найдёт «Кирпичный» и «кирпич» */}
