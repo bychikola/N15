@@ -26,7 +26,25 @@ find_media_volume() {
 pguser() { local v; v=$(grep -E '^POSTGRES_USER=' "$REPO_DIR/.env" | head -1 | cut -d= -f2-); echo "${v:-n15}"; }
 pgdb()   { local v; v=$(grep -E '^POSTGRES_DB='   "$REPO_DIR/.env" | head -1 | cut -d= -f2-); echo "${v:-n15}"; }
 
-# ── backup: только чтение, ничего не изменяет ───────────────────────────────
+# ── backup: только чтение данных, сервисы на время снятия копии ─────────────
+# Почему сервисы останавливаются: фоновая разметка фотографий (media-marking)
+# в этот момент ПЕРЕПИСЫВАЕТ файлы на диске, и архив может поймать фотографию
+# на середине записи — файл формально есть, а открыть его нельзя. По той же
+# причине агент не должен коммитить посреди переезда.
+#
+# Отмена происходит автоматически: даже если архивирование упадёт, сайт и агент
+# вернутся (trap EXIT ниже).
+PAUSED=0
+resume_services() {
+  [[ "$PAUSED" == 1 ]] || return 0
+  PAUSED=0
+  echo
+  echo "-- Возвращаю сайт и агента"
+  docker compose start app >/dev/null 2>&1 || true
+  systemctl start n15-agent >/dev/null 2>&1 || true
+}
+trap resume_services EXIT
+
 cmd_backup() {
   cd "$REPO_DIR"
   [[ -f .env ]] || { echo "Нет $REPO_DIR/.env" >&2; exit 1; }
@@ -37,6 +55,17 @@ cmd_backup() {
   mkdir -p "$BACKUP_DIR"
   echo "== Каталог бэкапа: $BACKUP_DIR"
   echo "== Том с фотографиями: $vol"
+
+  # Сколько влезает копировать — чтобы понимать, сколько это займёт по времени
+  echo "== Объём фотографий (это надолго, если много)"
+  docker run --rm -v "$vol":/data alpine \
+    sh -c "du -sh /data 2>/dev/null | cut -f1" | sed 's/^/   /'
+
+  echo "-- Останавливаю сайт и агента (фото перестанут переписываться)"
+  docker compose stop app >/dev/null
+  systemctl stop n15-agent >/dev/null 2>&1 || true
+  PAUSED=1
+  echo "   Сайт недоступен, пока снимается копия — это нужно для целостности фото."
 
   echo "-- База данных (агенты, администратор, объекты, заявки, письма)"
   docker compose exec -T postgres pg_dump -U "$(pguser)" -d "$(pgdb)" \
