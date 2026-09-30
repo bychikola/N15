@@ -90,6 +90,8 @@ interface ObjectRow {
   status: string
   agentName?: string
   thumb?: string
+  /** Адрес на плитке — сразу под названием, до цены (см. cardAddressText) */
+  address?: CardAddressLike | null
   /** Сводка «Где размещён объект» для мини-подписи на плитке */
   plChecked: boolean
   plFound: number
@@ -600,6 +602,64 @@ const addressComposed = (f: FormState): string =>
  */
 const fullAddressValue = (f: FormState, touched: boolean): string =>
   addressComposed(f) || (touched ? '' : f.fullAddress.trim())
+
+/**
+ * Адресные части объекта в документе Payload. Дом, корпус, квартиру и полный
+ * адрес строкой сервер отдаёт только сотруднику — полевая проверка
+ * exactAddressAccess в коллекции Objects (см. src/lib/object-public-address.ts
+ * о публичной части): у гостя сайта и клиента этих частей в документе нет.
+ */
+interface CardAddressLike {
+  city?: string | null
+  locality?: string | null
+  snt?: string | null
+  street?: string | null
+  house?: string | null
+  corpus?: string | null
+  apartment?: string | null
+  fullAddress?: string | null
+}
+
+/**
+ * Адрес объекта одной строкой для карточки CRM: «г. Владикавказ, ул. Кутузова,
+ * д. 7, корп. 2, Квартира 5». Показывается на плитке сразу под названием и в
+ * карточке пересекающегося объекта — без нажатия «Редактировать».
+ *
+ * Собирается тем же разбором, что и полный адрес формы (normalizeHouseAddress),
+ * поэтому список, карточка объекта и фильтры видят одно написание. Пустые части
+ * в строку не попадают — лишних запятых не остаётся, а объект без адресных
+ * частей строки не получает вовсе (один город, поставленный формой по
+ * умолчанию, адресом не считается — см. addressComposed). Старые карточки,
+ * где адрес сохранён одной строкой без разбора на части, показываем этой
+ * строкой.
+ */
+const cardAddressText = (addr: CardAddressLike | null | undefined, apartmentLabel: string): string => {
+  if (!addr) return ''
+  const parts = {
+    city: addr.city || '',
+    locality: addr.locality || '',
+    snt: addr.snt || '',
+    street: addr.street || '',
+    house: addr.house || '',
+    corpus: addr.corpus || '',
+  }
+  const hasParts = [parts.street, parts.house, parts.corpus, parts.snt, parts.locality]
+    .some((v) => v.trim())
+  const line = (hasParts ? normalizeHouseAddress(parts).display : '') || (addr.fullAddress || '').trim()
+  const apartment = (addr.apartment || '').trim()
+  return [line, apartment ? `${apartmentLabel} ${apartment}` : ''].filter(Boolean).join(', ')
+}
+
+/**
+ * Строка адреса на плитке объекта в общем списке CRM: под названием, до цены —
+ * адрес видно сразу, без нажатия «Редактировать». Объект без адреса строки не
+ * оставляет — плитка идёт дальше без пустого отступа (см. cardAddressText).
+ */
+const CardAddressLine: FC<{ addr?: CardAddressLike | null; apartmentLabel: string }> = ({ addr, apartmentLabel }) => {
+  const line = cardAddressText(addr, apartmentLabel)
+  if (!line) return null
+  return <div style={{ marginTop: 3, fontSize: 10, color: '#8a857b', lineHeight: 1.45 }}>{line}</div>
+}
 
 /**
  * Совпадают ли значения адреса без служебных слов: «ул. Кутузова» и
@@ -1117,6 +1177,11 @@ export const CrmObjects: FC<{
           status: o.status as string,
           agentName: agent?.name,
           thumb: img?.url,
+          // Адрес объекта — сотруднику сервер отдаёт и номер дома с квартирой
+          // (полевая проверка exactAddressAccess в коллекции Objects):
+          // карточка показывает полный адрес; недостающие части строка
+          // пропускает (см. cardAddressText)
+          address: (o.address as CardAddressLike | undefined) || null,
           plChecked: plSum.checked,
           plFound: plSum.found,
         }
@@ -3472,7 +3537,9 @@ export const CrmObjects: FC<{
           <p style={{ color: '#817b70', fontSize: 13, margin: 0 }}>{t.crm.objEmptyStatus}</p>
         </div>
       ) : rows.length ? (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }}>
+        // min(260px, 100%) — плитки с адресной строкой не вылезают за экран
+        // телефона (у .crm-main на мобильных 16px отступов с каждой стороны)
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(260px, 100%), 1fr))', gap: 14 }}>
           {rows.map((o) => (
             <div key={o.id} style={{ background: '#fff', border: '1px solid #e5dfd3', borderRadius: 12, padding: 14 }}>
               <div style={{ aspectRatio: '4 / 3', borderRadius: 8, overflow: 'hidden', background: o.thumb ? undefined : '#f2eadf', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -3483,6 +3550,8 @@ export const CrmObjects: FC<{
               <div style={{ marginTop: 12, fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {o.title}
               </div>
+              {/* Полный адрес — под названием и до цены (см. cardAddressText) */}
+              <CardAddressLine addr={o.address} apartmentLabel={t.crm.objApartment} />
               <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                 <span style={{ padding: '4px 8px', borderRadius: 999, background: '#f2eadf', color: '#8d6b40', fontSize: 9, textTransform: 'uppercase', letterSpacing: '.08em' }}>{t.categoryLabels[o.category as keyof typeof t.categoryLabels] ?? o.category}</span>
                 <span style={{ fontSize: 9, color: '#817b70' }}>{o.status === 'published' ? t.crm.statusPublished : o.status === 'archived' ? t.crm.statusArchived : t.crm.statusDraft}</span>
@@ -3776,21 +3845,10 @@ function DupViewCard({ t, view, err, notice, reported, reportBusy, onClose, onMi
     : null
   const statusLabel =
     o.status === 'published' ? t.crm.statusPublished : o.status === 'archived' ? t.crm.statusArchived : t.crm.statusDraft
-  // Адрес — тем же разбором, что и в карточке объекта (normalizeHouseAddress):
-  // сохранённый полный адрес, а если его нет — собранный из частей
-  const composed = normalizeHouseAddress({
-    city: o.address.city || '',
-    locality: o.address.locality || '',
-    snt: o.address.snt || '',
-    street: o.address.street || '',
-    house: o.address.house || '',
-    corpus: o.address.corpus || '',
-  }).display
-  const apartment = (o.address.apartment || '').trim()
-  const addressLine = [
-    (o.address.fullAddress || '').trim() || composed,
-    apartment ? `${t.crm.objApartment} ${apartment}` : '',
-  ].filter(Boolean).join(', ')
+  // Адрес — тем же сбором, что и на плитке списка (cardAddressText): дом,
+  // корпус и квартиру сервер отдаёт сотруднику, карточка показывает полную
+  // строку без пустых частей
+  const addressLine = cardAddressText(o.address, t.crm.objApartment)
   const areaText = (v: number | null, unit?: string | null): string | null => {
     if (v == null) return null
     const u = areaUnitOf(unit)
