@@ -8,6 +8,9 @@ import { OBJECT_CATEGORIES } from '@/lib/object-categories'
 import { LEGAL_VERSION } from '@/lib/legal-docs'
 // Невидимая защита форм от спама (поле-ловушка, время заполнения, лимит по IP)
 import { FILL_TIME_FIELD, HONEYPOT_FIELD, MAX_MESSAGE, checkSpam } from '@/lib/form-guard'
+// Связь обращения с обезличенной карточкой посетителя сайта — для блока
+// «Активность на сайте» в карточке заявки (см. src/lib/visitor-tracking.ts)
+import { linkApplicationToVisitor } from '@/lib/visitor-tracking'
 
 /**
  * Источники заявок, которые приходят с форм сайта: у них обязательна галочка
@@ -176,6 +179,28 @@ export const Applications: CollectionConfig = {
           }
         }
         return data
+      },
+    ],
+    afterChange: [
+      // Связь заявки с карточкой посетителя сайта: по хешу IP и браузера, с
+      // которого пришла форма, в карточке ставится «оставил обращение», и в
+      // CRM у заявки появляется блок «Активность на сайте» (см.
+      // src/lib/visitor-tracking.ts). Только для форм сайта: заявку, заведённую
+      // сотрудником из CRM, со своим браузером связывать нельзя.
+      async ({ doc, operation, req }) => {
+        if (operation !== 'create') return
+        if (!SITE_SOURCES.includes(String(doc.source))) return
+        try {
+          await linkApplicationToVisitor(req.payload, {
+            applicationId: Number(doc.id),
+            type: doc.type,
+            headers: req.headers,
+            userId: typeof doc.user === 'object' && doc.user ? Number(doc.user.id) : (doc.user as number | null),
+          })
+        } catch (e) {
+          // Связь не должна ломать создание заявки
+          console.error('attach visitor failed:', e)
+        }
       },
     ],
   },

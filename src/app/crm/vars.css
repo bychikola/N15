@@ -10,6 +10,18 @@
   font-display: swap;
 }
 
+/* ── Material Symbols (иконки, кнопка «Обновить» в почте) ──
+   Шрифт отдаёт свой сервер: ссылка на fonts.googleapis.com отправляла IP
+   сотрудника в Google (США) без необходимости. Файл и правила класса — те же,
+   что на публичном сайте (см. src/app/globals.css). */
+@font-face {
+  font-family: 'Material Symbols Outlined';
+  src: url('/fonts/material-symbols-outlined.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+}
+
 /* ── Светлая тема (по умолчанию) ── */
 :root {
   --n15-black:       #F6F2E9;

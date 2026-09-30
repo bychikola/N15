@@ -1,10 +1,14 @@
-import Script from 'next/script'
+import { cookies } from 'next/headers'
 import { getPayload } from 'payload'
 import config from '@payload-config'
+import { CONSENT_COOKIE, parseConsent } from '@/lib/consent'
+import { MetrikaCounter } from './MetrikaCounter'
 
 /**
- * Счётчик Яндекс.Метрики — подключается на всех страницах публичного сайта
- * и в CRM (оба корневых layout'а).
+ * Счётчик Яндекс.Метрики — подключается на страницах публичного сайта и в CRM
+ * (оба корневых layout'а), но только после согласия посетителя на аналитику:
+ * сама Метрика ставит свои cookie, поэтому до выбора в баннере её скрипт в HTML
+ * не попадает вовсе (ФЗ-152, ст. 9 и ст. 10.1).
  *
  * Номер счётчика берётся из настроек сайта (CRM → Настройки сайта →
  * «Аналитика: номер счётчика Яндекс.Метрики»). Пустое поле — счётчик не
@@ -14,44 +18,24 @@ import config from '@payload-config'
  * телефоны и тексты сообщений в Метрику попадать не должны. Уходят только
  * адрес страницы, обезличенные данные о посетителе и имена целей
  * (src/lib/metrika.ts).
+ *
+ * Свой счётчик посещений сайта (SiteVisitTracker) согласия не требует: он без
+ * cookie и без сохранения IP, то есть не относится к персональным данным
+ * (см. src/lib/site-stats.ts).
  */
 export async function YandexMetrika() {
   const counterId = await metrikaCounterId()
   if (!counterId) return null
 
-  // Стандартный сниппет Метрики: загружает tag.js и инициализирует счётчик.
-  // Строка с __n15MetrikaId нужна helper'у целей — по ней он находит номер
-  // счётчика и не отправляет цели, пока счётчика на странице нет.
-  const snippet = `
-(function(m,e,t,r,i,k,a){m[i]=m[i]||function(){(m[i].a=m[i].a||[]).push(arguments)};
-m[i].l=1*new Date();
-for (var j = 0; j < document.scripts.length; j++) {if (document.scripts[j].src === r) { return; }}
-k=e.createElement(t),a=e.getElementsByTagName(t)[0],k.async=1,k.src=r,a.parentNode.insertBefore(k,a)})
-(window, document, "script", "https://mc.yandex.ru/metrika/tag.js", "ym");
-window.__n15MetrikaId = ${counterId};
-ym(${counterId}, "init", {clickmap:true, trackLinks:true, accurateTrackBounce:true, webvisor:false});
-`
+  // Решение посетителя читаем на сервере: layout уже читает cookie темы, так
+  // что лишнего перехода в динамический рендер здесь нет. Согласие есть —
+  // счётчик попадает в HTML сразу, без ожидания клиентского скрипта, и
+  // считается даже у посетителей без JavaScript
+  const cookieStore = await cookies()
+  const consent = parseConsent(cookieStore.get(CONSENT_COOKIE)?.value)
+  const allowed = consent?.analytics === true
 
-  return (
-    <>
-      {/* beforeInteractive: сниппет попадает прямо в HTML страницы (виден в
-          исходном коде) и выполняется до гидратации — визит не теряется,
-          если посетитель ушёл раньше загрузки React */}
-      <Script id="n15-yandex-metrika" strategy="beforeInteractive">
-        {snippet}
-      </Script>
-      {/* Посетители без JavaScript: счётчик учитывает визит картинкой-пикселем */}
-      <noscript>
-        <div>
-          <img
-            src={`https://mc.yandex.ru/watch/${counterId}`}
-            style={{ position: 'absolute', left: '-9999px' }}
-            alt=""
-          />
-        </div>
-      </noscript>
-    </>
-  )
+  return <MetrikaCounter counterId={counterId} initialAnalytics={allowed} />
 }
 
 /** Номер счётчика из настроек сайта: только цифры, пусто — аналитика выключена */

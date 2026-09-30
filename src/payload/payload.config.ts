@@ -44,6 +44,13 @@ import { Settlements } from './collections/Settlements'
 // «Статистика сайта»: обезличенные посещения сайта для закрытого раздела CRM
 // (см. src/lib/site-stats.ts, src/app/crm/site-stats)
 import { SiteVisits } from './collections/SiteVisits'
+// «Аналитика → Посетители» и «Интерес к объектам»: карточки посетителей и их
+// действия на сайте (см. src/lib/visitor-tracking.ts, src/app/crm/visitors)
+import { Visitors } from './collections/Visitors'
+import { VisitorEvents } from './collections/VisitorEvents'
+// Журнал доступа к отчётам по посетителям (ст. 19 152-ФЗ, см.
+// src/lib/analytics-access.ts)
+import { AnalyticsAccess } from './collections/AnalyticsAccess'
 import { seedInterregional } from '@/lib/interregional-service'
 // Фоновая разметка уже загруженных фото знаком «Н15»
 // (см. src/lib/media-marking-job.ts)
@@ -95,7 +102,7 @@ export default buildConfig({
     abortOnLimit: true,
     responseOnLimit: `Файл больше ${PHOTO_MAX_LABEL} — допустимы ${PHOTO_FORMATS_LABEL} до ${PHOTO_MAX_LABEL}`,
   },
-  collections: [Users, Media, Objects, Agents, Applications, Tasks, Messages, Blog, News, Pages, Customers, Emails, MailAttachments, AgentTasks, MarketListings, LegalDocuments, LegalReports, Advertisers, Advertisements, AdvertisingRequests, AdvertisingMaterials, BoardAds, BoardMaterials, Regions, Settlements, SiteVisits],
+  collections: [Users, Media, Objects, Agents, Applications, Tasks, Messages, Blog, News, Pages, Customers, Emails, MailAttachments, AgentTasks, MarketListings, LegalDocuments, LegalReports, Advertisers, Advertisements, AdvertisingRequests, AdvertisingMaterials, BoardAds, BoardMaterials, Regions, Settlements, SiteVisits, Visitors, VisitorEvents, AnalyticsAccess],
   globals: [SiteSettings, MailSettings, AgentSettings, NewsSettings, PlatformSettings],
   editor: lexicalEditor(),
   i18n: {

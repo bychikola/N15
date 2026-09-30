@@ -2,12 +2,28 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { clientIp, rateLimited } from '@/lib/rate-limit'
-import { pagePath, trackPageview } from '@/lib/site-stats'
+import { isBot, objectPathId, pagePath, trackPageview, visitorHash } from '@/lib/site-stats'
+import {
+  CLIENT_EVENT_KINDS,
+  filterLabel,
+  pruneVisitorData,
+  regionFromHeaders,
+  touchVisitor,
+  trackVisitorEvent,
+  type VisitorEventKind,
+} from '@/lib/visitor-tracking'
 
 // Счётчик посещений сайта: маячок со страниц (POST) и пиксель для посетителей
 // без JavaScript (GET). Данные обезличенные, отчёт — только в CRM у
 // администратора (см. src/lib/site-stats.ts, src/app/crm/site-stats).
 // Ни один ответ этого маршрута не отдаёт статистику наружу.
+//
+// Кроме просмотров страниц маячок присылает события действий (избранное,
+// нажатия «Позвонить», WhatsApp, «Написать», начало подачи объявления) —
+// из них собираются разделы «Аналитика → Посетители» и «Интерес к объектам»
+// (см. src/lib/visitor-tracking.ts). Отсюда принимаются только события из
+// белого списка: заявку и публикацию объявления ставит сервер в хуках
+// коллекций, подделать их снаружи нельзя.
 
 export const dynamic = 'force-dynamic'
 
@@ -20,38 +36,122 @@ const RATE_WINDOW_MS = 60_000
 
 const NO_STORE = { 'Cache-Control': 'no-store' }
 
+/** События из браузера: белый список видов (см. CLIENT_EVENT_KINDS) */
+const CLIENT_EVENTS = new Set<string>(CLIENT_EVENT_KINDS)
+
+/** Запросы с чужих сайтов не считаем: маячок ставится только со страниц сайта */
+function isForeign(req: NextRequest): boolean {
+  return req.headers.get('sec-fetch-site') === 'cross-site'
+}
+
+/** Обезличенный идентификатор посетителя по заголовкам запроса */
+function visitorOf(req: NextRequest, ip: string): string | null {
+  const ua = req.headers.get('user-agent')
+  return isBot(ua) ? null : visitorHash(ip, ua as string)
+}
+
 /**
- * Записать просмотр. Ошибки только в лог: страница важнее статистики, и
- * посетитель ничего не должен заметить, даже если база недоступна.
+ * Событие действия из браузера. Ошибки только в лог: страница важнее
+ * статистики, и посетитель ничего не должен заметить.
  */
-async function record(req: NextRequest, path: string | null, referrer?: string | null): Promise<void> {
+async function recordEvent(
+  req: NextRequest,
+  kind: VisitorEventKind,
+  path: string | null,
+  objectId: number | null,
+): Promise<void> {
+  try {
+    if (isForeign(req)) return
+    const ip = clientIp(req.headers)
+    if (rateLimited(`visit:${ip}`, RATE_LIMIT, RATE_WINDOW_MS)) return
+    const visitor = visitorOf(req, ip)
+    if (!visitor) return
+
+    const payload = await getPayload({ config })
+    await trackVisitorEvent(payload, { visitor, kind, path, objectId })
+  } catch (e) {
+    console.error('[visitors] не удалось записать событие:', e)
+  }
+}
+
+/**
+ * Записать просмотр страницы. Кроме визита счётчик дописывает карточку
+ * посетителя (первый и последний заход, число визитов) и события страницы:
+ * открытие карточки объекта и применённые фильтры каталога.
+ */
+async function record(req: NextRequest, path: string | null, referrer?: string | null, search?: string | null): Promise<void> {
   try {
     // Запросы с чужих сайтов не считаем: маячок ставится только со страниц
     // n15-realty.ru, браузер помечает сторонние запросы как cross-site
-    if (req.headers.get('sec-fetch-site') === 'cross-site') return
+    if (isForeign(req)) return
 
     const ip = clientIp(req.headers)
     if (rateLimited(`visit:${ip}`, RATE_LIMIT, RATE_WINDOW_MS)) return
 
     const payload = await getPayload({ config })
-    await trackPageview(payload, { path: pagePath(path), referrer, headers: req.headers, ip })
+    const result = await trackPageview(payload, { path: pagePath(path), referrer, headers: req.headers, ip })
+    if (!result) return
+
+    await touchVisitor(payload, {
+      visitor: result.visitor,
+      device: result.device,
+      source: result.source,
+      referrer: result.referrer,
+      region: regionFromHeaders(req.headers),
+      path: result.path,
+      newVisit: result.newVisit,
+    })
+
+    // Карточка объекта — отдельное событие: по нему собирается отчёт
+    // «Интерес к объектам» (уникальные посетители, повторные просмотры)
+    const objectId = objectPathId(result.path)
+    if (objectId) {
+      await trackVisitorEvent(payload, { visitor: result.visitor, kind: 'object_view', path: result.path, objectId })
+    }
+
+    // Фильтры каталога: адрес со строкой запроса разбираем в понятную запись
+    const filters = search ? filterLabel(result.path, search) : null
+    if (filters) {
+      await trackVisitorEvent(payload, { visitor: result.visitor, kind: 'filter_use', path: result.path, detail: filters })
+    }
+
+    await pruneVisitorData(payload)
   } catch (e) {
     console.error('[site-stats] не удалось записать просмотр:', e)
   }
 }
 
-/** Маячок со страницы: адрес и внешний источник перехода присылает браузер */
+/** Маячок со страницы: адрес, источник перехода и событие присылает браузер */
 export async function POST(req: NextRequest) {
   let path: string | null = null
   let referrer: string | null = null
+  let search: string | null = null
+  let event: string | null = null
+  let objectId: number | null = null
   try {
-    const body = (await req.json().catch(() => null)) as { path?: unknown; referrer?: unknown } | null
+    const body = (await req.json().catch(() => null)) as {
+      path?: unknown
+      referrer?: unknown
+      search?: unknown
+      event?: unknown
+      objectId?: unknown
+    } | null
     path = typeof body?.path === 'string' ? body.path : null
     referrer = typeof body?.referrer === 'string' ? body.referrer : null
+    search = typeof body?.search === 'string' ? body.search : null
+    event = typeof body?.event === 'string' ? body.event : null
+    objectId = typeof body?.objectId === 'number' && Number.isInteger(body.objectId) && body.objectId > 0 ? body.objectId : null
   } catch {
     // Пустое или битое тело — просто ничего не записываем
   }
-  await record(req, path, referrer)
+
+  // Событие действия — отдельная запись, просмотр страницы ему не нужен
+  if (event && CLIENT_EVENTS.has(event)) {
+    await recordEvent(req, event as VisitorEventKind, pagePath(path), objectId)
+    return new NextResponse(null, { status: 204, headers: NO_STORE })
+  }
+
+  await record(req, path, referrer, search)
   return new NextResponse(null, { status: 204, headers: NO_STORE })
 }
 

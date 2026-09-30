@@ -6,6 +6,7 @@ import { getDictionary, isLocale, locales } from '@/i18n/dictionaries'
 import { I18nProvider } from '@/i18n/i18n-provider'
 import { YandexMetrika } from '@/components/analytics/YandexMetrika'
 import { SiteVisitTracker } from '@/components/analytics/SiteVisitTracker'
+import { CookieConsent } from '@/components/legal/CookieConsent'
 
 interface LayoutProps {
   children: React.ReactNode
@@ -44,14 +45,8 @@ export default async function SiteLayout({ children, params }: LayoutProps) {
 
   return (
     <html lang={lang} data-theme={theme} className="h-full antialiased" suppressHydrationWarning>
-      {/* Google Material Symbols (иконки Material Design).
-          Полный шрифт без icon_names: API отдаёт subset только по ПЕРВОМУ имени
-          (несколько icon_names игнорируются), а лигатуры без subset не работают. */}
-      <link
-        rel="stylesheet"
-        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200"
-        precedence="default"
-      />
+      {/* Иконки Material Symbols отдаёт свой сервер (см. globals.css):
+          внешних запросов со страниц сайта нет */}
       <body className="min-h-full bg-[var(--n15-black)] text-[var(--n15-silver)] font-[family-name:var(--font-body)] flex flex-col">
         <I18nProvider lang={lang} dict={t}>
           {children}
@@ -61,11 +56,15 @@ export default async function SiteLayout({ children, params }: LayoutProps) {
         <YandexMetrika />
         {/* Счётчик посещений сайта: маячок со страниц и пиксель для тех, у кого
             нет JavaScript (см. components/analytics/SiteVisitTracker). Отчёт по
-            этим данным видит только администратор в CRM → «Статистика сайта» */}
+            этим данным видит только администратор в CRM → «Статистика сайта».
+            Согласия счётчик не спрашивает: он без cookie и без сохранения IP */}
         <SiteVisitTracker />
         <noscript>
           <img src="/api/visit" alt="" width={1} height={1} style={{ position: 'absolute', left: '-9999px' }} />
         </noscript>
+        {/* Баннер согласия на аналитические cookie: пока выбора нет, Метрика
+            не подключается (см. components/legal/CookieConsent) */}
+        <CookieConsent />
       </body>
     </html>
   )

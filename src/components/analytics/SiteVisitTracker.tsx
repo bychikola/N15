@@ -2,21 +2,37 @@
 
 import { useEffect } from 'react'
 import { usePathname } from 'next/navigation'
+import { sendVisit } from './tracker'
 
-/** Адрес счётчика: тот же origin, ответ — пустой 204 (см. app/api/visit) */
-const ENDPOINT = '/api/visit'
+/** Номер объекта из адреса карточки «/<язык>/catalog/<номер>» */
+function objectIdFromPage(): number | null {
+  const m = /^\/[a-z]{2}\/catalog\/(\d+)\/?$/.exec(window.location.pathname)
+  return m ? Number(m[1]) : null
+}
+
+/**
+ * Вид события по ссылке: «Позвонить» — tel:, WhatsApp — wa.me, «Написать» —
+ * письмо или Telegram. Остальные ссылки события не создают.
+ */
+function clickKind(href: string): string | null {
+  if (href.startsWith('tel:')) return 'call_click'
+  if (/^https?:\/\/([\w-]+\.)?(wa\.me|whatsapp\.com)\//i.test(href)) return 'whatsapp_click'
+  if (href.startsWith('mailto:')) return 'write_click'
+  if (/^https?:\/\/([\w-]+\.)?(t\.me|telegram\.me)\//i.test(href)) return 'write_click'
+  return null
+}
 
 /**
  * Счётчик посещений сайта: при открытии страницы отправляет маячок с её
- * адресом. Клиентский, а не серверный, по двум причинам: переходы внутри
- * сайта (Next меняет страницу без перезагрузки) серверный счётчик не увидел
- * бы, а вызов headers() в общем layout'е сделал бы динамическими все
- * страницы сайта, включая статические.
+ * адресом и строкой фильтров, а при нажатиях «Позвонить», WhatsApp и
+ * «Написать» — событие действия. Клиентский, а не серверный, по двум
+ * причинам: переходы внутри сайта (Next меняет страницу без перезагрузки)
+ * серверный счётчик не увидел бы, а вызов headers() в общем layout'е сделал
+ * бы динамическими все страницы сайта, включая статические.
  *
- * Данные обезличенные (см. src/lib/site-stats.ts), в CRM их видит только
- * администратор. Маячок уходит «в фоне» (sendBeacon) — на скорость открытия
- * страницы он не влияет, а если браузер его заблокирует, страница просто не
- * попадёт в статистику.
+ * Данные обезличенные (см. src/lib/site-stats.ts, src/lib/visitor-tracking.ts),
+ * в CRM их видит только администратор. Маячок уходит «в фоне», а если браузер
+ * его заблокирует, страница просто не попадёт в статистику.
  */
 export function SiteVisitTracker() {
   const pathname = usePathname()
@@ -30,23 +46,33 @@ export function SiteVisitTracker() {
     const raw = document.referrer
     const referrer = raw && !raw.startsWith(window.location.origin) ? raw : ''
 
-    const body = JSON.stringify({ path: pathname, referrer })
+    // Строка запроса нужна фильтрам каталога: по ней сервер запишет, чем
+    // посетитель фильтровал выдачу (см. filterLabel в visitor-tracking)
+    sendVisit({ path: pathname, referrer, search: window.location.search })
 
-    try {
-      if (navigator.sendBeacon) {
-        navigator.sendBeacon(ENDPOINT, new Blob([body], { type: 'application/json' }))
-        return
-      }
-      void fetch(ENDPOINT, {
-        method: 'POST',
-        body,
-        headers: { 'Content-Type': 'application/json' },
-        keepalive: true,
-      }).catch(() => {})
-    } catch {
-      // Блокировщики и старые браузеры: статистика не важнее страницы
+    // Начало подачи объявления на доску: форму открывают на /board/new
+    if (/^\/[a-z]{2}\/board\/new\/?$/.test(pathname)) {
+      sendVisit({ event: 'board_started', path: pathname })
     }
   }, [pathname])
+
+  // Нажатия «Позвонить», WhatsApp и «Написать» — одно событие на клик.
+  // Слушатель делегированный: кнопки живут в десятке разных компонентов
+  // (шапка, карточка объекта, контакты, доска), вешать обработчик на каждую
+  // пришлось бы вручную и легко забыть новую. Элемент с data-track задаёт
+  // вид события сам — если кнопка не ссылка.
+  useEffect(() => {
+    const onClick = (event: MouseEvent) => {
+      const target = event.target as Element | null
+      const el = target?.closest?.('a[href], [data-track]')
+      if (!el) return
+      const kind = el.getAttribute('data-track') || clickKind(el.getAttribute('href') || '')
+      if (!kind) return
+      sendVisit({ event: kind, path: window.location.pathname, objectId: objectIdFromPage() })
+    }
+    document.addEventListener('click', onClick, true)
+    return () => document.removeEventListener('click', onClick, true)
+  }, [])
 
   return null
 }

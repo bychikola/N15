@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type FC } from 'react'
 import { useI18n } from '@/i18n/i18n-provider'
+import { trackAction } from '@/components/analytics/tracker'
 
 interface Props {
   objectId: number
@@ -83,6 +84,9 @@ export const ObjectActions: FC<Props> = ({ objectId, shareUrl }) => {
   const toggleFav = async () => {
     const next = !isFav
     setIsFav(next)
+    // Избранное — событие для раздела «Аналитика → Посетители»: видно, какие
+    // объекты откладывают, даже если человек ничего не отправил (см. /api/visit)
+    trackAction(next ? 'favorite_add' : 'favorite_remove', objectId)
     if (userId !== null) {
       const merged = next
         ? Array.from(new Set([...serverFavs, objectId]))

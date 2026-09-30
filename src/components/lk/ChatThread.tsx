@@ -13,6 +13,24 @@ interface MessageItem {
   senderName: string
 }
 
+/**
+ * «Активность на сайте» в карточке заявки (CRM): обезличенная история
+ * посетителя, с браузера которого пришла форма, — последний визит, сколько
+ * раз заходил, какие объекты открывал, что добавил в избранное и куда нажимал
+ * (см. /api/visitors/activity). Персональных данных здесь нет: фамилия и
+ * телефон — в самой заявке.
+ */
+interface SiteActivity {
+  found: boolean
+  lastSeenAt?: string | null
+  visitsCount?: number
+  pageviewsCount?: number
+  objects?: { id: number; title: string; views: number }[]
+  favorites?: { id: number; title: string }[]
+  clicks?: { call: number; whatsapp: number; write: number }
+  visitor?: { id: number; title: string } | null
+}
+
 const POLL_MS = 8_000
 
 function dayLabel(iso: string, t: { lkChat: { today: string; yesterday: string } }, locale: string): string {
@@ -22,6 +40,14 @@ function dayLabel(iso: string, t: { lkChat: { today: string; yesterday: string }
   if (startOf(d) === startOf(now)) return t.lkChat.today
   if (startOf(d) === startOf(now) - 86400000) return t.lkChat.yesterday
   return d.toLocaleDateString(locale, { day: 'numeric', month: 'long' })
+}
+
+/** Дата активности в карточке заявки: «1 октября, 14:22» */
+function formatMoment(iso: string | null | undefined, locale: string): string {
+  if (!iso) return '—'
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return '—'
+  return date.toLocaleString(locale, { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })
 }
 
 export default function ChatThread({ applicationId, lang, variant = 'lk' }: { applicationId: number; lang: string; variant?: 'lk' | 'crm' }) {
@@ -41,6 +67,7 @@ export default function ChatThread({ applicationId, lang, variant = 'lk' }: { ap
   const [taskDue, setTaskDue] = useState('today')
   const [taskPosted, setTaskPosted] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [activity, setActivity] = useState<SiteActivity | null>(null)
 
   const load = useCallback(async () => {
     const meRes = await fetch('/api/users/me', { credentials: 'include' })
@@ -147,6 +174,22 @@ export default function ChatThread({ applicationId, lang, variant = 'lk' }: { ap
       clearInterval(timer)
     }
   }, [load])
+
+  useEffect(() => {
+    // «Активность на сайте» запрашиваем один раз, а не с каждым опросом чата:
+    // история визитов за время открытой карточки не меняется
+    if (!isCrm) return
+    let alive = true
+    void fetch(`/api/visitors/activity?applicationId=${applicationId}`, { credentials: 'include' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (alive && data) setActivity(data as SiteActivity)
+      })
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [applicationId, isCrm])
 
   useEffect(() => {
     // Скроллим ТОЛЬКО контейнер сообщений (не страницу): scrollIntoView
@@ -296,6 +339,66 @@ export default function ChatThread({ applicationId, lang, variant = 'lk' }: { ap
           )}
         </div>
       </div>
+
+      {/* «Активность на сайте»: что человек делал на сайте до обращения.
+          Показываем только сотрудникам CRM и без персональных данных */}
+      {isCrm && activity?.found && (
+        <div style={{ padding: '12px 18px', borderBottom: '1px solid #e5dfd3', display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 9, textTransform: 'uppercase', letterSpacing: '.14em', color: '#817b70' }}>
+              {t.crm.leadActivityTitle}
+            </span>
+            {activity.visitor ? (
+              <Link href={`/crm/visitors/${activity.visitor.id}`} style={{ fontSize: 10, color: '#8d6b40', textDecoration: 'none' }}>
+                {activity.visitor.title} →
+              </Link>
+            ) : null}
+          </div>
+          <div style={{ fontSize: 11, color: '#25241f' }}>
+            {t.crm.leadActivityLast}: <strong>{formatMoment(activity.lastSeenAt, t.locale)}</strong>
+            {' · '}
+            {t.crm.leadActivityVisits}: <strong>{activity.visitsCount || 0}</strong>
+            {' · '}
+            {t.crm.visitorPageviews}: <strong>{activity.pageviewsCount || 0}</strong>
+          </div>
+          {activity.objects && activity.objects.length > 0 && (
+            <div style={{ fontSize: 11, color: '#25241f', lineHeight: 1.6 }}>
+              {t.crm.leadActivityObjects}:{' '}
+              {activity.objects.slice(0, 6).map((item, index) => (
+                <span key={item.id}>
+                  {index > 0 ? ', ' : ''}
+                  <Link href={`/${lang}/catalog/${item.id}`} target="_blank" rel="noopener" style={{ color: '#8d6b40', textDecoration: 'none' }}>
+                    {item.title}
+                  </Link>
+                  {item.views > 1 ? ` — ${t.crm.leadActivityRepeat}` : ''}
+                </span>
+              ))}
+            </div>
+          )}
+          {activity.favorites && activity.favorites.length > 0 && (
+            <div style={{ fontSize: 11, color: '#25241f' }}>
+              {t.crm.leadActivityFavorites}: {activity.favorites.slice(0, 6).map((item) => item.title).join(', ')}
+            </div>
+          )}
+          {activity.clicks && (activity.clicks.call > 0 || activity.clicks.whatsapp > 0 || activity.clicks.write > 0) && (
+            <div style={{ fontSize: 11, color: '#25241f' }}>
+              {t.crm.leadActivityClicks}:{' '}
+              {[
+                activity.clicks.call > 0 ? `${t.crm.leadActivityCall} — ${activity.clicks.call}` : '',
+                activity.clicks.whatsapp > 0 ? `WhatsApp — ${activity.clicks.whatsapp}` : '',
+                activity.clicks.write > 0 ? `${t.crm.leadActivityWrite} — ${activity.clicks.write}` : '',
+              ]
+                .filter(Boolean)
+                .join(', ')}
+            </div>
+          )}
+        </div>
+      )}
+      {isCrm && activity && !activity.found && (
+        <p style={{ margin: 0, padding: '10px 18px', borderBottom: '1px solid #e5dfd3', fontSize: 10, color: '#9b958a' }}>
+          {t.crm.leadActivityNone}
+        </p>
+      )}
 
       {isCrm && showTaskForm && (
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', padding: '12px 18px', borderBottom: '1px solid #e5dfd3', background: '#faf8f4' }}>

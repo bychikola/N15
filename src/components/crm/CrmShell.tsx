@@ -40,6 +40,12 @@ export function CrmShell({ user, t, active, children }: Props) {
     // Раздел только для администратора — агентам и клиентам статистика
     // недоступна (та же проверка на странице /crm/site-stats)
     ...(isAdmin ? [{ id: 'site-stats', href: '/crm/site-stats', label: t.crm.navSiteStats }] : []),
+    // «Посетители» и «Интерес к объектам»: обезличенные карточки посетителей,
+    // их действия и интерес к объектам. Здесь есть связь с обращениями, поэтому
+    // разделы открыты только администратору, а каждый заход записывается в
+    // журнал доступа (ст. 19 152-ФЗ, см. src/lib/analytics-access.ts)
+    ...(isAdmin ? [{ id: 'visitors', href: '/crm/visitors', label: t.crm.navVisitors }] : []),
+    ...(isAdmin ? [{ id: 'interest', href: '/crm/interest', label: t.crm.navInterest }] : []),
     { id: 'mail', href: '/crm/mail', label: t.crm.navMail },
     // Рекламой управляет администратор — агентам раздел не показываем
     ...(isAdmin ? [{ id: 'advertising', href: '/crm/advertising', label: t.crm.navAdvertising }] : []),

@@ -47,6 +47,15 @@ const BOT_RE = new RegExp(
   'i',
 )
 
+/**
+ * Похоже ли на робота: пустой User-Agent и известные шаблоны ботов. Нужно и
+ * маршруту /api/visit: события действий (избранное, нажатия) от роботов тоже
+ * записывать не нужно.
+ */
+export function isBot(ua: string | null | undefined): boolean {
+  return !ua || BOT_RE.test(ua)
+}
+
 /** Служебные разделы: CRM, админка, API, файлы — посещениями сайта не считаем */
 function isServicePath(path: string): boolean {
   if (/^\/(api|_next|crm|media|admin-add)(\/|$)/i.test(path)) return true
@@ -153,20 +162,38 @@ export interface PageviewInput {
   ip: string
 }
 
+/** Что счётчик записал: по этим данным /api/visit дописывает карточку посетителя */
+export interface PageviewResult {
+  /** Обезличенный идентификатор посетителя (см. visitorHash) */
+  visitor: string
+  /** Записанный путь страницы */
+  path: string
+  device: 'desktop' | 'mobile' | 'tablet'
+  source: 'direct' | 'search' | 'social' | 'referral'
+  /** Домен внешнего перехода — только у нового визита */
+  referrer: string | null
+  /** Начался новый визит (перерыв больше 30 минут или первый заход) */
+  newVisit: boolean
+}
+
 /**
  * Записать просмотр страницы. Визит продолжается, пока с последнего хита того
  * же посетителя прошло меньше 30 минут; иначе начинается новый визит с
  * источником перехода. Ошибки глушим: статистика не должна ломать страницу.
+ *
+ * null — просмотр не записан (робот, двойной маячок, служебный адрес): тогда
+ * и карточку посетителя трогать не нужно.
  */
-export async function trackPageview(payload: Payload, input: PageviewInput): Promise<void> {
+export async function trackPageview(payload: Payload, input: PageviewInput): Promise<PageviewResult | null> {
   const { path, ip } = input
-  if (!path) return
+  if (!path) return null
   const ua = input.headers.get('user-agent') || ''
-  if (!ua || BOT_RE.test(ua)) return
+  if (!ua || BOT_RE.test(ua)) return null
 
   const now = new Date()
   const visitor = visitorHash(ip, ua, now)
-  if (isDoubleHit(`${visitor}|${path}`, now.getTime())) return
+  const device = deviceFromUa(ua)
+  if (isDoubleHit(`${visitor}|${path}`, now.getTime())) return null
 
   // Переход внутри сайта (Referer — наша же страница) источником не считаем:
   // это продолжение визита, а не новый канал. Внешний источник берём только
@@ -174,6 +201,7 @@ export async function trackPageview(payload: Payload, input: PageviewInput): Pro
   const ownHost = (input.headers.get('host') || '').split(':')[0].toLowerCase().replace(/^www\./, '')
   const parsedHost = referrerHost(input.referrer)
   const host = parsedHost && ownHost && parsedHost === ownHost ? null : parsedHost
+  const source = visitSource(host)
   const since = new Date(now.getTime() - SESSION_GAP_MS).toISOString()
 
   const existing = await payload.find({
@@ -208,8 +236,8 @@ export async function trackPageview(payload: Payload, input: PageviewInput): Pro
       collection: 'site-visits',
       data: {
         visitor,
-        device: deviceFromUa(ua),
-        source: visitSource(host),
+        device,
+        source,
         referrer: host || undefined,
         landing: path,
         lastSeenAt: now.toISOString(),
@@ -221,6 +249,10 @@ export async function trackPageview(payload: Payload, input: PageviewInput): Pro
   }
 
   await pruneOldVisits(payload)
+
+  // Счётчик не только считает: по этим данным /api/visit дописывает карточку
+  // посетителя и события текущей страницы (см. src/lib/visitor-tracking.ts)
+  return { visitor, path, device, source, referrer: host, newVisit: !visit }
 }
 
 /** Когда последний раз чистили старые визиты (чистим не чаще раза в сутки) */

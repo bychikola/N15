@@ -15,6 +15,8 @@ import {
   type BoardStatus,
 } from '@/lib/board'
 import { BOARD_RULES_VERSION } from '@/lib/board-legal'
+// Событие «подал объявление» для раздела «Аналитика → Посетители»
+import { noteBoardPublished } from '@/lib/visitor-tracking'
 
 /**
  * «Объявления доски» — то, что размещают на доске: частные лица со страницы
@@ -175,6 +177,19 @@ export const BoardAds: CollectionConfig = {
         }
 
         return data
+      },
+    ],
+    afterChange: [
+      // Подача объявления дошла до конца формы — событие для раздела
+      // «Аналитика → Посетители» (начало подачи ставит маячок со страницы
+      // /board/new, см. src/lib/visitor-tracking.ts). Только частные авторы:
+      // объявление, заведённое сотрудником из админки или CRM, к посетителю
+      // не относится (вид автора считает beforeValidate — authorKind)
+      async ({ doc, operation, req }) => {
+        if (operation !== 'create' || doc.authorKind !== 'private') return
+        const authorId = typeof doc.author === 'object' && doc.author ? Number(doc.author.id) : Number(doc.author)
+        if (!Number.isInteger(authorId) || authorId <= 0) return
+        await noteBoardPublished(req.payload, { headers: req.headers, userId: authorId, adId: Number(doc.id) })
       },
     ],
   },

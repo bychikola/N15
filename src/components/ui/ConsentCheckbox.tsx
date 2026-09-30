@@ -9,6 +9,8 @@ interface ConsentProps {
   checked: boolean
   onChange: (v: boolean) => void
   className?: string
+  /** Обязательная галочка (по умолчанию да): без отметки форма не уходит */
+  required?: boolean
 }
 
 interface ConsentLineProps extends ConsentProps {
@@ -51,7 +53,7 @@ const DocLinks: FC<{ docs: LegalDocLink[]; lang: string; join: string }> = ({ do
  * форме — на случай отправки по Enter). Ссылки открываются в новой вкладке,
  * чтобы заполненная форма не потерялась.
  */
-export const ConsentLine: FC<ConsentLineProps> = ({ checked, onChange, text, docs, note, className = '' }) => {
+export const ConsentLine: FC<ConsentLineProps> = ({ checked, onChange, text, docs, note, className = '', required = true }) => {
   const { lang, t } = useI18n()
   // Текст отметки приходит из словаря одним куском: %s — место ссылок
   const [before, after] = text.split('%s')
@@ -60,7 +62,7 @@ export const ConsentLine: FC<ConsentLineProps> = ({ checked, onChange, text, doc
     <label className={`flex items-start gap-3 text-xs leading-relaxed text-[var(--n15-silver)] ${className}`}>
       <input
         type="checkbox"
-        required
+        required={required}
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
         className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--n15-gold)]"
@@ -96,6 +98,7 @@ export const ConsentCheckbox: FC<ConsentProps> = ({ checked, onChange, className
       className={className}
       text={t.consent.dataText}
       docs={legalDocLinks('personal-data-consent', 'privacy-policy')}
+      note={t.consent.dataNote}
     />
   )
 }
@@ -104,22 +107,23 @@ export const ConsentCheckbox: FC<ConsentProps> = ({ checked, onChange, className
  * Галочка согласия на рекламные сообщения — отдельная и необязательная:
  * с согласием на обработку персональных данных не объединяется (ст. 18
  * ФЗ «О рекламе»), на отправку формы не влияет и изначально снята.
+ *
+ * Условия согласия собраны в отдельном документе «Согласие на получение
+ * рекламных сообщений» — в нём же порядок отказа, поэтому на него ведёт
+ * ссылка прямо из текста галочки.
  */
 export const MarketingConsent: FC<ConsentProps> = ({ checked, onChange, className = '' }) => {
   const { t } = useI18n()
 
   return (
-    <label className={`flex items-start gap-3 text-xs leading-relaxed text-[var(--n15-silver)] ${className}`}>
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
-        className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--n15-gold)]"
-      />
-      <span>
-        {t.consent.marketingText}
-        <span className="block mt-1 text-[11px] text-[var(--n15-muted)]">{t.consent.marketingNote}</span>
-      </span>
-    </label>
+    <ConsentLine
+      required={false}
+      checked={checked}
+      onChange={onChange}
+      className={className}
+      text={t.consent.marketingText}
+      docs={legalDocLinks('marketing-consent')}
+      note={t.consent.marketingNote}
+    />
   )
 }
