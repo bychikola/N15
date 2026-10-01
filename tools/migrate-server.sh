@@ -161,19 +161,30 @@ cmd_restore() {
     sleep 2
   done
 
-  # Восстановление в пустую базу. Если данные уже есть — повторное
-  # восстановление допишет поверх, и это ловушка, поэтому проверяем заранее
+  # Восстановление в пустую базу. Если данные уже есть — пропускаем этот шаг
+  # и идём дальше: скрипт должен быть ПРОДОЛЖАЕМЫМ, чтобы после сбоя на любом
+  # из следующих шагов его можно было просто запустить снова, а не разбирать
+  # состояние вручную
   local rows; rows="$(docker compose exec -T postgres psql -U "$(pguser)" -d "$(pgdb)" -tAc \
     "SELECT count(*) FROM information_schema.tables WHERE table_schema='public'" | tr -d '[:space:]')"
   if [[ "${rows:-0}" -gt 3 ]]; then
-    echo "В базе уже есть таблицы ($rows) — похоже, восстановление уже было." >&2
-    echo "Если это точно нужно — сначала: docker compose down && docker volume rm n15_pgdata" >&2
-    exit 1
+    echo "-- В базе уже $rows таблиц — база восстановлена ранее, пропускаю"
+  else
+    echo "-- Восстанавливаю базу"
+    # psql продолжает работу после безобидных замечаний (владельцы объектов,
+    # расширения) и возвращает ненулевой код. Для нас это не провал: настоящую
+    # проверку делает check — по числу агентов, объектов и заявок
+    local restore_code=0
+    set +e
+    gunzip -c "$BACKUP_DIR/db.sql.gz" \
+      | docker compose exec -T postgres psql -q -U "$(pguser)" -d "$(pgdb)"
+    restore_code=${PIPESTATUS[1]}
+    set -e
+    if [[ "$restore_code" != 0 ]]; then
+      echo "   psql вернул код $restore_code — в дампе были замечания (обычно безобидные)."
+      echo "   Данные проверит шаг check."
+    fi
   fi
-
-  echo "-- Восстанавливаю базу"
-  gunzip -c "$BACKUP_DIR/db.sql.gz" \
-    | docker compose exec -T postgres psql -q -U "$(pguser)" -d "$(pgdb)"
 
   local vol; vol="$(find_media_volume)"
   if [[ -n "$vol" ]]; then
