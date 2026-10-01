@@ -18,8 +18,24 @@ BACKUP_DIR="${BACKUP_DIR:-/root/n15-migrate}"
 STAMP="$(date +%Y%m%d-%H%M)"
 # Том с фотографиями: ищем по имени тома docker (n15_media на этом проекте).
 # Том обязателен отдельно от базы: в дампе БД файлов нет.
+#
+# || true обязателен: когда тома ещё нет (первый перенос на чистый сервер),
+# grep не находит совпадений и возвращает ошибку — а из-за set -e это
+# обрывало скрипт на середине. Отсутствие тома — не ошибка: его создают ниже.
 find_media_volume() {
-  docker volume ls -q | grep -E '(^|_)media$' | head -1
+  docker volume ls -q 2>/dev/null | grep -E '(^|_)media$' | head -1 || true
+}
+
+# Гарантировать том с фотографиями: создать, если его ещё нет. Имя n15_media
+# соответствует объявленному в docker-compose (volume media при проекте n15)
+ensure_media_volume() {
+  local vol; vol="$(find_media_volume)"
+  if [[ -z "$vol" ]]; then
+    vol="n15_media"
+    echo "-- Тома с фотографиями нет — создаю $vol"
+    docker volume create "$vol" >/dev/null
+  fi
+  echo "$vol"
 }
 
 # Логин и база — из .env проекта (postgres поднимается с ними при первом старте)
@@ -99,10 +115,16 @@ cmd_verify() {
   # проверка «по хвосту» давала ложный отказ на исправном дампе
   if ! gzip -t "$BACKUP_DIR/db.sql.gz" 2>/dev/null; then
     echo "FAIL база: gzip-архив повреждён (передался не целиком)"; ok=0
-  elif zcat "$BACKUP_DIR/db.sql.gz" | grep -q "PostgreSQL database dump complete"; then
-    echo "OK   база: дамп дочитан целиком"
   else
-    echo "FAIL база: метки завершения нет — дамп обрезан"; ok=0
+    # Считаем через grep -c по той же причине, что и скрытые папки ниже:
+    # grep -q выходит досрочно, zcat ловит SIGPIPE, pipefail считает это ошибкой
+    local marker
+    marker="$(zcat "$BACKUP_DIR/db.sql.gz" | grep -c "PostgreSQL database dump complete" || true)"
+    if [[ "${marker:-0}" -gt 0 ]]; then
+      echo "OK   база: дамп дочитан целиком"
+    else
+      echo "FAIL база: метки завершения нет — дамп обрезан"; ok=0
+    fi
   fi
 
   [[ -s "$BACKUP_DIR/media.tar.gz" ]] || { echo "НЕТ media.tar.gz"; ok=0; }
@@ -113,9 +135,13 @@ cmd_verify() {
     echo "FAIL фото: архив пуст или не читается"; ok=0
   fi
 
-  # Скрытые папки — то, что молча теряется
-  if tar tzf "$BACKUP_DIR/media.tar.gz" 2>/dev/null | grep -qE 'originals|wm-backup'; then
-    echo "OK   скрытые папки (originals / .wm-backup) внутри архива"
+  # Скрытые папки — то, что молча теряется. Считаем через grep -c, а не -q:
+  # -q выходит после первого совпадения, tar получает SIGPIPE и падает,
+  # а pipefail считает это ошибкой — и проверка ругалась на исправный архив
+  local hidden
+  hidden="$(tar tzf "$BACKUP_DIR/media.tar.gz" 2>/dev/null | grep -cE 'originals|wm-backup' || true)"
+  if [[ "${hidden:-0}" -gt 0 ]]; then
+    echo "OK   скрытые папки (originals / .wm-backup) внутри архива — записей: $hidden"
   else
     echo "ВНИМАНИЕ скрытых папок нет — оригиналы фото могут не перенестись"
   fi
@@ -186,14 +212,12 @@ cmd_restore() {
     fi
   fi
 
-  local vol; vol="$(find_media_volume)"
-  if [[ -n "$vol" ]]; then
-    echo "-- Восстанавливаю фотографии в том $vol"
-    docker run --rm -v "$vol":/data -v "$BACKUP_DIR":/out:ro alpine \
-      tar xzf /out/media.tar.gz -C /data
-  else
-    echo "Том с медиа пока не создан — он появится при первом docker compose up app"
-  fi
+  # Том создаём сами, если его ещё нет: на чистом сервере его не существует
+  # до первой сборки, а фотографии нужны уже сейчас
+  local vol; vol="$(ensure_media_volume)"
+  echo "-- Восстанавливаю фотографии в том $vol"
+  docker run --rm -v "$vol":/data -v "$BACKUP_DIR":/out:ro alpine \
+    tar xzf /out/media.tar.gz -C /data
 
   echo "-- Собираю и запускаю сайт (15–45 минут)"
   bash deploy.sh
