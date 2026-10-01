@@ -93,10 +93,16 @@ cmd_verify() {
   local ok=1
 
   [[ -s "$BACKUP_DIR/db.sql.gz" ]] || { echo "НЕТ db.sql.gz"; ok=0; }
-  if zcat "$BACKUP_DIR/db.sql.gz" 2>/dev/null | tail -3 | grep -q "database dump complete"; then
-    echo "OK   база: дамп дочитан"
+  # Две независимые проверки: целостность архива и наличие метки завершения.
+  # Метку ищем по ВСЕМУ файлу, а не в последних строках: pg_dump ставит её
+  # не последней — после неё идут служебные строки \unrestrict, из-за которых
+  # проверка «по хвосту» давала ложный отказ на исправном дампе
+  if ! gzip -t "$BACKUP_DIR/db.sql.gz" 2>/dev/null; then
+    echo "FAIL база: gzip-архив повреждён (передался не целиком)"; ok=0
+  elif zcat "$BACKUP_DIR/db.sql.gz" | grep -q "PostgreSQL database dump complete"; then
+    echo "OK   база: дамп дочитан целиком"
   else
-    echo "FAIL база: дамп не дочитан или битый"; ok=0
+    echo "FAIL база: метки завершения нет — дамп обрезан"; ok=0
   fi
 
   [[ -s "$BACKUP_DIR/media.tar.gz" ]] || { echo "НЕТ media.tar.gz"; ok=0; }
