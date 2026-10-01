@@ -129,6 +129,25 @@ cmd_restore() {
 
   [[ -f .env ]] || { echo "В .env нет PAYLOAD_SECRET — скопируй app.env до деплоя" >&2; exit 1; }
 
+  # Пользователь n15 и ключ к GitHub — ПЕРВЫМИ. deploy.sh ниже делает
+  # git fetch origin по SSH: без ключа на месте он упадёт, и перенос
+  # остановится на середине. Ключ лежит в бэкапе (см. backup).
+  if ! id n15 >/dev/null 2>&1; then
+    echo "-- Создаю пользователя n15"
+    useradd -m -s /bin/bash n15
+  fi
+  if [[ -d "$BACKUP_DIR/n15-ssh" ]]; then
+    echo "-- Восстанавливаю SSH-ключ пользователя n15"
+    mkdir -p /home/n15/.ssh
+    cp -r "$BACKUP_DIR/n15-ssh/." /home/n15/.ssh/
+    chown -R n15:n15 /home/n15/.ssh
+    chmod 700 /home/n15/.ssh
+    chmod 600 /home/n15/.ssh/id_ed25519 /home/n15/.ssh/known_hosts 2>/dev/null || true
+    chmod 644 /home/n15/.ssh/id_ed25519.pub 2>/dev/null || true
+  else
+    echo "ВНИМАНИЕ: ключа в бэкапе нет — deploy.sh не сможет обратиться к GitHub" >&2
+  fi
+
   # Поднимаем только базу: приложение стартует после восстановления
   docker compose up -d postgres
   for i in $(seq 1 30); do
@@ -165,14 +184,6 @@ cmd_restore() {
   echo "-- Ставлю ИИ-агента"
   bash tools/agent-worker/install.sh
 
-  # SSH-ключ: без него агент и деплой не смогут ходить в GitHub
-  if [[ -d "$BACKUP_DIR/n15-ssh" ]]; then
-    echo "-- Восстанавливаю SSH-ключ пользователя n15"
-    mkdir -p /home/n15/.ssh
-    cp -r "$BACKUP_DIR/n15-ssh/." /home/n15/.ssh/
-    chown -R n15:n15 /home/n15/.ssh
-    chmod 700 /home/n15/.ssh; chmod 600 /home/n15/.ssh/* 2>/dev/null || true
-  fi
   [[ -f "$BACKUP_DIR/agent.env" && -f /home/n15/n15-agent/.env ]] && \
     cp "$BACKUP_DIR/agent.env" /home/n15/n15-agent/.env && \
     chown n15:n15 /home/n15/n15-agent/.env && chmod 600 /home/n15/n15-agent/.env && \
