@@ -10,6 +10,7 @@
     "check:city-filter": "node scripts/check-city-filter.mjs",
     "check:call-routing": "node scripts/check-call-routing.mjs",
     "check:catalog-map": "node scripts/check-catalog-map.mjs",
+    "check:object-privacy": "node scripts/check-object-privacy.mjs",
     "check:watermark": "node scripts/check-watermark.mjs"
   },
   "dependencies": {

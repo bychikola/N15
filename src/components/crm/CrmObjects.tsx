@@ -48,6 +48,10 @@ import { PURCHASE_OPTIONS, isPurchaseOption, purchaseOptionsApply } from '@/lib/
 // общий справочник со схемой коллекции и фильтром каталога
 // (см. src/lib/commercial-types.ts)
 import { COMMERCIAL_TYPES } from '@/lib/commercial-types'
+// Происхождение объекта (Н15 / собственник / NMarket.PRO / застройщик /
+// партнёр / другая площадка) — общий справочник с коллекцией Objects
+// (см. src/lib/object-origins.ts): внутренняя пометка, на сайте не видна
+import { OBJECT_ORIGINS, isObjectOrigin } from '@/lib/object-origins'
 // Варианты характеристик (ремонт, отопление, лифт, парковка) и правила их
 // применимости по категории объекта — общий справочник с фильтрами каталога
 // и карточкой сайта (см. src/lib/object-characteristics.ts)
@@ -351,6 +355,10 @@ const emptyForm = {
   corpus: '', fullAddress: '', apartment: '',
   lat: '', lng: '', description: '', status: 'draft', agent: '',
   ownerName: '', ownerPhone: '', cadastralNumber: '',
+  // Внутренние сведения агентства (закрытые поля объекта): происхождение
+  // карточки, комиссия, партнёрские условия и заметка для команды. На сайте
+  // и в публичном API их нет — см. access полей в коллекции Objects
+  origin: '', commission: '', partnerTerms: '', internalComment: '',
   // Варианты покупки — множественный выбор отметками (коды из
   // src/lib/purchase-options.ts); блок только у продажи жилья и коммерции
   purchaseOptions: [] as string[],
@@ -1383,6 +1391,13 @@ export const CrmObjects: FC<{
       // идемпотентно и подстраховывает старые записи
       ownerPhone: o.ownerPhone ? formatRuPhone(o.ownerPhone as string) : '',
       cadastralNumber: (o.cadastralNumber as string) || '',
+      // Внутренние сведения: происхождение карточки, комиссия, партнёрские
+      // условия и заметка. В чужом объекте закрытых полей в ответе нет —
+      // строки остаются пустыми (см. access полей в коллекции Objects)
+      origin: isObjectOrigin(o.origin) ? o.origin : '',
+      commission: (o.commission as string) || '',
+      partnerTerms: (o.partnerTerms as string) || '',
+      internalComment: (o.internalComment as string) || '',
       // Кадастровые сведения участка — как номера дома, у сотрудников их в
       // ответе нет (закрытые поля), поэтому придут пустыми строками
       plotCadastralNumber: (o.plotCadastralNumber as string) || '',
@@ -1949,6 +1964,15 @@ export const CrmObjects: FC<{
       // учёта, и один номер вместо двух не подходит. Пустое поле уходит
       // null — стёртое значение сохраняется.
       cadastralNumber: canEditPrivate ? form.cadastralNumber.trim() || null : undefined,
+      // Внутренние сведения — то же правило, что у закрытых полей
+      // собственника: правят администратор и агент в своём объекте, в чужой
+      // карточке не отправляются (undefined — сохранённое не затирается).
+      // Снятая пометка сохраняется: пустое значение уходит null. Код
+      // происхождения проверяем по справочнику — чужое значение не пройдёт
+      origin: canEditPrivate ? (isObjectOrigin(form.origin) ? form.origin : null) : undefined,
+      commission: canEditPrivate ? form.commission.trim() || null : undefined,
+      partnerTerms: canEditPrivate ? form.partnerTerms.trim() || null : undefined,
+      internalComment: canEditPrivate ? form.internalComment.trim() || null : undefined,
       plotCadastralNumber: canEditPrivate && plotSent ? form.plotCadastralNumber.trim() || null : undefined,
       plotLandCategory: canEditPrivate && plotSent ? form.plotLandCategory.trim() || null : undefined,
       plotPermittedUse: canEditPrivate && plotSent ? form.plotPermittedUse.trim() || null : undefined,
@@ -2934,6 +2958,43 @@ export const CrmObjects: FC<{
               {form.category === 'land' && !editId && (
                 <p className="crm-field-note">{t.crm.objCadastralLandNote}</p>
               )}
+            </div>
+          )}
+
+          {/* Блок «Внутренние сведения»: происхождение карточки, комиссия,
+              партнёрские условия и заметка для команды. Закрытые сведения —
+              их видит и правит администратор, а агент только в своём объекте
+              (см. access полей origin/commission/partnerTerms/internalComment
+              в коллекции Objects); на сайте и в публичном API их нет вовсе */}
+          {canEditPrivate && (
+            <div className="crm-fields-block span-2" style={{ gridColumn: '1 / -1' }}>
+              <div className="crm-block-head">
+                <strong>{t.crm.objInternalBlock}</strong>
+                <span>{t.crm.objInternalNote}</span>
+              </div>
+              <div className="crm-fields-grid">
+                <Field label={t.crm.objOrigin}>
+                  <select value={form.origin} onChange={(e) => set('origin', e.target.value)} style={inputStyle}>
+                    <option value="">{t.crm.objOriginEmpty}</option>
+                    {OBJECT_ORIGINS.map((origin) => (
+                      <option key={origin.value} value={origin.value}>{origin.label}</option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label={t.crm.objCommission}>
+                  <input value={form.commission} onChange={(e) => set('commission', e.target.value)} style={inputStyle} placeholder={t.crm.objCommissionPh} />
+                </Field>
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <Field label={t.crm.objPartnerTerms}>
+                    <textarea rows={2} value={form.partnerTerms} onChange={(e) => set('partnerTerms', e.target.value)} style={inputStyle} placeholder={t.crm.objPartnerTermsPh} />
+                  </Field>
+                </div>
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <Field label={t.crm.objInternalComment}>
+                    <textarea rows={3} value={form.internalComment} onChange={(e) => set('internalComment', e.target.value)} style={inputStyle} placeholder={t.crm.objInternalCommentPh} />
+                  </Field>
+                </div>
+              </div>
             </div>
           )}
 
