@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getPayload } from 'payload'
+import { getPayload, type Payload } from 'payload'
 import config from '@payload-config'
 import { clientIp, rateLimited } from '@/lib/rate-limit'
-import { isBot, objectPathId, pagePath, trackPageview, visitorHash } from '@/lib/site-stats'
+import { isBot, objectPathId, objectPathSlug, pagePath, trackPageview, visitorHash } from '@/lib/site-stats'
 import {
   CLIENT_EVENT_KINDS,
   filterLabel,
@@ -68,9 +68,43 @@ async function recordEvent(
     if (!visitor) return
 
     const payload = await getPayload({ config })
-    await trackVisitorEvent(payload, { visitor, kind, path, objectId })
+    // Действие на карточке объекта: браузер присылает только путь, а номера
+    // объекта в публичном адресе нет — достаём его по адресу (objectIdOfPath).
+    // Кнопки в других разделах сайта передают номер сами (например, избранное)
+    const resolved = objectId ?? (await objectIdOfPath(payload, path))
+    await trackVisitorEvent(payload, { visitor, kind, path, objectId: resolved })
   } catch (e) {
     console.error('[visitors] не удалось записать событие:', e)
+  }
+}
+
+/**
+ * Номер объекта для страницы карточки каталога. В старом адресе
+ * «/ru/catalog/199» он был прямо в пути, в публичном
+ * «/ru/catalog/kvartira-vesennyaya-40m2-a1b2c3» его нет — связь с записью
+ * базы восстанавливаем запросом (см. src/lib/object-slug.ts). Для страниц
+ * без карточки — null, лишних запросов к базе нет.
+ */
+async function objectIdOfPath(payload: Payload, path: string | null): Promise<number | null> {
+  if (!path) return null
+  const byId = objectPathId(path)
+  if (byId) return byId
+  const slug = objectPathSlug(path)
+  if (!slug) return null
+  try {
+    const { docs } = await payload.find({
+      collection: 'objects',
+      where: { slug: { equals: slug } },
+      limit: 1,
+      depth: 0,
+      overrideAccess: true,
+    })
+    const id = Number((docs[0] as { id?: unknown } | undefined)?.id)
+    return Number.isInteger(id) && id > 0 ? id : null
+  } catch {
+    // База недоступна — просмотр всё равно запишем, объект в статистике
+    // останется неопознанным (как у карточки, открытой по чужой ссылке)
+    return null
   }
 }
 
@@ -89,7 +123,9 @@ async function record(req: NextRequest, path: string | null, referrer?: string |
     if (rateLimited(`visit:${ip}`, RATE_LIMIT, RATE_WINDOW_MS)) return
 
     const payload = await getPayload({ config })
-    const result = await trackPageview(payload, { path: pagePath(path), referrer, headers: req.headers, ip })
+    const normalized = pagePath(path)
+    const objectId = await objectIdOfPath(payload, normalized)
+    const result = await trackPageview(payload, { path: normalized, referrer, headers: req.headers, ip, objectId })
     if (!result) return
 
     await touchVisitor(payload, {
@@ -103,10 +139,11 @@ async function record(req: NextRequest, path: string | null, referrer?: string |
     })
 
     // Карточка объекта — отдельное событие: по нему собирается отчёт
-    // «Интерес к объектам» (уникальные посетители, повторные просмотры)
-    const objectId = objectPathId(result.path)
-    if (objectId) {
-      await trackVisitorEvent(payload, { visitor: result.visitor, kind: 'object_view', path: result.path, objectId })
+    // «Интерес к объектам» (уникальные посетители, повторные просмотры).
+    // Номер уже найден выше (см. objectIdOfPath) — из публичного адреса его
+    // сами не достать
+    if (result.objectId) {
+      await trackVisitorEvent(payload, { visitor: result.visitor, kind: 'object_view', path: result.path, objectId: result.objectId })
     }
 
     // Фильтры каталога: адрес со строкой запроса разбираем в понятную запись

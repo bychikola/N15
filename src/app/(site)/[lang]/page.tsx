@@ -116,6 +116,9 @@ export default async function HomePage({ params, searchParams }: PageProps) {
     const addr = publicAddressOf(o.address)
     return {
       id: o.id as number,
+      // Публичный адрес карточки — по нему ObjectCard строит ссылку
+      // (см. src/lib/object-slug.ts)
+      slug: o.slug as string | undefined,
       title: o.title as string,
       type: (o.type as 'sale' | 'rent') || 'sale',
       category: (o.category as string) || '',

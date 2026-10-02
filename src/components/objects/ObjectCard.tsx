@@ -100,9 +100,14 @@ export default function ObjectCard({ obj, lang, t }: ObjectCardProps) {
     ? obj.agent.name.split(' ').map((n) => n[0]).join('').slice(0, 2)
     : ''
 
-  // Ссылка по id: кириллические slug-сегменты не матчатся роутером этой сборки
-  // Next.js (дают 404), числовой id работает всегда. Роут [slug] умеет оба вида.
-  const href = `/${lang}/catalog/${obj.id}`
+  // Публичный адрес карточки — человекочитаемый slug
+  // («kvartira-vesennyaya-40m2-a1b2c3», см. src/lib/object-slug.ts). Номер
+  // объекта в ссылку не попадает: по /catalog/199 объекты перебирались
+  // подряд. Slug латинский намеренно — кириллические сегменты адреса эта
+  // сборка Next.js роутером не матчит (404). Без slug (карточка ещё не
+  // проиндексирована задачей переноса адресов) ведём в каталог, а не по
+  // внутреннему номеру.
+  const href = obj.slug ? `/${lang}/catalog/${obj.slug}` : `/${lang}/catalog`
 
   // Карточка грузит Payload-размер card/thumbnail, а не оригинал (экономия МБ)
   const primarySrc = obj.primaryImage?.sizes?.card?.url || obj.primaryImage?.sizes?.thumbnail?.url || obj.primaryImage?.url

@@ -4,12 +4,6 @@ import { useEffect } from 'react'
 import { usePathname } from 'next/navigation'
 import { sendVisit } from './tracker'
 
-/** Номер объекта из адреса карточки «/<язык>/catalog/<номер>» */
-function objectIdFromPage(): number | null {
-  const m = /^\/[a-z]{2}\/catalog\/(\d+)\/?$/.exec(window.location.pathname)
-  return m ? Number(m[1]) : null
-}
-
 /**
  * Вид события по ссылке: «Позвонить» — tel:, WhatsApp — wa.me, «Написать» —
  * письмо или Telegram. Остальные ссылки события не создают.
@@ -68,7 +62,10 @@ export function SiteVisitTracker() {
       if (!el) return
       const kind = el.getAttribute('data-track') || clickKind(el.getAttribute('href') || '')
       if (!kind) return
-      sendVisit({ event: kind, path: window.location.pathname, objectId: objectIdFromPage() })
+      // Номер объекта не присылаем: в публичном адресе карточки его нет (там
+      // slug), и связь со записью базы восстанавливает сервер — см.
+      // objectIdOfPath в /api/visit
+      sendVisit({ event: kind, path: window.location.pathname })
     }
     document.addEventListener('click', onClick, true)
     return () => document.removeEventListener('click', onClick, true)

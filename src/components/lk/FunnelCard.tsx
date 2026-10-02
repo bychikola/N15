@@ -9,6 +9,8 @@ export interface FunnelApplication {
   clientPhone?: string
   objectTitle?: string
   objectId?: number
+  /** Публичный адрес карточки (slug) — по нему ведёт ссылка клиента */
+  objectSlug?: string
   objectPrice?: number
   lastText?: string
   lastActionAt?: string
@@ -78,8 +80,8 @@ export default function FunnelCard({ app, lang, t, onMoveLeft, onMoveRight, onOp
     <div style={cardStyle}>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
         <a
-          href={app.objectId ? `/${lang}/catalog/${app.objectId}` : undefined}
-          onClick={(e) => { e.stopPropagation(); if (!app.objectId) { e.preventDefault(); onOpenChat?.() } }}
+          href={app.objectSlug ? `/${lang}/catalog/${app.objectSlug}` : undefined}
+          onClick={(e) => { e.stopPropagation(); if (!app.objectSlug) { e.preventDefault(); onOpenChat?.() } }}
           style={{ fontWeight: 600, fontSize: 13, color: '#25241f', textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
         >
           {app.objectTitle || `Заявка #${app.id}`}

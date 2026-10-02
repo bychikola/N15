@@ -55,7 +55,7 @@ export default function ChatThread({ applicationId, lang, variant = 'lk' }: { ap
   const [messages, setMessages] = useState<MessageItem[]>([])
   const [meId, setMeId] = useState<number | null>(null)
   const [meRole, setMeRole] = useState<string>('user')
-  const [objectInfo, setObjectInfo] = useState<{ id?: number; title?: string; agentName?: string; agentPhone?: string; agentPhoto?: string; clientName?: string; clientPhone?: string }>({})
+  const [objectInfo, setObjectInfo] = useState<{ id?: number; slug?: string; title?: string; agentName?: string; agentPhone?: string; agentPhoto?: string; clientName?: string; clientPhone?: string }>({})
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -101,6 +101,9 @@ export default function ChatThread({ applicationId, lang, variant = 'lk' }: { ap
     const clientUser = app.user as Record<string, unknown> | undefined
     setObjectInfo({
       id: obj?.id as number | undefined,
+      // Публичный адрес карточки: ссылка из переписки ведёт по slug, номер
+      // объекта наружу не уходит (см. src/lib/object-slug.ts)
+      slug: (obj?.slug as string) || undefined,
       title: (obj?.title as string) || undefined,
       agentName: (agent?.name as string) || undefined,
       agentPhone: (agent?.phone as string) || undefined,
@@ -306,8 +309,8 @@ export default function ChatThread({ applicationId, lang, variant = 'lk' }: { ap
             </div>
           )}
           <div style={isCrm ? { minWidth: 0 } : undefined}>
-            {objectInfo.id ? (
-              <Link href={`/${lang}/catalog/${objectInfo.id}`}
+            {objectInfo.slug ? (
+              <Link href={`/${lang}/catalog/${objectInfo.slug}`}
                 style={isCrm ? { color: '#8d6b40', fontSize: 12, fontWeight: 600, textDecoration: 'none', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } : undefined}
                 className={isCrm ? undefined : 'text-sm text-[var(--n15-gold)] hover:underline truncate'}>
                 {objectInfo.title}

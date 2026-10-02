@@ -214,6 +214,7 @@ export async function toPublishObject(
   }
 
   const origin = serverOrigin()
+  const slug = typeof doc.slug === 'string' && doc.slug.trim() ? doc.slug.trim() : null
   return {
     id: id != null ? id : doc.id as string,
     title: typeof doc.title === 'string' ? doc.title : '',
@@ -232,7 +233,12 @@ export async function toPublishObject(
     agentName,
     isPremium: doc.isPremium === true,
     urgentSale: doc.urgentSale === true,
-    objectUrl: origin && id != null ? `${origin}/ru/catalog/${id}` : null,
+    // Ссылка в объявлении площадки — публичный адрес карточки (slug), а не
+    // номер объекта: по /catalog/199 объекты перебирались подряд, и гостю
+    // такой адрес больше не открывается (см. src/lib/object-slug.ts).
+    // У карточки без slug ссылки нет — задача переноса адресов
+    // (object-slug-backfill) проставит его при ближайшем старте приложения
+    objectUrl: origin && slug ? `${origin}/ru/catalog/${slug}` : null,
   }
 }
 

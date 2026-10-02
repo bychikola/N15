@@ -3,6 +3,7 @@ import { Footer } from '@/components/layout/Footer'
 import { SectionWrapper } from '@/components/ui/SectionWrapper'
 import { Button } from '@/components/ui/Button'
 import { LeadForm } from '@/components/forms/LeadForm'
+import { OwnerApplicationForm } from '@/components/forms/OwnerApplicationForm'
 import { getDictionary } from '@/i18n/dictionaries'
 
 interface PageProps {
@@ -61,6 +62,12 @@ export default async function SellPage({ params }: PageProps) {
                 {t.services.owners.title}
               </Button>
             </div>
+          </div>
+          {/* Заявка собственника: полная форма — владелец сам описывает объект
+              и подтверждает телефон кодом. Объект попадёт в каталог только
+              после проверки администратором (см. OwnerApplicationForm) */}
+          <div className="mt-14 border border-[var(--n15-gold)]/15 p-6 max-w-3xl">
+            <OwnerApplicationForm />
           </div>
         </SectionWrapper>
       </main>

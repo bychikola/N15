@@ -75,17 +75,24 @@ const linkCount = (v: unknown): number => (String(v ?? '').match(/(https?:\/\/|w
 /**
  * Проверка заявки с публичной формы: null — заявка проходит, иначе причина
  * отказа. headers — заголовки запроса, по ним считается IP для лимита.
+ * scope — свой счётчик лимитов для каждой формы: у заявок на просмотр и
+ * у заявок собственников квоты разные, и общий счётчик душил бы обе формы
+ * разом (по умолчанию — прежний, «applications»).
  */
-export function checkSpam(data: Record<string, unknown>, headers?: Headers): GuardFailure | null {
+export function checkSpam(
+  data: Record<string, unknown>,
+  headers?: Headers,
+  scope = 'applications',
+): GuardFailure | null {
   // Лимит по IP проверяем первым: отказ должен стоить дешевле самой заявки.
   // Без адреса клиента (запрос изнутри приложения, локальная разработка)
   // частоту не считаем — общий счётчик заблокировал бы всех разом
   const ip = headers ? clientIp(headers) : 'unknown'
   if (ip !== 'unknown') {
-    if (rateLimited(`applications:${ip}`, RATE_MAX, RATE_WINDOW_MS)) {
+    if (rateLimited(`${scope}:${ip}`, RATE_MAX, RATE_WINDOW_MS)) {
       return { status: 429, message: TOO_MANY_MESSAGE }
     }
-    if (rateLimited(`applications-day:${ip}`, RATE_DAY_MAX, RATE_DAY_WINDOW_MS)) {
+    if (rateLimited(`${scope}-day:${ip}`, RATE_DAY_MAX, RATE_DAY_WINDOW_MS)) {
       return { status: 429, message: TOO_MANY_MESSAGE }
     }
   }

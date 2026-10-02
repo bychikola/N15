@@ -103,7 +103,7 @@ interface VisitSlice {
   device?: string | null
   landing?: string | null
   pageviews?: number | null
-  pages?: { path?: string | null }[] | null
+  pages?: { path?: string | null; object?: number | null }[] | null
   createdAt?: string | null
   lastSeenAt?: string | null
 }
@@ -232,7 +232,9 @@ export async function scanVisits(payload: Payload, start: Date, end: Date): Prom
         pages.set(path, (pages.get(path) || 0) + 1)
         summary.pages.set(path, (summary.pages.get(path) || 0) + 1)
 
-        const objectId = objectPathId(path)
+        // Номер объекта: у новых записей он лежит рядом с адресом (в публичном
+        // адресе номера нет), у старых — берём из адреса «/catalog/199»
+        const objectId = hit.object && hit.object > 0 ? hit.object : objectPathId(path)
         if (objectId) {
           summary.objects.set(objectId, (summary.objects.get(objectId) || 0) + 1)
           const stat = objects.get(objectId) || { views: 0, visitors: new Set<string>() }
@@ -448,7 +450,9 @@ export async function loadVisitorHistory(
         const path = (hit.path || '').trim()
         if (!path) continue
         pages.set(path, (pages.get(path) || 0) + 1)
-        const objectId = objectPathId(path)
+        // Номер объекта: у новых записей — рядом с адресом, у старых — в
+        // самом адресе «/catalog/199» (см. страницы визита в SiteVisits)
+        const objectId = hit.object && hit.object > 0 ? hit.object : objectPathId(path)
         if (objectId) objects.set(objectId, (objects.get(objectId) || 0) + 1)
       }
     }

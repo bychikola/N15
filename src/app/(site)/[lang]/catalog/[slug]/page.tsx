@@ -1,7 +1,8 @@
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { RichText } from '@payloadcms/richtext-lexical/react'
-import { notFound } from 'next/navigation'
+import { headers } from 'next/headers'
+import { notFound, redirect } from 'next/navigation'
 import { Header } from '@/components/layout/Header'
 import { Footer } from '@/components/layout/Footer'
 
@@ -61,12 +62,25 @@ export default async function ObjectPage({ params }: PageProps) {
   const t = getDictionary(lang)
   const payload = await getPayload({ config })
 
-  // Ссылки на объекты бывают двух видов: /catalog/<id> (число) и /catalog/<slug>.
-  // parseInt от slug даёт NaN — такие значения в where не отправляем.
-  // Архивные объекты (status = archived) на сайте не показываются — ни в
-  // каталоге, ни по прямой ссылке: локальный API Payload обходит access
-  // коллекции, поэтому фильтруем статус явно (src/lib/archive.ts).
+  // Публичный адрес карточки — человекочитаемый slug
+  // («kvartira-vesennyaya-40m2-a1b2c3», см. src/lib/object-slug.ts). Числовой
+  // адрес (/catalog/199) — внутренний: по нему объекты перебирались подряд,
+  // поэтому гостю его не показываем вовсе (404, как у несуществующей
+  // страницы), а сотруднику из CRM отдаём постоянным переходом на публичный
+  // адрес — так ссылки из карточек CRM не ломаются, а в адресной строке
+  // остаётся нормальный адрес.
+  const { user } = await payload
+    .auth({ headers: await headers() })
+    .catch(() => ({ user: null }))
+  const staff = user && (user.role === 'agent' || user.role === 'admin') ? user : null
   const numericId = /^\d+$/.test(slug) ? parseInt(slug, 10) : null
+  if (numericId && !staff) notFound()
+
+  // Статус фильтруем явно: архивные объекты на сайте не показываются ни в
+  // каталоге, ни по прямой ссылке (src/lib/archive.ts), а черновик видит
+  // только сотрудник — гость получает 404, как и раньше получал на закрытые
+  // разделы. Доступ проверяет и сама коллекция (overrideAccess: false):
+  // агент видит черновики только своих объектов.
   const { docs } = await payload.find({
     collection: 'objects',
     where: {
@@ -77,10 +91,16 @@ export default async function ObjectPage({ params }: PageProps) {
     },
     limit: 1,
     depth: 2,
+    user: user ?? undefined,
+    overrideAccess: false,
   })
 
   const object = docs[0]
   if (!object) notFound()
+
+  // Сотрудник открыл числовой адрес — переводим на публичный
+  const objectSlug = (object as unknown as { slug?: string }).slug
+  if (numericId && objectSlug) redirect(`/${lang}/catalog/${objectSlug}`)
 
   const obj = object as unknown as {
     id: number; title: string; type: string; category: string
@@ -448,7 +468,9 @@ export default async function ObjectPage({ params }: PageProps) {
             <div className="lg:col-span-1">
               <div className="sticky top-24">
                 {/* В избранное / Поделиться — как на alaniadom */}
-                <ObjectActions objectId={obj.id} shareUrl={`/${lang}/catalog/${obj.id}`} />
+                {/* Ссылка «Поделиться» — публичный адрес карточки: номер
+                    объекта наружу не уходит (см. objectSlug выше) */}
+                <ObjectActions objectId={obj.id} shareUrl={`/${lang}/catalog/${objectSlug || slug}`} />
 
                 {/* ПОЗВОНИТЬ — контакты менеджера кнопками, номер на странице
                     не публикуется (см. AgentContactButtons). Маршрут строит

@@ -173,7 +173,7 @@ export const CatalogMap: FC<Props> = ({ where, lang }) => {
         kind ? `<span class="n15-map-balloon__kind">${escapeHtml(kind)}</span>` : '',
         point.title ? `<div class="n15-map-balloon__title">${escapeHtml(point.title)}</div>` : '',
         price ? `<div class="n15-map-balloon__price">${escapeHtml(price)}</div>` : '',
-        `<a class="n15-map-balloon__link" href="/${lang}/catalog/${point.id}">${escapeHtml(t.catalog.mapOpenObject)}</a>`,
+        `<a class="n15-map-balloon__link" href="/${lang}/catalog/${point.slug}">${escapeHtml(t.catalog.mapOpenObject)}</a>`,
         '</div>',
         '</div>',
       ].join('')

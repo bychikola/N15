@@ -14,6 +14,9 @@ import { ARCHIVE_LOG_LIMIT, ARCHIVE_REASONS, archiveFromDoc, isArchiveReason, ty
 // обновляем опубликованные посты, при снятии с продажи (archived) — снимаем
 // объявления (см. src/lib/publish-service.ts)
 import { objectsAfterChange, objectsAfterDelete } from '@/lib/publish-service'
+// Статус заявки собственника синхронизируется с публикацией объекта
+// (см. src/lib/owner-service.ts)
+import { syncOwnerApplicationOnPublish } from '@/lib/owner-service'
 // Телефон собственника — к одному виду «+7 (918) 828-40-88»: те же функции,
 // что у телефонов агентов (см. src/lib/phone.ts), иначе один и тот же номер,
 // набранный как «8 918…» и как «+7 918…», не считался бы дублем
@@ -37,6 +40,44 @@ import { COMMERCIAL_TYPES } from '@/lib/commercial-types'
 // партнёр / другая площадка) — общий справочник с формой CRM
 // (см. src/lib/object-origins.ts)
 import { OBJECT_ORIGINS } from '@/lib/object-origins'
+// Публичный адрес объекта (slug): сборка из вида, места и площади —
+// см. src/lib/object-slug.ts. Раньше slug был служебным «object-<uuid>»,
+// а ссылки на карточки строились по числовому id: адрес /catalog/199 позволял
+// перебирать объекты подряд.
+import {
+  OBJECT_SLUG_BACKFILL,
+  buildObjectSlug,
+  objectSlugSuffix,
+  type ObjectSlugSource,
+} from '@/lib/object-slug'
+
+/** Запрос из задачи переноса старых адресов: только она может сменить slug */
+function isSlugBackfill(req: unknown): boolean {
+  const context = (req as { context?: Record<string, unknown> } | undefined)?.context
+  return Boolean(context?.[OBJECT_SLUG_BACKFILL])
+}
+
+/**
+ * Свободный публичный адрес нового объекта. Занятость проверяем запросом:
+ * slug уникален в базе, а случайный хвост делает совпадение редким — на нём
+ * просто берём другой хвост. Пять попыток подряд не совпали — совсем
+ * маловероятный случай, отдаём uuid, чтобы документ не остался без адреса.
+ */
+async function uniqueObjectSlug(req: { payload: Payload }, data: Record<string, unknown>): Promise<string> {
+  const source = data as unknown as ObjectSlugSource
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const candidate = buildObjectSlug(source, objectSlugSuffix())
+    const { docs } = await req.payload.find({
+      collection: 'objects',
+      where: { slug: { equals: candidate } },
+      limit: 1,
+      depth: 0,
+      overrideAccess: true,
+    })
+    if (!docs.length) return candidate
+  }
+  return `obekt-${crypto.randomUUID()}`
+}
 
 /**
  * Чтение булева флага из query-параметра запроса. В разных окружениях
@@ -605,8 +646,10 @@ export const Objects: CollectionConfig = {
     defaultColumns: ['title', 'type', 'category', 'price', 'status'],
   },
   access: {
-    // Каталог на сайте читает объекты без авторизации. Архивные объекты
-    // (снятые с продажи) посетителям и клиентам не отдаём вовсе: они живут
+    // Каталог на сайте читает объекты без авторизации. Гостю отдаём только
+    // опубликованные карточки: черновики и архивные объекты публично не
+    // показываются (раньше условие «не архив» открывало черновики — прямая
+    // ссылка на ещё не готовый объект уже была видна снаружи). Архивные живут
     // только в разделе CRM «Архив объектов» — сайт, каталог, поиск и рекламные
     // выгрузки берут объекты без статуса archived (см. src/lib/archive.ts).
     //
@@ -617,9 +660,9 @@ export const Objects: CollectionConfig = {
     // по id (Payload объединяет его с запросом, см. findByID).
     read: async ({ req }) => {
       const staff = req.user as AccessReq['user'] | undefined
-      if (!staff) return { status: { not_equals: 'archived' } }
+      if (!staff) return { status: { equals: 'published' } }
       if (staff.role === 'admin') return true
-      if (staff.role !== 'agent') return { status: { not_equals: 'archived' } }
+      if (staff.role !== 'agent') return { status: { equals: 'published' } }
       const mine = await myAgentIds(req)
       return ownObjectsWhere(staff.id, mine) ?? false
     },
@@ -648,12 +691,15 @@ export const Objects: CollectionConfig = {
     delete: ({ req: { user } }) => user?.role === 'admin',
   },
   hooks: {
-    // Slug — чисто служебное поле: его генерирует сервер ДО валидации и
+    // Slug — публичный адрес карточки: его собирает сервер ДО валидации и
     // записи (beforeValidate выполняется раньше проверок полей и beforeChange),
     // поэтому формам и API присылать slug не нужно, а поле в схеме не
-    // обязательное. Формат — object-<уникальный-id>: id записи БД выдаёт уже
-    // после хуков, поэтому уникальность даёт сам UUID (полный), а не проверка
-    // занятости с суффиксами -2, -3… У старых записей slug остаётся как есть.
+    // обязательное. Формат — «kvartira-vesennyaya-40m2-a1b2c3»: вид, место,
+    // площадь и случайный хвост (см. src/lib/object-slug.ts); на правке адрес
+    // не меняется, чтобы ссылки на объект не гнили. У карточек, заведённых
+    // до появления человекочитаемых адресов, slug переписывает задача
+    // src/lib/object-slug-backfill.ts — она единственная шлёт контекст,
+    // которым хук разрешает смену slug.
     beforeValidate: [
       // Необязательные select-поля адреса (район, район города, товарищество):
       // Payload считает пустую строку '' недействительным вариантом выбора
@@ -673,11 +719,18 @@ export const Objects: CollectionConfig = {
         }
         return data
       },
-      async ({ data, operation }) => {
+      async ({ data, operation, req }) => {
         if (!data) return data
         if (operation === 'create') {
           // Всегда пересобираем: присланный клиентом slug не принимаем.
-          data.slug = `object-${crypto.randomUUID()}`
+          // Адрес собирается из понятных частей («kvartira-vesennyaya-40m2-a1b2c3»,
+          // см. src/lib/object-slug.ts), уникальность даёт случайный хвост —
+          // занятость проверяем запросом, на редком совпадении хвост меняем.
+          data.slug = await uniqueObjectSlug(req, data)
+        } else if (isSlugBackfill(req)) {
+          // Перенос старых адресов: единственный случай, когда slug можно
+          // сменить. Ставит его задача src/lib/object-slug-backfill.ts, клиент
+          // сюда не дотянется — контекст запроса из формы не приходит.
         } else {
           // На правке slug не трогаем и клиентские значения игнорируем:
           // изменение названия/цены/статуса не должно переименовывать объект.
@@ -796,7 +849,16 @@ export const Objects: CollectionConfig = {
         return doc
       },
     ],
-    afterChange: [objectsAfterChange],
+    afterChange: [
+      objectsAfterChange,
+      // Заявка собственника, из которой создан объект, получает статус
+      // «Опубликовано», когда объект выходит в каталог (см.
+      // syncOwnerApplicationOnPublish в src/lib/owner-service.ts)
+      ({ doc, req }) => {
+        void syncOwnerApplicationOnPublish(req.payload, doc as unknown as Record<string, unknown>)
+        return doc
+      },
+    ],
     afterDelete: [objectsAfterDelete],
   },
   fields: [
@@ -811,8 +873,10 @@ export const Objects: CollectionConfig = {
       type: 'text',
       label: 'URL-путь',
       unique: true,
-      // Поле служебное: slug всегда генерируется сервером автоматически
-      // (см. хук beforeValidate выше), пользователю не показываем.
+      // Публичный адрес карточки («kvartira-vesennyaya-40m2-a1b2c3», см.
+      // src/lib/object-slug.ts): сервер собирает его сам, руками поле не
+      // заполняют — в форме CRM оно скрыто. Номер объекта в адресе не
+      // участвует: по /catalog/199 объекты перебирались подряд.
       admin: {
         hidden: true,
       },

@@ -20,7 +20,9 @@ import type { ApproxPoint } from './object-approx-point'
 
 /** Объект внутри области: из этого собирается облачко области на карте */
 export interface ObjectMapPoint {
-  id: number
+  /** Публичный адрес карточки (slug): по нему строится ссылка из облачка.
+   *  Внутреннего номера объекта в ответе карты нет — он наружу не уходит */
+  slug: string
   title: string
   /** Вид сделки: sale | rent */
   type?: string
@@ -128,11 +130,14 @@ function imageOf(doc: Record<string, unknown>): string | undefined {
 
 /** Документ объекта → объект для облачка области (null — объекта нет) */
 function mapPointOf(doc: Record<string, unknown>): ObjectMapPoint | null {
-  const id = Number(doc.id)
-  if (!Number.isInteger(id)) return null
+  // Ссылка из облачка — по публичному адресу; карточка без slug на карту не
+  // попадает (адреса старым объектам ставит задача переноса, см.
+  // src/lib/object-slug-backfill.ts)
+  const slug = text(doc.slug)
+  if (!slug) return null
   const price = Number(doc.price)
   return {
-    id,
+    slug,
     title: text(doc.title),
     type: text(doc.type) || undefined,
     category: text(doc.category) || undefined,
@@ -146,8 +151,9 @@ function mapPointOf(doc: Record<string, unknown>): ObjectMapPoint | null {
  * собираются в одну область: подпись (район, город) у них общая, а отдельные
  * круги на соседних точках нарисовались бы друг на друге.
  *
- * Порядок обхода — по id: и объекты в облачке, и подпись области (её берём у
- * первого объекта) не должны зависеть от порядка выдачи фильтров.
+ * Порядок обхода — по публичному адресу: и объекты в облачке, и подпись
+ * области (её берём у первого объекта) не должны зависеть от порядка выдачи
+ * фильтров.
  */
 export function mapAreasOf(found: FoundObject[]): ObjectMapArea[] {
   const points = found
@@ -156,7 +162,7 @@ export function mapAreasOf(found: FoundObject[]): ObjectMapArea[] {
       (entry): entry is { area: ApproxPoint; doc: Record<string, unknown>; point: ObjectMapPoint } =>
         entry.point !== null,
     )
-    .sort((a, b) => a.point.id - b.point.id)
+    .sort((a, b) => (a.point.slug < b.point.slug ? -1 : a.point.slug > b.point.slug ? 1 : 0))
 
   const areas = new Map<string, ObjectMapArea>()
   for (const { area, doc, point } of points) {

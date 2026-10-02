@@ -21,6 +21,11 @@
  * 3. Страница объекта в исходном HTML — в разметке (включая данные React
  *    Server Components, которые приезжают браузеру вместе с HTML) нет
  *    ключей закрытых полей.
+ * 4. Публичный адрес объекта: числовой /ru/catalog/<id> гостю не отдаётся
+ *    (404), человекочитаемый открывается.
+ * 5. Заявки собственников: коллекции и служебные маршруты закрыты для гостя,
+ *    форма на /sell не содержит закрытых полей объекта. Проверки без
+ *    побочных эффектов: заявки не создаются, коды не запрашиваются.
  *
  * Правила доступа живут в коллекции objects (полевой access, см.
  * privateFieldsAccess / internalGroupsAccess в Objects.ts); публичная
@@ -170,6 +175,100 @@ async function main() {
       else ok('в исходном HTML закрытых полей нет')
     }
   }
+
+  // 5. Публичный адрес объекта: номер в адресе гостю больше не служит —
+  //    перебор объектов по порядковым номерам закрыт. Гость получает 404
+  //    на /ru/catalog/<id>, сотрудник CRM — редирект на человекочитаемый
+  //    адрес вида /ru/catalog/kvartira-vesennyaya-40m2-a1b2c3
+  //    (см. src/lib/object-slug.ts, catalog/[slug]/page.tsx).
+  if (sample?.id != null) {
+    console.log('\nПубличные адреса объектов:')
+    const numeric = await fetch(`${BASE}/ru/catalog/${encodeURIComponent(String(sample.id))}`, { redirect: 'manual' })
+    if (numeric.status === 404) ok(`числовой адрес /ru/catalog/${sample.id} гостю не отдаётся (404)`)
+    else if (numeric.status >= 300 && numeric.status < 400) bad(`числовой адрес /ru/catalog/${sample.id} отвечает редиректом — гостю он не должен служить`)
+    else bad(`числовой адрес /ru/catalog/${sample.id} открыт гостю — HTTP ${numeric.status}`)
+
+    if (sample.slug) {
+      const slugRes = await fetch(`${BASE}/ru/catalog/${encodeURIComponent(String(sample.slug))}`)
+      if (slugRes.ok) ok(`человекочитаемый адрес /ru/catalog/${sample.slug} открывается`)
+      else bad(`человекочитаемый адрес /ru/catalog/${sample.slug} не открывается — HTTP ${slugRes.status}`)
+    }
+  }
+
+  // 6. Заявки собственников: коллекции закрыты, служебные маршруты гостю
+  //    не отвечают данными, а форма на /sell не содержит закрытых ключей.
+  //    Проверки без побочных эффектов: заявки не создаются, коды не
+  //    запрашиваются (проверка не должна тратить чужие попытки ввода).
+  console.log('\nЗаявки собственников:')
+  const ownerList = await fetch(`${BASE}/api/owner-applications?limit=1`)
+  if (ownerList.status === 200) {
+    const body = await ownerList.json().catch(() => null)
+    if (Array.isArray(body?.docs) && body.docs.length) bad('REST коллекции owner-applications отдаёт заявки гостю')
+    else ok('REST коллекции owner-applications гостю ничего не отдаёт')
+  } else {
+    ok(`REST коллекции owner-applications закрыт (HTTP ${ownerList.status})`)
+  }
+  // Гость не может завести заявку в обход формы через REST коллекции
+  const ownerRestCreate = await fetch(`${BASE}/api/owner-applications`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ownerName: 'Проверка', ownerPhone: '+7 (900) 000-00-00' }),
+  })
+  if (ownerRestCreate.status === 403) ok('REST-создание заявки гостю запрещено (403)')
+  else bad(`REST-создание заявки доступно гостю — HTTP ${ownerRestCreate.status}`)
+
+  const ownerMats = await fetch(`${BASE}/api/owner-materials?limit=1`)
+  if (ownerMats.status === 200) {
+    const body = await ownerMats.json().catch(() => null)
+    if (Array.isArray(body?.docs) && body.docs.length) bad('REST коллекции owner-materials отдаёт файлы заявок гостю')
+    else ok('REST коллекции owner-materials гостю ничего не отдаёт')
+  } else {
+    ok(`REST коллекции owner-materials закрыт (HTTP ${ownerMats.status})`)
+  }
+
+  // Проверка кода по заведомо несуществующей заявке: 404 и никаких данных
+  const verify = await fetch(`${BASE}/api/owner-applications/verify`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: 2147483647, code: '00000' }),
+  })
+  const verifyBody = await verify.json().catch(() => null)
+  if (verify.status === 404) ok('проверка кода по несуществующей заявке отвечает 404')
+  else bad(`проверка кода по несуществующей заявке — HTTP ${verify.status}`)
+  if (verifyBody && collectKeys(verifyBody).size > 1) bad('ответ проверки кода содержит лишние данные')
+  else ok('в ответе проверки кода только сообщение')
+
+  // Гостевая форма заявки: пустой POST не создаёт заявку
+  const submit = await fetch(`${BASE}/api/owner-applications/submit`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: '{}',
+  })
+  if (submit.status >= 400) ok(`пустая заявка с сайта отклоняется (HTTP ${submit.status})`)
+  else bad(`пустая заявка с сайта принимается — HTTP ${submit.status}`)
+
+  // CRM-раздел заявок закрыт для гостя
+  const crm = await fetch(`${BASE}/crm/owner-applications`, { redirect: 'manual' })
+  if (crm.status >= 300 && crm.status < 400) ok('раздел CRM /crm/owner-applications гостя перенаправляет на вход')
+  else bad(`раздел CRM /crm/owner-applications открыт гостю — HTTP ${crm.status}`)
+  const crmAction = await fetch(`${BASE}/api/crm/owner-applications/action`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: '{}',
+  })
+  if (crmAction.status === 403) ok('действия по заявкам гостю запрещены (403)')
+  else bad(`действия по заявкам доступны гостю — HTTP ${crmAction.status}`)
+
+  // Страница /sell: в разметке формы нет закрытых полей объекта. «house»,
+  // «apartment» и прочие слова-имена полей формы из общего списка исключаем:
+  // в форме это подписи полей, а не данные объекта
+  const sellRes = await fetch(`${BASE}/ru/sell`)
+  const sellHtml = await sellRes.text()
+  const SELL_FORBIDDEN = ['ownerPhone', 'ownerName', 'cadastralNumber', 'internalComment', 'commission', 'partnerTerms', 'plotCadastralNumber']
+  const sellLeaks = SELL_FORBIDDEN.filter((key) => sellHtml.includes(`"${key}"`))
+  if (!sellRes.ok) bad(`страница /ru/sell не открывается — HTTP ${sellRes.status}`)
+  else if (sellLeaks.length) bad(`в HTML формы заявки закрытые поля: ${sellLeaks.join(', ')}`)
+  else ok('в HTML формы /ru/sell закрытых полей нет')
 
   if (failed.length) {
     console.log(`\n✗ Утечек: ${failed.length}`)

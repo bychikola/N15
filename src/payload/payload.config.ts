@@ -51,7 +51,15 @@ import { VisitorEvents } from './collections/VisitorEvents'
 // Журнал доступа к отчётам по посетителям (ст. 19 152-ФЗ, см.
 // src/lib/analytics-access.ts)
 import { AnalyticsAccess } from './collections/AnalyticsAccess'
+// «Заявки собственников»: предложения объектов от владельцев — до проверки
+// администратором в каталог не попадают, фото лежат в закрытом хранилище
+// (см. src/lib/owner-applications.ts, src/lib/owner-service.ts)
+import { OwnerApplications } from './collections/OwnerApplications'
+import { OwnerMaterials } from './collections/OwnerMaterials'
 import { seedInterregional } from '@/lib/interregional-service'
+// Перевод старых объектов на человекочитаемые публичные адреса
+// (см. src/lib/object-slug-backfill.ts)
+import { startObjectSlugBackfill } from '@/lib/object-slug-backfill'
 // Фоновая разметка уже загруженных фото знаком «Н15»
 // (см. src/lib/media-marking-job.ts)
 import { startWatermarkBackfill } from '@/lib/media-marking-job'
@@ -102,7 +110,7 @@ export default buildConfig({
     abortOnLimit: true,
     responseOnLimit: `Файл больше ${PHOTO_MAX_LABEL} — допустимы ${PHOTO_FORMATS_LABEL} до ${PHOTO_MAX_LABEL}`,
   },
-  collections: [Users, Media, Objects, Agents, Applications, Tasks, Messages, Blog, News, Pages, Customers, Emails, MailAttachments, AgentTasks, MarketListings, LegalDocuments, LegalReports, Advertisers, Advertisements, AdvertisingRequests, AdvertisingMaterials, BoardAds, BoardMaterials, Regions, Settlements, SiteVisits, Visitors, VisitorEvents, AnalyticsAccess],
+  collections: [Users, Media, Objects, Agents, Applications, Tasks, Messages, Blog, News, Pages, Customers, Emails, MailAttachments, AgentTasks, MarketListings, LegalDocuments, LegalReports, Advertisers, Advertisements, AdvertisingRequests, AdvertisingMaterials, BoardAds, BoardMaterials, Regions, Settlements, SiteVisits, Visitors, VisitorEvents, AnalyticsAccess, OwnerApplications, OwnerMaterials],
   globals: [SiteSettings, MailSettings, AgentSettings, NewsSettings, PlatformSettings],
   editor: lexicalEditor(),
   i18n: {
@@ -141,6 +149,11 @@ export default buildConfig({
     // в фоне, старт приложения её не ждёт (см. src/lib/media-marking-job.ts).
     // Выключается переменной окружения WATERMARK_BACKFILL=off
     startWatermarkBackfill(payload)
+    // Перевод старых объектов на публичные адреса вида
+    // «kvartira-vesennyaya-40m2-a1b2c3»: карточки с прежним служебным slug
+    // (object-<uuid>) или без него переименовываются в фоне при старте.
+    // Выключается переменной окружения OBJECT_SLUG_BACKFILL=off
+    startObjectSlugBackfill(payload)
   },
   sharp,
 })

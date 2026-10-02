@@ -66,10 +66,12 @@ export const HoneypotField: FC<{ value: string; onChange: (v: string) => void }>
 /**
  * Причина отказа с сервера: Payload отдаёт её в errors[0].message — это
  * тексты защиты («Слишком много отправок…», «Проверьте номер телефона…»)
- * и проверок заявки. Если текста нет (ответ не Payload), форма показывает
- * своё общее сообщение.
+ * и проверок заявки; собственные маршруты (заявки собственников) — в поле
+ * error. Если текста нет (ответ не наш), форма показывает своё сообщение.
  */
 export async function readServerError(res: Response, fallback: string): Promise<string> {
-  const body = (await res.json().catch(() => null)) as { errors?: { message?: string }[] } | null
-  return body?.errors?.[0]?.message || fallback
+  const body = (await res.json().catch(() => null)) as
+    | { errors?: { message?: string }[]; error?: string }
+    | null
+  return body?.errors?.[0]?.message || body?.error || fallback
 }

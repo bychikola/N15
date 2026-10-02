@@ -84,7 +84,19 @@ export const SiteVisits: CollectionConfig = {
       type: 'array',
       label: 'Просмотренные страницы',
       admin: { description: 'Порядок просмотра внутри визита' },
-      fields: [{ name: 'path', type: 'text', label: 'Адрес' }],
+      fields: [
+        { name: 'path', type: 'text', label: 'Адрес' },
+        {
+          name: 'object',
+          type: 'number',
+          label: 'Объект',
+          admin: {
+            readOnly: true,
+            description:
+              'Номер объекта каталога: в публичном адресе его нет (там slug), связь со записью базы восстанавливает счётчик при записи просмотра',
+          },
+        },
+      ],
     },
   ],
 }

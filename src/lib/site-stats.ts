@@ -134,10 +134,27 @@ export function pagePath(raw: string | null | undefined): string | null {
   return path
 }
 
-/** Номер объекта в адресе карточки «/<язык>/catalog/<номер>» */
+/**
+ * Номер объекта в старом адресе карточки «/<язык>/catalog/<номер>»: адреса
+ * этого вида остались только в записях статистики до перехода на публичные
+ * адреса, в выдаче страниц их больше нет (см. objectPathSlug).
+ */
 export function objectPathId(path: string): number | null {
   const m = /^\/[a-z]{2}\/catalog\/(\d+)\/?$/.exec(path)
   return m ? Number(m[1]) : null
+}
+
+/**
+ * Публичный адрес объекта в адресе карточки «/<язык>/catalog/<slug>»:
+ * «kvartira-vesennyaya-40m2-a1b2c3» (см. src/lib/object-slug.ts). Номер
+ * объекта в статистику не пишем — по адресу его не видно, а связь с записью
+ * базы счётчик восстанавливает сам (см. /api/visit). null — не карточка.
+ */
+export function objectPathSlug(path: string): string | null {
+  const m = /^\/[a-z]{2}\/catalog\/([^/]+)\/?$/.exec(path)
+  if (!m) return null
+  const value = decodeURIComponent(m[1])
+  return /^\d+$/.test(value) ? null : value
 }
 
 /** Повторные хиты по тому же пути того же посетителя: время последнего */
@@ -160,6 +177,14 @@ export interface PageviewInput {
   headers: Headers
   /** IP клиента (см. clientIp в lib/rate-limit) */
   ip: string
+  /**
+   * Номер объекта, если страница — карточка каталога. В адресе его больше нет
+   * (публичный адрес — slug), поэтому связь с записью базы восстанавливает
+   * /api/visit до записи хита. Нужен отчётам «Интерес к объектам» и
+   * «Посетители»: старые записи статистики читаются по номеру из адреса
+   * (см. objectPathId).
+   */
+  objectId?: number | null
 }
 
 /** Что счётчик записал: по этим данным /api/visit дописывает карточку посетителя */
@@ -174,6 +199,8 @@ export interface PageviewResult {
   referrer: string | null
   /** Начался новый визит (перерыв больше 30 минут или первый заход) */
   newVisit: boolean
+  /** Номер объекта каталога, к которому относится страница (если это карточка) */
+  objectId: number | null
 }
 
 /**
@@ -213,14 +240,23 @@ export async function trackPageview(payload: Payload, input: PageviewInput): Pro
     overrideAccess: true,
   })
 
+  // Номер объекта — только у карточки каталога и только когда он известен:
+  // у страниц без объекта поля в записи нет (страница — просто путь)
+  const objectId = typeof input.objectId === 'number' && input.objectId > 0 ? input.objectId : null
+  const page: { path: string; object?: number } = objectId ? { path, object: objectId } : { path }
+
   const visit = existing.docs[0] as
-    | { id: number; pageviews?: number | null; pages?: { id?: string; path?: string }[] | null }
+    | { id: number; pageviews?: number | null; pages?: { id?: string; path?: string; object?: number | null }[] | null }
     | undefined
 
   if (visit) {
     // Тот же визит: продлеваем и дописываем страницу (если есть место)
-    const pages: { id?: string; path?: string }[] = (visit.pages || []).map((p) => ({ id: p.id, path: p.path }))
-    if (pages.length < MAX_PAGES_PER_VISIT) pages.push({ path })
+    const pages: { id?: string; path?: string; object?: number }[] = (visit.pages || []).map((p) => ({
+      id: p.id,
+      path: p.path,
+      ...(typeof p.object === 'number' && p.object > 0 ? { object: p.object } : {}),
+    }))
+    if (pages.length < MAX_PAGES_PER_VISIT) pages.push(page)
     await payload.update({
       collection: 'site-visits',
       id: visit.id,
@@ -242,7 +278,7 @@ export async function trackPageview(payload: Payload, input: PageviewInput): Pro
         landing: path,
         lastSeenAt: now.toISOString(),
         pageviews: 1,
-        pages: [{ path }],
+        pages: [page],
       },
       overrideAccess: true,
     })
@@ -252,7 +288,7 @@ export async function trackPageview(payload: Payload, input: PageviewInput): Pro
 
   // Счётчик не только считает: по этим данным /api/visit дописывает карточку
   // посетителя и события текущей страницы (см. src/lib/visitor-tracking.ts)
-  return { visitor, path, device, source, referrer: host, newVisit: !visit }
+  return { visitor, path, device, source, referrer: host, newVisit: !visit, objectId }
 }
 
 /** Когда последний раз чистили старые визиты (чистим не чаще раза в сутки) */

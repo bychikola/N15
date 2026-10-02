@@ -84,6 +84,9 @@ export default function FunnelBoard({ lang }: { lang: string }) {
         clientPhone: (clientUser?.phone as string) || (a.clientPhone as string) || undefined,
         objectTitle: (obj?.title as string) || undefined,
         objectId: (obj?.id as number) || undefined,
+        // Публичный адрес карточки: ссылка клиента ведёт по slug, номер
+        // объекта наружу не уходит (см. src/lib/object-slug.ts)
+        objectSlug: (obj?.slug as string) || undefined,
         objectPrice: (obj?.price as number) || undefined,
         lastText: (last?.text as string) || undefined,
         lastActionAt: (last?.createdAt as string) || (a.createdAt as string) || undefined,

@@ -5,7 +5,7 @@ import config from '@payload-config'
 import { getDictionary } from '@/i18n/dictionaries'
 import { canAccessCrm, getCrmUser } from '../auth'
 import { CrmShell } from '@/components/crm/CrmShell'
-import { DEVICE_LABELS, SOURCE_LABELS, objectPathId } from '@/lib/site-stats'
+import { DEVICE_LABELS, SOURCE_LABELS, objectPathId, objectPathSlug } from '@/lib/site-stats'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Статистика сайта' }
@@ -21,7 +21,7 @@ interface VisitSlice {
   referrer?: string | null
   device?: string | null
   pageviews?: number | null
-  pages?: { path?: string | null }[] | null
+  pages?: { path?: string | null; object?: number | null }[] | null
   createdAt?: string | null
 }
 
@@ -198,7 +198,9 @@ export default async function CrmSiteStatsPage({ searchParams }: PageProps) {
         const path = (hit.path || '').trim()
         if (!path) continue
         pathCounts.set(path, (pathCounts.get(path) || 0) + 1)
-        const objectId = objectPathId(path)
+        // Номер объекта: у новых записей он лежит рядом с адресом (в публичном
+        // адресе его нет), у старых — берём из адреса «/catalog/199»
+        const objectId = hit.object && hit.object > 0 ? hit.object : objectPathId(path)
         if (objectId) objectCounts.set(objectId, (objectCounts.get(objectId) || 0) + 1)
       }
     }
@@ -237,7 +239,7 @@ export default async function CrmSiteStatsPage({ searchParams }: PageProps) {
   // Популярные страницы: карточки объектов считаем отдельно — им посвящена
   // своя таблица, иначе один и тот же просмотр попал бы в отчёт дважды
   const topPages = top(pathCounts, 40)
-    .filter(([path]) => !objectPathId(path))
+    .filter(([path]) => !objectPathId(path) && !objectPathSlug(path))
     .slice(0, 12)
   const topObjects = Array.from(objectCounts.entries())
     .sort((a, b) => b[1] - a[1])
