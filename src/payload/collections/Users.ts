@@ -22,7 +22,15 @@ export const Users: CollectionConfig = {
   },
   access: {
     create: () => true,       // Anyone can register
-    read: ({ req: { user } }) => !!user,  // Only logged-in users can read
+    // Свой профиль — любому залогиненному, чужие аккаунты — только администратору.
+    // Возвращаем не true, а запрос-констрейнт: Payload ограничивает им и список
+    // (/api/users), и чтение по id, поэтому ни клиент, ни агент не выгрузят всю
+    // базу пользователей и не откроют чужой профиль прямой ссылкой.
+    read: ({ req: { user } }) => {
+      if (!user) return false
+      if (user.role === 'admin') return true
+      return { id: { equals: user.id } }
+    },
     // Свой профиль — любому залогиненному, чужие аккаунты — только администратор
     update: ({ req: { user }, id }) => {
       if (!user) return false
@@ -35,15 +43,22 @@ export const Users: CollectionConfig = {
       // Первый созданный пользователь автоматически становится администратором,
       // иначе «Create First User» создаёт аккаунт с ролью 'user' и админка
       // отвечает «You are not allowed to perform this action».
-      async ({ data, req, operation }) => {
+      async ({ data, req, operation, originalDoc }) => {
         // Привилегии (роль, доступ к ИИ-агенту) выставляет только администратор.
-        // Не-админу роль не удаляем целиком: Payload валидирует данные ещё раз
-        // после beforeChange, и отсутствие обязательной роли превратило бы
-        // обычную регистрацию клиента (role=user) в ошибку «Роль: обязательно».
-        // Убираем только заявку на привилегированную роль; явный user остаётся.
+        // На обновлении Payload подмешивает в data поля текущего документа,
+        // поэтому role здесь — обычно уже существующая роль, а не то, что
+        // прислал клиент. Привилегированную роль не-админу не отдаём: при
+        // правке возвращаем прежнюю роль (без неё валидация обязательного поля
+        // «Роль» заваливает сохранение собственного профиля), при создании —
+        // убираем, её подставит defaultValue 'user'; явный user остаётся.
         if (req.user?.role !== 'admin' && data) {
           if (data.role && data.role !== 'user') {
-            delete data.role
+            const prevRole = (originalDoc as { role?: string } | undefined)?.role
+            if (prevRole) {
+              data.role = prevRole
+            } else {
+              delete data.role
+            }
           }
           delete data.agentAccess
           delete data.canManageAgents
@@ -140,6 +155,15 @@ export const Users: CollectionConfig = {
       name: 'phone',
       type: 'text',
       label: 'Телефон (логин)',
+      // Телефон — персональные данные: при чтении отдаём его только самому
+      // владельцу аккаунта или администратору. Чужие профили и так закрыты
+      // доступом коллекции (см. access.read) — это второй рубеж на случай,
+      // если правило чтения когда-нибудь ослабят. Поле email добавляет сам
+      // Payload (auth), поэтому для него работает только правило коллекции.
+      access: {
+        read: ({ req: { user }, id }) =>
+          user?.role === 'admin' || (user != null && String(id) === String(user.id)),
+      },
       admin: {
         description: 'Номер телефона — логин для входа. По нему подтягиваются ваши заявки.',
       },
