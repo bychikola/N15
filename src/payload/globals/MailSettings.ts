@@ -1,7 +1,25 @@
-import type { GlobalConfig } from 'payload'
+import type { FieldHook, GlobalConfig } from 'payload'
 
 // Настройки подключения почтового ящика (VK WorkSpace / Mail.ru).
 // Заполняются админом; поллер и отправка используют эти значения.
+//
+// Пароль ящика — секрет: наружу его не отдаём (access.read: false), иначе он
+// утекал бы открытым текстом в ответе /api/globals/mail-settings, в браузер
+// администратора, историю и логи. Сервер читает пароль через Local API с
+// overrideAccess (board-mail.ts, advertising-service.ts, /api/mail/send) —
+// там поле по-прежнему доступно. Читать и менять глобал может только админ.
+const secretRead = (): false => false
+
+// Админка не показывает прежний пароль, поэтому при сохранении других полей
+// поле пароля приходит пустым. Пустое значение не должно затирать рабочий
+// пароль — оставляем значение из базы (originalDoc в update-операции читается
+// с overrideAccess, поэтому реальный пароль здесь есть).
+const keepPasswordIfEmpty: FieldHook = ({ value, originalDoc }) => {
+  if (typeof value === 'string' && value.trim() !== '') return value
+  const current = (originalDoc as { password?: string } | undefined)?.password
+  return current || value
+}
+
 export const MailSettings: GlobalConfig = {
   slug: 'mail-settings',
   label: 'Почта (подключение)',
@@ -9,7 +27,8 @@ export const MailSettings: GlobalConfig = {
     group: 'Система',
   },
   access: {
-    read: ({ req: { user } }) => !!user && (user.role === 'admin' || user.role === 'agent'),
+    // В глобале лежит пароль ящика — доступ только администратору
+    read: ({ req: { user } }) => user?.role === 'admin',
     update: ({ req: { user } }) => user?.role === 'admin',
   },
   fields: [
@@ -65,8 +84,17 @@ export const MailSettings: GlobalConfig = {
       name: 'password',
       type: 'text',
       label: 'Пароль приложения',
+      access: {
+        // Пароль не возвращается клиенту даже администратору
+        read: secretRead,
+      },
+      hooks: {
+        beforeChange: [keepPasswordIfEmpty],
+      },
       admin: {
-        description: 'Пароль для внешних приложений (не основной пароль ящика)',
+        autoComplete: 'new-password',
+        description:
+          'Пароль для внешних приложений (не основной пароль ящика). Не показывается и не возвращается через API: чтобы не менять пароль, оставьте поле пустым.',
       },
     },
     {
