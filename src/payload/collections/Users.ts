@@ -2,6 +2,8 @@ import { APIError, type CollectionConfig } from 'payload'
 // Редакция правовых документов, действующая на момент регистрации
 // (см. src/lib/legal-docs.ts): сохраняется в аккаунте
 import { LEGAL_VERSION } from '@/lib/legal-docs'
+// Журнал входов (успешных и неуспешных) — без паролей и секретов
+import { logAuthFailure, logAuthSuccess } from '@/lib/auth-log'
 
 export const Users: CollectionConfig = {
   slug: 'users',
@@ -15,6 +17,22 @@ export const Users: CollectionConfig = {
       requireEmail: false,
       requireUsername: false,
     },
+    cookies: {
+      // HttpOnly Payload ставит токен-куке всегда (см. payload generatePayloadCookie);
+      // здесь то, что зависит от окружения. Secure — только в продакшене: сервер
+      // работает по HTTPS (Caddy), а в локальной разработке по http://localhost
+      // флаг Secure не дал бы залогиниться.
+      secure: process.env.NODE_ENV === 'production',
+      // Lax — кука не уходит на сторонние сайты, но переживает переходы
+      // по ссылкам внутрь CRM. Strict сломал бы возврат после внешних ссылок.
+      sameSite: 'Lax',
+    },
+    // Ограничение перебора: 5 неудачных попыток на аккаунт, блокировка на
+    // 10 минут (значения Payload по умолчанию, зафиксированы явно, чтобы
+    // их не потеряли при будущих правках). Дополнительно попытки ограничены
+    // по IP на входе в приложение — см. src/proxy.ts.
+    maxLoginAttempts: 5,
+    lockTime: 10 * 60 * 1000,
   },
   admin: {
     useAsTitle: 'email',
@@ -39,6 +57,28 @@ export const Users: CollectionConfig = {
     delete: ({ req: { user } }) => user?.role === 'admin',
   },
   hooks: {
+    // Журнал авторизаций. afterLogin срабатывает только после успешного входа
+    // (и в CRM, и в админке), afterError — при отказе; фильтруем отказы по
+    // статусу 401 (неверный логин/пароль, заблокированный аккаунт), чтобы в
+    // журнал входов не попадали прочие ошибки коллекции. Пароли, токены и
+    // cookie в лог не пишутся — см. src/lib/auth-log.ts.
+    afterLogin: [
+      ({ user, req, collection }) => {
+        logAuthSuccess(collection?.slug || 'users', user, req.headers)
+      },
+    ],
+    afterError: [
+      ({ error, req, collection }) => {
+        const status = (error as { status?: number } | undefined)?.status
+        if (status === 401) {
+          logAuthFailure(
+            collection?.slug || 'users',
+            error?.name || 'AuthenticationError',
+            req.headers,
+          )
+        }
+      },
+    ],
     beforeChange: [
       // Первый созданный пользователь автоматически становится администратором,
       // иначе «Create First User» создаёт аккаунт с ролью 'user' и админка
