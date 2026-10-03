@@ -5,46 +5,15 @@ import { Header } from '@/components/layout/Header'
 import { Footer } from '@/components/layout/Footer'
 import { SectionWrapper } from '@/components/ui/SectionWrapper'
 import { OrnamentDivider } from '@/components/ui/OrnamentDivider'
-import { getDictionary, type Dict } from '@/i18n/dictionaries'
+import { getDictionary } from '@/i18n/dictionaries'
+// Безопасный вывод Rich Text: экранирование и белый список тегов/атрибутов
+// (аудит задачи №6). Раньше HTML собирался склейкой строк без экранирования.
+import { renderRichText } from '@/lib/rich-text'
 
 export const dynamic = 'force-dynamic'
 
 interface PageProps {
   params: Promise<{ lang: string; slug: string }>
-}
-
-function renderRichText(content: Record<string, unknown> | undefined, t: Dict): string {
-  const root = content?.root as { children?: Array<{ type?: string; tag?: string; children?: Array<{ text?: string; type?: string; children?: Array<{ text?: string }> }> }> } | undefined
-  if (!root?.children) return ''
-  const children = root.children
-  let html = ''
-  for (const node of children) {
-    if (node.type === 'heading') {
-      const tag = node.tag || 'h2'
-      const text = node.children?.map((c) => c.text || '').join('') || ''
-      html += `<${tag} class="text-xl font-[family-name:var(--font-display)] text-[var(--n15-white)] mt-8 mb-3">${text}</${tag}>`
-    } else if (node.type === 'paragraph') {
-      const text = node.children?.map((c) => c.text || '').join('') || ''
-      html += `<p class="text-[var(--n15-silver)] leading-relaxed mb-4">${text}</p>`
-    } else if (node.type === 'ul') {
-      html += `<ul class="list-disc pl-5 mb-4 space-y-1">`
-      for (const li of node.children || []) {
-        const text = li.children?.map((c) => c.text || '').join('') || ''
-        html += `<li class="text-[var(--n15-silver)]">${text}</li>`
-      }
-      html += `</ul>`
-    } else if (node.type === 'ol') {
-      html += `<ol class="list-decimal pl-5 mb-4 space-y-1">`
-      for (const li of node.children || []) {
-        const text = li.children?.map((c) => c.text || '').join('') || ''
-        html += `<li class="text-[var(--n15-silver)]">${text}</li>`
-      }
-      html += `</ol>`
-    } else if (node.type === 'upload') {
-      html += `<div class="my-6 flex justify-center"><div class="border border-[var(--n15-gold)]/10 p-2">${t.blog.imagePlaceholder}</div></div>`
-    }
-  }
-  return html
 }
 
 export default async function BlogPostPage({ params }: PageProps) {
@@ -74,7 +43,7 @@ export default async function BlogPostPage({ params }: PageProps) {
 
   if (!post) notFound()
 
-  const contentHtml = renderRichText(post.content as Record<string, unknown> | undefined, t)
+  const contentHtml = renderRichText(post.content, { imagePlaceholder: t.blog.imagePlaceholder })
 
   return (
     <>
