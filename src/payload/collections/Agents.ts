@@ -10,9 +10,19 @@ export const Agents: CollectionConfig = {
     defaultColumns: ['name', 'position', 'phone', 'isActive'],
   },
   access: {
+    // Витрина команды открыта всем: имя, должность, фото, опыт и сделки —
+    // данные для клиента. Персональные и внутренние поля (телефон, почта,
+    // Telegram, WhatsApp, номер в АТС, связь с учётной записью) срезает
+    // полевая проверка ниже — публично уходит только то, что предназначено
+    // клиенту, без правки остальных страниц.
     read: () => true,
-    create: ({ req: { user } }) => !!user,
-    update: ({ req: { user } }) => !!user,
+    // Заводить и править карточки может только администратор или сотрудник
+    // с явным разрешением canManageAgents (галочка «Может добавлять и
+    // редактировать агентов» в Users.ts) — то же условие, что в маршруте
+    // /api/agents/manage. Обычный агент чужой профиль не меняет: раньше
+    // сюда проходил любой вошедший (в том числе клиент role=user).
+    create: ({ req: { user } }) => user?.role === 'admin' || user?.canManageAgents === true,
+    update: ({ req: { user } }) => user?.role === 'admin' || user?.canManageAgents === true,
     delete: ({ req: { user } }) => user?.role === 'admin',
   },
   hooks: {
@@ -80,11 +90,24 @@ export const Agents: CollectionConfig = {
       name: 'email',
       type: 'email',
       label: 'Электронная почта',
+      // Личная почта агента — персональные данные: клиентам сайта она не
+      // показывается (публичных кнопок «Написать на почту» у агента нет).
+      // Поле нужно только форме правки профиля в CRM и админке — команде
+      // (role=agent) и администратору.
+      access: {
+        read: ({ req: { user } }) => user?.role === 'agent' || user?.role === 'admin',
+      },
     },
     {
       name: 'telegram',
       type: 'text',
       label: 'Telegram',
+      // Юзернейм/ссылка Telegram — тоже личный контакт агента. Публичной
+      // кнопки Telegram у карточек агента нет, поэтому наружу не отдаём:
+      // поле читает только команда (role=agent) и администратор.
+      access: {
+        read: ({ req: { user } }) => user?.role === 'agent' || user?.role === 'admin',
+      },
       admin: {
         description: 'Ссылка или юзернейм: https://t.me/username или @username. Оставьте пустым, чтобы скрыть кнопку.',
       },
@@ -149,6 +172,12 @@ export const Agents: CollectionConfig = {
       type: 'relationship',
       label: 'Учётная запись агента',
       relationTo: 'users',
+      // Связь карточки с аккаунтом — внутреннее сведение (даже сам id
+      // пользователя): клиентам и посетителям не отдаём. В CRM связь для
+      // выборки «своих» объектов читается с overrideAccess (object-access.ts).
+      access: {
+        read: ({ req: { user } }) => user?.role === 'agent' || user?.role === 'admin',
+      },
       admin: {
         description: 'Связь с аккаунтом на сайте (role=agent) — для чатов с клиентами',
       },
