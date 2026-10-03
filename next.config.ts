@@ -59,6 +59,8 @@ function contentSecurityPolicy(): string {
 }
 
 const nextConfig: NextConfig = {
+  // Не раскрываем стек (сейчас ответы отдают «x-powered-by: Next.js, Payload»)
+  poweredByHeader: false,
   images: {
     remotePatterns: [
       { protocol: 'http', hostname: 'localhost', port: '3000' },
