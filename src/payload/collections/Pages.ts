@@ -8,9 +8,14 @@ export const Pages: CollectionConfig = {
     group: 'Контент',
   },
   access: {
+    // Страницы витрины открыты всем: черновиков у коллекции нет, каждая
+    // запись — опубликованная страница. Закрываем только запись.
     read: () => true,
-    create: ({ req: { user } }) => !!user,
-    update: ({ req: { user } }) => !!user,
+    // Создавать и править страницы может администратор или сотрудник с
+    // разрешением canManageContent (см. Users.ts). Клиент и агент без галочки
+    // — не могут: раньше страницу менял любой вошедший.
+    create: ({ req: { user } }) => user?.role === 'admin' || user?.canManageContent === true,
+    update: ({ req: { user } }) => user?.role === 'admin' || user?.canManageContent === true,
     delete: ({ req: { user } }) => user?.role === 'admin',
   },
   fields: [

@@ -9,9 +9,21 @@ export const Blog: CollectionConfig = {
     defaultColumns: ['title', 'category', 'publishedAt', 'isFeatured'],
   },
   access: {
-    read: () => true,
-    create: ({ req: { user } }) => !!user,
-    update: ({ req: { user } }) => !!user,
+    // Наружу (REST /api/blog без входа) уходят только опубликованные статьи:
+    // черновик без даты публикации и статья с датой в будущем скрыты. Команда
+    // (агент, администратор) видит весь список, включая готовящиеся материалы.
+    read: ({ req: { user } }) => {
+      if (user?.role === 'agent' || user?.role === 'admin') return true
+      return {
+        publishedAt: { exists: true, less_than_equal: new Date().toISOString() },
+      }
+    },
+    // Вести блог может администратор или сотрудник с явным разрешением
+    // canManageContent (галочка «Может вести блог, страницы и медиафайлы»
+    // в Users.ts). Обычный вошедший (клиент role=user) и агент без галочки
+    // статьи не создают и не правят — раньше сюда проходил любой user.
+    create: ({ req: { user } }) => user?.role === 'admin' || user?.canManageContent === true,
+    update: ({ req: { user } }) => user?.role === 'admin' || user?.canManageContent === true,
     delete: ({ req: { user } }) => user?.role === 'admin',
   },
   fields: [

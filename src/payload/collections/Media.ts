@@ -9,9 +9,17 @@ export const Media: CollectionConfig = {
     group: 'Система',
   },
   access: {
+    // Файлы читает витрина: фото объектов, обложки статей, портреты команды.
     read: () => true,
-    create: ({ req: { user } }) => !!user,
-    update: ({ req: { user } }) => !!user,
+    // Загружать и менять медиа может сотрудник (агент или администратор) —
+    // фото объекта, портрет агента и материалы грузятся из CRM под его
+    // сессией (/api/crm/upload) — либо пользователь с разрешением
+    // canManageContent. Обычный вошедший (клиент role=user) больше не может
+    // создавать и править файлы через REST /api/media.
+    create: ({ req: { user } }) =>
+      user?.role === 'agent' || user?.role === 'admin' || user?.canManageContent === true,
+    update: ({ req: { user } }) =>
+      user?.role === 'agent' || user?.role === 'admin' || user?.canManageContent === true,
     delete: ({ req: { user } }) => user?.role === 'admin',
   },
   upload: {

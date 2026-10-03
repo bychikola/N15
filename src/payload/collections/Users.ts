@@ -62,6 +62,7 @@ export const Users: CollectionConfig = {
           }
           delete data.agentAccess
           delete data.canManageAgents
+          delete data.canManageContent
         }
         // Первый созданный пользователь автоматически становится администратором,
         // иначе «Create First User» создаёт аккаунт с ролью 'user' и админка
@@ -208,6 +209,21 @@ export const Users: CollectionConfig = {
       admin: {
         description:
           'Разрешает кнопки «Добавить агента» и «Редактировать» в CRM (раздел «Агенты»): профиль агента — имя, должность, контакты, фото, активность.',
+      },
+    },
+    {
+      name: 'canManageContent',
+      type: 'checkbox',
+      label: 'Может вести блог, страницы и медиафайлы',
+      defaultValue: false,
+      access: {
+        // Как и остальные привилегии: выставляет только администратор
+        create: ({ req }) => req.user?.role === 'admin',
+        update: ({ req }) => req.user?.role === 'admin',
+      },
+      admin: {
+        description:
+          'Разрешает создавать и править статьи (блог), страницы и медиафайлы. Администратор может это всегда. Агент CRM загружает фото объектов и без галочки, а блог и страницы ведёт только с ней.',
       },
     },
     {
