@@ -1,10 +1,28 @@
 import type { GlobalConfig } from 'payload'
 
+// Настройки сайта: контакты, логотип, SEO по умолчанию и контент страницы
+// «Об агентстве». Значения показываются на публичных страницах, поэтому:
+//   • читать глобал может кто угодно — но только поля, нужные для отображения
+//     сайта (см. access.read и field-level access у служебных полей);
+//   • менять — только администратор. По умолчанию Payload разрешает
+//     обновление любому вошедшему (defaultAccess = Boolean(user)), а значит
+//     агент мог править настройки сайта — закрываем явно;
+//   • служебные/технические поля (номер счётчика Метрики и т.п.) наружу через
+//     /api/globals/site-settings не отдаются — только администратору.
+// Серверный код читает глобал через Local API (payload.findGlobal), который
+// по умолчанию работает с overrideAccess: true и потому видит все поля.
 export const SiteSettings: GlobalConfig = {
   slug: 'site-settings',
   label: 'Настройки сайта',
   admin: {
     group: 'Система',
+  },
+  access: {
+    // Публичное чтение витринных полей; технические поля закрыты field-level
+    // правилами ниже
+    read: () => true,
+    // Менять настройки сайта — только администратор (агент и клиент не могут)
+    update: ({ req: { user } }) => user?.role === 'admin',
   },
   fields: [
     {
@@ -67,6 +85,12 @@ export const SiteSettings: GlobalConfig = {
       name: 'metrikaId',
       type: 'text',
       label: 'Аналитика: номер счётчика Яндекс.Метрики',
+      // Служебный технический параметр: во внешний API (и в браузер
+      // не-администратора) не отдаём. Счётчик подключает серверный компонент
+      // YandexMetrika через Local API с overrideAccess — ему поле доступно.
+      access: {
+        read: ({ req: { user } }) => user?.role === 'admin',
+      },
       validate: (value?: string | null) =>
         value == null || value === '' || /^\d+$/.test(value.trim())
           ? true
