@@ -3,6 +3,8 @@ import config from '@payload-config'
 import { NextRequest, NextResponse } from 'next/server'
 import { rateLimited, clientIp } from '@/lib/rate-limit'
 import { buildCallRoute, telHref, type CallAgent } from '@/lib/call-routing'
+// Общий номер агентства — только поле «Телефоны» настроек сайта
+import { getPublicSiteSettings } from '@/lib/site-settings'
 
 // Маршрут звонка с сайта. Кнопки «Позвонить»/«WhatsApp» запрашивают контакт
 // здесь — одним запросом в момент нажатия — и сразу переходят по ссылке:
@@ -95,12 +97,8 @@ export async function GET(req: NextRequest) {
     }
 
     // Общий номер агентства — тот же, что в шапке сайта (настройки → «Телефоны»)
-    const settings = (await payload.findGlobal({
-      slug: 'site-settings',
-      depth: 0,
-      overrideAccess: true,
-    })) as { phones?: { phone?: string }[] } | null
-    const commonPhone = settings?.phones?.[0]?.phone
+    const { phones } = await getPublicSiteSettings(['phones'], payload)
+    const commonPhone = phones?.[0]?.phone
 
     // Маршрут: агент определён — адресный звонок (номер агента в АТС или общий
     // номер), агента нет — общий (резервный) номер. См. src/lib/call-routing.ts

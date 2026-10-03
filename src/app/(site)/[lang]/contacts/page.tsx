@@ -10,6 +10,8 @@ import { linkGoal } from '@/lib/metrika'
 // Телефоны из настроек — в ссылки tel: тем же видом, что в шапке сайта
 // (+7…); WhatsApp ведёт отдельной ссылкой wa.me (см. SITE_PHONE)
 import { phoneHref, SITE_PHONE, SITE_PHONE_TEL } from '@/lib/call-routing'
+// Витрина настроек: страница контактов — телефоны, почта, адрес и соцсети
+import { getPublicSiteSettings } from '@/lib/site-settings'
 import { getDictionary, type Dict } from '@/i18n/dictionaries'
 
 export const dynamic = 'force-dynamic'
@@ -20,14 +22,8 @@ interface PageProps {
 
 async function getContacts(t: Dict) {
   const payload = await getPayload({ config })
-  const settings = await payload.findGlobal({ slug: 'site-settings' })
-
-  const s = settings as unknown as {
-    phones?: { phone?: string; label?: string }[]
-    email?: string
-    address?: string
-    socialLinks?: { platform?: string; url?: string }[]
-  }
+  // Только витринные поля контактов — ничего служебного из глобала
+  const s = await getPublicSiteSettings(['phones', 'email', 'address', 'socialLinks'], payload)
 
   const contacts: { label: string; value: string; href: string | null }[] = []
 

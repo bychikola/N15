@@ -16,6 +16,8 @@ import { visibleAdRequestCards, visibleAdvertisements, type SiteAdCard } from '@
 // «Позвонить» из первого экрана — та же tel:-ссылка на общий номер агентства,
 // что в шапке и в карточке объекта (см. src/lib/call-routing.ts)
 import { phoneHref as phoneLink } from '@/lib/call-routing'
+// Для кнопки «Позвонить» из настроек нужен только телефон
+import { getPublicSiteSettings } from '@/lib/site-settings'
 
 export const dynamic = 'force-dynamic'
 
@@ -58,9 +60,8 @@ export default async function AdvertisingPage({ params }: PageProps) {
     ])
     cards = [...ads, ...placements].slice(0, 12)
     // Телефон из глобала — для кнопки «Позвонить» (fallback — номер прототипа)
-    const site = await payload.findGlobal({ slug: 'site-settings', depth: 0 })
-    const sitePhones = ((site as Record<string, unknown>).phones as { phone?: string }[] | undefined) || []
-    phone = sitePhones[0]?.phone || ''
+    const { phones } = await getPublicSiteSettings(['phones'], payload)
+    phone = phones?.[0]?.phone || ''
   } catch {
     // Без базы страница всё равно открывается: текст и форма важнее списка
   }

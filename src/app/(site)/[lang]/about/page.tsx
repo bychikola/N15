@@ -6,6 +6,8 @@ import { SectionWrapper } from '@/components/ui/SectionWrapper'
 import { OrnamentBorder } from '@/components/ui/OrnamentBorder'
 import { getDictionary } from '@/i18n/dictionaries'
 import { compareAgents } from '@/lib/agents-sort'
+// Контент страницы — только группа aboutPage из настроек сайта
+import { getPublicSiteSettings } from '@/lib/site-settings'
 // Биография агента — richText (lexical): в карточку команды уходит плоский
 // текст, тем же способом, что в выгрузках на площадки (см. publish-service)
 import { richTextToPlainText } from '@/lib/publish-service'
@@ -130,9 +132,9 @@ interface AboutData {
 
 async function getAboutData(): Promise<AboutData> {
   const payload = await getPayload({ config })
-  const settings = await payload.findGlobal({ slug: 'site-settings' })
-
-  const about = (settings as Record<string, unknown>).aboutPage as Record<string, unknown> | undefined
+  // Из глобала берём только группу aboutPage: остальные поля не читаются
+  const { aboutPage } = await getPublicSiteSettings(['aboutPage'], payload)
+  const about = aboutPage as unknown as Record<string, unknown> | null | undefined
 
   // Fetch real agents
   const { docs: agents } = await payload.find({

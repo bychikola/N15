@@ -40,6 +40,8 @@ import {
   vkUpdate,
   vkWithdraw,
 } from './publish-adapters'
+// Общий номер сайта для объявлений — только поле «Телефоны» настроек
+import { getPublicSiteSettings } from './site-settings'
 
 export interface PubItem {
   platform?: string
@@ -189,15 +191,8 @@ export async function toPublishObject(
   // что в шапке и контактах сайта)
   let contactPhone = ''
   try {
-    const settings = await payload.findGlobal({
-      slug: 'site-settings',
-      depth: 0,
-      overrideAccess: true,
-    })
-    const phones = ((settings as unknown as { phones?: { phone?: string }[] }).phones || [])
-      .map((p) => (p.phone || '').trim())
-      .filter(Boolean)
-    contactPhone = phones[0] || ''
+    const { phones } = await getPublicSiteSettings(['phones'], payload)
+    contactPhone = (phones || []).map((p) => (p.phone || '').trim()).filter(Boolean)[0] || ''
   } catch {
     contactPhone = ''
   }

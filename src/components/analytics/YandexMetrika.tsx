@@ -2,6 +2,7 @@ import { cookies } from 'next/headers'
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { CONSENT_COOKIE, parseConsent } from '@/lib/consent'
+import { getSiteMetrikaId } from '@/lib/site-settings'
 import { MetrikaCounter } from './MetrikaCounter'
 
 /**
@@ -38,12 +39,15 @@ export async function YandexMetrika() {
   return <MetrikaCounter counterId={counterId} initialAnalytics={allowed} />
 }
 
-/** Номер счётчика из настроек сайта: только цифры, пусто — аналитика выключена */
+/**
+ * Номер счётчика из настроек сайта: только цифры, пусто — аналитика выключена.
+ * Из глобала читается ровно одно поле — metrikaId (см. getSiteMetrikaId),
+ * остальные настройки компоненту Метрики недоступны.
+ */
 async function metrikaCounterId(): Promise<number | null> {
   try {
     const payload = await getPayload({ config })
-    const settings = await payload.findGlobal({ slug: 'site-settings', depth: 0 })
-    const raw = (settings as unknown as { metrikaId?: string | null }).metrikaId
+    const raw = await getSiteMetrikaId(payload)
     const digits = (raw || '').replace(/\D/g, '')
     if (!digits) return null
     const id = Number(digits)

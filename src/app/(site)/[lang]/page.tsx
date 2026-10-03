@@ -29,6 +29,8 @@ import { SNT_AREAS } from '@/components/home/landing-data'
 import { OBJECT_CATEGORY_VALUES } from '@/lib/object-categories'
 // Регионы «Межрегиональной недвижимости» для блока на главной — из CRM
 import { loadInterregionalRegions } from '@/lib/interregional-service'
+// Телефон шапки/подвала — единственное витринное поле настроек, нужное главной
+import { getPublicSiteSettings } from '@/lib/site-settings'
 
 export const dynamic = 'force-dynamic'
 
@@ -183,10 +185,9 @@ export default async function HomePage({ params, searchParams }: PageProps) {
   // (коллекции regions и settlements, см. src/lib/interregional-service.ts)
   const interregionalRegions = await loadInterregionalRegions(payload)
 
-  // Телефон из глобала (fallback — из прототипа)
-  const site = await payload.findGlobal({ slug: 'site-settings', depth: 0 })
-  const sitePhones = ((site as Record<string, unknown>).phones as { phone?: string }[] | undefined) || []
-  const phone = sitePhones[0]?.phone
+  // Телефон из глобала — только поле «Телефоны» (fallback — из прототипа)
+  const { phones: sitePhones } = await getPublicSiteSettings(['phones'], payload)
+  const phone = sitePhones?.[0]?.phone || undefined
 
   // Подбор по местоположению пуст (населённый пункт, район, район города,
   // товарищество) — вместо декоративных карточек-заглушек показываем честное
