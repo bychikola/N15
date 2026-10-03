@@ -13,8 +13,10 @@ import { getPublicSiteSettings } from '@/lib/site-settings'
 // «Позвонить» ведёт не на личный номер агента: решение о том, кому адресован
 // звонок, принимает сервер (src/lib/call-routing.ts) — по объекту это его
 // ответственный агент, без объекта — общий (резервный) номер агентства.
-// Личный номер агента клиенту не отдаётся вовсе; WhatsApp — отдельный канал,
-// он идёт мимо АТС, поэтому номер берётся из профиля, как и раньше.
+// Личный номер агента клиенту не отдаётся вовсе: buildCallRoute не набирает
+// ни phone, ни WhatsApp агента, даже если личный номер окажется в поле
+// «Номер в АТС». WhatsApp — отдельный канал мимо АТС, номер берётся из поля
+// whatsapp профиля (без подстановки личного телефона), как и раньше.
 //
 // Параметры: ?object=<id> — карточка объекта, ?id=<agentId> — страница команды.
 //
@@ -26,8 +28,6 @@ const CONTACT_RATE_WINDOW_MS = 60_000
 /** Агент с полями, нужными для маршрута и WhatsApp */
 interface AgentRow extends CallAgent {
   isActive?: boolean
-  phone?: string | null
-  whatsapp?: string | null
 }
 
 /** Цифры номера для wa.me: российская «восьмёрка» не годится, нужен код страны */
@@ -36,9 +36,14 @@ const waDigits = (v?: string | null): string => {
   return d.length === 11 && d.startsWith('8') ? `7${d.slice(1)}` : d
 }
 
-/** Телефон/WhatsApp приводим к тому виду, что принимает wa.me (без «+») */
+/**
+ * Ссылка WhatsApp — только по полю whatsapp. Личный телефон (поле phone)
+ * сюда не подставляется: при пустом WhatsApp в ответ попадал бы личный
+ * мобильный агента, а он не должен выходить на публичный сайт ни в каком
+ * виде. Нет WhatsApp — кнопки WhatsApp просто нет.
+ */
 const waLink = (agent: AgentRow): string => {
-  const digits = waDigits(agent.whatsapp) || waDigits(agent.phone)
+  const digits = waDigits(agent.whatsapp)
   return digits ? `https://wa.me/${digits}` : ''
 }
 

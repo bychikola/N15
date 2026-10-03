@@ -16,9 +16,12 @@
  *    а не ко всей команде.
  * 3. Объект без ответственного агента: маршрут уходит на общий номер
  *    (source=reserve) — в АТС это резервный агент (Лана).
- * 4. Личные номера агентов в ответе не появляются. Если задан DATABASE_URI
- *    и доступен модуль pg, номера сверяются с базой (телефоны и WhatsApp
- *    всех агентов); без доступа к базе проверка пропускается с пометкой.
+ * 4. Маршрут звонка по каждому агенту: личные номера (телефон и WhatsApp)
+ *    в ответе не появляются, а набор — только разрешённый через АТС: общий
+ *    номер, общий с добавочным или неличный прямой номер АТС. Личный номер,
+ *    ошибочно записанный в «Номер в АТС», не набирается. Если задан
+ *    DATABASE_URI и доступен модуль pg, номера и «Номер в АТС» сверяются
+ *    с базой (все агенты); без доступа к базе проверка пропускается с пометкой.
  * 5. Объекты без ответственного агента — список для назначения в CRM:
  *    это не ошибка маршрута (звонок по ним не теряется), но карточки стоит
  *    закрепить за агентами.
@@ -92,6 +95,29 @@ const atsWord = (kind, source) =>
     ? 'номер в АТС не задан — звонок на общий номер, с агентом соединяет АТС'
     : 'резервный маршрут — общий номер')
 
+/**
+ * Какой набор допустим агенту по его данным: общий номер, общий с добавочным
+ * или прямой номер АТС. Повторяет логику src/lib/call-routing.ts. Личный
+ * телефон/WhatsApp агента допустимым быть не может: даже если он записан в
+ * «Номер в АТС», маршрут обязан уйти на общий номер — это и проверяем.
+ * Нераспознанный «Номер в АТС» (7–9 цифр) маршрут тоже игнорирует.
+ */
+const allowedDial = (agent, commonDigits) => {
+  const value = String(agent.atsNumber ?? '').trim()
+  const d = digits(value)
+  if (!d) return commonDigits
+  if (d.length <= 6) return digits(`${commonDigits},,${d}`)
+  const full = ruDigits(value)
+  if (full.length === 11 && !agent.numbers.includes(full)) return full
+  return commonDigits
+}
+
+/** Понятное описание личного номера, ошибочно попавшего в поле «Номер в АТС» */
+const personalInAts = (agent) => {
+  const full = ruDigits(agent.atsNumber)
+  return full.length >= 10 && agent.numbers.includes(full)
+}
+
 /** Общий номер агентства из tel:-ссылок главной страницы */
 async function commonNumbers() {
   const html = await (await fetch(`${BASE}/ru`)).text()
@@ -131,13 +157,15 @@ async function loadPersonalNumbers() {
   const client = new Client({ connectionString: uri })
   try {
     await client.connect()
-    const { rows } = await client.query('select id, name, phone, whatsapp from agents order by id')
+    const { rows } = await client.query('select id, name, phone, whatsapp, ats_number from agents order by id')
     return {
       rows: rows.map((r) => ({
         id: r.id,
         name: r.name,
         // Личный номер — и телефон, и WhatsApp: в звонке не должно быть обоих
         numbers: [...new Set([ruDigits(r.phone), ruDigits(r.whatsapp)].filter((d) => d.length >= 10))],
+        // Номер в АТС — для сверки маршрута: добавочный, прямой или пусто
+        atsNumber: r.ats_number,
       })),
     }
   } catch (error) {
@@ -205,20 +233,31 @@ async function main() {
   // не годится (у него нет карточки на сайте)
   if (reserve && withoutAgent.length) links.push({ label: `#${reserveProbe.id} «${reserveProbe.title}» (без агента)`, route: reserve })
 
-  // 4. Личные номера в ответе: сверка с базой, если она доступна
-  console.log('\nЛичные номера агентов в маршруте:')
+  // 4. Маршрут звонка для каждого агента: сверка с базой, если она доступна.
+  // Проверяем и утечку (личный номер в tel:), и что маршрут — разрешённый
+  // набор через АТС: общий номер, общий с добавочным или прямой номер АТС.
+  console.log('\nЛичные номера агентов и маршрут звонка по каждому агенту:')
   if (personal.skipped) console.log(`  • сверка с базой пропущена — ${personal.skipped}`)
   else {
     const leaked = []
     for (const agent of personal.rows) {
+      const who = `агент #${agent.id} ${String(agent.name).trim()}`
       const route = await api(`/api/agents/contact?id=${agent.id}`).catch(() => null)
-      if (!route) continue
+      if (!route) {
+        bad(`${who}: маршрут не ответил`, 'ожидается 200 с маршрутом звонка')
+        continue
+      }
       // Проверяем только звонок: WhatsApp — отдельный канал мимо АТС,
       // у него номер агента свой (wa.me), и это не утечка маршрута
       for (const number of agent.numbers) {
         if (digits(route.tel).includes(number)) leaked.push(`${agent.name} — ${number} в звонке #${agent.id}`)
       }
-      links.push({ label: `агент #${agent.id} ${String(agent.name).trim()}`, route })
+      const allowed = allowedDial(agent, commonDigits)
+      const got = digits(route.tel)
+      if (got !== allowed) bad(`${who}: маршрут ведёт на ${route.tel ?? 'ничего'}`, `допустимый набор — ${allowed}`)
+      else if (personalInAts(agent)) ok(`${who} → общий номер ${commonDigits}`, 'личный номер в «Номере в АТС» не набирается — маршрут уходит в АТС')
+      else ok(`${who} → ${atsWord(route.ats, route.source)}`, route.ats ? `набор ${got}` : '')
+      links.push({ label: who, route })
     }
     if (leaked.length) bad('личный номер попал в маршрут звонка', leaked.join('; '))
     else ok(`проверено агентов: ${personal.rows.length}`, 'ни один личный номер не набирается кнопкой «Позвонить» (WhatsApp — отдельный канал, у него свой номер)')
