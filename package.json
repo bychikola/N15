@@ -11,7 +11,8 @@
     "check:call-routing": "node scripts/check-call-routing.mjs",
     "check:catalog-map": "node scripts/check-catalog-map.mjs",
     "check:object-privacy": "node scripts/check-object-privacy.mjs",
-    "check:watermark": "node scripts/check-watermark.mjs"
+    "check:watermark": "node scripts/check-watermark.mjs",
+    "check:pii-guard": "node --experimental-strip-types scripts/check-pii-guard.mjs"
   },
   "dependencies": {
     "@payloadcms/db-postgres": "3.86.0",
