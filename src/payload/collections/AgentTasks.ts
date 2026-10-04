@@ -1,4 +1,5 @@
-import type { CollectionConfig } from 'payload'
+import { APIError, type CollectionConfig } from 'payload'
+import { anonymizePrompt, checkPromptForPii, piiBlockMessage } from '@/lib/pii-guard'
 
 // Задачи для ИИ-агента: запрос → воркер на сервере правит код, коммитит,
 // пушит и деплоит. Чтение — у кого есть доступ к ИИ-агенту (agentAccess),
@@ -23,6 +24,27 @@ export const AgentTasks: CollectionConfig = {
     create: ({ req: { user } }) => user?.role === 'admin',
     update: ({ req: { user } }) => user?.role === 'admin',
     delete: ({ req: { user } }) => user?.role === 'admin',
+  },
+  hooks: {
+    // Единая точка контроля: ни маршрут CRM, ни Payload REST/админка не могут
+    // поставить в очередь запрос с персональными данными — воркер ходит с этим
+    // текстом во внешний ИИ (DeepSeek/ChatGPT). Разрешённый запрос дополнительно
+    // обезличивается перед записью (второй слой, см. src/lib/pii-guard.ts).
+    beforeValidate: [
+      ({ data }) => {
+        if (!data) return data
+        const prompt = typeof data.prompt === 'string' ? data.prompt.trim() : ''
+        if (!prompt) return data
+        const pii = checkPromptForPii(prompt)
+        if (!pii.safe) {
+          // APIError, а не Error: причина должна дойти до человека текстом,
+          // без самих данных в сообщении (см. piiBlockMessage)
+          throw new APIError(piiBlockMessage(pii.categories), 400)
+        }
+        data.prompt = anonymizePrompt(prompt)
+        return data
+      },
+    ],
   },
   fields: [
     {

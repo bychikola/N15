@@ -1,6 +1,7 @@
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { NextRequest, NextResponse } from 'next/server'
+import { checkPromptForPii, piiBlockMessage } from '@/lib/pii-guard'
 
 // Задачи ИИ-агента: доступ по флагу agentAccess (ставится админом в админке
 // Payload на пользователе). Создание ставит задачу в очередь —
@@ -52,6 +53,19 @@ export async function POST(req: NextRequest) {
     const me = await payload.auth({ headers: req.headers })
     if (!me.user || !me.user.agentAccess) {
       return NextResponse.json({ error: 'Доступ запрещён' }, { status: 403 })
+    }
+
+    // Персональные данные во внешний ИИ не уходят: запрос с ФИО, телефоном,
+    // email, адресом, паспортом и т.п. не ставится в очередь (см. pii-guard).
+    // Та же проверка продублирована хуком коллекции agent-tasks — чтобы
+    // ограничение нельзя было обойти и через Payload REST/админку.
+    const pii = checkPromptForPii(prompt)
+    if (!pii.safe) {
+      console.warn(`[agent] запрос отклонён: персональные данные (${pii.categories.join(', ')})`)
+      return NextResponse.json(
+        { error: piiBlockMessage(pii.categories), code: 'pii_blocked', categories: pii.categories },
+        { status: 400 },
+      )
     }
 
     const task = await payload.create({
