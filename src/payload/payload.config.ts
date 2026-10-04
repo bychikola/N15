@@ -16,6 +16,10 @@ import { Applications } from './collections/Applications'
 import { Messages } from './collections/Messages'
 import { Blog } from './collections/Blog'
 import { News } from './collections/News'
+// «Новости на проверку» — отдельный раздел админки: ручной реестр официальных
+// документов со статусом документа, номером и датой вступления в силу.
+// Не связан с автосбором RSS и публикацией в блог (см. News.ts и NewsReviews.ts)
+import { NewsReviews } from './collections/NewsReviews'
 import { Pages } from './collections/Pages'
 import { Users } from './collections/Users'
 import { Media } from './collections/Media'
@@ -110,7 +114,7 @@ export default buildConfig({
     abortOnLimit: true,
     responseOnLimit: `Файл больше ${PHOTO_MAX_LABEL} — допустимы ${PHOTO_FORMATS_LABEL} до ${PHOTO_MAX_LABEL}`,
   },
-  collections: [Users, Media, Objects, Agents, Applications, Tasks, Messages, Blog, News, Pages, Customers, Emails, MailAttachments, AgentTasks, MarketListings, LegalDocuments, LegalReports, Advertisers, Advertisements, AdvertisingRequests, AdvertisingMaterials, BoardAds, BoardMaterials, Regions, Settlements, SiteVisits, Visitors, VisitorEvents, AnalyticsAccess, OwnerApplications, OwnerMaterials],
+  collections: [Users, Media, Objects, Agents, Applications, Tasks, Messages, Blog, News, NewsReviews, Pages, Customers, Emails, MailAttachments, AgentTasks, MarketListings, LegalDocuments, LegalReports, Advertisers, Advertisements, AdvertisingRequests, AdvertisingMaterials, BoardAds, BoardMaterials, Regions, Settlements, SiteVisits, Visitors, VisitorEvents, AnalyticsAccess, OwnerApplications, OwnerMaterials],
   globals: [SiteSettings, MailSettings, AgentSettings, NewsSettings, PlatformSettings],
   editor: lexicalEditor(),
   i18n: {
