@@ -49,8 +49,30 @@ export type AdRequestStatus =
   | 'rejected'
   | 'done'
 
-/** Как к обратившемуся обращаться — первое поле формы заявки */
+/**
+ * Как к обратившемуся обращаться — первое поле формы заявки.
+ *
+ * Ключи enum оставлены прежними (name, company, agency, developer, other):
+ * добавить в enum новое значение нельзя — drizzle-kit push не умеет
+ * ALTER TYPE ADD VALUE и зависает на пересборке типа (см. docker-entrypoint.sh).
+ * Поэтому «ИП» хранится в ключе company, а «Застройщик / компания» — в
+ * developer: в заявке и CRM важны подписи, а не имена ключей.
+ */
 export type AdContactKind = 'name' | 'company' | 'agency' | 'developer' | 'other'
+
+/**
+ * Варианты поля «Кто обращается» в форме заявки — по порядку.
+ * «Другое» (other) в форме не показываем: обращается физлицо-собственник, ИП,
+ * агентство или застройщик. Ключ сохранён, чтобы читались прежние заявки.
+ */
+export const AD_CONTACT_KIND_FORM_KINDS: AdContactKind[] = ['name', 'company', 'agency', 'developer']
+
+/**
+ * Физлицо-собственник: название организации у него не спрашивают, поле в форме
+ * скрыто, а сервер не сохраняет случайно присланное значение (152-ФЗ, принцип
+ * минимизации данных — ст. 5).
+ */
+export const adContactKindIsIndividual = (kind?: string | null): boolean => kind === 'name'
 
 /** Тип объекта в заявке (что именно предлагают к размещению) */
 export type AdObjectType = 'apartment' | 'house' | 'land' | 'commercial' | 'newbuilding' | 'other'
@@ -128,10 +150,10 @@ export const AD_REQUEST_STATUS_LABELS: Record<AdRequestStatus, string> = {
 }
 
 export const AD_CONTACT_KIND_LABELS: Record<AdContactKind, string> = {
-  name: 'Имя и фамилия',
-  company: 'Компания',
-  agency: 'Агентство',
-  developer: 'Застройщик',
+  name: 'Физическое лицо / собственник',
+  company: 'ИП',
+  agency: 'Агент / агентство недвижимости',
+  developer: 'Застройщик / компания',
   other: 'Другое',
 }
 
@@ -346,7 +368,7 @@ export const markingReady = (marking?: Partial<AdMarking> | null): boolean =>
 
 /** Заявка с формы платного размещения — то, что нужно проверке публикации */
 export interface AdRequestLike {
-  /** Как обращаться: имя, компания, агентство, застройщик, другое */
+  /** Кто обращается: физлицо-собственник, ИП, агентство, застройщик */
   contactKind?: string | null
   name?: string | null
   company?: string | null

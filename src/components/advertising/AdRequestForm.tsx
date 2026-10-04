@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useI18n } from '@/i18n/i18n-provider'
 import { Button } from '@/components/ui/Button'
 import { ConsentCheckbox } from '@/components/ui/ConsentCheckbox'
-import { AD_CONTACT_KIND_LABELS, AD_OBJECT_TYPE_LABELS } from '@/lib/advertising'
+import { AD_CONTACT_KIND_FORM_KINDS, AD_OBJECT_TYPE_LABELS, adContactKindIsIndividual } from '@/lib/advertising'
 import { legalDocLinks } from '@/lib/legal-docs'
 import { reachGoal } from '@/lib/metrika'
 import { AD_OFFER, AD_RULES, adDocHref } from '@/lib/advertising-legal'
@@ -13,6 +13,11 @@ import { AD_OFFER, AD_RULES, adDocHref } from '@/lib/advertising-legal'
 /**
  * Форма заявки «Ваша реклама» (страница /advertising): кто обращается, что за
  * объект, фотографии и видео, желаемый срок и три отдельных согласия.
+ *
+ * «Кто обращается» — физлицо-собственник, ИП, агентство или застройщик. У
+ * физлица поле с названием организации скрыто: ему оно не нужно, а лишние
+ * данные заявке ни к чему (152-ФЗ, ст. 5). У остальных название организации
+ * остаётся и обязательно — по нему собирается информация о рекламодателе.
  *
  * Три согласия — три отдельные обязательные галочки, каждая со своим
  * документом (оферта, правила размещения, политика обработки персональных
@@ -24,7 +29,10 @@ import { AD_OFFER, AD_RULES, adDocHref } from '@/lib/advertising-legal'
  *
  * Заявка уходит multipart-запросом (вместе с фотографиями) на
  * /api/advertising/request: сервер сохраняет дату и время отправки, IP-адрес,
- * принятую версию оферты и кладёт фотографии в закрытое хранилище.
+ * принятую версию оферты и версию согласия на обработку персональных данных
+ * и кладёт фотографии в закрытое хранилище. Номер заявки показывается в
+ * подтверждении — это технический идентификатор, по которому видно, что
+ * согласие получено.
  */
 
 /** Сколько фотографий принимает форма — столько же проверяет сервер */
@@ -50,7 +58,6 @@ type Form = {
   description: string
   listingUrl: string
   videoLinks: string
-  message: string
 }
 
 const EMPTY: Form = {
@@ -65,7 +72,6 @@ const EMPTY: Form = {
   description: '',
   listingUrl: '',
   videoLinks: '',
-  message: '',
 }
 
 /** 2026-09-15 → 15.09.2026: в заявке, CRM и договоре дата — в привычном виде */
@@ -94,6 +100,9 @@ export const AdRequestForm: FC<{ lang: string }> = ({ lang }) => {
   const [termDate, setTermDate] = useState('')
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
+  // Номер принятой заявки — технический идентификатор для подтверждения
+  // получения согласия (сервер возвращает id записи)
+  const [ref, setRef] = useState<number | null>(null)
   const [error, setError] = useState('')
   const fileInput = useRef<HTMLInputElement | null>(null)
 
@@ -108,6 +117,19 @@ export const AdRequestForm: FC<{ lang: string }> = ({ lang }) => {
     (key: keyof Form) =>
     (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
       setForm((prev) => ({ ...prev, [key]: e.target.value }))
+
+  /**
+   * Смена роли обратившегося. У физлица-собственника поле организации скрыто,
+   * поэтому при его выборе уже введённое название стираем — чтобы в заявку не
+   * ушли данные, которые у этого человека не спрашивали.
+   */
+  const setContactKind = (value: string) => {
+    setForm((prev) => ({
+      ...prev,
+      contactKind: value,
+      company: adContactKindIsIndividual(value) ? '' : prev.company,
+    }))
+  }
 
   /** Догрузка фотографий: не больше MAX_PHOTOS, лишние не берём */
   const addPhotos = (list: FileList | null) => {
@@ -130,6 +152,12 @@ export const AdRequestForm: FC<{ lang: string }> = ({ lang }) => {
       setError(t.advertising.fieldsRequired)
       return
     }
+    // У ИП, агентства и застройщика название организации обязательно:
+    // без него нельзя указать рекламодателя при публикации
+    if (!adContactKindIsIndividual(form.contactKind) && !form.company.trim()) {
+      setError(t.advertising.companyRequired)
+      return
+    }
     if (!consents.offer || !consents.rights || !consents.data) {
       setError(t.advertising.consentRequired)
       return
@@ -148,7 +176,7 @@ export const AdRequestForm: FC<{ lang: string }> = ({ lang }) => {
       for (const photo of photos) body.append('photos', photo)
 
       const res = await fetch('/api/advertising/request', { method: 'POST', body })
-      const data = (await res.json().catch(() => null)) as { error?: string } | null
+      const data = (await res.json().catch(() => null)) as { error?: string; id?: number } | null
       if (!res.ok) {
         setError(data?.error || t.advertising.errorSend)
         return
@@ -157,6 +185,7 @@ export const AdRequestForm: FC<{ lang: string }> = ({ lang }) => {
       // рекламы. Данные заявки (имя, телефон, описание) в Метрику не уходят
       reachGoal('lead_form')
       reachGoal('ad_request')
+      setRef(typeof data?.id === 'number' ? data.id : null)
       setSent(true)
     } catch {
       setError(t.advertising.errorSend)
@@ -170,11 +199,18 @@ export const AdRequestForm: FC<{ lang: string }> = ({ lang }) => {
       <div className="p-6 border border-[var(--n15-green)]/25 bg-[var(--n15-black)]">
         <p className="text-base text-[var(--n15-white)] mb-2">{t.advertising.sentTitle}</p>
         <p className="text-sm text-[var(--n15-muted)] leading-relaxed">{t.advertising.sentText}</p>
+        {ref !== null && (
+          <p className="mt-2 text-xs text-[var(--n15-muted)]">
+            {t.advertising.sentNumber.replace('%s', String(ref))}
+          </p>
+        )}
       </div>
     )
   }
 
   const sectionTitle = 'text-xs tracking-[0.16em] uppercase text-[var(--n15-gold)] mb-4'
+  // Физлицо-собственник: поле организации не показываем и не спрашиваем
+  const individual = adContactKindIsIndividual(form.contactKind)
 
   return (
     <form onSubmit={(e) => void submit(e)} className="flex flex-col gap-8">
@@ -184,8 +220,13 @@ export const AdRequestForm: FC<{ lang: string }> = ({ lang }) => {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <label>
             <span className={labelCls}>{t.advertising.contactKind}</span>
-            <select required value={form.contactKind} onChange={set('contactKind')} className={inputCls}>
-              {(Object.keys(AD_CONTACT_KIND_LABELS) as (keyof typeof AD_CONTACT_KIND_LABELS)[]).map((key) => (
+            <select
+              required
+              value={form.contactKind}
+              onChange={(e) => setContactKind(e.target.value)}
+              className={inputCls}
+            >
+              {AD_CONTACT_KIND_FORM_KINDS.map((key) => (
                 <option key={key} value={key}>
                   {t.advertising.contactKinds[key]}
                 </option>
@@ -203,16 +244,22 @@ export const AdRequestForm: FC<{ lang: string }> = ({ lang }) => {
               className={inputCls}
             />
           </label>
-          <label>
-            <span className={labelCls}>{t.advertising.company}</span>
-            <input
-              type="text"
-              value={form.company}
-              onChange={set('company')}
-              placeholder={t.advertising.companyPlaceholder}
-              className={inputCls}
-            />
-          </label>
+          {/* Название организации — только у ИП, агентства и застройщика.
+              Физлицу-собственнику это поле не нужно: форма его не показывает,
+              а сервер не сохраняет (152-ФЗ, ст. 5) */}
+          {!individual && (
+            <label>
+              <span className={labelCls}>{t.advertising.company}</span>
+              <input
+                type="text"
+                required
+                value={form.company}
+                onChange={set('company')}
+                placeholder={t.advertising.companyPlaceholder}
+                className={inputCls}
+              />
+            </label>
+          )}
           <label>
             <span className={labelCls}>{t.advertising.phone}</span>
             <input

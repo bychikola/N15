@@ -90,6 +90,8 @@ export interface AdRequestRow {
   status: string
   consentAt: string | null
   createdAt: string | null
+  /** Редакция согласия на обработку ПД, принятая при отправке */
+  consentVersion: string
   /** Как обращаться: name, company, agency, developer, other */
   contactKind: string
   objectType: string
@@ -438,6 +440,7 @@ export async function loadAdvertisingBoard(
       status: req.status || 'new',
       consentAt: str(doc.consentAt) || null,
       createdAt: str(doc.createdAt) || null,
+      consentVersion: str(doc.consentVersion),
       contactKind: str(doc.contactKind) || 'name',
       objectType: str(doc.objectType),
       location: str(doc.location),

@@ -309,6 +309,7 @@ export const AdRequestsBoard: FC<Props> = ({ t, requests }) => {
                 </span>{' '}
                 {r.consentAt ? `· ${fmtMoment(r.consentAt)}` : ''}
                 {r.offerVersion ? ` · ${t.crm.adReqOfferVersion}: ${r.offerVersion}` : ''}
+                {r.consentVersion ? ` · ${t.crm.adReqConsentVersion}: ${r.consentVersion}` : ''}
                 {r.ip ? ` · ${t.crm.adReqIp}: ${r.ip}` : ''}
               </p>
 

@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { clientIp, rateLimited } from '@/lib/rate-limit'
 import { PHOTO_FORMATS_LABEL, PHOTO_MAX_BYTES, PHOTO_MAX_LABEL, isAllowedPhoto } from '@/lib/photo-rules'
 import { AD_OFFER_VERSION } from '@/lib/advertising-legal'
-import { AD_CONTACT_KIND_LABELS, AD_OBJECT_TYPE_LABELS } from '@/lib/advertising'
+import { AD_CONTACT_KIND_LABELS, AD_OBJECT_TYPE_LABELS, adContactKindIsIndividual } from '@/lib/advertising'
 
 /**
  * Приём заявки с формы «Ваша реклама» (страница /advertising).
@@ -121,6 +121,15 @@ export async function POST(req: NextRequest) {
     }
     if (data.contactKind && !(data.contactKind in AD_CONTACT_KIND_LABELS)) {
       return bad('Выберите, как к вам обращаться')
+    }
+    // Физлицо-собственник: название организации не спрашиваем и не храним —
+    // лишние данные заявке не нужны (152-ФЗ, ст. 5), форма это поле скрывает.
+    // У ИП, агентства и застройщика название обязательно: по нему собирается
+    // информация о рекламодателе для маркировки.
+    if (adContactKindIsIndividual(data.contactKind)) {
+      data.company = ''
+    } else if (!data.company) {
+      return bad('Укажите название организации')
     }
     if (!data.consentOffer || !data.consentRights || !data.consent) {
       return bad('Нужны все три согласия: оферта, права на материалы и обработка персональных данных')

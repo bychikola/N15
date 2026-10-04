@@ -16,6 +16,14 @@ import {
   adValue,
 } from '@/lib/advertising'
 import { AD_OFFER_VERSION, adDocHref } from '@/lib/advertising-legal'
+import { LEGAL_DOCS } from '@/lib/legal-docs'
+
+/**
+ * Версия согласия на обработку персональных данных (реестр документов,
+ * src/lib/legal-docs.ts). Фиксируется в заявке вместе с датой — по ней видно,
+ * на какую редакцию согласия человек согласился (152-ФЗ, ст. 9).
+ */
+const PD_CONSENT_VERSION = LEGAL_DOCS['personal-data-consent'].version
 
 /**
  * «Заявки на рекламу» — обращения с формы платного размещения «Ваша реклама»
@@ -24,8 +32,9 @@ import { AD_OFFER_VERSION, adDocHref } from '@/lib/advertising-legal'
  *
  * Заявка приходит только серверным маршрутом /api/advertising/request:
  * публичного создания через REST нет (create запрещён, маршрут валидирует
- * поля, сохраняет три согласия, IP-адрес и версию оферты). Без всех трёх
- * согласий заявка не принимается — ни с формы, ни из админки.
+ * поля, сохраняет три согласия, IP-адрес, версию оферты и версию согласия на
+ * обработку персональных данных). Без всех трёх согласий заявка не
+ * принимается — ни с формы, ни из админки.
  *
  * Публикация (status = «Опубликовано») проходит проверку adRequestPublishIssue:
  * заявка одобрена, содержание проверено, три согласия на месте, оплата
@@ -84,11 +93,15 @@ export const AdvertisingRequests: CollectionConfig = {
         if (!data) return data
         const prev = (originalDoc || {}) as Record<string, unknown>
 
-        // Момент согласий, IP-адрес и принятая редакция оферты фиксируются
-        // один раз при создании — задним числом их не переписать
+        // Момент согласий, IP-адрес и принятые редакции документов
+        // фиксируются один раз при создании — задним числом их не переписать.
+        // consentVersion — редакция согласия на обработку персональных данных:
+        // вместе с consentAt, IP и номером заявки (id) она подтверждает, что
+        // согласие получено и на какой именно текст (152-ФЗ, ст. 9).
         if (operation === 'create') {
           data.consentAt = new Date().toISOString()
           data.offerVersion = AD_OFFER_VERSION
+          data.consentVersion = PD_CONSENT_VERSION
         }
 
         // Отправленный договор — событие журнала: сам PDF формирует и отправляет
@@ -198,7 +211,10 @@ export const AdvertisingRequests: CollectionConfig = {
           options: AD_CONTACT_KIND_OPTIONS,
           defaultValue: 'name',
           required: true,
-          admin: { description: 'От этого зависит, что писать в договоре: имя, компания, агентство или застройщик' },
+          admin: {
+            description:
+              'От этого зависит, что писать в договоре: физлицо-собственник, ИП, агентство или застройщик. У физлица поле «Компания» пустое',
+          },
         },
         {
           name: 'name',
@@ -468,6 +484,16 @@ export const AdvertisingRequests: CollectionConfig = {
           type: 'text',
           label: 'Принятая версия оферты',
           admin: { readOnly: true, description: 'Редакция, которую человек принял при отправке заявки' },
+        },
+        {
+          name: 'consentVersion',
+          type: 'text',
+          label: 'Принятая версия согласия на обработку ПД',
+          admin: {
+            readOnly: true,
+            description:
+              'Редакция согласия на обработку персональных данных, принятая при отправке. Вместе с датой, IP и номером заявки подтверждает факт согласия',
+          },
         },
         {
           name: 'ip',
