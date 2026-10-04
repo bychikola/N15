@@ -227,11 +227,11 @@ export const AgentFormModal: FC<Props> = ({ t, agent, onClose, onSaved }) => {
             {t.crm.agAddWhatsapp}
             <input value={fields.whatsapp} onChange={(e) => setField('whatsapp', maskRuPhoneInput(e.target.value))} style={inputStyle} placeholder="+7 (___) ___-__-__ или https://wa.me/7…" />
           </label>
-          {/* Номер в АТС: по нему АТС соединяет клиента с агентом, когда
-              звонок пришёл из карточки объекта. Маски телефона нет — здесь
-              бывает и короткий добавочный (101), маска превратила бы его
-              в городской номер. Личный номер сюда не вписывают: он остаётся
-              в поле «Телефон» и клиентам не набирается */}
+          {/* Номер в АТС: кабинет МегаФон, для АТС и внутренних задач.
+              Кнопка «Позвонить» на сайте ведёт на личный номер из поля
+              «Телефон», а не сюда. Маски телефона нет — здесь бывает и
+              короткий добавочный (101), маска превратила бы его в городской
+              номер */}
           <label style={labelStyle}>
             {t.crm.agAddAts}
             <input value={fields.atsNumber} onChange={(e) => setField('atsNumber', e.target.value)} style={inputStyle} placeholder="+7 (867) 2__-__-__ или 101" />

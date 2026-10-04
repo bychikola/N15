@@ -2,21 +2,19 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 import { NextRequest, NextResponse } from 'next/server'
 import { rateLimited, clientIp } from '@/lib/rate-limit'
-import { buildCallRoute, telHref, type CallAgent } from '@/lib/call-routing'
+import { buildCallRoute, telHref, waHref, type CallAgent } from '@/lib/call-routing'
 // Общий номер агентства — только поле «Телефоны» настроек сайта
 import { getPublicSiteSettings } from '@/lib/site-settings'
 
-// Маршрут звонка с сайта. Кнопки «Позвонить»/«WhatsApp» запрашивают контакт
-// здесь — одним запросом в момент нажатия — и сразу переходят по ссылке:
-// номера текстом на странице не показываются.
+// Контакты агента для кнопок карточки объекта. Кнопки «Позвонить»/«WhatsApp»
+// запрашивают контакт здесь — одним запросом при открытии страницы — и
+// переходят по готовой ссылке: номеров текстом на странице нет.
 //
-// «Позвонить» ведёт не на личный номер агента: решение о том, кому адресован
-// звонок, принимает сервер (src/lib/call-routing.ts) — по объекту это его
-// ответственный агент, без объекта — общий (резервный) номер агентства.
-// Личный номер агента клиенту не отдаётся вовсе: buildCallRoute не набирает
-// ни phone, ни WhatsApp агента, даже если личный номер окажется в поле
-// «Номер в АТС». WhatsApp — отдельный канал мимо АТС, номер берётся из поля
-// whatsapp профиля (без подстановки личного телефона), как и раньше.
+// Кнопка «Позвонить» ведёт на личный рабочий мобильный ответственного агента,
+// «WhatsApp» — на его WhatsApp (данные конкретного агента в CRM). По объекту
+// ответственного называет сервер (src/lib/call-routing.ts), а не страница:
+// чужому агенту клиент не попадёт. Общий номер Н15/АТС — отдельный канал:
+// он остаётся резервным маршрутом, когда у объекта ответственного агента нет.
 //
 // Параметры: ?object=<id> — карточка объекта, ?id=<agentId> — страница команды.
 //
@@ -28,23 +26,6 @@ const CONTACT_RATE_WINDOW_MS = 60_000
 /** Агент с полями, нужными для маршрута и WhatsApp */
 interface AgentRow extends CallAgent {
   isActive?: boolean
-}
-
-/** Цифры номера для wa.me: российская «восьмёрка» не годится, нужен код страны */
-const waDigits = (v?: string | null): string => {
-  const d = (v || '').replace(/\D/g, '')
-  return d.length === 11 && d.startsWith('8') ? `7${d.slice(1)}` : d
-}
-
-/**
- * Ссылка WhatsApp — только по полю whatsapp. Личный телефон (поле phone)
- * сюда не подставляется: при пустом WhatsApp в ответ попадал бы личный
- * мобильный агента, а он не должен выходить на публичный сайт ни в каком
- * виде. Нет WhatsApp — кнопки WhatsApp просто нет.
- */
-const waLink = (agent: AgentRow): string => {
-  const digits = waDigits(agent.whatsapp)
-  return digits ? `https://wa.me/${digits}` : ''
 }
 
 /** Активный агент по id: скрытых и уволенных не отдаём */
@@ -79,8 +60,9 @@ export async function GET(req: NextRequest) {
 
     // Ответственный агент: у объекта — его поле «Ответственный агент», на
     // странице команды — тот агент, чья карточка открыта. Объект и агент
-    // читаются с overrideAccess: маршрут строит сервер, а поле «Номер в АТС»
-    // скрыто от посетителей полевой проверкой коллекции agents.
+    // читаются с overrideAccess: маршрут строит сервер, а личные поля агента
+    // (телефон, WhatsApp) скрыты от посетителей полевой проверкой коллекции
+    // agents. Наружу уходят только готовые ссылки кнопок, не сами номера.
     let agent: AgentRow | null = null
     if (hasObject) {
       const { docs } = await payload.find({
@@ -105,11 +87,11 @@ export async function GET(req: NextRequest) {
     const { phones } = await getPublicSiteSettings(['phones'], payload)
     const commonPhone = phones?.[0]?.phone
 
-    // Маршрут: агент определён — адресный звонок (номер агента в АТС или общий
-    // номер), агента нет — общий (резервный) номер. См. src/lib/call-routing.ts
+    // Маршрут: агент определён — звонок на его личный мобильный, агента нет —
+    // общий (резервный) номер агентства. См. src/lib/call-routing.ts
     const route = buildCallRoute(commonPhone, agent)
     const tel = telHref(route.dial)
-    const wa = agent ? waLink(agent) : ''
+    const wa = waHref(agent)
 
     if (!tel && !wa) {
       return NextResponse.json({ error: 'No call route and no WhatsApp' }, { status: 404 })
@@ -121,7 +103,8 @@ export async function GET(req: NextRequest) {
       // клиенту эта информация ничего не добавляет, но и не выдаёт лишнего
       source: route.source,
       agentId: route.agent?.id,
-      ats: route.target?.kind,
+      // true — набран личный мобильный агента, false — общий номер агентства
+      personal: route.personal,
     })
   } catch (error) {
     console.error('Agent contact error:', error)

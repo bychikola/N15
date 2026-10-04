@@ -36,7 +36,7 @@ type AgentBody = {
   email?: string
   telegram?: string
   whatsapp?: string
-  /** Номер в АТС: прямой или добавочный — по нему идёт звонок из карточки */
+  /** Номер в АТС: прямой или добавочный — для АТС и внутренних задач */
   atsNumber?: string
   photoId?: number | string | null
   isActive?: boolean
