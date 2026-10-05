@@ -15,14 +15,16 @@
  *     `needsAgreement` — приём возможен только по договору с источником;
  *     `forbidden` — канал в реестре есть, но включить его нельзя, и причина
  *     записана прямо (автосбор чужих объявлений запрещён правилами площадок);
- *   — забор ведёт канал самого источника (поле fetch). Подключены два канала:
+ *   — забор ведёт канал самого источника (поле fetch). Подключены три канала:
  *     «Заявки собственников» читает заявки из своей базы (owner-applications),
- *     «Партнёрские агентства» — согласованный JSON-фид по договору. Оба кладут
- *     объекты только кандидатами в очередь — без публикации. Первое подключение
- *     внешнего источника ограничено потолком (importLimit, не больше 5 объектов
- *     за забор): очередь наполняется порциями, массовой загрузки нет. У остальных
- *     каналов (застройщики, NMarket) fetch: null, то есть структура готова, но
- *     данных от них нет: API и XML площадок в этом этапе не подключаются;
+ *     «ГИС Торги» — публичный JSON-API государственного портала торгов
+ *     (torgi.gov.ru, без доступов), «Партнёрские агентства» — согласованный
+ *     JSON-фид по договору. Все кладут объекты только кандидатами в очередь —
+ *     без публикации. Первое подключение внешнего источника ограничено потолком
+ *     (importLimit, не больше 5 объектов за забор): очередь наполняется порциями,
+ *     массовой загрузки нет. У остальных каналов (застройщики, NMarket) fetch:
+ *     null, то есть структура готова, но данных от них нет: API и XML площадок
+ *     в этом этапе не подключаются;
  *   — выборочная публикация: ни один объект из источника не попадает в
  *     каталог автоматически. Кандидат проходит очередь (коллекция
  *     source-objects) и публикуется только после явного решения сотрудника
@@ -618,6 +620,354 @@ const fetchPartnerFeed: SourceFetch = async ({ creds }) => {
   }
 }
 
+// --- Канал «ГИС Торги» -------------------------------------------------------------------
+
+/**
+ * Первый государственный источник: портал торгов torgi.gov.ru отдаёт карточки
+ * лотов публичным JSON-API — открытые сведения о торгах, без авторизации и
+ * токенов. Канал берёт только недвижимость и только наши регионы, не больше
+ * потолка за забор, и кладёт кандидатов в очередь без публикации.
+ *
+ * Как устроен забор (проверено по фактическому формату API портала):
+ *   — поиск: GET /new/api/public/lotcards/search с фильтрами
+ *     dynSubjRF (коды субъектов РФ), lotStatus (актуальные статусы),
+ *     catCode (категория имущества), сортировка по свежести;
+ *   — карточка лота: GET /new/api/public/lotcards/{id} — начальная цена,
+ *     задаток, шаг аукциона, даты, ссылка на ЭТП, документы;
+ *   — по каждому лоту запрашивается отдельная карточка: без неё нет цены и
+ *     документов, а выдумывать значения нельзя.
+ *
+ * Приоритет категорий — как у Н15: квартиры, дома, коммерция, участки.
+ * Категории опрашиваются по очереди, и как только набрано не больше
+ * TORGI_MAX_ITEMS объектов, забор останавливается: массовой загрузки нет.
+ *
+ * Персональные данные в очередь не попадают: сведения о лоте — это объект,
+ * а не собственник. Публичные данные организатора торгов в разбор не кладём
+ * вовсе (телефоны, контактные лица и адреса приёма граждан отбрасываются):
+ * разбор собирается по белому списку полей, а не копированием ответа.
+ */
+const TORGI_SEARCH_URL = 'https://torgi.gov.ru/new/api/public/lotcards/search'
+const TORGI_LOT_API_URL = 'https://torgi.gov.ru/new/api/public/lotcards'
+const TORGI_LOT_PAGE_URL = 'https://torgi.gov.ru/new/public/lots/lot'
+const TORGI_FILE_URL = 'https://torgi.gov.ru/new/file-store/v1'
+const TORGI_TIMEOUT_MS = 15_000
+/** Потолок одного забора: очередь наполняется порциями, а не массово */
+const TORGI_MAX_ITEMS = 5
+
+/** Категории портала в порядке приоритета Н15: код → тип объекта каталога */
+const TORGI_CATEGORY_PRIORITY: { code: string; objectType: string }[] = [
+  { code: '9', objectType: 'apartment' }, // Жилые помещения — квартиры и комнаты
+  { code: '8', objectType: 'house' }, // Здания — дома
+  { code: '11', objectType: 'commercial' }, // Нежилые помещения
+  { code: '2', objectType: 'land' }, // Земельные участки
+]
+
+/** Актуальные лоты: идёт приём заявок или извещение опубликовано */
+const TORGI_ACTIVE_STATUSES = ['APPLICATIONS_SUBMISSION', 'PUBLISHED']
+
+const TORGI_STATUS_LABELS: Record<string, string> = {
+  APPLICATIONS_SUBMISSION: 'Приём заявок',
+  PUBLISHED: 'Опубликован',
+  DETERMINING_WINNER: 'Определение победителя',
+  SUCCEED: 'Состоялся',
+  FAILED: 'Не состоялся',
+  CANCELED: 'Отменён',
+}
+
+/** Наши регионы: код субъекта РФ портала → название */
+const TORGI_REGIONS: { code: string; name: string }[] = [
+  { code: '77', name: 'г. Москва' },
+  { code: '50', name: 'Московская область' },
+  { code: '78', name: 'г. Санкт-Петербург' },
+  { code: '23', name: 'Краснодарский край' },
+  { code: '26', name: 'Ставропольский край' },
+  { code: '1', name: 'Республика Адыгея' },
+  { code: '15', name: 'Республика Северная Осетия-Алания' },
+]
+
+const TORGI_REGION_NAMES = new Map(TORGI_REGIONS.map((r) => [r.code, r.name]))
+
+/** Ответ портала: разобранный JSON или честная причина отказа */
+interface TorgiResponse {
+  ok: boolean
+  data?: Record<string, unknown>
+  reason?: string
+}
+
+/** Запрос к публичному API портала: JSON или причина, без выдуманных успехов */
+async function torgiGetJson(url: string): Promise<TorgiResponse> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), TORGI_TIMEOUT_MS)
+  try {
+    const res = await fetch(url, {
+      headers: { Accept: 'application/json' },
+      signal: controller.signal,
+      cache: 'no-store',
+    })
+    if (!res.ok) return { ok: false, reason: `портал ответил отказом (код ${res.status})` }
+    return { ok: true, data: (await res.json()) as Record<string, unknown> }
+  } catch (e) {
+    const reason =
+      e instanceof Error && e.name === 'AbortError' ? 'портал не ответил вовремя' : 'нет связи с порталом'
+    return { ok: false, reason }
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+/** Поиск лотов одной категории в наших регионах — самые свежие сверху */
+async function torgiSearch(catCode: string): Promise<TorgiResponse & { items?: Record<string, unknown>[] }> {
+  const params = new URLSearchParams({
+    dynSubjRF: TORGI_REGIONS.map((r) => r.code).join(','),
+    lotStatus: TORGI_ACTIVE_STATUSES.join(','),
+    catCode,
+    page: '0',
+    size: '10',
+    sort: 'firstVersionPublicationDate,desc',
+  })
+  const res = await torgiGetJson(`${TORGI_SEARCH_URL}?${params.toString()}`)
+  if (!res.ok) return res
+  const content = res.data?.content
+  const items = Array.isArray(content) ? content.filter(isFeedObject) : []
+  return { ok: true, items }
+}
+
+/** Карточка лота: цена, задаток, шаг, даты, документы. Сбой — null, без выдумок */
+async function torgiLotDetail(id: string): Promise<Record<string, unknown> | null> {
+  const res = await torgiGetJson(`${TORGI_LOT_API_URL}/${encodeURIComponent(id)}`)
+  return res.ok && res.data ? res.data : null
+}
+
+/** Значение характеристики лота по коду или названию (строка или мультивыбор) */
+function torgiCharacteristic(
+  sources: (Record<string, unknown> | null)[],
+  re: RegExp,
+): string | null {
+  for (const src of sources) {
+    const chars = src?.characteristics
+    if (!Array.isArray(chars)) continue
+    for (const c of chars) {
+      if (!isFeedObject(c)) continue
+      if (!re.test(String(c.code || '')) && !re.test(String(c.name || ''))) continue
+      const value = c.characteristicValue
+      if (Array.isArray(value)) {
+        const first = value.find(isFeedObject) as Record<string, unknown> | undefined
+        const s = feedText(first?.value) || feedText(first?.name)
+        if (s) return s
+      } else {
+        const s = feedText(value)
+        if (s) return s
+      }
+    }
+  }
+  return null
+}
+
+/** Начальная цена лота: явные поля карточки портала (задаток и шаг — не цена) */
+function torgiPrice(item: Record<string, unknown>, detail: Record<string, unknown> | null): number | null {
+  for (const src of [detail, item]) {
+    if (!src) continue
+    for (const key of ['priceMin', 'price', 'startPrice', 'priceStart']) {
+      const n = feedNum(src[key])
+      if (n != null && n > 0) return n
+    }
+  }
+  return null
+}
+
+/** Местоположение, записанное прямо в названии или описании лота */
+function torgiLocationFromText(text: string | null): string | null {
+  if (!text) return null
+  const m = text.match(/(?:местоположени\w*|адрес\w*|расположен\w*)\s*:?\s*([\s\S]+)/i)
+  if (!m) return null
+  const line = m[1]
+    .split(/\s*\(/)[0]
+    .split(/,\s*(?:для|с целью|категория|вид |общей|площадью)/i)[0]
+    .replace(/\s+/g, ' ')
+    .replace(/[.;,\s]+$/, '')
+    .trim()
+  return line.length >= 6 ? line.slice(0, 300) : null
+}
+
+/** Адрес лота: готовое поле карточки, иначе местоположение из текста лота */
+function torgiAddress(item: Record<string, unknown>, detail: Record<string, unknown> | null): string | null {
+  for (const src of [detail, item]) {
+    if (!src) continue
+    const direct = feedAddressLine(feedPick(src, ['objectAddress', 'address', 'location', 'lotAddress']))
+    if (direct) return direct
+  }
+  for (const src of [item, detail]) {
+    if (!src) continue
+    const parsed = torgiLocationFromText(feedText(src.lotName) || feedText(src.lotDescription))
+    if (parsed) return parsed
+  }
+  return null
+}
+
+/** Официальные фото лота: идентификаторы файлов портала → публичные ссылки */
+function torgiPhotos(item: Record<string, unknown>): string[] {
+  const images = item.lotImages
+  if (!Array.isArray(images)) return []
+  return images
+    .map((v) => feedText(v))
+    .filter((v): v is string => !!v)
+    .map((v) => (/^https?:\/\//i.test(v) ? v : `${TORGI_FILE_URL}/${encodeURIComponent(v)}?disposition=inline`))
+    .slice(0, 10)
+}
+
+/** Документы лота портала: имя файла и публичная ссылка (без ПД) */
+function torgiDocuments(detail: Record<string, unknown> | null): { name: string; url: string }[] {
+  const list = detail?.lotAttachments
+  if (!Array.isArray(list)) return []
+  return list
+    .map((a) => {
+      if (!isFeedObject(a)) return null
+      const fileId = feedText(a.fileId)
+      if (!fileId) return null
+      return { name: feedText(a.fileName) || 'Документ', url: `${TORGI_FILE_URL}/${encodeURIComponent(fileId)}` }
+    })
+    .filter((d): d is { name: string; url: string } => !!d)
+    .slice(0, 20)
+}
+
+/** Количество комнат: характеристика лота, иначе разбор «N-комн.» из названия */
+function torgiRooms(
+  title: string | null,
+  sources: (Record<string, unknown> | null)[],
+): number | null {
+  const fromCharacteristic = feedNum(torgiCharacteristic(sources, /комнат/i))
+  if (fromCharacteristic != null) return fromCharacteristic
+  const m = (title || '').match(/(\d+)\s*-?\s*комн/i)
+  return m ? Number(m[1]) : null
+}
+
+/**
+ * Лот портала → кандидат очереди: характеристики объекта без персональных
+ * данных. Разбор (raw) собирается по белому списку — ответ портала целиком не
+ * копируется, чтобы контакты организатора и служебные поля не попали в CRM.
+ * Ссылка на лот, идентификатор и разбор хранятся в закрытых полях (см.
+ * SourceObjects.ts — доступ только администратору) и на сайте не показываются.
+ */
+function torgiCandidate(
+  item: Record<string, unknown>,
+  detail: Record<string, unknown> | null,
+  objectType: string,
+): SourceCandidate {
+  const id = feedText(item.id) || ''
+  const title = feedText(item.lotName)
+  const regionCode = feedText(item.subjectRFCode) || feedText(detail?.subjectRFCode)
+  const category = isFeedObject(item.category) ? feedText(item.category.name) : null
+  const statusCode = feedText(item.lotStatus)
+  const statusLabel = statusCode ? TORGI_STATUS_LABELS[statusCode] || statusCode : null
+  const cadastralNumber = torgiCharacteristic([item, detail], /cadastral|кадастр/i)
+  const area = feedNum(torgiCharacteristic([item, detail], /^square|площад/i))
+  const price = torgiPrice(item, detail)
+  const documents = torgiDocuments(detail)
+
+  return {
+    // Идентификатор лота портала — ключ дедупликации при повторном заборе
+    externalId: id || null,
+    title,
+    region: regionCode ? TORGI_REGION_NAMES.get(regionCode) || null : null,
+    address: torgiAddress(item, detail),
+    objectType,
+    dealType: sourceDealType(feedText(item.typeTransaction) || feedPick(item, ['dealType', 'deal', 'operation'])),
+    price,
+    area,
+    rooms: torgiRooms(title, [item, detail]),
+    description: (feedText(item.lotDescription) || '').slice(0, 4000) || null,
+    // Публичная страница лота на портале — внутренние данные, клиенту не показывается
+    url: id ? `${TORGI_LOT_PAGE_URL}/${encodeURIComponent(id)}` : null,
+    photos: torgiPhotos(item),
+    // Комиссии у государственных торгов нет
+    commission: null,
+    actualAt: feedText(item.noticeFirstVersionPublicationDate) || feedText(item.createDate) || null,
+    // Разбор по белому списку: только характеристики объекта и ход торгов, без ПД
+    raw: {
+      torgi: {
+        id,
+        noticeNumber: feedText(item.noticeNumber),
+        lotNumber: feedNum(item.lotNumber),
+        status: statusCode,
+        statusLabel,
+        biddType: isFeedObject(item.biddType) ? feedText(item.biddType.name) : null,
+        biddForm: isFeedObject(item.biddForm) ? feedText(item.biddForm.name) : null,
+        category,
+        subjectRFCode: regionCode,
+        region: regionCode ? TORGI_REGION_NAMES.get(regionCode) || null : null,
+        dealType: feedText(item.typeTransaction),
+        biddEndTime: feedText(item.biddEndTime),
+        biddStartTime: feedText(detail?.biddStartTime),
+        auctionStartDate: feedText(detail?.auctionStartDate),
+        etpUrl: feedText(detail?.etpUrl),
+        cadastralNumber,
+        area,
+        priceMin: price,
+        deposit: feedNum(detail?.deposit),
+        priceStep: feedNum(detail?.priceStep),
+        photos: torgiPhotos(item),
+        documents,
+      },
+    },
+  }
+}
+
+/**
+ * Забор недвижимости с ГИС Торги. Категории опрашиваются по приоритету Н15;
+ * на каждый лот запрашивается карточка портала (цена, задаток, документы).
+ * Канал реализован всегда (implemented: true): сбой связи или отказ портала
+ * не выдаётся за успех — кандидатов нет, а в очереди и журнале остаётся
+ * честное сообщение. Публикации нет: кандидаты кладутся в очередь со статусом
+ * «Ждёт решения» (см. importFromObjectSource).
+ */
+const fetchGisTorgi: SourceFetch = async () => {
+  const candidates: SourceCandidate[] = []
+  const seen = new Set<string>()
+  let rawCount = 0
+  let detailFailures = 0
+  let firstFailure: string | null = null
+
+  for (const category of TORGI_CATEGORY_PRIORITY) {
+    if (candidates.length >= TORGI_MAX_ITEMS) break
+    const found = await torgiSearch(category.code)
+    if (!found.ok) {
+      // Первая же неудача — портал недоступен: дальше по категориям не долбим
+      firstFailure = firstFailure || found.reason || 'ошибка запроса'
+      if (!candidates.length) break
+      continue
+    }
+    const items = found.items || []
+    rawCount += items.length
+    for (const item of items) {
+      if (candidates.length >= TORGI_MAX_ITEMS) break
+      const id = feedText(item.id)
+      if (!id || seen.has(id)) continue
+      seen.add(id)
+      const detail = await torgiLotDetail(id)
+      if (!detail) detailFailures += 1
+      candidates.push(torgiCandidate(item, detail, category.objectType))
+    }
+  }
+
+  if (!candidates.length) {
+    return {
+      candidates: [],
+      implemented: true,
+      rawCount,
+      message: `ГИС Торги: ${firstFailure || 'подходящих объектов в наших регионах не найдено'} — объекты не получены`,
+    }
+  }
+  const tail = detailFailures
+    ? `; по ${detailFailures} лотам карточка портала не открылась — часть полей (цена, задаток, документы) пуста`
+    : ''
+  return {
+    candidates,
+    implemented: true,
+    rawCount,
+    message: `ГИС Торги: получено объектов — ${candidates.length} из ${rawCount} найденных${tail}`,
+  }
+}
+
 // --- Реестр источников ------------------------------------------------------------------
 
 const MANUAL: ObjectSourceSpec = {
@@ -678,6 +1028,35 @@ const PARTNER: ObjectSourceSpec = {
   // Первый внешний канал: читает согласованный JSON-фид партнёра. Публикации
   // нет — кандидаты кладутся в очередь со статусом «Ждёт решения».
   fetch: fetchPartnerFeed,
+}
+
+const GIS_TORGI: ObjectSourceSpec = {
+  slug: 'gis-torgi',
+  name: 'ГИС Торги',
+  summary: 'Государственные торги по недвижимости: публичный API портала torgi.gov.ru',
+  // Отдельного происхождения «ГИС Торги» в справочнике нет (новое значение
+  // select меняло бы enum в базе), поэтому карточка помечается как «Другая
+  // площадка», а точный канал виден по полю source кандидата и по ссылке
+  origin: 'other',
+  kind: 'api',
+  policy: 'allowed',
+  reason:
+    'Официальный государственный портал раскрывает сведения о торгах публично; забираются только открытые данные о лоте — без авторизации и персональных данных',
+  gives:
+    'Актуальные лоты-недвижимость наших регионов: тип, адрес, площадь, кадастровый номер, начальная цена, задаток и шаг, статус торгов, даты, официальные фото и документы',
+  limits:
+    'Не больше 5 объектов за забор и только в очередь; в каталог — вручную после проверки. Контакты организатора и лишние поля портала в очередь не переносятся',
+  needs:
+    'Ничего: данные открыты. Перед боевым использованием свериться с условиями использования портала — источник подключает администратор',
+  docsUrl: 'https://torgi.gov.ru',
+  enabledByDefault: false,
+  // Первое подключение тестового источника — не больше 5 объектов за забор
+  // (см. importFromObjectSource): очередь наполняется порциями
+  importLimit: TORGI_MAX_ITEMS,
+  credentials: [],
+  // Государственный канал: публичный JSON-API портала, без доступов.
+  // Публикации нет — кандидаты кладутся в очередь со статусом «Ждёт решения».
+  fetch: fetchGisTorgi,
 }
 
 const DEVELOPER: ObjectSourceSpec = {
@@ -744,13 +1123,15 @@ const forbidden = (slug: string, name: string): ObjectSourceSpec => ({
 
 /**
  * Реестр источников объектов. Сначала разрешённые (собственные данные и
- * заявки), затем подключаемые по договору, затем запрещённые каналы.
- * Канал забора реализован только у «Заявок собственников» (fetch не null);
+ * заявки, затем открытые государственные торги), затем подключаемые по
+ * договору, затем запрещённые каналы. Канал забора реализован у «Заявок
+ * собственников», «ГИС Торги» и партнёрского JSON-фида (fetch не null);
  * у остальных fetch: null — структура готова, но объектов они не отдают.
  */
 export const OBJECT_SOURCE_SPECS: ObjectSourceSpec[] = [
   MANUAL,
   OWNER,
+  GIS_TORGI,
   PARTNER,
   DEVELOPER,
   NMARKET,

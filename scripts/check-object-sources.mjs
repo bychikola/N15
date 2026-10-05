@@ -5,12 +5,12 @@
  * Запуск: node --experimental-strip-types scripts/check-object-sources.mjs
  * (или npm run check:object-sources)
  *
- * Подключены два канала: «Заявки собственников» (читает открытые заявки из
- * своей базы, owner-applications) и «Партнёрские агентства» (читает
- * согласованный JSON-фид по договору). Оба кладут объекты кандидатами, а
- * очередь — со статусом «Ждёт решения». Проверяем без базы: заявки — на
- * фиктивном клиенте данных, фид — на подменённом fetch; API, XML и NMarket
- * не подключаются.
+ * Подключены три канала: «Заявки собственников» (читает открытые заявки из
+ * своей базы, owner-applications), «ГИС Торги» (публичный JSON-API портала
+ * torgi.gov.ru) и «Партнёрские агентства» (читает согласованный JSON-фид по
+ * договору). Все кладут объекты кандидатами, а очередь — со статусом «Ждёт
+ * решения». Проверяем без базы: заявки — на фиктивном клиенте данных, ГИС
+ * Торги и фид — на подменённом fetch; API, XML и NMarket не подключаются.
  *
  * 1. Каналы owner и partner реализованы (fetch не null), остальные источники —
  *    нет; запрещённые по-прежнему нельзя включить.
@@ -66,8 +66,14 @@ check('источник «Партнёрские агентства» есть �
 check('у «Партнёрских агентств» канал JSON-фида реализован', !!partner?.fetch)
 check('партнёрский источник подключается только по договору', partner?.policy === 'needsAgreement')
 
+const torgi = objectSourceBySlug('gis-torgi')
+check('источник «ГИС Торги» есть в реестре', !!torgi)
+check('у «ГИС Торги» канал государственного API реализован', !!torgi?.fetch)
+check('«ГИС Торги» разрешён правилами (открытые данные портала)', torgi?.policy === 'allowed')
+check('доступы «ГИС Торги» не требуются (публичный API)', (torgi?.credentials || []).length === 0)
+
 for (const spec of OBJECT_SOURCE_SPECS) {
-  if (spec.slug === 'owner' || spec.slug === 'partner') continue
+  if (spec.slug === 'owner' || spec.slug === 'partner' || spec.slug === 'gis-torgi') continue
   check(`«${spec.name}»: канал ещё не реализован (fetch: null)`, spec.fetch === null)
 }
 
@@ -236,6 +242,134 @@ const denied = await partner.fetch({ creds: { feedUrl: 'https://partner.example/
 globalThis.fetch = realFetch
 check('отказ источника честно сообщается', denied.candidates.length === 0 && /403/.test(denied.message))
 
+// --- 4б. Канал «ГИС Торги» (государственный портал) --------------------------------
+// Сеть в проверке не нужна: подменяем fetch, а разбор ответа портала и защита
+// от ПД — как в бою. Форма ответа взята по фактическому API портала
+// (/new/api/public/lotcards/search и /new/api/public/lotcards/{id}).
+const searchResponse = (items) => jsonResponse({ content: items, totalElements: items.length })
+
+const apartment = {
+  id: '77000000000000000001_1',
+  noticeNumber: '77000000000000000001',
+  lotNumber: 1,
+  lotStatus: 'APPLICATIONS_SUBMISSION',
+  biddType: { code: 'A', name: 'Аукцион' },
+  biddForm: { code: 'EA', name: 'Электронный аукцион' },
+  lotName: 'Квартира, назначение: жилое, площадь 54,5 кв.м, адрес: г. Москва, ул. Тверская, д. 12, кв. 5',
+  lotDescription: 'Квартира с ремонтом',
+  priceMin: 8900000,
+  biddEndTime: '2026-11-01T20:59:00.000+00:00',
+  lotImages: ['img-1', 'img-2'],
+  characteristics: [
+    { code: 'CadastralNumber', name: 'Кадастровый номер', characteristicValue: '77:01:0001001:1234' },
+    { code: 'Square', name: 'Площадь', characteristicValue: '54.5' },
+    { code: 'RoomsCount', name: 'Количество комнат', characteristicValue: '2' },
+  ],
+  // ПД организатора торгов: в разбор попадать не должно
+  attributes: [{ code: 'ContactPerson', fullName: 'Контактное лицо', value: 'Иванов Иван Иванович, тел. +7 999 000-00-00' }],
+  subjectRFCode: 77,
+  category: { code: '9', name: 'Жилые помещения' },
+  typeTransaction: 'sale',
+  noticeFirstVersionPublicationDate: '2026-10-01T09:00:00.000+00:00',
+  createDate: '2026-10-01T09:00:00.000+00:00',
+}
+const apartment2 = { ...apartment, id: '77000000000000000001_2', noticeNumber: '77000000000000000002', lotName: 'Квартира, площадь 40 кв.м, адрес: г. Москва, ул. Арбат, д. 1' }
+const house = { ...apartment, id: '50000000000000000002_1', noticeNumber: '50000000000000000002', lotName: 'Жилой дом, площадь 120 кв.м, адрес: Московская область, г. Химки, ул. Ленина, д. 3', subjectRFCode: 50, category: { code: '8', name: 'Здания' }, characteristics: [{ code: 'CadastralNumber', name: 'Кадастровый номер', characteristicValue: '50:10:0010101:55' }, { code: 'Square', name: 'Площадь', characteristicValue: '120' }] }
+const house2 = { ...house, id: '78000000000000000003_1', noticeNumber: '78000000000000000003', subjectRFCode: 78, lotName: 'Жилой дом, площадь 95 кв.м, адрес: г. Санкт-Петербург, ул. Невский проспект, д. 10' }
+const commercial = { ...apartment, id: '23000000000000000004_1', noticeNumber: '23000000000000000004', lotName: 'Нежилое помещение, площадь 80 кв.м, адрес: г. Краснодар, ул. Красная, д. 1', subjectRFCode: 23, category: { code: '11', name: 'Нежилые помещения' }, typeTransaction: 'rent', characteristics: [{ code: 'Square', name: 'Площадь', characteristicValue: '80' }] }
+const land = { ...apartment, id: '10000000000000000005_1', noticeNumber: '10000000000000000005', lotName: 'Земельный участок площадью 580 кв.м, местоположением: Республика Адыгея, г. Майкоп, ул. Садовая', subjectRFCode: 1, category: { code: '2', name: 'Земельные участки' }, typeTransaction: 'rent', characteristics: [{ code: 'CadastralNumber', name: 'Кадастровый номер земельного участка', characteristicValue: '01:08:0512001:7' }, { code: 'SquareZU', name: 'Площадь земельного участка', characteristicValue: '580.0' }] }
+
+const DETAILS = {
+  [apartment.id]: { priceMin: 8900000, deposit: 445000, priceStep: 89000, biddStartTime: '2026-10-05T09:00:00.000+00:00', auctionStartDate: '2026-11-05T09:00:00.000+00:00', etpUrl: 'https://etp.example/torgi/1', lotAttachments: [{ fileName: 'Извещение.pdf', fileId: 'file-1' }], characteristics: apartment.characteristics },
+  [house.id]: { priceMin: 12500000, deposit: 625000, lotAttachments: [{ fileName: 'Проект договора.pdf', fileId: 'file-2' }] },
+  [commercial.id]: { priceMin: 65000, deposit: 13000 },
+  [land.id]: { priceMin: 0, deposit: 5000, lotAttachments: [{ fileName: 'Схема.pdf', fileId: 'file-3' }] },
+}
+
+const SEARCHES = {
+  9: [apartment, apartment2],
+  8: [house, house2],
+  11: [commercial],
+  2: [land],
+}
+
+let seenSearchUrls = []
+globalThis.fetch = async (url) => {
+  const u = String(url)
+  if (u.includes('/lotcards/search')) {
+    seenSearchUrls.push(u)
+    const cat = new URL(u).searchParams.get('catCode')
+    return searchResponse(SEARCHES[cat] || [])
+  }
+  const id = decodeURIComponent((u.match(/\/lotcards\/([^/?]+)/) || [])[1] || '')
+  return jsonResponse(DETAILS[id] || {})
+}
+const torgiResult = await torgi.fetch({ creds: {}, client: {} })
+globalThis.fetch = realFetch
+
+check('ГИС Торги отчитывается как реализованный', torgiResult.implemented === true)
+check('берётся не больше потолка за забор', torgiResult.candidates.length === 5)
+check(
+  'приоритет категорий: квартиры, дома, коммерция',
+  JSON.stringify(torgiResult.candidates.map((c) => c.objectType)) ===
+    JSON.stringify(['apartment', 'apartment', 'house', 'house', 'commercial']),
+)
+const firstSearch = new URL(seenSearchUrls[0] || 'https://x/')
+check('первой опрашивается категория квартир (9)', firstSearch.searchParams.get('catCode') === '9')
+check(
+  'поиск ограничен нашими регионами',
+  (firstSearch.searchParams.get('dynSubjRF') || '').split(',').join('|') === '77|50|78|23|26|1|15',
+)
+check('поиск берёт только актуальные статусы', /APPLICATIONS_SUBMISSION/.test(firstSearch.searchParams.get('lotStatus') || ''))
+check('поиск сортирует по свежести', /firstVersionPublicationDate/.test(firstSearch.searchParams.get('sort') || ''))
+
+const tc = torgiResult.candidates[0]
+check('ключ дедупликации — номер лота портала', tc?.externalId === '77000000000000000001_1')
+check('регион лота переведён в название', tc?.region === 'г. Москва')
+check('адрес разобран из карточки лота', tc?.address === 'г. Москва, ул. Тверская, д. 12, кв. 5')
+check('начальная цена перенесена', tc?.price === 8900000)
+check('площадь перенесена', tc?.area === 54.5)
+check('комнаты перенесены', tc?.rooms === 2)
+check('вид сделки перенесён', tc?.dealType === 'sale')
+check('ссылка на лот портала сохранена', tc?.url === 'https://torgi.gov.ru/new/public/lots/lot/77000000000000000001_1')
+check('фото портала — публичные ссылки', tc?.photos[0] === 'https://torgi.gov.ru/new/file-store/v1/img-1?disposition=inline')
+check('кадастровый номер в разборе', tc?.raw?.torgi?.cadastralNumber === '77:01:0001001:1234')
+check('статус торгов переведён в подпись', tc?.raw?.torgi?.statusLabel === 'Приём заявок')
+check('задаток и шаг аукциона в разборе', tc?.raw?.torgi?.deposit === 445000 && tc?.raw?.torgi?.priceStep === 89000)
+check('документы лота сохранены', tc?.raw?.torgi?.documents?.[0]?.name === 'Извещение.pdf')
+const torgiRawText = JSON.stringify(tc?.raw || {})
+check('в разборе нет ФИО организатора', !/Иванов/.test(torgiRawText))
+check('в разборе нет телефона организатора', !/999/.test(torgiRawText))
+check('комиссия у гос. торгов не выдумывается', tc?.commission === null)
+
+// Отдельный прогон: участок Адыгеи ложится в очередь как «участок»
+globalThis.fetch = async (url) => {
+  const u = String(url)
+  if (u.includes('/lotcards/search')) {
+    const cat = new URL(u).searchParams.get('catCode')
+    return searchResponse(cat === '2' ? [land] : [])
+  }
+  const id = decodeURIComponent((u.match(/\/lotcards\/([^/?]+)/) || [])[1] || '')
+  return jsonResponse(DETAILS[id] || {})
+}
+const landResult = await torgi.fetch({ creds: {}, client: {} })
+globalThis.fetch = realFetch
+check('участок распознан как участок', landResult.candidates[0]?.objectType === 'land')
+check('регион «Республика Адыгея» переведён', landResult.candidates[0]?.region === 'Республика Адыгея')
+
+// Сбой портала не выдаётся за успех: кандидатов нет, сообщение честное
+globalThis.fetch = async () => new Response('nope', { status: 503 })
+const torgiDown = await torgi.fetch({ creds: {}, client: {} })
+globalThis.fetch = realFetch
+check('отказ портала честно сообщается', torgiDown.candidates.length === 0 && /ГИС Торги/.test(torgiDown.message) && /503/.test(torgiDown.message))
+
+globalThis.fetch = async () => {
+  throw new Error('network down')
+}
+const torgiNoNet = await torgi.fetch({ creds: {}, client: {} })
+globalThis.fetch = realFetch
+check('нет связи — объекты не выдумываются', torgiNoNet.candidates.length === 0 && torgiNoNet.implemented === true)
+
 // --- 5. Тип объекта и потолок первого забора ---------------------------------------
 check(
   'синонимы типа объекта сходятся к коду каталога',
@@ -246,12 +380,14 @@ check(
 check('неизвестный тип объекта не выдумывается', sourceObjectType('что-то своё') === null)
 check('синонимы вида сделки сходятся к коду', sourceDealType('Аренда') === 'rent' && sourceDealType('продам') === 'sale')
 check('у партнёрского источника потолок первого забора — 5 объектов', partner?.importLimit === 5)
+check('у «ГИС Торги» потолок первого забора — 5 объектов', torgi?.importLimit === 5)
 check('у прочих источников потолка нет', owner?.importLimit === undefined)
 
 // --- 6. Публикации нет -------------------------------------------------------------
 check('забор не создаёт объект каталога', !('publishedObject' in (candidate || {})))
 check('статус очереди по умолчанию — «Ждёт решения»', SOURCE_CANDIDATE_STATUS_LABELS.pending === 'Ждёт решения')
 check('партнёрский источник по умолчанию выключен', partner?.enabledByDefault === false)
+check('«ГИС Торги» по умолчанию выключен (тестовый источник)', torgi?.enabledByDefault === false)
 
 // --- 7. Готовность источника к забору ----------------------------------------------
 const ownerGate = canImportFromObjectSource(owner, {}, { enabled: true })
