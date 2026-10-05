@@ -60,6 +60,10 @@ import { AnalyticsAccess } from './collections/AnalyticsAccess'
 // (см. src/lib/owner-applications.ts, src/lib/owner-service.ts)
 import { OwnerApplications } from './collections/OwnerApplications'
 import { OwnerMaterials } from './collections/OwnerMaterials'
+// «Источники объектов»: очередь кандидатов из разрешённых источников. В каталог
+// объект попадает только после явного решения сотрудника — автосбор чужих
+// объявлений запрещён (см. src/lib/object-sources.ts)
+import { SourceObjects } from './collections/SourceObjects'
 import { seedInterregional } from '@/lib/interregional-service'
 // Перевод старых объектов на человекочитаемые публичные адреса
 // (см. src/lib/object-slug-backfill.ts)
@@ -76,6 +80,10 @@ import { NewsSettings } from './globals/NewsSettings'
 // «Интеграции площадок»: доступы к официальным каналам Авито/ЦИАН/Домклика
 // и результаты проверок соединения (см. src/lib/platform-integration-service.ts)
 import { PlatformSettings } from './globals/PlatformSettings'
+// «Источники объектов»: какие разрешённые источники включены и какие доступы
+// заданы (см. src/lib/object-sources.ts, object-source-service.ts). Забор пока
+// не реализован, объекты не загружаются
+import { ObjectSourceSettings } from './globals/ObjectSourceSettings'
 // Форматы и предел размера фото — общие для браузера и сервера
 // (см. src/lib/photo-rules.ts)
 import { PHOTO_FORMATS_LABEL, PHOTO_MAX_BYTES, PHOTO_MAX_LABEL } from '@/lib/photo-rules'
@@ -114,8 +122,8 @@ export default buildConfig({
     abortOnLimit: true,
     responseOnLimit: `Файл больше ${PHOTO_MAX_LABEL} — допустимы ${PHOTO_FORMATS_LABEL} до ${PHOTO_MAX_LABEL}`,
   },
-  collections: [Users, Media, Objects, Agents, Applications, Tasks, Messages, Blog, News, NewsReviews, Pages, Customers, Emails, MailAttachments, AgentTasks, MarketListings, LegalDocuments, LegalReports, Advertisers, Advertisements, AdvertisingRequests, AdvertisingMaterials, BoardAds, BoardMaterials, Regions, Settlements, SiteVisits, Visitors, VisitorEvents, AnalyticsAccess, OwnerApplications, OwnerMaterials],
-  globals: [SiteSettings, MailSettings, AgentSettings, NewsSettings, PlatformSettings],
+  collections: [Users, Media, Objects, Agents, Applications, Tasks, Messages, Blog, News, NewsReviews, Pages, Customers, Emails, MailAttachments, AgentTasks, MarketListings, LegalDocuments, LegalReports, Advertisers, Advertisements, AdvertisingRequests, AdvertisingMaterials, BoardAds, BoardMaterials, Regions, Settlements, SiteVisits, Visitors, VisitorEvents, AnalyticsAccess, OwnerApplications, OwnerMaterials, SourceObjects],
+  globals: [SiteSettings, MailSettings, AgentSettings, NewsSettings, PlatformSettings, ObjectSourceSettings],
   editor: lexicalEditor(),
   i18n: {
     // Интерфейс админки — только на русском (без переключателя языков)
