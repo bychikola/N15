@@ -9,6 +9,7 @@ import {
   importFromObjectSource,
   objectSourcesSummary,
   objectSourceStates,
+  publishSourceCandidate,
   saveObjectSourceCredentials,
   setObjectSourceEnabled,
   sourceQueue,
@@ -31,7 +32,11 @@ import {
  *                       статусом «Ждёт решения», публикации нет; у остальных
  *                       источников честный ответ — «не реализовано»;
  *   action: 'decide'  — решение по кандидату (approved/rejected): выборочная
- *                       публикация, без неё объект в каталог не попадает.
+ *                       публикация, без неё объект в каталог не попадает;
+ *   action: 'publish' — перенос одобренного кандидата в основной каталог
+ *                       N15: объект заводится черновиком, кандидат получает
+ *                       статус «Опубликован» и связывается с карточкой.
+ *                       Неодобренный кандидат не переносится.
  *
  * Запрещённый источник включить нельзя: маршрут отвечает отказом до записи.
  * Доступ только у администратора: в настройках лежат доступы источников.
@@ -98,6 +103,18 @@ export async function POST(req: NextRequest) {
       const result = await decideSourceObject(payload, candidateId, decision, user?.id)
       if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 })
       return NextResponse.json({ ok: true, status: result.status })
+    }
+
+    // Перенос одобренного кандидата в каталог — тоже по кандидату, без источника
+    if (action === 'publish') {
+      const candidateId = Number(body?.candidateId)
+      if (!Number.isFinite(candidateId) || candidateId <= 0) {
+        return NextResponse.json({ error: 'Не указан кандидат' }, { status: 400 })
+      }
+      const user = await getCrmUser()
+      const result = await publishSourceCandidate(payload, candidateId, user?.id)
+      if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 })
+      return NextResponse.json({ ok: true, objectId: result.objectId })
     }
 
     const slug = String(body?.slug || '')

@@ -1,7 +1,15 @@
-import type { CollectionConfig } from 'payload'
+import type { CollectionConfig, FieldAccess } from 'payload'
 // Разрешённые источники — общий закрытый реестр (см. src/lib/object-sources.ts):
 // варианты поля совпадают с реестром, запрещённые каналы сюда не попадают
 import { allowedObjectSources } from '@/lib/object-sources'
+
+/**
+ * Доступ к закрытым полям кандидата — ссылке на источник, партнёрской
+ * комиссии и исходным данным. Их видит и правит только администратор: агент
+ * работает с очередью, но технические условия партнёра ему не нужны, а
+ * посетитель сайта не может прочитать коллекцию вовсе (см. access коллекции).
+ */
+const sourcePrivateAccess: FieldAccess = ({ req: { user } }) => user?.role === 'admin'
 
 /**
  * «Источники объектов» — очередь кандидатов из разрешённых источников.
@@ -11,13 +19,18 @@ import { allowedObjectSources } from '@/lib/object-sources'
  * сотрудника (одобрено / отклонено) определяет его судьбу. Это и есть
  * выборочная публикация — правило SOURCE_PUBLICATION_RULE в object-sources.ts.
  *
- * Первым работает канал «Заявки собственников»: забор читает открытые заявки
- * из owner-applications и кладёт их сюда со статусом «Ждёт решения» (записи
- * пишет сервис, src/lib/object-source-service.ts). У остальных источников
- * канал пока не реализован (fetch: null), поэтому их кандидатов здесь нет.
+ * Работают два канала: «Заявки собственников» (читает открытые заявки из
+ * owner-applications) и «Партнёрские агентства» (читает согласованный
+ * JSON-фид по договору). Оба кладут кандидатов сюда со статусом «Ждёт
+ * решения» (записи пишет сервис, src/lib/object-source-service.ts).
+ * У остальных источников канал не реализован (fetch: null) — API, XML и
+ * NMarket в этом этапе не подключаются.
  *
- * В каталог кандидат переносится следующим шагом модуля: поле publishedObject
- * и статус «Опубликован» для этого уже заведены, но перенос пока не выполняется.
+ * Повторный забор не задваивает кандидата: запись ищется по паре
+ * «источник + externalId» и обновляется. Одобренного кандидата администратор
+ * переносит в каталог отдельным действием — объект заводится черновиком,
+ * кандидат получает статус «Опубликован» и остаётся связанным с карточкой
+ * (publishedObject); автоматической публикации нет.
  */
 export const SourceObjects: CollectionConfig = {
   slug: 'source-objects',
@@ -61,6 +74,12 @@ export const SourceObjects: CollectionConfig = {
       label: 'Название',
     },
     {
+      name: 'region',
+      type: 'text',
+      label: 'Регион',
+      admin: { description: 'Регион или район, как его назвал источник' },
+    },
+    {
       name: 'address',
       type: 'text',
       label: 'Адрес из источника',
@@ -69,7 +88,20 @@ export const SourceObjects: CollectionConfig = {
     { name: 'price', type: 'number', label: 'Цена, ₽' },
     { name: 'area', type: 'number', label: 'Площадь, м²' },
     { name: 'rooms', type: 'number', label: 'Комнат', min: 0, max: 20 },
-    { name: 'url', type: 'text', label: 'Ссылка на объект у источника' },
+    {
+      name: 'description',
+      type: 'textarea',
+      label: 'Описание из источника',
+      admin: { description: 'Описание объекта от источника — переносится в карточку каталога при переносе' },
+    },
+    {
+      name: 'url',
+      type: 'text',
+      label: 'Ссылка на объект у источника',
+      // Техническая ссылка партнёра — закрытые данные: видит только администратор
+      access: { read: sourcePrivateAccess },
+      admin: { description: 'Внутренняя ссылка на карточку у источника. Клиенту сайта не показывается' },
+    },
     {
       name: 'photos',
       type: 'array',
@@ -79,6 +111,20 @@ export const SourceObjects: CollectionConfig = {
         description: 'Прямые ссылки на фото — только когда источник официально отдаёт их. В каталог переносятся отдельным шагом, после проверки',
       },
       fields: [{ name: 'url', type: 'text', label: 'Ссылка на фото' }],
+    },
+    {
+      name: 'commission',
+      type: 'text',
+      label: 'Партнёрская комиссия',
+      // Закрытое условие сделки: видит только администратор, клиенту не показывается
+      access: { read: sourcePrivateAccess },
+      admin: { description: 'Вознаграждение по договору с источником (например: 3 % или 50 000 ₽). Внутренние данные' },
+    },
+    {
+      name: 'actualAt',
+      type: 'date',
+      label: 'Актуально на',
+      admin: { date: { pickerAppearance: 'dayAndTime' }, description: 'Дата актуальности данных на стороне источника' },
     },
     {
       name: 'status',
@@ -100,9 +146,11 @@ export const SourceObjects: CollectionConfig = {
       name: 'raw',
       type: 'json',
       label: 'Исходные данные источника',
+      // Разбор ответа источника — технические данные: только администратор
+      access: { read: sourcePrivateAccess },
       admin: {
         readOnly: true,
-        description: 'Ответ источника как есть — для разбора. Посетителю не показывается',
+        description: 'Ответ источника как есть — для разбора. Клиенту не показывается',
       },
     },
     { name: 'importedAt', type: 'date', label: 'Когда получен', admin: { date: { pickerAppearance: 'dayAndTime' } } },
@@ -121,7 +169,7 @@ export const SourceObjects: CollectionConfig = {
       label: 'Объект каталога',
       admin: {
         readOnly: true,
-        description: 'Заполняется, когда кандидат перенесён в каталог (следующий шаг модуля — пока не выполняется)',
+        description: 'Заполняется, когда одобренный кандидат перенесён в каталог — объект заводится черновиком',
       },
     },
   ],

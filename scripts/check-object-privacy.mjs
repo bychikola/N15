@@ -26,6 +26,10 @@
  * 5. Заявки собственников: коллекции и служебные маршруты закрыты для гостя,
  *    форма на /sell не содержит закрытых полей объекта. Проверки без
  *    побочных эффектов: заявки не создаются, коды не запрашиваются.
+ * 6. Источники объектов: очередь кандидатов (source-objects) и маршрут
+ *    /api/object-sources закрыты для гостя, раздел /crm/sources перенаправляет
+ *    на вход. Закрытые поля кандидата (ссылка на источник, партнёрская
+ *    комиссия, разбор raw) гостю не отдаются.
  *
  * Правила доступа живут в коллекции objects (полевой access, см.
  * privateFieldsAccess / internalGroupsAccess в Objects.ts); публичная
@@ -269,6 +273,28 @@ async function main() {
   if (!sellRes.ok) bad(`страница /ru/sell не открывается — HTTP ${sellRes.status}`)
   else if (sellLeaks.length) bad(`в HTML формы заявки закрытые поля: ${sellLeaks.join(', ')}`)
   else ok('в HTML формы /ru/sell закрытых полей нет')
+
+  // 7. Источники объектов: кандидаты из внешних каналов не отдаются гостю.
+  //    В очереди лежат служебные данные источника — технический источник,
+  //    ссылка на карточку партнёра, партнёрская комиссия и разбор ответа
+  //    (см. поля url/commission/raw в SourceObjects.ts). Коллекция
+  //    source-objects закрыта, а раздел CRM и маршрут источников гостя не
+  //    пускают. Проверки без побочных эффектов: забор не запускается.
+  console.log('\nИсточники объектов:')
+  const sourceList = await fetch(`${BASE}/api/source-objects?limit=1`)
+  if (sourceList.status === 200) {
+    const body = await sourceList.json().catch(() => null)
+    if (Array.isArray(body?.docs) && body.docs.length) bad('REST коллекции source-objects отдаёт кандидатов гостю')
+    else ok('REST коллекции source-objects гостю ничего не отдаёт')
+  } else {
+    ok(`REST коллекции source-objects закрыт (HTTP ${sourceList.status})`)
+  }
+  const sourcesRoute = await fetch(`${BASE}/api/object-sources`)
+  if (sourcesRoute.status === 403) ok('маршрут /api/object-sources гостю запрещён (403)')
+  else bad(`маршрут /api/object-sources доступен гостю — HTTP ${sourcesRoute.status}`)
+  const sourcesCrm = await fetch(`${BASE}/crm/sources`, { redirect: 'manual' })
+  if (sourcesCrm.status >= 300 && sourcesCrm.status < 400) ok('раздел CRM /crm/sources гостя перенаправляет на вход')
+  else bad(`раздел CRM /crm/sources открыт гостю — HTTP ${sourcesCrm.status}`)
 
   if (failed.length) {
     console.log(`\n✗ Утечек: ${failed.length}`)

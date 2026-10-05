@@ -15,10 +15,12 @@
  *     `needsAgreement` — приём возможен только по договору с источником;
  *     `forbidden` — канал в реестре есть, но включить его нельзя, и причина
  *     записана прямо (автосбор чужих объявлений запрещён правилами площадок);
- *   — забор ведёт канал самого источника (поле fetch). Первым подключён канал
- *     «Заявки собственников»: он читает заявки из своей базы (owner-applications)
- *     и кладёт их кандидатами в очередь — без публикации. У остальных каналов
- *     fetch: null, то есть структура готова, а данных от них нет;
+ *   — забор ведёт канал самого источника (поле fetch). Подключены два канала:
+ *     «Заявки собственников» читает заявки из своей базы (owner-applications),
+ *     «Партнёрские агентства» — согласованный JSON-фид по договору. Оба кладут
+ *     объекты только кандидатами в очередь — без публикации. У остальных каналов
+ *     (застройщики, NMarket) fetch: null, то есть структура готова, но данных от
+ *     них нет: API и XML площадок в этом этапе не подключаются;
  *   — выборочная публикация: ни один объект из источника не попадает в
  *     каталог автоматически. Кандидат проходит очередь (коллекция
  *     source-objects) и публикуется только после явного решения сотрудника
@@ -147,12 +149,21 @@ export interface SourceCandidate {
   /** Идентификатор объекта на стороне источника (для дедупликации) */
   externalId: string | null
   title: string | null
+  /** Регион/район, как его назвал источник */
+  region: string | null
   address: string | null
   price: number | null
   area: number | null
   rooms: number | null
+  /** Описание объекта от источника — показывается в карточке каталога */
+  description: string | null
+  /** Ссылка на объект у источника — внутренние данные, клиенту не показывается */
   url: string | null
   photos: string[]
+  /** Партнёрская комиссия/вознаграждение — закрытое условие, клиенту не показывается */
+  commission: string | null
+  /** Дата актуальности данных на стороне источника (ISO) */
+  actualAt: string | null
   /** Исходные данные источника — для разбора, не для показа посетителю */
   raw: Record<string, unknown> | null
 }
@@ -260,14 +271,18 @@ function ownerCandidate(doc: Record<string, unknown>): SourceCandidate {
     // Номер заявки — ключ дедупликации: повторный забор не задвоит кандидата
     externalId: `owner:${id}`,
     title,
+    region: ownerText(address.district) || ownerText(address.city) || null,
     address: ownerAddressLine(address),
     price: ownerNum(doc.price),
     area: ownerNum(doc.area),
     rooms: ownerNum(doc.rooms),
+    description: ownerText(doc.description) || null,
     url: null,
     // Фото заявки лежат в закрытом хранилище (owner-materials) и прямых
     // публичных ссылок не имеют — кандидату их не отдаём вовсе
     photos: [],
+    commission: null,
+    actualAt: ownerText(doc.receivedAt) || null,
     // Разбор без ПД: связь с заявкой и характеристики, имя и телефон — нет
     raw: {
       applicationId: id,
@@ -302,6 +317,214 @@ const fetchOwnerApplications: SourceFetch = async ({ client }) => {
     implemented: true,
     rawCount: docs.length,
     message: `Заявки собственников: получено ${candidates.length} заявок в работу — все попадут в статус «Ждёт решения»`,
+  }
+}
+
+// --- Канал «Партнёрский JSON-фид» --------------------------------------------------------
+
+/**
+ * Первый внешний источник: партнёр по договору отдаёт объекты обычным
+ * JSON-фидом. Канал реализован ровно так, как требует правовой статус
+ * `needsAgreement`: адрес выгрузки и токен выдаёт партнёр по договору, без
+ * них забор не запускается (см. missingSourceCredentials). Никакого
+ * чтения чужих страниц и XML/API площадок здесь нет — только согласованный
+ * JSON-документ по известному адресу.
+ *
+ * Формат фида — массив объектов или объект с массивом в одном из полей
+ * `items`, `objects`, `data`, `results`, `listings`. Поля одного объекта
+ * читаются терпимо к синонимам (партнёры называют их по-разному):
+ *   id | externalId | objectId      — идентификатор у источника (ключ дедупликации);
+ *   title | name                    — название;
+ *   region                          — регион/район;
+ *   address                         — адрес (строкой или объектом);
+ *   price | cost                    — стоимость;
+ *   area | square                   — площадь, м²;
+ *   rooms | roomCount               — комнат;
+ *   description | text              — описание;
+ *   url | link | sourceUrl          — ссылка у источника (закрытая, для CRM);
+ *   commission                      — вознаграждение (закрытое, для CRM);
+ *   actualAt | updatedAt | updated  — дата актуальности;
+ *   photos | images                 — массив ссылок (строк или объектов с url).
+ *
+ * Кандидат несёт только характеристики объекта: персональные данные
+ * собственника партнёр не передаёт, а ссылку и комиссию посетитель сайта
+ * никогда не увидит (см. SourceObjects.ts — доступ к полям только у админа).
+ */
+const FEED_MAX_ITEMS = 500
+const FEED_TIMEOUT_MS = 15_000
+
+const isFeedObject = (v: unknown): v is Record<string, unknown> =>
+  typeof v === 'object' && v !== null && !Array.isArray(v)
+
+const feedText = (v: unknown): string | null => {
+  if (typeof v === 'string') return v.trim() || null
+  if (typeof v === 'number' && Number.isFinite(v)) return String(v)
+  return null
+}
+
+/** Число из фида: принимает и число, и строку «4 500 000» / «54,5» */
+const feedNum = (v: unknown): number | null => {
+  if (typeof v === 'number' && Number.isFinite(v)) return v
+  const s = feedText(v)
+  if (!s) return null
+  const n = Number(s.replace(/[\s ]/g, '').replace(',', '.'))
+  return Number.isFinite(n) ? n : null
+}
+
+/** Ссылка фида: только http/https — прочие схемы отбрасываем */
+const feedUrl = (v: unknown): string | null => {
+  const s = feedText(v)
+  return s && /^https?:\/\//i.test(s) ? s : null
+}
+
+/** Первое непустое значение из списка синонимов поля */
+const feedPick = (item: Record<string, unknown>, keys: string[]): unknown => {
+  for (const key of keys) {
+    const v = item[key]
+    if (v !== undefined && v !== null && v !== '') return v
+  }
+  return null
+}
+
+/** Адрес фида одной строкой: строка как есть или сборка из частей объекта */
+function feedAddressLine(v: unknown): string | null {
+  const line = feedText(v)
+  if (line) return line
+  if (!isFeedObject(v)) return null
+  const parts = [v.city, v.district, v.locality, v.street, v.house].map(feedText).filter(Boolean)
+  return parts.length ? parts.join(', ') : null
+}
+
+/** Фото фида: массив ссылок или объектов с url — только http/https */
+function feedPhotos(v: unknown): string[] {
+  if (!Array.isArray(v)) return []
+  return v
+    .map((p) => (isFeedObject(p) ? feedUrl(feedPick(p, ['url', 'src', 'link', 'image'])) : feedUrl(p)))
+    .filter((p): p is string => !!p)
+}
+
+/** Список объектов из ответа фида: корневой массив или массив в известном поле */
+function feedItems(payload: unknown): Record<string, unknown>[] {
+  if (Array.isArray(payload)) return payload.filter(isFeedObject)
+  if (isFeedObject(payload)) {
+    for (const key of ['items', 'objects', 'data', 'results', 'listings']) {
+      if (Array.isArray(payload[key])) return (payload[key] as unknown[]).filter(isFeedObject)
+    }
+  }
+  return []
+}
+
+/**
+ * Персональные данные в разборе фида не храним: разбор нужен для сверки
+ * характеристик объекта, а не для чужих контактов. Даже если партнёр прислал
+ * телефон или почту собственника, в разбор они не попадут (152-ФЗ).
+ */
+const FEED_PII_KEYS = new Set([
+  'ownername',
+  'ownerphone',
+  'phone',
+  'phonenumber',
+  'contact',
+  'contactname',
+  'contactphone',
+  'email',
+  'owneremail',
+  'passport',
+  'snils',
+])
+
+function feedRaw(item: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(item)) {
+    if (FEED_PII_KEYS.has(key.toLowerCase())) continue
+    out[key] = value
+  }
+  return out
+}
+
+/** Запись фида → кандидат очереди: характеристики объекта без чужих ПД */
+function partnerCandidate(item: Record<string, unknown>): SourceCandidate {
+  const id = feedText(feedPick(item, ['id', 'externalId', 'objectId']))
+  const photos = feedPhotos(feedPick(item, ['photos', 'images']))
+  return {
+    // Идентификатор источника — ключ дедупликации: повторный забор той же
+    // записи обновит кандидата, а не создаст второго (см. object-source-service)
+    externalId: id,
+    title: feedText(feedPick(item, ['title', 'name'])),
+    region: feedText(feedPick(item, ['region', 'district', 'areaName'])),
+    address: feedAddressLine(feedPick(item, ['address', 'location'])),
+    price: feedNum(feedPick(item, ['price', 'cost'])),
+    area: feedNum(feedPick(item, ['area', 'square'])),
+    rooms: feedNum(feedPick(item, ['rooms', 'roomCount'])),
+    description: feedText(feedPick(item, ['description', 'text'])),
+    url: feedUrl(feedPick(item, ['url', 'link', 'sourceUrl'])),
+    photos,
+    commission: feedText(feedPick(item, ['commission', 'fee'])),
+    actualAt: feedText(feedPick(item, ['actualAt', 'updatedAt', 'updated'])),
+    // Разбор без ПД: запись фида за вычетом контактов, чтобы сотрудник сверил
+    // характеристики объекта, а чужие персональные данные в очередь не попали
+    raw: feedRaw(item),
+  }
+}
+
+/**
+ * Забор объектов из JSON-фида партнёра. Канал реализован всегда (implemented:
+ * true) — сбой соединения или не-JSON ответ не выдаётся за успех: кандидатов
+ * нет, а в очереди и журнале остаётся честное сообщение. Токен, если задан,
+ * уходит заголовком Authorization: Bearer.
+ */
+const fetchPartnerFeed: SourceFetch = async ({ creds }) => {
+  const url = (creds.feedUrl || '').trim()
+  if (!/^https?:\/\//i.test(url)) {
+    return {
+      candidates: [],
+      implemented: true,
+      message: 'Партнёрский фид: адрес выгрузки не задан или неверен — объекты не получены',
+    }
+  }
+
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), FEED_TIMEOUT_MS)
+  let res: Response
+  try {
+    res = await fetch(url, {
+      headers: {
+        Accept: 'application/json',
+        ...(creds.token ? { Authorization: `Bearer ${creds.token}` } : {}),
+      },
+      signal: controller.signal,
+      cache: 'no-store',
+    })
+  } catch (e) {
+    const reason = e instanceof Error && e.name === 'AbortError' ? 'источник не ответил вовремя' : 'нет связи с источником'
+    return { candidates: [], implemented: true, message: `Партнёрский фид: ${reason} — объекты не получены` }
+  } finally {
+    clearTimeout(timer)
+  }
+
+  if (!res.ok) {
+    return { candidates: [], implemented: true, message: `Партнёрский фид: источник ответил отказом (код ${res.status}) — объекты не получены` }
+  }
+
+  let payload: unknown
+  try {
+    payload = await res.json()
+  } catch {
+    return { candidates: [], implemented: true, message: 'Партнёрский фид: ответ не является JSON — объекты не получены' }
+  }
+
+  const all = feedItems(payload)
+  const items = all.slice(0, FEED_MAX_ITEMS)
+  const candidates = items
+    .map(partnerCandidate)
+    // Запись без идентификатора, названия и адреса бесполезна — её не берём
+    .filter((c) => c.externalId || c.title || c.address)
+  const truncated = all.length > items.length ? ` (взяты первые ${FEED_MAX_ITEMS})` : ''
+  return {
+    candidates,
+    implemented: true,
+    rawCount: all.length,
+    message: `Партнёрский фид: получено объектов — ${candidates.length}${truncated}`,
   }
 }
 
@@ -345,21 +568,23 @@ const OWNER: ObjectSourceSpec = {
 const PARTNER: ObjectSourceSpec = {
   slug: 'partner',
   name: 'Партнёрские агентства',
-  summary: 'Выгрузка объектов партнёра по договору о сотрудничестве',
+  summary: 'JSON-фид объектов партнёра по договору о сотрудничестве',
   origin: 'partner',
   kind: 'feed',
   policy: 'needsAgreement',
   reason: 'Приём объектов возможен только по договору с партнёром и с его письменного согласия',
-  gives: 'Фид или выгрузка объектов партнёра в согласованном формате',
-  limits: 'Без договора и согласия приём объектов партнёра запрещён',
-  needs: 'Договор с партнёром и адрес его выгрузки; доступ выдаёт администратор',
+  gives: 'JSON-фид объектов партнёра в согласованном формате: характеристики, фото, ссылка и вознаграждение',
+  limits: 'Без договора и адреса выгрузки приём объектов партнёра запрещён; в каталог — только вручную после проверки',
+  needs: 'Договор с партнёром и адрес его JSON-фида; доступ выдаёт администратор',
   docsUrl: null,
   enabledByDefault: false,
   credentials: [
-    { key: 'feedUrl', label: 'Адрес выгрузки', env: 'PARTNER_FEED_URL', secret: false, required: true, hint: 'Ссылка на фид партнёра (http/https), выданная по договору' },
-    { key: 'token', label: 'Токен доступа', env: 'PARTNER_FEED_TOKEN', secret: true, required: false, hint: 'Если фид закрыт — токен из договора' },
+    { key: 'feedUrl', label: 'Адрес выгрузки', env: 'PARTNER_FEED_URL', secret: false, required: true, hint: 'Ссылка на JSON-фид партнёра (http/https), выданная по договору' },
+    { key: 'token', label: 'Токен доступа', env: 'PARTNER_FEED_TOKEN', secret: true, required: false, hint: 'Если фид закрыт — токен из договора (уйдёт заголовком Authorization: Bearer)' },
   ],
-  fetch: null,
+  // Первый внешний канал: читает согласованный JSON-фид партнёра. Публикации
+  // нет — кандидаты кладутся в очередь со статусом «Ждёт решения».
+  fetch: fetchPartnerFeed,
 }
 
 const DEVELOPER: ObjectSourceSpec = {

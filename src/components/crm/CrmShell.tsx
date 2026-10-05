@@ -26,6 +26,11 @@ export function CrmShell({ user, t, active, children }: Props) {
     // администратора: в заявке телефон и адрес собственника
     // (та же проверка на странице /crm/owner-applications)
     ...(isAdmin ? [{ id: 'owner-applications', href: '/crm/owner-applications', label: t.crm.navOwnerApplications }] : []),
+    // «Источники объектов»: очередь объектов из внешних каналов (партнёрский
+    // JSON-фид, заявки собственников). В настройках лежат доступы каналов, в
+    // очереди — служебные данные источника: раздел только для администратора
+    // (та же проверка на странице /crm/sources)
+    ...(isAdmin ? [{ id: 'sources', href: '/crm/sources', label: t.crm.navSources }] : []),
     // «Архив объектов»: снятые с продажи объекты остаются в базе, но скрыты
     // с сайта, из каталога, поиска и с площадок публикации (src/lib/archive.ts)
     { id: 'archive', href: '/crm/archive', label: t.crm.navArchive },
