@@ -136,7 +136,7 @@ export default function RegisterPage() {
                   checked={agreed}
                   onChange={setAgreed}
                   text={t.consent.registerText}
-                  docs={legalDocLinks('user-agreement', 'personal-data-consent')}
+                  docs={legalDocLinks('user-agreement', 'personal-data-consent', 'privacy-policy')}
                   note={t.consent.registerHint}
                 />
 
