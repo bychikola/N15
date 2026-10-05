@@ -36,7 +36,9 @@ import {
  *   action: 'publish' — перенос одобренного кандидата в основной каталог
  *                       N15: объект заводится черновиком, кандидат получает
  *                       статус «Опубликован» и связывается с карточкой.
- *                       Неодобренный кандидат не переносится.
+ *                       Неодобренный кандидат не переносится. Обязателен
+ *                       ответственный агент (agentId) — без него новый
+ *                       объект не создаётся (validateResponsibleAgent).
  *
  * Запрещённый источник включить нельзя: маршрут отвечает отказом до записи.
  * Доступ только у администратора: в настройках лежат доступы источников.
@@ -84,6 +86,7 @@ export async function POST(req: NextRequest) {
       slug?: string
       credentials?: Record<string, string>
       candidateId?: number | string
+      agentId?: number | string
     } | null
 
     const action = body?.action
@@ -112,7 +115,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Не указан кандидат' }, { status: 400 })
       }
       const user = await getCrmUser()
-      const result = await publishSourceCandidate(payload, candidateId, user?.id)
+      const result = await publishSourceCandidate(payload, candidateId, user?.id, body?.agentId)
       if (!result.ok) return NextResponse.json({ error: result.error }, { status: 400 })
       return NextResponse.json({ ok: true, objectId: result.objectId })
     }

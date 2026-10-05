@@ -26,6 +26,10 @@ interface Props {
   t: Dict
   sources: ObjectSourceState[]
   queue: SourceQueueItem[]
+  /** Активные агенты для выбора ответственного при переносе в каталог */
+  agents: { id: number; name: string }[]
+  /** Профиль агента учётной записи администратора — предлагается по умолчанию */
+  defaultAgentId?: number | null
 }
 
 const cardStyle: React.CSSProperties = {
@@ -84,13 +88,14 @@ const dateText = (iso: string | null): string => {
 
 const money = (v: number | null): string => (v == null ? '—' : `${new Intl.NumberFormat('ru-RU').format(v)} ₽`)
 
-export const SourceQueueBoard: FC<Props> = ({ t, sources, queue }) => {
+export const SourceQueueBoard: FC<Props> = ({ t, sources, queue, agents, defaultAgentId }) => {
   const router = useRouter()
   const [busy, setBusy] = useState<string>('')
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [filter, setFilter] = useState<SourceCandidateStatus | 'all'>('pending')
   const [publishTarget, setPublishTarget] = useState<SourceQueueItem | null>(null)
+  const [publishAgent, setPublishAgent] = useState<number | null>(null)
 
   // Модалка подтверждения закрывается Esc — как и кликом по подложке и крестиком
   useEffect(() => {
@@ -147,9 +152,24 @@ export const SourceQueueBoard: FC<Props> = ({ t, sources, queue }) => {
     await act(`decide:${id}`, { action: 'decide', candidateId: id, decision })
   }
 
+  // Открытие подтверждения переноса: сразу предлагаем ответственного агента —
+  // профиль администратора, если он есть, иначе первого активного агента
+  const openPublish = (row: SourceQueueItem) => {
+    const preferred =
+      defaultAgentId != null && agents.some((a) => a.id === defaultAgentId)
+        ? defaultAgentId
+        : agents[0]?.id ?? null
+    setPublishAgent(preferred)
+    setPublishTarget(row)
+  }
+
   const confirmPublish = async () => {
-    if (!publishTarget) return
-    const data = await act(`publish:${publishTarget.id}`, { action: 'publish', candidateId: publishTarget.id })
+    if (!publishTarget || !publishAgent) return
+    const data = await act(`publish:${publishTarget.id}`, {
+      action: 'publish',
+      candidateId: publishTarget.id,
+      agentId: publishAgent,
+    })
     if (data) {
       setPublishTarget(null)
       setNotice(t.crm.srcPublished)
@@ -342,7 +362,7 @@ export const SourceQueueBoard: FC<Props> = ({ t, sources, queue }) => {
                   </>
                 )}
                 {isApproved && (
-                  <button type="button" onClick={() => setPublishTarget(row)} disabled={Boolean(busy)} style={{ ...btnGold, marginLeft: 'auto' }}>
+                  <button type="button" onClick={() => openPublish(row)} disabled={Boolean(busy)} style={{ ...btnGold, marginLeft: 'auto' }}>
                     {t.crm.srcPublish}
                   </button>
                 )}
@@ -394,7 +414,26 @@ export const SourceQueueBoard: FC<Props> = ({ t, sources, queue }) => {
             <p style={{ margin: '0 0 8px', fontSize: 13, color: '#25241f', fontWeight: 600 }}>
               {publishTarget.title || `№${publishTarget.id}`}
             </p>
-            <p style={{ margin: '0 0 16px', fontSize: 12, color: '#716b62', lineHeight: 1.6 }}>{t.crm.srcPublishConfirmText}</p>
+            <p style={{ margin: '0 0 14px', fontSize: 12, color: '#716b62', lineHeight: 1.6 }}>{t.crm.srcPublishConfirmText}</p>
+            {/* Ответственный агент обязателен для нового объекта: без него
+                сервер отклоняет создание (validateResponsibleAgent) */}
+            <label style={{ display: 'block', fontSize: 10, color: '#817b70', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>
+              {t.crm.srcPublishAgent}
+            </label>
+            <select
+              value={publishAgent ?? ''}
+              onChange={(e) => setPublishAgent(e.target.value ? Number(e.target.value) : null)}
+              disabled={Boolean(busy) || !agents.length}
+              style={{ width: '100%', minHeight: 44, border: '1px solid #d9d1c4', borderRadius: 8, background: '#fff', color: '#25241f', padding: '9px 12px', fontSize: 12, marginBottom: 6 }}
+            >
+              {!agents.length && <option value="">{t.crm.srcPublishNoAgents}</option>}
+              {agents.map((agent) => (
+                <option key={agent.id} value={agent.id}>
+                  {agent.name}
+                </option>
+              ))}
+            </select>
+            <p style={{ margin: '0 0 16px', fontSize: 11, color: '#817b70', lineHeight: 1.5 }}>{t.crm.srcPublishAgentHint}</p>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
               <button type="button" onClick={() => setPublishTarget(null)} disabled={Boolean(busy)} style={btnStyle}>
                 {t.crm.srcCancel}
@@ -402,8 +441,8 @@ export const SourceQueueBoard: FC<Props> = ({ t, sources, queue }) => {
               <button
                 type="button"
                 onClick={() => void confirmPublish()}
-                disabled={Boolean(busy)}
-                style={{ ...btnGold, opacity: busy ? 0.6 : 1 }}
+                disabled={Boolean(busy) || !publishAgent}
+                style={{ ...btnGold, opacity: busy || !publishAgent ? 0.6 : 1 }}
               >
                 {busy ? t.crm.srcImporting : t.crm.srcPublishConfirm}
               </button>

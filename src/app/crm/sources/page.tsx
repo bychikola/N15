@@ -42,6 +42,39 @@ export default async function CrmSourcesPage() {
     console.error('Object sources: не удалось прочитать очередь кандидатов:', e)
   }
 
+  // Ответственных агентов выбирает администратор при переносе: у нового
+  // объекта агент обязателен (маршрутизация звонков и доступ к карточке).
+  // По умолчанию предлагаем профиль, привязанный к учётной записи самого
+  // администратора, — если он есть, перенос в один клик.
+  let agents: { id: number; name: string }[] = []
+  let ownAgentId: number | null = null
+  try {
+    const active = await payload.find({
+      collection: 'agents',
+      where: { isActive: { equals: true } },
+      sort: 'sortOrder',
+      limit: 200,
+      depth: 0,
+      overrideAccess: true,
+    })
+    agents = active.docs
+      .map((doc) => ({ id: Number(doc.id), name: String((doc as { name?: unknown }).name || '').trim() }))
+      .filter((agent) => Number.isFinite(agent.id) && agent.name)
+    const own = await payload.find({
+      collection: 'agents',
+      where: { user: { equals: user.id } },
+      limit: 1,
+      depth: 0,
+      overrideAccess: true,
+    })
+    const ownId = Number(own.docs[0]?.id)
+    ownAgentId = Number.isFinite(ownId) && ownId > 0 ? ownId : null
+  } catch (e) {
+    // Без списка агентов перенос невозможен: поле ответственного нечем
+    // заполнить. Раздел не роняем — сервер вернёт понятную ошибку.
+    console.error('Object sources: не удалось прочитать список агентов:', e)
+  }
+
   return (
     <CrmShell user={user} t={t} active="sources">
       <h2 style={{ margin: '0 0 6px', fontFamily: "'New Standard', Georgia, serif", fontWeight: 400, fontSize: 22 }}>
@@ -50,7 +83,7 @@ export default async function CrmSourcesPage() {
       <p style={{ margin: '0 0 18px', color: '#817b70', fontSize: 11, lineHeight: 1.55, maxWidth: 760 }}>
         {t.crm.srcSubtitle}
       </p>
-      <SourceQueueBoard t={t} sources={sources} queue={queue} />
+      <SourceQueueBoard t={t} sources={sources} queue={queue} agents={agents} defaultAgentId={ownAgentId} />
     </CrmShell>
   )
 }

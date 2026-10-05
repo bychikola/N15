@@ -24,6 +24,7 @@
 import type { Payload } from 'payload'
 import { maskValue } from './platform-integrations'
 import { DISTRICT_OPTIONS } from './districts'
+import { splitSourceAddress, stripAddressDetails } from './object-source-address'
 import {
   canImportFromObjectSource,
   OBJECT_SOURCE_SPECS,
@@ -608,17 +609,33 @@ const DISTRICT_SET = new Set<string>(DISTRICT_OPTIONS)
 /**
  * Регион и адрес кандидата → поля адреса объекта каталога. Регион, совпавший
  * с районом республики, становится районом; иначе — населённым пунктом.
- * Адрес источника — свободная строка, поэтому кладём её в закрытое поле
- * улицы: сотрудник уточнит адрес в карточке, а на сайте точный адрес
- * собственника не показывается (см. exactAddressAccess в Objects.ts).
+ *
+ * Адрес источника — свободная строка с номером дома и квартиры, и в публичную
+ * улицу она попадать не должна: строку разбирает splitSourceAddress
+ * (src/lib/object-source-address.ts). Публично уходят только город, район,
+ * населённый пункт и улица без уточнений, а полная строка и номер дома/корпуса/
+ * квартиры — в закрытые поля (exactAddressAccess в Objects.ts): в CRM их видит
+ * агент, на сайте — никто.
  */
 function sourceObjectAddress(item: SourceQueueItem): Record<string, unknown> {
+  const parsed = splitSourceAddress(item.address || '')
   const region = (item.region || '').trim()
-  const line = (item.address || '').trim()
-  const address: Record<string, unknown> = { city: 'Владикавказ' }
+  const address: Record<string, unknown> = {}
+  // Полная строка источника — только закрытое поле: сотрудник видит её в CRM
+  if (parsed.fullAddress) address.fullAddress = parsed.fullAddress
+  address.city = parsed.city || 'Владикавказ'
   if (region && DISTRICT_SET.has(region)) address.district = region
   else if (region) address.locality = region
-  if (line) address.street = line
+  // Район и пункт из самой строки дополняют регион, если тот их не задал
+  if (parsed.district && !address.district) address.district = parsed.district
+  if (parsed.cityDistrict && !address.cityDistrict) address.cityDistrict = parsed.cityDistrict
+  if (parsed.locality && !address.locality) address.locality = parsed.locality
+  // Публичная улица — без номера дома, корпуса и квартиры
+  if (parsed.street) address.street = parsed.street
+  // Уточнения — закрытые поля адреса
+  if (parsed.house) address.house = parsed.house
+  if (parsed.corpus) address.corpus = parsed.corpus
+  if (parsed.apartment) address.apartment = parsed.apartment
   return address
 }
 
@@ -690,6 +707,64 @@ export interface PublishResult {
   objectId?: number
 }
 
+/** Числовой id из значения формы/связи; null — если его нет */
+const toId = (value: unknown): number | null => {
+  const n = typeof value === 'number' ? value : Number(value)
+  return Number.isInteger(n) && n > 0 ? n : null
+}
+
+/**
+ * Ответственный агент для нового объекта каталога.
+ *
+ * У нового объекта агент обязателен (validateResponsibleAgent в Objects.ts):
+ * по нему маршрутизируются звонки и строится доступ к карточке. Перенос
+ * выполняет администратор, а хук objectsOwnershipHook подставляет агента
+ * только агентской учётке — администратору его надо выбрать. Порядок:
+ *   1. агент, выбранный в форме (agents — профиль агентства, не учётка);
+ *   2. иначе — профиль агента, привязанный к учётной записи того, кто
+ *      переносит (администратор может быть и агентом, agents.user);
+ *   3. иначе — ошибка: без ответственного объект создавать нельзя.
+ * Проверку validateResponsibleAgent это не обходит — поле просто заполняется
+ * до неё, как и при обычном создании карточки агентом.
+ */
+async function resolveResponsibleAgent(
+  payload: Payload,
+  userId: number | string | null | undefined,
+  agentId: number | string | null | undefined,
+): Promise<{ ok: true; id: number } | { ok: false; error: string }> {
+  const explicit = toId(agentId)
+  if (explicit != null) {
+    try {
+      const found = await payload.findByID({ collection: 'agents', id: explicit, depth: 0, overrideAccess: true })
+      if (found?.id != null) return { ok: true, id: explicit }
+    } catch {
+      // не нашли профиль — сообщим выбору, а не создадим «агента-призрака»
+    }
+    return { ok: false, error: 'Выбранный ответственный агент не найден — выберите агента из списка' }
+  }
+
+  const owner = toId(userId)
+  if (owner != null) {
+    try {
+      const { docs } = await payload.find({
+        collection: 'agents',
+        where: { user: { equals: owner } },
+        limit: 1,
+        depth: 0,
+        overrideAccess: true,
+      })
+      const own = toId(docs[0]?.id)
+      if (own != null) return { ok: true, id: own }
+    } catch {
+      // связи нет — переходим к сообщению о выборе агента
+    }
+  }
+  return {
+    ok: false,
+    error: 'Выберите ответственного агента: по нему маршрутизируются звонки и строится доступ к объекту',
+  }
+}
+
 /**
  * Перенос одобренного кандидата в основной каталог N15.
  *
@@ -697,18 +772,25 @@ export interface PublishResult {
  * не перенесён — неодобренный или уже опубликованный кандидат возвращает
  * ошибку. Объект заводится черновиком (status 'draft') с происхождением
  * источника: в каталоге он появляется только после обычной публикации в CRM,
- * автоматической публикации из источника нет. Характеристики, описание и
- * фото переносятся; фото скачиваются в media. Ссылка на источник и
- * партнёрская комиссия в публичные поля объекта не попадают: комиссия
- * остаётся закрытым условием объекта (privateFieldsAccess), а ссылки у
- * объекта каталога нет вовсе — она хранится только у кандидата и доступна
- * администратору. После успеха кандидат получает статус 'published' и
- * связывается с карточкой (publishedObject).
+ * автоматической публикации из источника нет. Ответственный агент
+ * обязателен: его передаёт администратор (agentId) или он определяется по
+ * учётной записи переносящего — см. resolveResponsibleAgent; без агента
+ * создание отклоняет validateResponsibleAgent, обходить её нельзя.
+ * Характеристики, описание и фото переносятся; фото скачиваются в media.
+ * Адрес источника разбирается так, чтобы публично ушли только город, район и
+ * улица без уточнений, а полная строка с домом и квартирой осталась в закрытых
+ * полях (см. sourceObjectAddress); название чистится от тех же уточнений
+ * (stripAddressDetails). Ссылка на источник и партнёрская комиссия в публичные
+ * поля объекта не попадают: комиссия остаётся закрытым условием объекта
+ * (privateFieldsAccess), а ссылки у объекта каталога нет вовсе — она хранится
+ * только у кандидата и доступна администратору. После успеха кандидат
+ * получает статус 'published' и связывается с карточкой (publishedObject).
  */
 export async function publishSourceCandidate(
   payload: Payload,
   id: number | string,
   userId?: number | string | null,
+  agentId?: number | string | null,
 ): Promise<PublishResult> {
   let doc: Record<string, unknown> | null = null
   try {
@@ -729,9 +811,19 @@ export async function publishSourceCandidate(
     return { ok: false, error: 'В каталог переносится только одобренный объект — сначала одобрите кандидата' }
   }
 
+  const agent = await resolveResponsibleAgent(payload, userId, agentId)
+  if (!agent.ok) return { ok: false, error: agent.error }
+
   const item = queueItem(doc)
   const spec = objectSourceBySlug(item.source)
-  const title = item.title || `Объект из источника №${id}`
+  // Название от источника может содержать адрес целиком — убираем уточнения,
+  // иначе номер дома утёк бы через заголовок и публичный slug карточки
+  const parsedAddress = splitSourceAddress(item.address || '')
+  const title = stripAddressDetails(item.title || `Объект из источника №${id}`, {
+    house: parsedAddress.house,
+    corpus: parsedAddress.corpus,
+    apartment: parsedAddress.apartment,
+  })
   const photoIds = await importSourcePhotos(payload, item.photos, title)
 
   let objectId: number
@@ -749,6 +841,9 @@ export async function publishSourceCandidate(
         price: item.price ?? 0,
         area: item.area ?? undefined,
         rooms: item.rooms ?? undefined,
+        // Ответственный агент обязателен для нового объекта; проверку
+        // validateResponsibleAgent поле проходит, а не обходит
+        agent: agent.id,
         address: sourceObjectAddress(item),
         description: item.description ? descriptionLexical(item.description) : undefined,
         // Партнёрское вознаграждение — закрытое условие объекта, на сайте не показывается
