@@ -6,15 +6,16 @@
  * и очередь кандидатов (коллекция source-objects). Наружу значения доступов не
  * отдаются: только признак «заполнено» и хвост значения.
  *
- * В основе модуля НЕТ реального забора: у всех источников реестра fetch: null,
- * поэтому importFromObjectSource ничего не загружает и честно отвечает, что
- * канал не реализован. Сеть здесь не вызывается. Когда появится первый канал,
- * его функция забора пройдёт те же проверки: источник разрешён правилами,
- * включён и доступы заданы — иначе забор не запускается.
+ * Первый реальный забор подключён у источника «Заявки собственников»:
+ * importFromObjectSource читает открытые заявки из своей базы и кладёт их
+ * кандидатами в очередь. Любой канал, включая этот, проходит одни и те же
+ * проверки: источник разрешён правилами, включён и доступы заданы — иначе
+ * забор не запускается. У остальных источников fetch: null, поэтому они честно
+ * отвечают «канал не реализован».
  *
  * Выборочная публикация: кандидат из очереди становится объектом каталога
- * только после явного решения сотрудника (decideSourceObject). Перенос в
- * каталог — следующий шаг модуля, здесь он не выполняется.
+ * только после явного решения сотрудника (decideSourceObject). Забор лишь
+ * пополняет очередь со статусом «Ждёт решения»; в каталог объекты не идут.
  */
 import type { Payload } from 'payload'
 import { maskValue } from './platform-integrations'
@@ -27,8 +28,10 @@ import {
   type ObjectSourceKind,
   type ObjectSourcePolicy,
   type ObjectSourceSpec,
+  type SourceCandidate,
   type SourceCandidateStatus,
   type SourceCredentialField,
+  type SourceDataClient,
   type SourceImportResult,
 } from './object-sources'
 import type { ObjectOrigin } from './object-origins'
@@ -286,26 +289,94 @@ async function persistRun(
   }
 }
 
+const text = (v: unknown): string => (typeof v === 'string' ? v.trim() : '')
+
+/**
+ * Постановка кандидатов в очередь. Каждый кандидат кладётся в source-objects
+ * со статусом «Ждёт решения» (pending) — автоматической публикации нет.
+ * Повторного кандидата не будет: уже стоящие в очереди записи этого источника
+ * отсеиваются по externalId. Персональные данные кандидат не несёт — их
+ * источник в очередь не передаёт (см. fetchOwnerApplications).
+ */
+async function enqueueSourceCandidates(
+  payload: Payload,
+  slug: string,
+  candidates: SourceCandidate[],
+): Promise<{ added: number; skipped: number }> {
+  const existing = await payload.find({
+    collection: 'source-objects',
+    where: { source: { equals: slug } },
+    limit: 1000,
+    depth: 0,
+    pagination: false,
+    overrideAccess: true,
+  })
+  const known = new Set(
+    (existing.docs as unknown as Record<string, unknown>[])
+      .map((d) => text(d.externalId))
+      .filter(Boolean),
+  )
+
+  let added = 0
+  let skipped = 0
+  const importedAt = new Date().toISOString()
+  for (const c of candidates) {
+    const key = text(c.externalId)
+    if (key && known.has(key)) {
+      skipped += 1
+      continue
+    }
+    await payload.create({
+      collection: 'source-objects',
+      data: {
+        source: slug,
+        externalId: key || undefined,
+        title: c.title || undefined,
+        address: c.address || undefined,
+        price: c.price ?? undefined,
+        area: c.area ?? undefined,
+        rooms: c.rooms ?? undefined,
+        url: c.url || undefined,
+        photos: c.photos.map((url) => ({ url })),
+        raw: c.raw ?? undefined,
+        // Кандидат всегда ждёт решения сотрудника — публикации нет
+        status: 'pending',
+        importedAt,
+      },
+      overrideAccess: true,
+    })
+    if (key) known.add(key)
+    added += 1
+  }
+  return { added, skipped }
+}
+
 /**
  * Забор объектов с источника. Проверяет правовой статус, включённость и
- * доступы; пока канал не реализован (fetch: null — так у всех источников в
- * основе модуля), возвращает честный ответ «не реализовано» и ничего не
- * загружает. Возвращает null только для неизвестного источника.
+ * доступы; если канал не реализован (fetch: null — так у остальных
+ * источников), возвращает честный ответ «не реализовано». У подключённого
+ * канала полученные кандидаты кладутся в очередь со статусом «Ждёт решения»,
+ * без публикации. Возвращает null только для неизвестного источника.
  */
 export async function importFromObjectSource(payload: Payload, slug: string): Promise<SourceImportResult | null> {
   const spec = objectSourceBySlug(slug)
   if (!spec) return null
   const settings = await loadObjectSourceSettings(payload)
   const enabled = isObjectSourceEnabled(spec, settings)
-  const gate = canImportFromObjectSource(spec, sourceCredentialsFor(spec, settings), { enabled })
+  const creds = sourceCredentialsFor(spec, settings)
+  const gate = canImportFromObjectSource(spec, creds, { enabled })
   if (!gate.ok || !spec.fetch) {
     return { candidates: [], implemented: false, message: gate.reason || sourceImportNotImplemented(spec.name).message }
   }
 
-  // Реальный канал забора (появится, когда источник будет подключён)
-  const result = await spec.fetch(sourceCredentialsFor(spec, settings))
-  await persistRun(payload, slug, new Date().toISOString(), result.rawCount ?? result.candidates.length, result.candidates.length, result.message)
-  return result
+  // Реальный канал забора: источник читает свои данные, публикации не делает
+  const result = await spec.fetch({ creds, client: payload as unknown as SourceDataClient })
+  if (!result.implemented) return result
+
+  const { added, skipped } = await enqueueSourceCandidates(payload, slug, result.candidates)
+  const message = `${result.message}; добавлено в очередь ${added}${skipped ? `, уже стояло ${skipped}` : ''}`
+  await persistRun(payload, slug, new Date().toISOString(), result.rawCount ?? result.candidates.length, added, message)
+  return { ...result, message }
 }
 
 /** Короткая сводка по источникам — для интерфейса */

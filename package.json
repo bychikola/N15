@@ -11,6 +11,7 @@
     "check:call-routing": "node scripts/check-call-routing.mjs",
     "check:catalog-map": "node scripts/check-catalog-map.mjs",
     "check:object-privacy": "node scripts/check-object-privacy.mjs",
+    "check:object-sources": "node --experimental-strip-types scripts/check-object-sources.mjs",
     "check:watermark": "node scripts/check-watermark.mjs",
     "check:pii-guard": "node --experimental-strip-types scripts/check-pii-guard.mjs"
   },

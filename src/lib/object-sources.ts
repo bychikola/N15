@@ -15,8 +15,10 @@
  *     `needsAgreement` — приём возможен только по договору с источником;
  *     `forbidden` — канал в реестре есть, но включить его нельзя, и причина
  *     записана прямо (автосбор чужих объявлений запрещён правилами площадок);
- *   — никакой загрузки объектов в основе модуля: ни один канал пока не
- *     реализован (fetch: null), поэтому структура готова, а данных нет;
+ *   — забор ведёт канал самого источника (поле fetch). Первым подключён канал
+ *     «Заявки собственников»: он читает заявки из своей базы (owner-applications)
+ *     и кладёт их кандидатами в очередь — без публикации. У остальных каналов
+ *     fetch: null, то есть структура готова, а данных от них нет;
  *   — выборочная публикация: ни один объект из источника не попадает в
  *     каталог автоматически. Кандидат проходит очередь (коллекция
  *     source-objects) и публикуется только после явного решения сотрудника
@@ -75,6 +77,37 @@ export interface SourceCredentialField {
   hint: string
 }
 
+// --- Клиент данных источника ------------------------------------------------------------
+
+/**
+ * Минимум серверного клиента данных, который нужен источнику, читающему свою
+ * базу (как «Заявки собственников»). Описан структурно, без импорта Payload:
+ * реестр остаётся чистым файлом правил, а сервис передаёт сюда настоящий
+ * Payload (см. object-source-service.ts).
+ */
+export interface SourceDataClient {
+  find(args: {
+    collection: string
+    where?: Record<string, unknown>
+    sort?: string
+    limit?: number
+    depth?: number
+    pagination?: boolean
+    overrideAccess?: boolean
+  }): Promise<{ docs: Record<string, unknown>[] }>
+}
+
+/** Что получает канал забора: доступы источника и серверный клиент данных */
+export interface SourceFetchContext {
+  /** Заданные доступы источника (нужны сетевым каналам; внутренним — пусты) */
+  creds: Record<string, string>
+  /** Серверный клиент данных — для источников, читающих свою базу */
+  client: SourceDataClient
+}
+
+/** Канал забора объектов с источника */
+export type SourceFetch = (ctx: SourceFetchContext) => Promise<SourceImportResult>
+
 // --- Описание источника -----------------------------------------------------------------
 
 export interface ObjectSourceSpec {
@@ -99,8 +132,8 @@ export interface ObjectSourceSpec {
   /** Собственные объекты/заявки, которые уже работают: включены по умолчанию */
   enabledByDefault: boolean
   credentials: SourceCredentialField[]
-  /** Забор объектов с источника; null — канал ещё не реализован (основа модуля) */
-  fetch: ((creds: Record<string, string>) => Promise<SourceImportResult>) | null
+  /** Забор объектов с источника; null — канал ещё не реализован */
+  fetch: SourceFetch | null
 }
 
 // --- Кандидаты и результат забора --------------------------------------------------------
@@ -127,7 +160,7 @@ export interface SourceCandidate {
 export interface SourceImportResult {
   /** Кандидаты, как их отдал источник (могут быть отброшены при разборе) */
   candidates: SourceCandidate[]
-  /** Канал забора реализован; в основе модуля у всех источников false */
+  /** Канал забора реализован (у подключённых источников — true) */
   implemented: boolean
   /** Что произошло — своими словами, без выдуманных результатов */
   message: string
@@ -168,6 +201,110 @@ export const SOURCE_CANDIDATE_STATUS_LABELS: Record<SourceCandidateStatus, strin
   published: 'Опубликован',
 }
 
+// --- Канал «Заявки собственников» --------------------------------------------------------
+
+/**
+ * Первый реальный источник: заявки, которые собственники сами оставляют на
+ * сайте (форма «Предложить объект», коллекция owner-applications). Основание —
+ * согласие собственника (152-ФЗ), данное при отправке формы, поэтому источник
+ * разрешён. Забор ничего не публикует: канал читает заявки из своей базы и
+ * отдаёт их кандидатами, а очередь кладёт их со статусом «Ждёт решения»
+ * (см. enqueueSourceCandidates в object-source-service.ts).
+ *
+ * Правила отбора: берём открытые заявки (не отклонённые и не дубли), по
+ * которым ещё нет объекта каталога. Персональные данные собственника (имя,
+ * телефон) в очередь не переносим — кандидату хватает характеристик объекта и
+ * ссылки на заявку; заявка как была, так и остаётся в закрытой коллекции.
+ *
+ * В fetch идёт только минимум полей — заголовок, адрес, цена, площадь, комнаты
+ * и служебный разбор. Название и адрес собираются по тем же правилам, что
+ * черновик объекта из заявки (см. ownerObjectTitle в owner-applications.ts).
+ */
+const OWNER_EXCLUDED_STATUSES = ['rejected', 'duplicate']
+
+const OWNER_CATEGORY_LABELS: Record<string, string> = {
+  apartment: 'Квартира',
+  room: 'Комната',
+  house: 'Дом',
+  part_house: 'Часть дома',
+  townhouse: 'Таунхаус',
+  cottage: 'Коттедж',
+  dacha: 'Дача',
+  land: 'Земельный участок',
+  commercial: 'Коммерческий объект',
+  garage: 'Гараж',
+}
+
+const ownerText = (v: unknown): string => (typeof v === 'string' ? v.trim() : '')
+const ownerNum = (v: unknown): number | null =>
+  typeof v === 'number' && Number.isFinite(v) ? v : null
+
+/** Адрес заявки одной строкой — как его записал собственник */
+function ownerAddressLine(address: Record<string, unknown> | null | undefined): string | null {
+  const a = address || {}
+  const line = [a.city, a.district, a.locality, a.snt, a.street, a.house]
+    .map(ownerText)
+    .filter(Boolean)
+    .join(', ')
+  return line || null
+}
+
+/** Заявка → кандидат очереди: характеристики объекта, без ПД собственника */
+function ownerCandidate(doc: Record<string, unknown>): SourceCandidate {
+  const address = (doc.address && typeof doc.address === 'object' ? doc.address : {}) as Record<string, unknown>
+  const category = ownerText(doc.category)
+  const place = ownerText(address.locality) || ownerText(address.street) || ownerText(address.city)
+  const title = [OWNER_CATEGORY_LABELS[category] || 'Объект', place].filter(Boolean).join(', ')
+  const id = doc.id as number | string
+  return {
+    // Номер заявки — ключ дедупликации: повторный забор не задвоит кандидата
+    externalId: `owner:${id}`,
+    title,
+    address: ownerAddressLine(address),
+    price: ownerNum(doc.price),
+    area: ownerNum(doc.area),
+    rooms: ownerNum(doc.rooms),
+    url: null,
+    // Фото заявки лежат в закрытом хранилище (owner-materials) и прямых
+    // публичных ссылок не имеют — кандидату их не отдаём вовсе
+    photos: [],
+    // Разбор без ПД: связь с заявкой и характеристики, имя и телефон — нет
+    raw: {
+      applicationId: id,
+      status: ownerText(doc.status) || null,
+      type: ownerText(doc.type) || null,
+      category: category || null,
+      cadastralNumber: ownerText(doc.cadastralNumber) || null,
+      receivedAt: ownerText(doc.receivedAt) || null,
+      source: ownerText(doc.source) || null,
+    },
+  }
+}
+
+const fetchOwnerApplications: SourceFetch = async ({ client }) => {
+  const { docs } = await client.find({
+    collection: 'owner-applications',
+    where: {
+      and: [
+        { status: { not_in: OWNER_EXCLUDED_STATUSES } },
+        // Заявка, из которой объект уже заведён, в очередь не возвращается
+        { object: { exists: false } },
+      ],
+    },
+    sort: '-receivedAt',
+    limit: 200,
+    depth: 0,
+    overrideAccess: true,
+  })
+  const candidates = docs.map(ownerCandidate)
+  return {
+    candidates,
+    implemented: true,
+    rawCount: docs.length,
+    message: `Заявки собственников: получено ${candidates.length} заявок в работу — все попадут в статус «Ждёт решения»`,
+  }
+}
+
 // --- Реестр источников ------------------------------------------------------------------
 
 const MANUAL: ObjectSourceSpec = {
@@ -195,13 +332,14 @@ const OWNER: ObjectSourceSpec = {
   kind: 'cabinet',
   policy: 'allowed',
   reason: 'Собственник сам оставляет заявку на сайте и даёт согласие на обработку данных (152-ФЗ)',
-  gives: 'Заявка с параметрами объекта и контактами собственника',
-  limits: 'До проверки администратором в каталог не попадает — так устроено уже сейчас',
-  needs: 'Форма «Предложить объект» на сайте (уже работает)',
+  gives: 'Заявка с параметрами объекта; ПД собственника остаются в закрытой коллекции',
+  limits: 'До проверки администратором в каталог не попадает: канал только кладёт кандидата в очередь',
+  needs: 'Форма «Предложить объект» на сайте (уже работает) — доступы не нужны',
   docsUrl: null,
   enabledByDefault: true,
   credentials: [],
-  fetch: null,
+  // Первый реальный канал: читает заявки из своей базы, публикации нет
+  fetch: fetchOwnerApplications,
 }
 
 const PARTNER: ObjectSourceSpec = {
@@ -289,8 +427,8 @@ const forbidden = (slug: string, name: string): ObjectSourceSpec => ({
 /**
  * Реестр источников объектов. Сначала разрешённые (собственные данные и
  * заявки), затем подключаемые по договору, затем запрещённые каналы.
- * `fetch: null` у всех: в основе модуля забор не реализован — структура
- * готова, реальные объекты не загружаются.
+ * Канал забора реализован только у «Заявок собственников» (fetch не null);
+ * у остальных fetch: null — структура готова, но объектов они не отдают.
  */
 export const OBJECT_SOURCE_SPECS: ObjectSourceSpec[] = [
   MANUAL,
