@@ -6,6 +6,7 @@ import type { Dict } from '@/i18n/dictionaries'
 import type { ObjectSourceState, SourceQueueItem } from '@/lib/object-source-service'
 import type { SourceCandidateStatus } from '@/lib/object-sources'
 import { OBJECT_SOURCE_POLICY_LABELS } from '@/lib/object-sources'
+import { categoryLabel } from '@/lib/object-categories'
 
 /**
  * Раздел CRM «Источники объектов» (только администратор) — очередь объектов
@@ -294,6 +295,22 @@ export const SourceQueueBoard: FC<Props> = ({ t, sources, queue, agents, default
                 {row.region && (
                   <div>
                     <strong>{t.crm.srcRegion}:</strong> {row.region}
+                  </div>
+                )}
+                {(row.objectType || row.dealType) && (
+                  <div>
+                    {row.objectType && (
+                      <>
+                        <strong>{t.crm.srcObjectType}:</strong> {categoryLabel(row.objectType)}
+                      </>
+                    )}
+                    {row.objectType && row.dealType ? ' · ' : ''}
+                    {row.dealType && (
+                      <>
+                        <strong>{t.crm.srcDealType}:</strong>{' '}
+                        {row.dealType === 'rent' ? t.crm.srcDealRent : t.crm.srcDealSale}
+                      </>
+                    )}
                   </div>
                 )}
                 <div>

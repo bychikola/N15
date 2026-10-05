@@ -18,9 +18,11 @@
  *   — забор ведёт канал самого источника (поле fetch). Подключены два канала:
  *     «Заявки собственников» читает заявки из своей базы (owner-applications),
  *     «Партнёрские агентства» — согласованный JSON-фид по договору. Оба кладут
- *     объекты только кандидатами в очередь — без публикации. У остальных каналов
- *     (застройщики, NMarket) fetch: null, то есть структура готова, но данных от
- *     них нет: API и XML площадок в этом этапе не подключаются;
+ *     объекты только кандидатами в очередь — без публикации. Первое подключение
+ *     внешнего источника ограничено потолком (importLimit, не больше 5 объектов
+ *     за забор): очередь наполняется порциями, массовой загрузки нет. У остальных
+ *     каналов (застройщики, NMarket) fetch: null, то есть структура готова, но
+ *     данных от них нет: API и XML площадок в этом этапе не подключаются;
  *   — выборочная публикация: ни один объект из источника не попадает в
  *     каталог автоматически. Кандидат проходит очередь (коллекция
  *     source-objects) и публикуется только после явного решения сотрудника
@@ -133,6 +135,12 @@ export interface ObjectSourceSpec {
   docsUrl: string | null
   /** Собственные объекты/заявки, которые уже работают: включены по умолчанию */
   enabledByDefault: boolean
+  /**
+   * Потолок одного забора. Первое подключение внешнего источника не должно
+   * массово заваливать очередь: не больше этого числа объектов за прогон.
+   * Не задан — ограничение только защитное (FEED_MAX_ITEMS у фида).
+   */
+  importLimit?: number
   credentials: SourceCredentialField[]
   /** Забор объектов с источника; null — канал ещё не реализован */
   fetch: SourceFetch | null
@@ -152,6 +160,10 @@ export interface SourceCandidate {
   /** Регион/район, как его назвал источник */
   region: string | null
   address: string | null
+  /** Тип объекта — код справочника OBJECT_CATEGORIES (квартира, дом, участок…) */
+  objectType: string | null
+  /** Вид сделки: sale или rent, если источник его отдаёт */
+  dealType: string | null
   price: number | null
   area: number | null
   rooms: number | null
@@ -185,6 +197,76 @@ export const sourceImportNotImplemented = (name: string): SourceImportResult => 
   implemented: false,
   message: `${name}: забор объектов ещё не реализован — канал не подключён, объекты не загружаются`,
 })
+
+// --- Тип объекта и вид сделки ------------------------------------------------------------
+
+/**
+ * Синонимы типа объекта у источников → код справочника OBJECT_CATEGORIES.
+ * Партнёры и заявки называют тип по-разному («Квартира», «кв.», apartment),
+ * а в карточку каталога должен уйти код категории. Неизвестное значение не
+ * выдумываем: кандидат остаётся без типа, сотрудник уточнит его при проверке.
+ */
+const OBJECT_TYPE_ALIASES: Record<string, string> = {
+  apartment: 'apartment',
+  flat: 'apartment',
+  квартира: 'apartment',
+  кв: 'apartment',
+  комната: 'room',
+  room: 'room',
+  дом: 'house',
+  house: 'house',
+  домовладение: 'house',
+  таунхаус: 'townhouse',
+  townhouse: 'townhouse',
+  коттедж: 'cottage',
+  cottage: 'cottage',
+  дача: 'dacha',
+  dacha: 'dacha',
+  участок: 'land',
+  земельныйучасток: 'land',
+  земля: 'land',
+  зу: 'land',
+  land: 'land',
+  коммерческая: 'commercial',
+  коммерция: 'commercial',
+  commercial: 'commercial',
+  гараж: 'garage',
+  garage: 'garage',
+  частьдома: 'part_house',
+  parthouse: 'part_house',
+}
+
+/** Вид сделки у источников → код поля type коллекции objects */
+const DEAL_TYPE_ALIASES: Record<string, string> = {
+  sale: 'sale',
+  продажа: 'sale',
+  продам: 'sale',
+  rent: 'rent',
+  аренда: 'rent',
+  сдам: 'rent',
+  снять: 'rent',
+}
+
+/** Нормализация подписи источника: регистр, пробелы и знаки, ё → е */
+const aliasKey = (v: unknown): string =>
+  typeof v === 'string' ? v.trim().toLowerCase().replace(/ё/g, 'е').replace(/[\s._-]+/g, '') : ''
+
+/**
+ * Тип объекта источника → код категории каталога (или null, если не распознан).
+ * Таблица синонимов самодостаточна — включает и сами коды справочника
+ * (apartment, house, part_house…), поэтому файл правил остаётся без рантайм-
+ * импортов и работает в быстрых проверках node.
+ */
+export function sourceObjectType(v: unknown): string | null {
+  const key = aliasKey(v)
+  return key ? OBJECT_TYPE_ALIASES[key] || null : null
+}
+
+/** Вид сделки источника → sale/rent (или null, если источник его не назвал) */
+export function sourceDealType(v: unknown): string | null {
+  const key = aliasKey(v)
+  return key ? DEAL_TYPE_ALIASES[key] || null : null
+}
 
 // --- Выборочная публикация --------------------------------------------------------------
 
@@ -273,6 +355,9 @@ function ownerCandidate(doc: Record<string, unknown>): SourceCandidate {
     title,
     region: ownerText(address.district) || ownerText(address.city) || null,
     address: ownerAddressLine(address),
+    // Тип объекта и вид сделки заявки — кодами справочника каталога
+    objectType: sourceObjectType(category),
+    dealType: sourceDealType(ownerText(doc.type)),
     price: ownerNum(doc.price),
     area: ownerNum(doc.area),
     rooms: ownerNum(doc.rooms),
@@ -337,6 +422,8 @@ const fetchOwnerApplications: SourceFetch = async ({ client }) => {
  *   title | name                    — название;
  *   region                          — регион/район;
  *   address                         — адрес (строкой или объектом);
+ *   category | objectType | … | type — тип объекта (код справочника категорий);
+ *   dealType | deal | operation     — вид сделки (sale/rent);
  *   price | cost                    — стоимость;
  *   area | square                   — площадь, м²;
  *   rooms | roomCount               — комнат;
@@ -453,6 +540,9 @@ function partnerCandidate(item: Record<string, unknown>): SourceCandidate {
     title: feedText(feedPick(item, ['title', 'name'])),
     region: feedText(feedPick(item, ['region', 'district', 'areaName'])),
     address: feedAddressLine(feedPick(item, ['address', 'location'])),
+    // Тип объекта и вид сделки — кодами справочника каталога (синонимы фида)
+    objectType: sourceObjectType(feedPick(item, ['category', 'objectType', 'propertyType', 'kind', 'type'])),
+    dealType: sourceDealType(feedPick(item, ['dealType', 'deal', 'operation'])),
     price: feedNum(feedPick(item, ['price', 'cost'])),
     area: feedNum(feedPick(item, ['area', 'square'])),
     rooms: feedNum(feedPick(item, ['rooms', 'roomCount'])),
@@ -578,6 +668,9 @@ const PARTNER: ObjectSourceSpec = {
   needs: 'Договор с партнёром и адрес его JSON-фида; доступ выдаёт администратор',
   docsUrl: null,
   enabledByDefault: false,
+  // Первое подключение — не больше 5 объектов за забор: очередь наполняется
+  // порциями, массовой загрузки нет (см. importFromObjectSource)
+  importLimit: 5,
   credentials: [
     { key: 'feedUrl', label: 'Адрес выгрузки', env: 'PARTNER_FEED_URL', secret: false, required: true, hint: 'Ссылка на JSON-фид партнёра (http/https), выданная по договору' },
     { key: 'token', label: 'Токен доступа', env: 'PARTNER_FEED_TOKEN', secret: true, required: false, hint: 'Если фид закрыт — токен из договора (уйдёт заголовком Authorization: Bearer)' },

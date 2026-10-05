@@ -10,7 +10,9 @@
  * своей базы) и «Партнёрские агентства» (читает согласованный JSON-фид по
  * договору, см. fetchPartnerFeed в object-sources.ts). importFromObjectSource
  * проводит любой канал через одни и те же проверки: источник разрешён
- * правилами, включён и доступы заданы — иначе забор не запускается.
+ * правилами, включён и доступы заданы — иначе забор не запускается. Первое
+ * подключение внешнего источника ограничено потолком importLimit (у партнёра —
+ * 5 объектов за забор): очередь наполняется порциями, массовой загрузки нет.
  * У остальных источников fetch: null, поэтому они честно отвечают «канал не
  * реализован»: API, XML и NMarket в этом этапе не подключаются.
  *
@@ -24,6 +26,7 @@
 import type { Payload } from 'payload'
 import { maskValue } from './platform-integrations'
 import { DISTRICT_OPTIONS } from './districts'
+import { OBJECT_CATEGORY_VALUES } from './object-categories'
 import { splitSourceAddress, stripAddressDetails } from './object-source-address'
 import {
   canImportFromObjectSource,
@@ -305,6 +308,8 @@ function candidateFields(c: SourceCandidate, importedAt: string): Record<string,
     title: c.title || undefined,
     region: c.region || undefined,
     address: c.address || undefined,
+    objectType: c.objectType || undefined,
+    dealType: c.dealType || undefined,
     price: c.price ?? undefined,
     area: c.area ?? undefined,
     rooms: c.rooms ?? undefined,
@@ -422,12 +427,22 @@ export async function importFromObjectSource(payload: Payload, slug: string): Pr
   const result = await spec.fetch({ creds, client: payload as unknown as SourceDataClient })
   if (!result.implemented) return result
 
-  const { added, updated, skipped } = await enqueueSourceCandidates(payload, slug, result.candidates)
+  // Потолок первого подключения: источник не должен массово заваливать очередь.
+  // В очередь идёт не больше importLimit объектов за забор; сотрудник решает по
+  // каждому, и только после решений можно поднимать потолок.
+  const limit = spec.importLimit && spec.importLimit > 0 ? spec.importLimit : 0
+  const candidates = limit && result.candidates.length > limit ? result.candidates.slice(0, limit) : result.candidates
+  const capped = candidates.length < result.candidates.length
+
+  const { added, updated, skipped } = await enqueueSourceCandidates(payload, slug, candidates)
   const parts: string[] = []
   if (added) parts.push(`добавлено в очередь ${added}`)
   if (updated) parts.push(`обновлено ${updated}`)
   if (skipped) parts.push(`без изменений ${skipped}`)
-  const message = result.candidates.length ? `${result.message}; ${parts.join(', ') || 'изменений нет'}` : result.message
+  const limitNote = capped ? ` (первое подключение: не больше ${limit} объектов за забор)` : ''
+  const message = candidates.length
+    ? `${result.message}${limitNote}; ${parts.join(', ') || 'изменений нет'}`
+    : result.message
   await persistRun(
     payload,
     slug,
@@ -472,6 +487,10 @@ export interface SourceQueueItem {
   title: string | null
   region: string | null
   address: string | null
+  /** Тип объекта — код категории каталога (apartment, house, land…), если распознан */
+  objectType: string | null
+  /** Вид сделки: sale/rent, если источник его отдал */
+  dealType: string | null
   price: number | null
   area: number | null
   rooms: number | null
@@ -511,6 +530,8 @@ function queueItem(doc: Record<string, unknown>): SourceQueueItem {
     title: typeof doc.title === 'string' ? doc.title : null,
     region: typeof doc.region === 'string' ? doc.region : null,
     address: typeof doc.address === 'string' ? doc.address : null,
+    objectType: typeof doc.objectType === 'string' ? doc.objectType : null,
+    dealType: typeof doc.dealType === 'string' ? doc.dealType : null,
     price: typeof doc.price === 'number' ? doc.price : null,
     area: typeof doc.area === 'number' ? doc.area : null,
     rooms: typeof doc.rooms === 'number' ? doc.rooms : null,
@@ -832,10 +853,11 @@ export async function publishSourceCandidate(
       collection: 'objects',
       data: {
         title,
-        // Вид сделки и категорию источник не передаёт: черновик заводится
+        // Вид сделки и тип объекта переносятся, если источник их отдал (см.
+        // sourceObjectType/sourceDealType); не распознаны — черновик заводится
         // квартирой-продажей, сотрудник уточняет их при проверке карточки
-        type: 'sale',
-        category: 'apartment',
+        type: item.dealType === 'rent' ? 'rent' : 'sale',
+        category: item.objectType && OBJECT_CATEGORY_VALUES.includes(item.objectType) ? item.objectType : 'apartment',
         status: 'draft',
         origin: spec?.origin || 'other',
         price: item.price ?? 0,

@@ -2,6 +2,9 @@ import type { CollectionConfig, FieldAccess } from 'payload'
 // Разрешённые источники — общий закрытый реестр (см. src/lib/object-sources.ts):
 // варианты поля совпадают с реестром, запрещённые каналы сюда не попадают
 import { allowedObjectSources } from '@/lib/object-sources'
+// Тип объекта — общий справочник категорий каталога: в очередь кладётся тот же
+// код, что и в карточку объекта при переносе (см. src/lib/object-categories.ts)
+import { OBJECT_CATEGORIES } from '@/lib/object-categories'
 
 /**
  * Доступ к закрытым полям кандидата — ссылке на источник, партнёрской
@@ -56,6 +59,9 @@ export const SourceObjects: CollectionConfig = {
       label: 'Источник',
       required: true,
       options: allowedObjectSources().map((s) => ({ label: s.name, value: s.slug })),
+      // Канал, из которого пришёл объект, — служебные данные источника: видит
+      // только администратор (клиенту сайта коллекция и так недоступна)
+      access: { read: sourcePrivateAccess },
       admin: {
         description: 'Канал, из которого пришёл кандидат (только разрешённые источники)',
       },
@@ -84,6 +90,25 @@ export const SourceObjects: CollectionConfig = {
       type: 'text',
       label: 'Адрес из источника',
       admin: { description: 'Адрес, как его отдал источник, — до проверки сотрудником' },
+    },
+    {
+      name: 'objectType',
+      type: 'select',
+      label: 'Тип объекта',
+      options: OBJECT_CATEGORIES.map((c) => ({ label: c.label, value: c.value })),
+      admin: {
+        description: 'Тип объекта от источника (как в каталоге). Не распознан — сотрудник уточнит при проверке',
+      },
+    },
+    {
+      name: 'dealType',
+      type: 'select',
+      label: 'Вид сделки',
+      options: [
+        { label: 'Продажа', value: 'sale' },
+        { label: 'Аренда', value: 'rent' },
+      ],
+      admin: { description: 'Вид сделки от источника; пусто — уточняется при проверке' },
     },
     { name: 'price', type: 'number', label: 'Цена, ₽' },
     { name: 'area', type: 'number', label: 'Площадь, м²' },
