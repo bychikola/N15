@@ -21,6 +21,11 @@ import { categoryLabel } from '@/lib/object-categories'
  * src/lib/object-source-service.ts). Повторный забор того же объекта обновляет
  * кандидата, а не создаёт второго, — в ответе забора видно, сколько добавлено
  * и сколько обновлено.
+ *
+ * Каналы независимы: сбой одного источника не влияет на другие и на сайт.
+ * Источник, который перестал отвечать или сменил формат ответа, останавливается
+ * автоматически — вверху видно предупреждение с причиной и кнопка
+ * «Возобновить забор». Уже полученные объекты при остановке сохраняются.
  */
 
 interface Props {
@@ -149,6 +154,13 @@ export const SourceQueueBoard: FC<Props> = ({ t, sources, queue, agents, default
     if (data) setNotice(data.import?.message || t.crm.srcImportFailed)
   }
 
+  // Возобновление источника после автоостановки: сбрасывает серию сбоев,
+  // данные (очередь и каталог) не трогает
+  const resume = async (slug: string) => {
+    const data = await act(`resume:${slug}`, { action: 'resume', slug })
+    if (data) setNotice(t.crm.srcResumed)
+  }
+
   const decide = async (id: number | string, decision: 'approved' | 'rejected') => {
     await act(`decide:${id}`, { action: 'decide', candidateId: id, decision })
   }
@@ -185,11 +197,35 @@ export const SourceQueueBoard: FC<Props> = ({ t, sources, queue, agents, default
   const rows = queue.filter((q) => filter === 'all' || q.status === filter)
   // Каналы забора: ручной ввод карточку заводит человек, в очереди он не участвует
   const channels = sources.filter((s) => s.allowed && s.kind !== 'manual')
+  // Источники, забор которых остановлен автоматически после сбоев — их
+  // предупреждение показываем отдельным блоком, чтобы администратор не пропустил
+  const pausedChannels = channels.filter((s) => s.autoPaused)
 
   return (
     <div>
       {error && <p style={{ margin: '0 0 12px', color: '#9b4e43', fontSize: 12 }}>{error}</p>}
       {notice && <p style={{ margin: '0 0 12px', color: '#3f6b34', fontSize: 12 }}>{notice}</p>}
+
+      {/* Предупреждение об автоостановке: сбойный источник не забирает данные,
+          уже полученные объекты сохранены — их никто не удалял */}
+      {pausedChannels.length > 0 && (
+        <div style={{ ...cardStyle, borderColor: '#e3b7ad', background: '#fbf0ed' }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: '#9b4e43', marginBottom: 6 }}>
+            {t.crm.srcPausedBanner}
+          </div>
+          <p style={{ margin: '0 0 8px', fontSize: 11, color: '#716b62', lineHeight: 1.55 }}>
+            {t.crm.srcPausedBannerText}
+          </p>
+          <ul style={{ margin: 0, paddingLeft: 18, fontSize: 11, color: '#454340', lineHeight: 1.6 }}>
+            {pausedChannels.map((s) => (
+              <li key={s.slug}>
+                <strong>{s.name}</strong>
+                {s.autoPauseReason ? `: ${s.autoPauseReason}` : ` — ${t.crm.srcAutoPaused}`}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* Каналы забора: что подключено, что реализовано и что мешает забору */}
       <div style={{ ...cardStyle, background: '#fdfbf7' }}>
@@ -214,6 +250,10 @@ export const SourceQueueBoard: FC<Props> = ({ t, sources, queue, agents, default
                   {s.configured ? t.crm.srcConfigured : t.crm.srcNotConfigured}
                 </span>
               )}
+              {s.autoPaused && <span style={chipStyle('bad')}>{t.crm.srcAutoPaused}</span>}
+              {!s.autoPaused && s.failCount > 0 && (
+                <span style={chipStyle('warn')}>{t.crm.srcFailures.replace('%d', String(s.failCount))}</span>
+              )}
               <button
                 type="button"
                 onClick={() => void runImport(s.slug)}
@@ -223,6 +263,19 @@ export const SourceQueueBoard: FC<Props> = ({ t, sources, queue, agents, default
               >
                 {importing ? t.crm.srcImporting : t.crm.srcImport}
               </button>
+              {s.autoPaused && (
+                <button
+                  type="button"
+                  onClick={() => void resume(s.slug)}
+                  disabled={Boolean(busy)}
+                  style={{ ...btnGold, opacity: busy ? 0.6 : 1 }}
+                >
+                  {busy === `resume:${s.slug}` ? t.crm.srcResuming : t.crm.srcResume}
+                </button>
+              )}
+              {s.autoPaused && s.autoPauseReason && (
+                <div style={{ flexBasis: '100%', fontSize: 11, color: '#9b4e43', lineHeight: 1.5 }}>{s.autoPauseReason}</div>
+              )}
             </div>
           )
         })}

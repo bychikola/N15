@@ -24,6 +24,17 @@
  * (decideSourceObject), а переносит его отдельное действие
  * (publishSourceCandidate) — объект заводится черновиком. Автоматической
  * публикации нет.
+ *
+ * Независимость источников: забор каждого канала идёт отдельно, и сбой одного
+ * источника не задевает ни другие каналы, ни сайт. Исключение внутри канала
+ * превращается в честный сбой (см. importFromObjectSource), а состояние
+ * источника (сбои подряд, автоостановка) хранится отдельно по каждому slug
+ * (health в настройках). Источник, который перестал отвечать или изменил
+ * формат ответа, останавливается автоматически (nextSourceHealth): новые
+ * данные не забираются, уже полученные кандидаты и объекты каталога остаются
+ * на месте, а администратор видит предупреждение и может возобновить забор
+ * (resumeObjectSource). Забор умеет только добавлять и обновлять кандидатов —
+ * удалять данные из очереди или каталога он не умеет вовсе.
  */
 import type { Payload } from 'payload'
 import { maskValue } from './platform-integrations'
@@ -32,6 +43,10 @@ import { OBJECT_CATEGORY_VALUES } from './object-categories'
 import { splitSourceAddress, stripAddressDetails } from './object-source-address'
 import {
   canImportFromObjectSource,
+  emptySourceHealth,
+  isSourceFailureKind,
+  isSourceImportOutcome,
+  nextSourceHealth,
   OBJECT_SOURCE_SPECS,
   objectSourceBySlug,
   objectSourceName,
@@ -44,6 +59,9 @@ import {
   type SourceCandidateStatus,
   type SourceCredentialField,
   type SourceDataClient,
+  type SourceFailureKind,
+  type SourceHealth,
+  type SourceImportOutcome,
   type SourceImportResult,
 } from './object-sources'
 import type { ObjectOrigin } from './object-origins'
@@ -67,9 +85,16 @@ export async function loadObjectSourceSettings(payload: Payload): Promise<Object
   }
 }
 
+/**
+ * Ключ группы настроек источника в глобале. Обычно совпадает со slug, но у
+ * «ГИС Торги» slug с дефисом — в имя поля Payload он не годится, поэтому у
+ * источника задан settingsKey (см. ObjectSourceSpec).
+ */
+const sourceSettingsKey = (spec: ObjectSourceSpec): string => spec.settingsKey || spec.slug
+
 /** Группа источника в глобале (enabled + сохранённые доступы) */
 function sourceGroup(spec: ObjectSourceSpec, settings: ObjectSourceSettingsData): Record<string, unknown> {
-  const group = settings[spec.slug]
+  const group = settings[sourceSettingsKey(spec)]
   return group && typeof group === 'object' ? (group as Record<string, unknown>) : {}
 }
 
@@ -142,6 +167,22 @@ export interface ObjectSourceState {
   canImport: boolean
   /** Что мешает забору — готовая формулировка (пусто, если не мешает) */
   importReason: string
+  /** Источник остановлен автоматически после сбоев (см. nextSourceHealth) */
+  autoPaused: boolean
+  /** Почему забор остановлен — готовая формулировка для администратора */
+  autoPauseReason: string
+  /** Когда забор остановлен */
+  autoPausedAt: string | null
+  /** Сбоев забора подряд; успешный забор сбрасывает счётчик */
+  failCount: number
+  /** Последний сбой: когда, какой и что именно произошло */
+  lastFailureAt: string | null
+  lastFailureKind: SourceFailureKind | null
+  lastError: string
+  /** Последний забор: когда, с каким итогом и что сообщил */
+  lastRunAt: string | null
+  lastOutcome: SourceImportOutcome | null
+  lastMessage: string
   /** Поля доступа: заполнены ли и откуда взяты (значения не отдаём) */
   credentials: SourceCredentialState[]
 }
@@ -152,6 +193,7 @@ export function objectSourceState(spec: ObjectSourceSpec, settings: ObjectSource
   const values = sourceCredentialsFor(spec, settings)
   const enabled = isObjectSourceEnabled(spec, settings)
   const configured = sourceCredentialsComplete(spec, values)
+  const health = sourceHealthFor(spec, settings)
   const credentials: SourceCredentialState[] = spec.credentials.map((field: SourceCredentialField) => {
     const fromCrm = (typeof group[field.key] === 'string' ? (group[field.key] as string) : '').trim()
     const fromEnv = String(process.env[field.env] || '').trim()
@@ -166,7 +208,11 @@ export function objectSourceState(spec: ObjectSourceSpec, settings: ObjectSource
       preview: value ? maskValue(value, field.secret) : '',
     }
   })
-  const gate = canImportFromObjectSource(spec, values, { enabled })
+  const gate = canImportFromObjectSource(spec, values, {
+    enabled,
+    paused: health.autoPaused,
+    pauseReason: health.autoPauseReason || undefined,
+  })
   return {
     slug: spec.slug,
     name: spec.name,
@@ -185,6 +231,16 @@ export function objectSourceState(spec: ObjectSourceSpec, settings: ObjectSource
     channelReady: !!spec.fetch,
     canImport: gate.ok,
     importReason: gate.reason || '',
+    autoPaused: health.autoPaused,
+    autoPauseReason: health.autoPauseReason || '',
+    autoPausedAt: health.autoPausedAt,
+    failCount: health.failCount,
+    lastFailureAt: health.lastFailureAt,
+    lastFailureKind: health.lastFailureKind,
+    lastError: health.lastError || '',
+    lastRunAt: health.lastRunAt,
+    lastOutcome: health.lastOutcome,
+    lastMessage: health.lastMessage || '',
     credentials,
   }
 }
@@ -225,7 +281,7 @@ export async function saveObjectSourceCredentials(
   }
   await payload.updateGlobal({
     slug: 'object-source-settings',
-    data: { [spec.slug]: group },
+    data: { [sourceSettingsKey(spec)]: group },
     depth: 0,
     overrideAccess: true,
   })
@@ -240,7 +296,7 @@ export async function clearObjectSourceCredentials(payload: Payload, slug: strin
   for (const field of spec.credentials) group[field.key] = ''
   await payload.updateGlobal({
     slug: 'object-source-settings',
-    data: { [spec.slug]: group },
+    data: { [sourceSettingsKey(spec)]: group },
     depth: 0,
     overrideAccess: true,
   })
@@ -263,7 +319,7 @@ export async function setObjectSourceEnabled(
   group.enabled = enabled
   await payload.updateGlobal({
     slug: 'object-source-settings',
-    data: { [spec.slug]: group },
+    data: { [sourceSettingsKey(spec)]: group },
     depth: 0,
     overrideAccess: true,
   })
@@ -302,6 +358,105 @@ async function persistRun(
 }
 
 const text = (v: unknown): string => (typeof v === 'string' ? v.trim() : '')
+
+// --- Состояние здоровья источников (сбои и автоостановка) ---------------------------------
+
+/**
+ * Записи состояния источников из глобала. Поле health — массив с текстовым
+ * ключом source (не select: значения не привязаны к enum в базе, поэтому новый
+ * источник не требует менять тип БД). Одна запись на источник.
+ */
+const healthRows = (settings: ObjectSourceSettingsData): Record<string, unknown>[] =>
+  Array.isArray(settings.health)
+    ? (settings.health as unknown[]).filter((r): r is Record<string, unknown> => !!r && typeof r === 'object')
+    : []
+
+const positiveInt = (v: unknown): number =>
+  typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.floor(v) : 0
+
+/** Состояние одного источника из настроек; пустое — если запись ещё не заведена */
+export function sourceHealthFor(spec: ObjectSourceSpec, settings: ObjectSourceSettingsData): SourceHealth {
+  const row = healthRows(settings).find((r) => text(r.source) === spec.slug)
+  return row ? sourceHealthFromRow(spec.slug, row) : emptySourceHealth(spec.slug)
+}
+
+/** Состояние источника → строка для хранения в глобале (пустые — null) */
+function healthRow(health: SourceHealth): Record<string, unknown> {
+  return {
+    source: health.slug,
+    failCount: health.failCount,
+    lastFailureAt: health.lastFailureAt,
+    lastFailureKind: health.lastFailureKind,
+    lastError: health.lastError,
+    autoPaused: health.autoPaused,
+    autoPausedAt: health.autoPausedAt,
+    autoPauseReason: health.autoPauseReason,
+    lastRunAt: health.lastRunAt,
+    lastOutcome: health.lastOutcome,
+    lastMessage: health.lastMessage,
+  }
+}
+
+/**
+ * Сохранить состояние одного источника, не трогая записи других. Ошибка записи
+ * не роняет забор: результат важнее, поэтому её только логируем.
+ */
+async function persistSourceHealth(payload: Payload, slug: string, health: SourceHealth): Promise<void> {
+  try {
+    const settings = await loadObjectSourceSettings(payload)
+    const others = healthRows(settings)
+      .filter((r) => text(r.source) !== slug)
+      .map((r) => healthRow(sourceHealthFromRow(text(r.source), r)))
+    await payload.updateGlobal({
+      slug: 'object-source-settings',
+      data: { health: [...others, healthRow(health)] },
+      depth: 0,
+      overrideAccess: true,
+    })
+  } catch (e) {
+    console.error(`Object sources: не удалось сохранить состояние источника «${slug}»:`, e)
+  }
+}
+
+/** Строка глобала → SourceHealth (для перезаписи чужих записей как есть) */
+function sourceHealthFromRow(slug: string, row: Record<string, unknown>): SourceHealth {
+  const kind = text(row.lastFailureKind)
+  const outcome = text(row.lastOutcome)
+  return {
+    slug,
+    failCount: positiveInt(row.failCount),
+    lastFailureAt: text(row.lastFailureAt) || null,
+    lastFailureKind: isSourceFailureKind(kind) ? kind : null,
+    lastError: text(row.lastError) || null,
+    autoPaused: row.autoPaused === true,
+    autoPausedAt: text(row.autoPausedAt) || null,
+    autoPauseReason: text(row.autoPauseReason) || null,
+    lastRunAt: text(row.lastRunAt) || null,
+    lastOutcome: isSourceImportOutcome(outcome) ? outcome : null,
+    lastMessage: text(row.lastMessage) || null,
+  }
+}
+
+/**
+ * Возобновление источника после автоматической остановки: администратор
+ * подтвердил, что причина устранена. Сбрасываем серию сбоев и снимаем
+ * автоостановку; история последнего сбоя остаётся видимой, а данные — на месте.
+ * Запрещённый источник возобновить нельзя.
+ */
+export async function resumeObjectSource(payload: Payload, slug: string): Promise<ObjectSourceState | null> {
+  const spec = objectSourceBySlug(slug)
+  if (!spec || spec.policy === 'forbidden') return null
+  const settings = await loadObjectSourceSettings(payload)
+  const health = sourceHealthFor(spec, settings)
+  await persistSourceHealth(payload, slug, {
+    ...health,
+    failCount: 0,
+    autoPaused: false,
+    autoPausedAt: null,
+    autoPauseReason: null,
+  })
+  return objectSourceStateFor(payload, slug)
+}
 
 /** Поля кандидата для хранения в очереди: характеристики объекта как есть */
 function candidateFields(c: SourceCandidate, importedAt: string): Record<string, unknown> {
@@ -408,11 +563,17 @@ async function enqueueSourceCandidates(
 }
 
 /**
- * Забор объектов с источника. Проверяет правовой статус, включённость и
- * доступы; если канал не реализован (fetch: null — так у остальных
+ * Забор объектов с источника. Проверяет правовой статус, включённость, доступы
+ * и автоостановку; если канал не реализован (fetch: null — так у остальных
  * источников), возвращает честный ответ «не реализовано». У подключённого
  * канала полученные кандидаты кладутся в очередь со статусом «Ждёт решения»,
  * без публикации. Возвращает null только для неизвестного источника.
+ *
+ * Сбой канала (исключение, таймаут, отказ, смена формата) не трогает данные:
+ * кандидаты не перебираются и не удаляются, а состояние источника обновляется —
+ * после серии сбоев или необратимого сбоя забор останавливается автоматически
+ * (см. nextSourceHealth). Каждый источник ведёт своё состояние отдельно, так
+ * что сбой одного канала не влияет на другие и на сайт.
  */
 export async function importFromObjectSource(payload: Payload, slug: string): Promise<SourceImportResult | null> {
   const spec = objectSourceBySlug(slug)
@@ -420,14 +581,62 @@ export async function importFromObjectSource(payload: Payload, slug: string): Pr
   const settings = await loadObjectSourceSettings(payload)
   const enabled = isObjectSourceEnabled(spec, settings)
   const creds = sourceCredentialsFor(spec, settings)
-  const gate = canImportFromObjectSource(spec, creds, { enabled })
+  const health = sourceHealthFor(spec, settings)
+  const gate = canImportFromObjectSource(spec, creds, {
+    enabled,
+    paused: health.autoPaused,
+    pauseReason: health.autoPauseReason || undefined,
+  })
   if (!gate.ok || !spec.fetch) {
     return { candidates: [], implemented: false, message: gate.reason || sourceImportNotImplemented(spec.name).message }
   }
 
-  // Реальный канал забора: источник читает свои данные, публикации не делает
-  const result = await spec.fetch({ creds, client: payload as unknown as SourceDataClient })
+  // Реальный канал забора: источник читает свои данные, публикации не делает.
+  // Каждый канал изолирован: исключение внутри него не роняет раздел и не
+  // задевает другие источники — превращаем его в честный сбой.
+  let result: SourceImportResult
+  try {
+    result = await spec.fetch({ creds, client: payload as unknown as SourceDataClient })
+  } catch (e) {
+    const reason = e instanceof Error ? e.message : String(e)
+    result = {
+      candidates: [],
+      implemented: true,
+      outcome: 'failed',
+      failureKind: 'error',
+      message: `${spec.name}: сбой канала забора (${reason}) — объекты не получены`,
+    }
+  }
   if (!result.implemented) return result
+
+  const at = new Date().toISOString()
+  const outcome: SourceImportOutcome = result.outcome || (result.candidates.length ? 'ok' : 'empty')
+
+  // Сбой: фиксируем причину и, если источник не отвечает раз за разом или
+  // изменил формат ответа, останавливаем его забор. Уже полученные данные не
+  // трогаем — ни очередь кандидатов, ни каталог сбоем не изменяются вовсе.
+  if (outcome === 'failed') {
+    const next = nextSourceHealth(health, {
+      status: 'failed',
+      kind: result.failureKind || 'error',
+      message: result.message,
+      at,
+    })
+    await persistSourceHealth(payload, slug, next)
+    const pauseNote = next.autoPaused
+      ? ' Забор источника остановлен автоматически; уже полученные объекты сохранены — возобновите забор после устранения причины.'
+      : ''
+    const message = `${result.message}${pauseNote}`
+    if (spec.journalRuns !== false) await persistRun(payload, slug, at, result.rawCount ?? 0, 0, message)
+    return { ...result, message }
+  }
+
+  // Успех (в том числе пустая выдача) сбрасывает серию сбоев источника
+  await persistSourceHealth(
+    payload,
+    slug,
+    nextSourceHealth(health, { status: outcome, kind: null, message: result.message, at }),
+  )
 
   // Потолок первого подключения: источник не должен массово заваливать очередь.
   // В очередь идёт не больше importLimit объектов за забор; сотрудник решает по
@@ -445,14 +654,9 @@ export async function importFromObjectSource(payload: Payload, slug: string): Pr
   const message = candidates.length
     ? `${result.message}${limitNote}; ${parts.join(', ') || 'изменений нет'}`
     : result.message
-  await persistRun(
-    payload,
-    slug,
-    new Date().toISOString(),
-    result.rawCount ?? result.candidates.length,
-    added,
-    message,
-  )
+  if (spec.journalRuns !== false) {
+    await persistRun(payload, slug, at, result.rawCount ?? result.candidates.length, added, message)
+  }
   return { ...result, message }
 }
 
@@ -463,6 +667,8 @@ export function objectSourcesSummary(states: ObjectSourceState[]): {
   enabled: number
   ready: number
   forbidden: number
+  /** Источники, забор которых остановлен автоматически после сбоев */
+  paused: number
 } {
   return {
     total: states.length,
@@ -470,6 +676,7 @@ export function objectSourcesSummary(states: ObjectSourceState[]): {
     enabled: states.filter((s) => s.allowed && s.enabled).length,
     ready: states.filter((s) => s.canImport).length,
     forbidden: states.filter((s) => !s.allowed).length,
+    paused: states.filter((s) => s.allowed && s.autoPaused).length,
   }
 }
 

@@ -10,6 +10,7 @@ import {
   objectSourcesSummary,
   objectSourceStates,
   publishSourceCandidate,
+  resumeObjectSource,
   saveObjectSourceCredentials,
   setObjectSourceEnabled,
   sourceQueue,
@@ -27,6 +28,9 @@ import {
  *   action: 'clear'   — отключить источник (стереть доступы);
  *   action: 'enable'  — включить источник;
  *   action: 'disable' — выключить источник;
+ *   action: 'resume'  — возобновить источник после автоматической остановки:
+ *                       серия сбоев сбрасывается, забор снова можно запускать.
+ *                       Данные при остановке и возобновлении не трогаются;
  *   action: 'import'  — запустить забор объектов. У «Заявок собственников»
  *                       канал работает: кандидаты кладутся в очередь со
  *                       статусом «Ждёт решения», публикации нет; у остальных
@@ -142,6 +146,14 @@ export async function POST(req: NextRequest) {
 
     if (action === 'enable' || action === 'disable') {
       const source = await setObjectSourceEnabled(payload, slug, action === 'enable')
+      if (!source) return NextResponse.json({ error: `Источник запрещён: ${spec.reason}` }, { status: 400 })
+      return NextResponse.json({ ok: true, source })
+    }
+
+    // Возобновление после автоостановки: источник мог быть выключен и заново
+    // включён, но серия сбоев сама не сбросится — сбрасывает администратор
+    if (action === 'resume') {
+      const source = await resumeObjectSource(payload, slug)
       if (!source) return NextResponse.json({ error: `Источник запрещён: ${spec.reason}` }, { status: 400 })
       return NextResponse.json({ ok: true, source })
     }

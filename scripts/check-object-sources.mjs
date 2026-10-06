@@ -26,6 +26,10 @@
  *    потолок забора — не больше 5 объектов (без массовой загрузки).
  * 6. Забор ничего не публикует: публикация возможна только по решению
  *    сотрудника (статус pending), автоматического переноса в каталог нет.
+ * 7. Независимость источников: сбой помечается видом (сеть, формат, доступ,
+ *    код ответа), смена формата и серия сетевых сбоев останавливают забор
+ *    автоматически, успех сбрасывает серию, а остановка одного источника не
+ *    мешает другим. Данные при этом не удаляются — их просто не трогают.
  *
  * Код возврата: 0 — все проверки прошли, 1 — есть ошибки (помечены ✗).
  */
@@ -33,7 +37,11 @@
 import {
   OBJECT_SOURCE_SPECS,
   SOURCE_CANDIDATE_STATUS_LABELS,
+  SOURCE_FAILURES_BEFORE_PAUSE,
+  SOURCE_PAUSE_IMMEDIATE_FAILURES,
   canImportFromObjectSource,
+  emptySourceHealth,
+  nextSourceHealth,
   objectSourceBySlug,
   sourceDealType,
   sourceObjectType,
@@ -241,6 +249,24 @@ globalThis.fetch = async () => new Response('nope', { status: 403 })
 const denied = await partner.fetch({ creds: { feedUrl: 'https://partner.example/feed' }, client: {} })
 globalThis.fetch = realFetch
 check('отказ источника честно сообщается', denied.candidates.length === 0 && /403/.test(denied.message))
+check('не-JSON ответ помечен как смена формата', badJson.outcome === 'failed' && badJson.failureKind === 'format')
+check('отказ 403 помечен как сбой доступа', denied.outcome === 'failed' && denied.failureKind === 'auth')
+
+// Смена формата фида: JSON пришёл, но массива объектов в известном поле нет —
+// это сбой, а не пустая выдача, иначе источник можно было бы не заметить
+globalThis.fetch = async () => jsonResponse({ result: [], total: 0 })
+const partnerFormat = await partner.fetch({ creds: { feedUrl: 'https://partner.example/feed' }, client: {} })
+globalThis.fetch = realFetch
+check(
+  'смена формата фида — сбой, а не пустая выдача',
+  partnerFormat.outcome === 'failed' && partnerFormat.failureKind === 'format',
+)
+
+// Пустая, но распознанная выдача — не сбой: партнёр просто ничего не прислал
+globalThis.fetch = async () => jsonResponse({ items: [] })
+const partnerEmpty = await partner.fetch({ creds: { feedUrl: 'https://partner.example/feed' }, client: {} })
+globalThis.fetch = realFetch
+check('пустой, но распознанный фид — не сбой', partnerEmpty.outcome === 'empty' && partnerEmpty.candidates.length === 0)
 
 // --- 4б. Канал «ГИС Торги» (государственный портал) --------------------------------
 // Сеть в проверке не нужна: подменяем fetch, а разбор ответа портала и защита
@@ -362,6 +388,16 @@ globalThis.fetch = async () => new Response('nope', { status: 503 })
 const torgiDown = await torgi.fetch({ creds: {}, client: {} })
 globalThis.fetch = realFetch
 check('отказ портала честно сообщается', torgiDown.candidates.length === 0 && /ГИС Торги/.test(torgiDown.message) && /503/.test(torgiDown.message))
+check('отказ 5xx помечен как ошибка источника', torgiDown.outcome === 'failed' && torgiDown.failureKind === 'http')
+
+// Ответ 200, но списка content нет: у портала сменился формат поиска
+globalThis.fetch = async () => jsonResponse({ data: [], totalElements: 0 })
+const torgiFormat = await torgi.fetch({ creds: {}, client: {} })
+globalThis.fetch = realFetch
+check(
+  'смена формата API портала — сбой, а не «объектов нет»',
+  torgiFormat.outcome === 'failed' && torgiFormat.failureKind === 'format',
+)
 
 globalThis.fetch = async () => {
   throw new Error('network down')
@@ -369,6 +405,7 @@ globalThis.fetch = async () => {
 const torgiNoNet = await torgi.fetch({ creds: {}, client: {} })
 globalThis.fetch = realFetch
 check('нет связи — объекты не выдумываются', torgiNoNet.candidates.length === 0 && torgiNoNet.implemented === true)
+check('нет связи помечено как сетевой сбой', torgiNoNet.outcome === 'failed' && torgiNoNet.failureKind === 'network')
 
 // --- 5. Тип объекта и потолок первого забора ---------------------------------------
 check(
@@ -403,6 +440,56 @@ check(
 check(
   'без адреса выгрузки партнёрский забор не запускается',
   canImportFromObjectSource(partner, {}, { enabled: true }).ok === false,
+)
+
+// --- 8. Независимость источников: сбои и автоостановка -------------------------------
+const h0 = emptySourceHealth('partner')
+const failNet = (prev, at) =>
+  nextSourceHealth(prev, { status: 'failed', kind: 'network', message: 'нет связи с источником', at })
+
+check('у источника без истории нет сбоев и автоостановки', h0.failCount === 0 && h0.autoPaused === false)
+check('порог автоостановки — не меньше двух сбоев', SOURCE_FAILURES_BEFORE_PAUSE >= 2)
+check(
+  'смена формата и отказ в доступе останавливают сразу',
+  SOURCE_PAUSE_IMMEDIATE_FAILURES.includes('format') && SOURCE_PAUSE_IMMEDIATE_FAILURES.includes('auth'),
+)
+
+const afterOne = failNet(h0, 't1')
+check('единичный сетевой сбой не останавливает забор', afterOne.failCount === 1 && afterOne.autoPaused === false)
+check(
+  'сбой сохраняет вид и причину для администратора',
+  afterOne.lastFailureKind === 'network' && afterOne.lastOutcome === 'failed' && /нет связи/.test(afterOne.lastError || ''),
+)
+
+let afterMany = h0
+for (let i = 0; i < SOURCE_FAILURES_BEFORE_PAUSE; i++) afterMany = failNet(afterMany, `t${i + 1}`)
+check(
+  'серия сетевых сбоев останавливает забор',
+  afterMany.autoPaused === true && afterMany.failCount === SOURCE_FAILURES_BEFORE_PAUSE,
+)
+check(
+  'у автоостановки есть причина и время',
+  !!afterMany.autoPauseReason && afterMany.autoPausedAt === `t${SOURCE_FAILURES_BEFORE_PAUSE}`,
+)
+
+const afterFormat = nextSourceHealth(h0, { status: 'failed', kind: 'format', message: 'формат ответа изменился', at: 't1' })
+check('смена формата останавливает забор сразу', afterFormat.autoPaused === true)
+
+const recovered = nextSourceHealth(afterOne, { status: 'ok', kind: null, message: 'получено объектов — 3', at: 't2' })
+check(
+  'успешный забор сбрасывает серию сбоев',
+  recovered.failCount === 0 && recovered.autoPaused === false && recovered.lastOutcome === 'ok',
+)
+check('успех сохраняет итог последнего забора', recovered.lastMessage === 'получено объектов — 3')
+
+// Автоостановка запрещает забор только сбойного канала: другие источники
+// работают как обычно, а данные сбойного никто не удаляет
+const pausedGate = canImportFromObjectSource(owner, {}, { enabled: true, paused: true, pauseReason: 'источник не отвечает' })
+check('остановленный источник забор не запускает', pausedGate.ok === false)
+check('причина остановки отдаётся администратору', pausedGate.reason === 'источник не отвечает')
+check(
+  'остановка одного источника не трогает другие',
+  canImportFromObjectSource(partner, { feedUrl: 'https://partner.example/feed' }, { enabled: true }).ok === true,
 )
 
 console.log(`\nИтог: пройдено ${passed}, ошибок ${failed}`)

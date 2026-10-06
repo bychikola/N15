@@ -28,7 +28,14 @@
  *   — выборочная публикация: ни один объект из источника не попадает в
  *     каталог автоматически. Кандидат проходит очередь (коллекция
  *     source-objects) и публикуется только после явного решения сотрудника
- *     (см. SOURCE_PUBLICATION_RULE и source-object-service.ts).
+ *     (см. SOURCE_PUBLICATION_RULE и object-source-service.ts);
+ *   — независимость каналов: каждый забор идёт сам по себе, а сбой одного
+ *     источника не трогает ни сайт, ни другие каналы. Источник, который
+ *     перестал отвечать или изменил формат ответа, автоматически
+ *     останавливается (см. nextSourceHealth), уже полученные данные
+ *     сохраняются, а администратор видит предупреждение. Временная
+ *     недоступность источника никогда не удаляет объекты из каталога: забор
+ *     только добавляет и обновляет кандидатов, удалять он не умеет.
  *
  * Файл без импортов из Payload: работает и на сервере, и в быстрых проверках
  * node. Хранение настроек и очередь — в src/lib/object-source-service.ts.
@@ -119,6 +126,20 @@ export type SourceFetch = (ctx: SourceFetchContext) => Promise<SourceImportResul
 export interface ObjectSourceSpec {
   slug: string
   name: string
+  /**
+   * Ключ группы настроек в глобале, если он отличается от slug: имя поля
+   * Payload не может содержать дефис, поэтому у «ГИС Торги» (slug gis-torgi)
+   * группа называется gisTorgi. Не задан — ключ совпадает со slug.
+   */
+  settingsKey?: string
+  /**
+   * Писать ли попытки забора в журнал runs глобала. Поле runs.source — select,
+   * а его варианты в базе — enum; новый slug в этот enum не добавить без
+   * миграции типа (dev-push её не умеет). Для «ГИС Торги» журнал заменяет
+   * состояние источника (health): там есть и последний забор, и его итог.
+   * Не задан — попытки журналируются.
+   */
+  journalRuns?: boolean
   /** Короткое пояснение для карточки */
   summary: string
   /** Происхождение карточки (поле origin коллекции objects) — какой код ставится */
@@ -191,6 +212,10 @@ export interface SourceImportResult {
   message: string
   /** Сколько записей было в ответе источника (для честной формулировки) */
   rawCount?: number
+  /** Итог обращения к источнику; у нереализованных каналов не задан */
+  outcome?: SourceImportOutcome
+  /** Вид сбоя, если outcome === 'failed' */
+  failureKind?: SourceFailureKind
 }
 
 /** Единая формулировка «канал ещё не реализован» — чтобы не обещать загрузку */
@@ -199,6 +224,170 @@ export const sourceImportNotImplemented = (name: string): SourceImportResult => 
   implemented: false,
   message: `${name}: забор объектов ещё не реализован — канал не подключён, объекты не загружаются`,
 })
+
+// --- Итог забора, сбои и независимость источников ----------------------------------------
+
+/**
+ * Итог обращения к источнику:
+ *   ok     — источник ответил, данные получены;
+ *   empty  — источник ответил, но подходящих объектов нет;
+ *   failed — источник не ответил, отказал или изменил формат ответа.
+ * Забор каждого источника идёт отдельно: сбой одного канала не трогает ни
+ * очередь, ни каталог, ни другие источники (см. object-source-service.ts).
+ */
+export type SourceImportOutcome = 'ok' | 'empty' | 'failed'
+
+/** Список значений итога — для разбора сохранённого состояния */
+export const SOURCE_IMPORT_OUTCOMES: SourceImportOutcome[] = ['ok', 'empty', 'failed']
+
+export const isSourceImportOutcome = (v: unknown): v is SourceImportOutcome =>
+  typeof v === 'string' && (SOURCE_IMPORT_OUTCOMES as string[]).includes(v)
+
+/**
+ * Вид сбоя — по нему решается, останавливать ли забор:
+ *   network — источник не отвечает (таймаут, нет связи);
+ *   format  — изменился формат ответа (не JSON, нет ожидаемых полей);
+ *   auth    — источник отказал в доступе (401/403);
+ *   http    — источник ответил ошибкой (5xx и прочие коды);
+ *   error   — сбой самого канала забора (исключение при разборе).
+ */
+export type SourceFailureKind = 'network' | 'format' | 'auth' | 'http' | 'error'
+
+export const SOURCE_FAILURE_KINDS: SourceFailureKind[] = ['network', 'format', 'auth', 'http', 'error']
+
+export const isSourceFailureKind = (v: unknown): v is SourceFailureKind =>
+  typeof v === 'string' && (SOURCE_FAILURE_KINDS as string[]).includes(v)
+
+export const SOURCE_FAILURE_KIND_LABELS: Record<SourceFailureKind, string> = {
+  network: 'источник не отвечает',
+  format: 'изменился формат ответа',
+  auth: 'источник отказал в доступе',
+  http: 'источник ответил ошибкой',
+  error: 'сбой канала забора',
+}
+
+/**
+ * Сколько сбоев подряд терпим, прежде чем автоматически остановить забор.
+ * Единичный таймаут — ещё не «источник сломался»: сеть могла мигнуть. Но
+ * источник, который не отвечает раз за разом, продолжать дёргать нельзя.
+ */
+export const SOURCE_FAILURES_BEFORE_PAUSE = 3
+
+/**
+ * Сбои, при которых забор останавливается сразу, без ожидания серии: смена
+ * формата API и отказ в доступе сами не «починятся» повтором — ждать нечего.
+ */
+export const SOURCE_PAUSE_IMMEDIATE_FAILURES: SourceFailureKind[] = ['format', 'auth']
+
+// --- Состояние здоровья источника --------------------------------------------------------
+
+/**
+ * Состояние источника между заборами: сколько сбоев подряд, когда был
+ * последний и остановлен ли забор автоматически. Хранится в настройках
+ * (см. object-source-service.ts) и показывается администратору.
+ *
+ * Сбой источника ничего не удаляет: уже полученные кандидаты и объекты
+ * каталога остаются на месте — забор просто перестаёт ходить к источнику,
+ * пока администратор не возобновит его вручную (resumeObjectSource).
+ */
+export interface SourceHealth {
+  slug: string
+  /** Сбоев подряд (успешный забор сбрасывает счётчик) */
+  failCount: number
+  lastFailureAt: string | null
+  lastFailureKind: SourceFailureKind | null
+  /** Сообщение последнего сбоя — готовая формулировка для администратора */
+  lastError: string | null
+  /** Импорт остановлен автоматически после сбоев */
+  autoPaused: boolean
+  autoPausedAt: string | null
+  autoPauseReason: string | null
+  lastRunAt: string | null
+  lastOutcome: SourceImportOutcome | null
+  lastMessage: string | null
+}
+
+export const emptySourceHealth = (slug: string): SourceHealth => ({
+  slug,
+  failCount: 0,
+  lastFailureAt: null,
+  lastFailureKind: null,
+  lastError: null,
+  autoPaused: false,
+  autoPausedAt: null,
+  autoPauseReason: null,
+  lastRunAt: null,
+  lastOutcome: null,
+  lastMessage: null,
+})
+
+/** Итог одного забора — вход для nextSourceHealth */
+export interface SourceRunOutcome {
+  status: SourceImportOutcome
+  kind: SourceFailureKind | null
+  message: string
+  at: string
+}
+
+/**
+ * Новое состояние источника после забора. Успех (в том числе пустая выдача)
+ * сбрасывает серию сбоев; сбой её увеличивает и, если серия доросла до
+ * порога — или сбой необратимый (формат, доступ), — останавливает забор.
+ * Остановка касается только забора: очередь кандидатов и каталог не трогаются.
+ */
+export function nextSourceHealth(prev: SourceHealth, run: SourceRunOutcome): SourceHealth {
+  const base: SourceHealth = {
+    ...prev,
+    lastRunAt: run.at,
+    lastOutcome: run.status,
+    lastMessage: run.message,
+  }
+  if (run.status !== 'failed') {
+    return {
+      ...base,
+      failCount: 0,
+      lastFailureAt: null,
+      lastFailureKind: null,
+      lastError: null,
+    }
+  }
+  const kind = run.kind || 'error'
+  const failCount = prev.failCount + 1
+  const immediate = SOURCE_PAUSE_IMMEDIATE_FAILURES.includes(kind)
+  const shouldPause = immediate || failCount >= SOURCE_FAILURES_BEFORE_PAUSE
+  const firstTime = shouldPause && !prev.autoPaused
+  return {
+    ...base,
+    failCount,
+    lastFailureAt: run.at,
+    lastFailureKind: kind,
+    lastError: run.message,
+    autoPaused: shouldPause || prev.autoPaused,
+    autoPausedAt: firstTime ? run.at : prev.autoPausedAt,
+    autoPauseReason: shouldPause
+      ? sourceAutoPauseReason(prev.slug, kind, run.message, failCount)
+      : prev.autoPauseReason,
+  }
+}
+
+/** Готовая формулировка предупреждения администратору об автоостановке */
+export function sourceAutoPauseReason(
+  slug: string,
+  kind: SourceFailureKind,
+  message: string,
+  failCount: number,
+): string {
+  const name = objectSourceName(slug)
+  const cause =
+    kind === 'format'
+      ? 'источник изменил формат ответа'
+      : kind === 'auth'
+        ? 'источник отказал в доступе'
+        : failCount >= SOURCE_FAILURES_BEFORE_PAUSE
+          ? `подряд не удалось получить данные ${failCount} раза`
+          : SOURCE_FAILURE_KIND_LABELS[kind]
+  return `${name}: забор остановлен автоматически — ${cause}. ${message} Уже полученные объекты сохранены; забор возобновите вручную после устранения причины.`
+}
 
 // --- Тип объекта и вид сделки ------------------------------------------------------------
 
@@ -402,6 +591,8 @@ const fetchOwnerApplications: SourceFetch = async ({ client }) => {
   return {
     candidates,
     implemented: true,
+    // Своя база прочитана — это успех даже при нуле заявок; сбоя источника тут нет
+    outcome: candidates.length ? 'ok' : 'empty',
     rawCount: docs.length,
     message: `Заявки собственников: получено ${candidates.length} заявок в работу — все попадут в статус «Ждёт решения»`,
   }
@@ -492,15 +683,19 @@ function feedPhotos(v: unknown): string[] {
     .filter((p): p is string => !!p)
 }
 
-/** Список объектов из ответа фида: корневой массив или массив в известном поле */
-function feedItems(payload: unknown): Record<string, unknown>[] {
-  if (Array.isArray(payload)) return payload.filter(isFeedObject)
+/**
+ * Список объектов из ответа фида: корневой массив или массив в известном поле.
+ * `recognized: false` — ответ пришёл, но массива объектов там, где он ожидался,
+ * нет: это не пустая выдача, а смена формата (см. fetchPartnerFeed).
+ */
+function feedItemsShape(payload: unknown): { items: Record<string, unknown>[] | null } {
+  if (Array.isArray(payload)) return { items: payload.filter(isFeedObject) }
   if (isFeedObject(payload)) {
     for (const key of ['items', 'objects', 'data', 'results', 'listings']) {
-      if (Array.isArray(payload[key])) return (payload[key] as unknown[]).filter(isFeedObject)
+      if (Array.isArray(payload[key])) return { items: (payload[key] as unknown[]).filter(isFeedObject) }
     }
   }
-  return []
+  return { items: null }
 }
 
 /**
@@ -561,9 +756,13 @@ function partnerCandidate(item: Record<string, unknown>): SourceCandidate {
 
 /**
  * Забор объектов из JSON-фида партнёра. Канал реализован всегда (implemented:
- * true) — сбой соединения или не-JSON ответ не выдаётся за успех: кандидатов
- * нет, а в очереди и журнале остаётся честное сообщение. Токен, если задан,
- * уходит заголовком Authorization: Bearer.
+ * true) — сбой соединения, отказ источника или смена формата не выдаются за
+ * успех: кандидатов нет, а итог (outcome/failureKind) честно сообщает, что
+ * случилось, чтобы сбойный источник можно было остановить (см.
+ * nextSourceHealth). Токен, если задан, уходит заголовком Authorization: Bearer.
+ *
+ * Адрес выгрузки — настройка канала, а не сбой источника: неверный адрес не
+ * считается сбоем и не останавливает забор — администратор просто поправит его.
  */
 const fetchPartnerFeed: SourceFetch = async ({ creds }) => {
   const url = (creds.feedUrl || '').trim()
@@ -571,6 +770,7 @@ const fetchPartnerFeed: SourceFetch = async ({ creds }) => {
     return {
       candidates: [],
       implemented: true,
+      outcome: 'empty',
       message: 'Партнёрский фид: адрес выгрузки не задан или неверен — объекты не получены',
     }
   }
@@ -589,23 +789,57 @@ const fetchPartnerFeed: SourceFetch = async ({ creds }) => {
     })
   } catch (e) {
     const reason = e instanceof Error && e.name === 'AbortError' ? 'источник не ответил вовремя' : 'нет связи с источником'
-    return { candidates: [], implemented: true, message: `Партнёрский фид: ${reason} — объекты не получены` }
+    return {
+      candidates: [],
+      implemented: true,
+      outcome: 'failed',
+      failureKind: 'network',
+      message: `Партнёрский фид: ${reason} — объекты не получены`,
+    }
   } finally {
     clearTimeout(timer)
   }
 
   if (!res.ok) {
-    return { candidates: [], implemented: true, message: `Партнёрский фид: источник ответил отказом (код ${res.status}) — объекты не получены` }
+    // Отказ в доступе сам не пройдёт — отдельный вид сбоя; прочие коды — ошибка источника
+    const kind: SourceFailureKind = res.status === 401 || res.status === 403 ? 'auth' : 'http'
+    return {
+      candidates: [],
+      implemented: true,
+      outcome: 'failed',
+      failureKind: kind,
+      message: `Партнёрский фид: источник ответил отказом (код ${res.status}) — объекты не получены`,
+    }
   }
 
   let payload: unknown
   try {
     payload = await res.json()
   } catch {
-    return { candidates: [], implemented: true, message: 'Партнёрский фид: ответ не является JSON — объекты не получены' }
+    return {
+      candidates: [],
+      implemented: true,
+      outcome: 'failed',
+      failureKind: 'format',
+      message: 'Партнёрский фид: ответ не является JSON — формат ответа изменился, объекты не получены',
+    }
   }
 
-  const all = feedItems(payload)
+  const shape = feedItemsShape(payload)
+  if (!shape.items) {
+    // JSON разобрался, но массива объектов в ожидаемом поле нет: это смена формата,
+    // а не пустая выдача — иначе её было бы не отличить от «партнёр ничего не прислал».
+    return {
+      candidates: [],
+      implemented: true,
+      outcome: 'failed',
+      failureKind: 'format',
+      message:
+        'Партнёрский фид: формат ответа изменился — не найден массив объектов (items, objects, data, results, listings) — объекты не получены',
+    }
+  }
+
+  const all = shape.items
   const items = all.slice(0, FEED_MAX_ITEMS)
   const candidates = items
     .map(partnerCandidate)
@@ -615,6 +849,7 @@ const fetchPartnerFeed: SourceFetch = async ({ creds }) => {
   return {
     candidates,
     implemented: true,
+    outcome: all.length ? 'ok' : 'empty',
     rawCount: all.length,
     message: `Партнёрский фид: получено объектов — ${candidates.length}${truncated}`,
   }
@@ -687,11 +922,12 @@ const TORGI_REGIONS: { code: string; name: string }[] = [
 
 const TORGI_REGION_NAMES = new Map(TORGI_REGIONS.map((r) => [r.code, r.name]))
 
-/** Ответ портала: разобранный JSON или честная причина отказа */
+/** Ответ портала: разобранный JSON или честная причина отказа с видом сбоя */
 interface TorgiResponse {
   ok: boolean
   data?: Record<string, unknown>
   reason?: string
+  kind?: SourceFailureKind
 }
 
 /** Запрос к публичному API портала: JSON или причина, без выдуманных успехов */
@@ -704,12 +940,19 @@ async function torgiGetJson(url: string): Promise<TorgiResponse> {
       signal: controller.signal,
       cache: 'no-store',
     })
-    if (!res.ok) return { ok: false, reason: `портал ответил отказом (код ${res.status})` }
-    return { ok: true, data: (await res.json()) as Record<string, unknown> }
+    if (!res.ok) {
+      const kind: SourceFailureKind = res.status === 401 || res.status === 403 ? 'auth' : 'http'
+      return { ok: false, kind, reason: `портал ответил отказом (код ${res.status})` }
+    }
+    try {
+      return { ok: true, data: (await res.json()) as Record<string, unknown> }
+    } catch {
+      return { ok: false, kind: 'format', reason: 'ответ портала не является JSON' }
+    }
   } catch (e) {
     const reason =
       e instanceof Error && e.name === 'AbortError' ? 'портал не ответил вовремя' : 'нет связи с порталом'
-    return { ok: false, reason }
+    return { ok: false, kind: 'network', reason }
   } finally {
     clearTimeout(timer)
   }
@@ -728,8 +971,11 @@ async function torgiSearch(catCode: string): Promise<TorgiResponse & { items?: R
   const res = await torgiGetJson(`${TORGI_SEARCH_URL}?${params.toString()}`)
   if (!res.ok) return res
   const content = res.data?.content
-  const items = Array.isArray(content) ? content.filter(isFeedObject) : []
-  return { ok: true, items }
+  if (!Array.isArray(content)) {
+    // Ответ 200, но списка content нет: у портала сменился формат поиска
+    return { ok: false, kind: 'format', reason: 'формат поиска портала изменился — нет списка content' }
+  }
+  return { ok: true, items: content.filter(isFeedObject) }
 }
 
 /** Карточка лота: цена, задаток, шаг, даты, документы. Сбой — null, без выдумок */
@@ -915,24 +1161,27 @@ function torgiCandidate(
 /**
  * Забор недвижимости с ГИС Торги. Категории опрашиваются по приоритету Н15;
  * на каждый лот запрашивается карточка портала (цена, задаток, документы).
- * Канал реализован всегда (implemented: true): сбой связи или отказ портала
- * не выдаётся за успех — кандидатов нет, а в очереди и журнале остаётся
- * честное сообщение. Публикации нет: кандидаты кладутся в очередь со статусом
- * «Ждёт решения» (см. importFromObjectSource).
+ * Канал реализован всегда (implemented: true): сбой связи, отказ портала или
+ * смена формата не выдаются за успех — кандидатов нет, а итог (outcome/
+ * failureKind) честно сообщает, что случилось, чтобы сбойный источник можно
+ * было остановить (см. nextSourceHealth). Публикации нет: кандидаты кладутся
+ * в очередь со статусом «Ждёт решения» (см. importFromObjectSource).
  */
 const fetchGisTorgi: SourceFetch = async () => {
   const candidates: SourceCandidate[] = []
   const seen = new Set<string>()
   let rawCount = 0
   let detailFailures = 0
-  let firstFailure: string | null = null
+  // Твёрдый сбой (портал не ответил, отказал или сменил формат) — не «объектов
+  // нет», а «источник сломался»: по нему забор останавливается
+  let hardFailure: { kind: SourceFailureKind; reason: string } | null = null
 
   for (const category of TORGI_CATEGORY_PRIORITY) {
     if (candidates.length >= TORGI_MAX_ITEMS) break
     const found = await torgiSearch(category.code)
     if (!found.ok) {
       // Первая же неудача — портал недоступен: дальше по категориям не долбим
-      firstFailure = firstFailure || found.reason || 'ошибка запроса'
+      hardFailure = hardFailure || { kind: found.kind || 'http', reason: found.reason || 'ошибка запроса' }
       if (!candidates.length) break
       continue
     }
@@ -950,11 +1199,22 @@ const fetchGisTorgi: SourceFetch = async () => {
   }
 
   if (!candidates.length) {
+    if (hardFailure) {
+      return {
+        candidates: [],
+        implemented: true,
+        outcome: 'failed',
+        failureKind: hardFailure.kind,
+        rawCount,
+        message: `ГИС Торги: ${hardFailure.reason} — объекты не получены`,
+      }
+    }
     return {
       candidates: [],
       implemented: true,
+      outcome: 'empty',
       rawCount,
-      message: `ГИС Торги: ${firstFailure || 'подходящих объектов в наших регионах не найдено'} — объекты не получены`,
+      message: 'ГИС Торги: подходящих объектов в наших регионах не найдено — объекты не получены',
     }
   }
   const tail = detailFailures
@@ -963,6 +1223,7 @@ const fetchGisTorgi: SourceFetch = async () => {
   return {
     candidates,
     implemented: true,
+    outcome: 'ok',
     rawCount,
     message: `ГИС Торги: получено объектов — ${candidates.length} из ${rawCount} найденных${tail}`,
   }
@@ -1033,6 +1294,11 @@ const PARTNER: ObjectSourceSpec = {
 const GIS_TORGI: ObjectSourceSpec = {
   slug: 'gis-torgi',
   name: 'ГИС Торги',
+  // Имя поля Payload не может содержать дефис, поэтому группа настроек — gisTorgi
+  settingsKey: 'gisTorgi',
+  // В enum поля runs.source (select) значения gis-torgi нет, а добавить его
+  // без миграции типа нельзя — журнал этого канала ведёт состояние health
+  journalRuns: false,
   summary: 'Государственные торги по недвижимости: публичный API портала torgi.gov.ru',
   // Отдельного происхождения «ГИС Торги» в справочнике нет (новое значение
   // select меняло бы enum в базе), поэтому карточка помечается как «Другая
@@ -1180,17 +1446,30 @@ export interface ImportGate {
 }
 
 /**
- * Можно ли запускать забор с источника: проверяет правовой статус, включён ли
- * источник, реализован ли канал и заданы ли доступы. Здесь же — единый запрет
- * на автосбор чужих объявлений: у запрещённого источника ok всегда false.
+ * Можно ли запускать забор с источника: проверяет правовой статус, не
+ * остановлен ли забор автоматически, включён ли источник, реализован ли канал
+ * и заданы ли доступы. Здесь же — единый запрет на автосбор чужих объявлений:
+ * у запрещённого источника ok всегда false.
+ *
+ * `paused` — источник остановлен автоматически после сбоев (см.
+ * nextSourceHealth): забор не идёт, пока администратор не возобновит его
+ * (resumeObjectSource). Уже полученные данные при этом не трогаются.
  */
 export function canImportFromObjectSource(
   spec: ObjectSourceSpec,
   creds: Record<string, string>,
-  opts: { enabled: boolean },
+  opts: { enabled: boolean; paused?: boolean; pauseReason?: string },
 ): ImportGate {
   if (spec.policy === 'forbidden') {
     return { ok: false, reason: `Источник запрещён: ${spec.reason}` }
+  }
+  if (opts.paused) {
+    return {
+      ok: false,
+      reason:
+        opts.pauseReason ||
+        `${spec.name}: забор остановлен автоматически после сбоев — возобновите его в разделе «Источники объектов»`,
+    }
   }
   if (!opts.enabled) {
     return { ok: false, reason: `${spec.name} выключен — источник можно включить в настройках «Источники объектов»` }
