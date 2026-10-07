@@ -22,6 +22,9 @@
  * Источник маршрута в ответе (source):
  *   agent   — ответственный агент определён (по объекту или запрошен напрямую);
  *   reserve — агента нет: объект без ответственного или запрос без объекта.
+ *             Сюда же попадают объекты офиса Н15 (ownership=office): личного
+ *             агента у них нет, звонок и WhatsApp идут на общий номер офиса —
+ *             тот же резервный маршрут, что у карточки без ответственного.
  */
 
 /** Агент, по которому строится маршрут (поля коллекции agents) */
@@ -98,6 +101,18 @@ export function buildCallRoute(
 export function waHref(agent: CallAgent | null): string {
   if (!agent) return ''
   const digits = waDigits(agent.whatsapp) || waDigits(agent.phone)
+  return digits.length >= 10 ? `https://wa.me/${digits}` : ''
+}
+
+/**
+ * WhatsApp офиса Н15 — на основной контакт агентства (общий номер из настроек
+ * сайта). У объекта офиса личного ответственного агента нет, и обе кнопки —
+ * «Позвонить» и «WhatsApp» — ведут на один общий номер агентства, а не на
+ * телефон сотрудника (см. src/lib/object-ownership.ts). Номер пуст или не
+ * похож на телефон — ссылки нет, кнопка WhatsApp не показывается.
+ */
+export function officeWaHref(commonPhone: string | null | undefined): string {
+  const digits = waDigits(commonPhone)
   return digits.length >= 10 ? `https://wa.me/${digits}` : ''
 }
 

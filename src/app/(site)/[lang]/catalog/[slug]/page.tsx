@@ -145,6 +145,9 @@ export default async function ObjectPage({ params }: PageProps) {
       position?: string
       photo?: { url?: string; focalPoint?: { x?: number; y?: number } }
     }
+    // Владелец карточки: 'office' — объект офиса Н15 (личного агента нет),
+    // в блоке «Ваш агент» показывается агентство (src/lib/object-ownership.ts)
+    ownership?: string
     primaryImage?: { id: number; url?: string; alt?: string; filename?: string; sizes?: { thumbnail?: { url?: string }; card?: { url?: string } } }
     images?: { id: number; url?: string; alt?: string; filename?: string; sizes?: { thumbnail?: { url?: string }; card?: { url?: string } } }[]
   }
@@ -198,6 +201,11 @@ export default async function ObjectPage({ params }: PageProps) {
   // Коммерция: в «Площади» — здание или комплекс, участок идёт отдельной
   // строкой «Площадь участка»
   const isCommercial = obj.category === 'commercial'
+  // Объект офиса Н15: принадлежит агентству — вместо имени сотрудника
+  // показывается агентство, а звонок и WhatsApp ведут на основной контакт
+  // офиса, даже если в старых данных остался прежний ответственный
+  // (см. src/lib/object-ownership.ts и call-routing.ts)
+  const isOfficeObject = obj.ownership === 'office'
   const floorSpecs = isHouse
     ? [
         { label: t.object.floors, value: floorHuman(obj.totalFloors, t.object.floorUnits, areaFmt) },
@@ -495,29 +503,38 @@ export default async function ObjectPage({ params }: PageProps) {
                   </a>
                 </div>
 
-                {/* ВАШ МЕНЕДЖЕР */}
-                {obj.agent && (
+                {/* ВАШ МЕНЕДЖЕР. У объекта офиса Н15 личного агента нет —
+                    вместо имени сотрудника показываем агентство, кнопки ведут
+                    на основной контакт офиса (см. isOfficeObject) */}
+                {(obj.agent || isOfficeObject) && (
                   <OrnamentBorder cornerOrnament>
                     <div className="p-6">
-                      <h3 className="text-sm tracking-wider uppercase text-[var(--n15-gold)] mb-4">{t.object.yourAgent}</h3>
+                      <h3 className="text-sm tracking-wider uppercase text-[var(--n15-gold)] mb-4">
+                        {isOfficeObject ? t.object.agencyHeading : t.object.yourAgent}
+                      </h3>
                       <div className="flex items-center gap-4 mb-4">
-                        {obj.agent.photo?.url ? (
+                        {!isOfficeObject && obj.agent?.photo?.url ? (
                           <img src={obj.agent.photo.url} alt={obj.agent.name || ''} style={focalPosition(obj.agent.photo.focalPoint)} className="w-14 h-14 rounded-full object-cover border border-[var(--n15-gold)]/20" />
                         ) : (
                           <div className="w-14 h-14 rounded-full bg-[var(--n15-charcoal)] border border-[var(--n15-gold)]/20 flex items-center justify-center">
                             <span className="text-lg font-[family-name:var(--font-display)] text-[var(--n15-gold)]">
-                              {obj.agent.name?.split(' ').map((n) => n[0]).join('').slice(0, 2) || 'Н15'}
+                              {isOfficeObject ? 'Н15' : obj.agent?.name?.split(' ').map((n) => n[0]).join('').slice(0, 2) || 'Н15'}
                             </span>
                           </div>
                         )}
                         <div>
-                          <div className="text-sm text-[var(--n15-white)]">{obj.agent.name}</div>
-                          <div className="text-xs text-[var(--n15-muted)]">{obj.agent.position || t.object.leadingExpert}</div>
+                          <div className="text-sm text-[var(--n15-white)]">
+                            {isOfficeObject ? t.object.agencyName : obj.agent?.name}
+                          </div>
+                          <div className="text-xs text-[var(--n15-muted)]">
+                            {isOfficeObject ? t.object.agencyShort : obj.agent?.position || t.object.leadingExpert}
+                          </div>
                         </div>
                       </div>
                       {/* Контакты агента: только «Позвонить» и «WhatsApp».
                           Объект передаём целиком — маршрут звонка сервер
-                          строит по его ответственному агенту */}
+                          строит по его ответственному агенту, а у объекта
+                          офиса — по основному контакту агентства */}
                       <AgentContactButtons
                         objectId={obj.id}
                         callLabel={t.object.phone}

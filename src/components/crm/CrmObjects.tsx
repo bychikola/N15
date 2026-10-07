@@ -23,7 +23,7 @@ import { normalizeHouseAddress } from '@/lib/house-info'
 import { sortAgents } from '@/lib/agents-sort'
 // Фильтры списка (агент и статус) — общее условие выборки для запроса к
 // /api/objects, см. src/lib/object-filters.ts
-import { objectListWhere, type ObjectListFilters } from '@/lib/object-filters'
+import { OBJECT_FILTER_OFFICE, objectListWhere, type ObjectListFilters } from '@/lib/object-filters'
 // Ответственный агент — поле с поиском по агентам (см. AgentPicker)
 import { AgentPicker } from '@/components/crm/AgentPicker'
 // Категории объектов: полный список значений, правила участка и домовых
@@ -52,6 +52,11 @@ import { COMMERCIAL_TYPES } from '@/lib/commercial-types'
 // партнёр / другая площадка) — общий справочник с коллекцией Objects
 // (см. src/lib/object-origins.ts): внутренняя пометка, на сайте не видна
 import { OBJECT_ORIGINS, isObjectOrigin } from '@/lib/object-origins'
+// Владелец карточки: личный агент или офис Н15 — общий справочник с коллекцией
+// Objects и фильтром списка (см. src/lib/object-ownership.ts). У объекта офиса
+// личного агента нет: на сайте показывается агентство, звонок и WhatsApp идут
+// на основной контакт офиса
+import { isObjectOwnership, isOfficeOwnership } from '@/lib/object-ownership'
 // Варианты характеристик (ремонт, отопление, лифт, парковка) и правила их
 // применимости по категории объекта — общий справочник с фильтрами каталога
 // и карточкой сайта (см. src/lib/object-characteristics.ts)
@@ -93,6 +98,8 @@ interface ObjectRow {
   price: number | null
   status: string
   agentName?: string
+  /** Владелец карточки: 'office' — объект офиса Н15 (см. object-ownership) */
+  ownership?: string
   thumb?: string
   /** Адрес на плитке — сразу под названием, до цены (см. cardAddressText) */
   address?: CardAddressLike | null
@@ -365,7 +372,11 @@ const emptyForm = {
   // Корпус — отдельное поле адреса (был частью номера дома: «15 к2»);
   // полный адрес — собранная строка, её видит агент и хранит объект
   corpus: '', fullAddress: '', apartment: '',
-  lat: '', lng: '', description: '', status: 'draft', agent: '',
+  lat: '', lng: '', description: '', status: 'draft',
+  // Источник / ответственный: 'agent' — личный агент, 'office' — объект офиса
+  // Н15 (без личного агента, см. src/lib/object-ownership.ts)
+  ownership: 'agent' as string,
+  agent: '',
   // Застройщик и его жилой комплекс — необязательная связь объекта со
   // справочником «Застройщики» (раздел CRM /crm/developers). В списке
   // комплексов показываются только комплексы выбранного застройщика; у
@@ -1052,6 +1063,11 @@ export const CrmObjects: FC<{
   const [saved, setSaved] = useState(false)
   const [modalOpen, setModalOpen] = useState(false)
   const [saveError, setSaveError] = useState('')
+  // Кто фактически завёл карточку (поле createdBy, сервер отдаёт его только
+  // администратору) — показываем администратору в карточке объекта. Особенно
+  // важно у объекта офиса Н15: личного агента у него нет, и автор — единственный
+  // след того, кто добавил объект в базу
+  const [createdByName, setCreatedByName] = useState('')
   // Фильтры списка: ответственный агент (выбор — администратору, см. разметку
   // фильтров ниже) и статус карточки. Оба уходят в запрос к /api/objects (см.
   // load): фильтрует сервер, поэтому в списке ровно выбранная выборка, а не
@@ -1212,6 +1228,7 @@ export const CrmObjects: FC<{
           price: o.price as number | null,
           status: o.status as string,
           agentName: agent?.name,
+          ownership: o.ownership as string | undefined,
           thumb: img?.url,
           // Адрес объекта — сотруднику сервер отдаёт и номер дома с квартирой
           // (полевая проверка exactAddressAccess в коллекции Objects):
@@ -1312,6 +1329,7 @@ export const CrmObjects: FC<{
     // emptyForm: отметки нового объекта не должны задевать общий образец
     setForm({ ...emptyForm, agent: myAgentId ? String(myAgentId) : '', purchaseOptions: [] })
     setEditId(null)
+    setCreatedByName('')
     setPhotos([])
     setFeatures([])
     setFloorDescs([])
@@ -1376,6 +1394,14 @@ export const CrmObjects: FC<{
     const addr = o.address as Record<string, unknown> | undefined
     const coords = o.coordinates as Record<string, unknown> | undefined
     const agentRel = o.agent as Record<string, unknown> | undefined
+    // Кто завёл карточку: поле createdBy сервер отдаёт администратору (у
+    // остальных его в ответе нет). На глубине связи приходит объект пользователя
+    const createdRel = o.createdBy as { name?: string; email?: string } | number | undefined
+    setCreatedByName(
+      createdRel && typeof createdRel === 'object'
+        ? createdRel.name || createdRel.email || ''
+        : '',
+    )
     setEditId(o.id as number)
     // Площадь участка показываем в той единице, в которой её вводили
     // (сотки — «6», гектары — «1,2», а не «600»/«12000»); у остальных
@@ -1444,6 +1470,9 @@ export const CrmObjects: FC<{
       lng: coords?.lng != null ? String(coords.lng) : '',
       description: '',
       status: (o.status as string) || 'draft',
+      // Источник / ответственный: объект офиса Н15 сохраняем как «офис», у
+      // старых карточек владелец не проставлен — считаем «Агент»
+      ownership: isObjectOwnership(o.ownership) ? o.ownership : 'agent',
       agent: agentRel?.id != null ? String(agentRel.id) : '',
       // Застройщик и жилой комплекс — связи объекта: в ответе с depth это
       // объекты { id, name }, поэтому берём id. У объектов без привязки пусто
@@ -1871,8 +1900,10 @@ export const CrmObjects: FC<{
       return false
     }
     // Новый объект агента должен быть привязан к профилю агента: объект без
-    // агента («бесхозный») агент потом не сможет редактировать и публиковать
-    if (!editId && !isAdmin && !form.agent) {
+    // агента («бесхозный») агент потом не сможет редактировать и публиковать.
+    // Объект офиса Н15 — исключение: он принадлежит агентству, личного агента
+    // у него нет (см. src/lib/object-ownership.ts)
+    if (!editId && !isAdmin && !form.agent && !isOfficeOwnership(form.ownership)) {
       setSaveError(t.crm.objAgentRequired)
       return false
     }
@@ -2007,10 +2038,18 @@ export const CrmObjects: FC<{
       // показ в блоке на главной (как и прочие признаки карточки)
       urgentSale: form.urgentSale,
       status: form.status,
+      // Источник / ответственный: «офис Н15» — объект агентства без личного
+      // агента, «агент» — обычная карточка. Значение уходит всегда: объект
+      // офиса можно позже перевести на конкретного агента, и наоборот
+      ownership: isObjectOwnership(form.ownership) ? form.ownership : 'agent',
       // Ответственный агент: у администратора пустое значение очищает поле
       // (в поле выбора это строка «—»), у остальных агент не участвует в
-      // запросе — своего агента агенту проставляет хук коллекции при создании
-      agent: form.agent ? Number(form.agent) : isAdmin ? null : undefined,
+      // запросе — своего агента агенту проставляет хук коллекции при создании.
+      // У объекта офиса агент не отправляется (у администратора — null, чтобы
+      // снять прежнего ответственного): личного агента у такого объекта нет
+      agent: isOfficeOwnership(form.ownership)
+        ? (isAdmin ? null : undefined)
+        : form.agent ? Number(form.agent) : isAdmin ? null : undefined,
       // Застройщик и жилой комплекс — необязательная связь со справочником
       // «Застройщики». Пусто уходит null: снятый выбор сохраняется. В чужом
       // объекте поля не отправляем (access полей в коллекции Objects), чтобы
@@ -2448,7 +2487,10 @@ export const CrmObjects: FC<{
           <label style={filterLabelStyle}>
             {t.crm.filterAgent}
             <select value={agentFilter} onChange={(e) => setAgentFilter(e.target.value)} style={filterInputStyle}>
+              {/* Все / офис Н15 / конкретный агент — общий список ответственных
+                  (см. objectListWhere и src/lib/object-ownership.ts) */}
               <option value="">{t.crm.filterAllAgents}</option>
+              <option value={OBJECT_FILTER_OFFICE}>{t.crm.filterOffice}</option>
               {agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
             </select>
           </label>
@@ -3249,26 +3291,79 @@ export const CrmObjects: FC<{
               {editId && <option value="archived">{t.crm.statusArchived}</option>}
             </select>
           </Field>
-          {/* Ответственного агента назначает администратор: агент не может
-              ни передать свой объект другому, ни забрать чужой (сервер это
-              тоже не принимает — см. access поля в коллекции Objects). Свой
-              новый объект агент получает автоматически, поэтому ему видно
-              только имя ведущего агента */}
-          <Field label={t.crm.objAgent}>
-            {isAdmin ? (
-              // Поле с поиском по агентам: список длинный, нужного ищут по
-              // фамилии (см. AgentPicker). Строка «—» снимает ответственного —
-              // это же значение сохраняет карточка (см. agent в save)
-              <AgentPicker t={t} agents={agents} value={form.agent} onChange={(id) => set('agent', id)} />
-            ) : (
+          {/* Источник / ответственный: кому принадлежит карточка — личному
+              агенту или агентству (офис Н15). У объекта офиса личного агента
+              нет: поле ответственного скрываем, на сайте вместо имени
+              сотрудника показывается агентство, а звонок и WhatsApp идут на
+              основной контакт офиса (см. src/lib/object-ownership.ts) */}
+          <Field label={t.crm.objOwnership}>
+            <select
+              value={form.ownership}
+              onChange={(e) => {
+                const v = e.target.value
+                set('ownership', v)
+                // Переход на «Офис Н15» снимает личного агента: у объекта
+                // агентства ответственного нет. Вернуть конкретного агента
+                // можно позже — выбрав «Агент» и указав его в поле ниже
+                if (v === 'office') set('agent', '')
+              }}
+              style={inputStyle}
+            >
+              <option value="agent">{t.crm.objOwnershipAgent}</option>
+              <option value="office">{t.crm.objOwnershipOffice}</option>
+            </select>
+          </Field>
+          {isOfficeOwnership(form.ownership) ? (
+            <Field label={t.crm.objAgent}>
+              {/* У объекта офиса ответственного нет — вместо выбора показываем
+                  пометку. Назначить агента позже: «Источник / ответственный» →
+                  «Агент» */}
               <input
-                value={agents.find((a) => String(a.id) === form.agent)?.name || (form.agent ? form.agent : '—')}
+                value={t.crm.objOwnershipOffice}
                 readOnly
                 disabled
                 style={{ ...inputStyle, background: '#f2ede4', color: '#716b62' }}
               />
-            )}
-          </Field>
+            </Field>
+          ) : (
+            // Ответственного агента назначает администратор: агент не может
+            // ни передать свой объект другому, ни забрать чужой (сервер это
+            // тоже не принимает — см. access поля в коллекции Objects). Свой
+            // новый объект агент получает автоматически, поэтому ему видно
+            // только имя ведущего агента
+            <Field label={t.crm.objAgent}>
+              {isAdmin ? (
+                // Поле с поиском по агентам: список длинный, нужного ищут по
+                // фамилии (см. AgentPicker). Строка «—» снимает ответственного —
+                // это же значение сохраняет карточка (см. agent в save)
+                <AgentPicker t={t} agents={agents} value={form.agent} onChange={(id) => set('agent', id)} />
+              ) : (
+                <input
+                  value={agents.find((a) => String(a.id) === form.agent)?.name || (form.agent ? form.agent : '—')}
+                  readOnly
+                  disabled
+                  style={{ ...inputStyle, background: '#f2ede4', color: '#716b62' }}
+                />
+              )}
+            </Field>
+          )}
+          {isOfficeOwnership(form.ownership) && (
+            <p className="crm-field-note" style={{ gridColumn: '1 / -1', margin: 0 }}>
+              {t.crm.objOfficeNote}
+            </p>
+          )}
+          {isAdmin && editId != null && (
+            // Кто фактически завёл карточку (createdBy, поле видно только
+            // администратору). У объекта офиса это единственный след автора
+            <Field label={t.crm.objCreatedBy}>
+              <input
+                value={createdByName || '—'}
+                readOnly
+                disabled
+                style={{ ...inputStyle, background: '#f2ede4', color: '#716b62' }}
+              />
+            </Field>
+          )}
 
           <div className="span-2" style={{ gridColumn: '1 / -1' }}>
             <div className="crm-gallery-field">
@@ -3745,7 +3840,15 @@ export const CrmObjects: FC<{
                 <strong style={{ fontFamily: "'New Standard', Georgia, serif", fontWeight: 400, fontSize: 18, color: '#25241f' }}>
                   {o.price != null ? new Intl.NumberFormat('ru-RU').format(o.price) + ' ₽' : '—'}
                 </strong>
-                {o.agentName && <span style={{ fontSize: 10, color: '#8a857b' }}>{o.agentName}</span>}
+                {/* Владелец карточки: пометка «Офис Н15» либо имя агента.
+                    Владелец важнее связи: у объекта офиса показываем агентство,
+                    даже если в данных остался прежний ответственный
+                    (см. src/lib/object-ownership.ts) */}
+                {(o.agentName || isOfficeOwnership(o.ownership)) && (
+                  <span style={{ fontSize: 10, color: '#8a857b' }}>
+                    {isOfficeOwnership(o.ownership) ? t.crm.objOwnershipOffice : o.agentName}
+                  </span>
+                )}
               </div>
               {/* «Где размещён объект» — краткая сводка на плитке */}
               <div style={{ marginTop: 6, fontSize: 10, color: '#8a857b' }}>

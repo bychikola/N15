@@ -2,7 +2,9 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 import { NextRequest, NextResponse } from 'next/server'
 import { rateLimited, clientIp } from '@/lib/rate-limit'
-import { buildCallRoute, telHref, waHref, type CallAgent } from '@/lib/call-routing'
+import { buildCallRoute, officeWaHref, telHref, waHref, type CallAgent } from '@/lib/call-routing'
+// Объект офиса Н15: владелец — агентство, личного агента нет (см. ниже)
+import { isOfficeOwnership } from '@/lib/object-ownership'
 // Общий номер агентства — только поле «Телефоны» настроек сайта
 import { getPublicSiteSettings } from '@/lib/site-settings'
 
@@ -15,6 +17,10 @@ import { getPublicSiteSettings } from '@/lib/site-settings'
 // ответственного называет сервер (src/lib/call-routing.ts), а не страница:
 // чужому агенту клиент не попадёт. Общий номер Н15/АТС — отдельный канал:
 // он остаётся резервным маршрутом, когда у объекта ответственного агента нет.
+//
+// Объект офиса Н15 (ownership=office) личного агента не имеет: для него и
+// звонок, и WhatsApp ведут на основной контакт офиса — общий номер агентства
+// из настроек сайта (см. src/lib/object-ownership.ts).
 //
 // Параметры: ?object=<id> — карточка объекта, ?id=<agentId> — страница команды.
 //
@@ -64,6 +70,9 @@ export async function GET(req: NextRequest) {
     // (телефон, WhatsApp) скрыты от посетителей полевой проверкой коллекции
     // agents. Наружу уходят только готовые ссылки кнопок, не сами номера.
     let agent: AgentRow | null = null
+    // Объект офиса Н15: карточка принадлежит агентству, личного агента у неё
+    // нет — кнопки ведут на основной контакт офиса (см. src/lib/object-ownership.ts)
+    let officeObject = false
     if (hasObject) {
       const { docs } = await payload.find({
         collection: 'objects',
@@ -72,7 +81,9 @@ export async function GET(req: NextRequest) {
         depth: 0,
         overrideAccess: true,
       })
-      const rel = (docs[0] as { agent?: unknown } | undefined)?.agent
+      const doc = docs[0] as { agent?: unknown; ownership?: unknown } | undefined
+      officeObject = isOfficeOwnership(doc?.ownership)
+      const rel = doc?.agent
       // На глубине 0 связь приходит id, но принимаем и развёрнутый объект
       const ref = typeof rel === 'object' && rel !== null ? (rel as { id?: unknown }).id : rel
       const responsibleId = Number(ref)
@@ -89,9 +100,13 @@ export async function GET(req: NextRequest) {
 
     // Маршрут: агент определён — звонок на его личный мобильный, агента нет —
     // общий (резервный) номер агентства. См. src/lib/call-routing.ts
-    const route = buildCallRoute(commonPhone, agent)
+    // У объекта офиса личный агент игнорируется: и звонок, и WhatsApp идут на
+    // основной контакт офиса, даже если в старых данных остался ответственный
+    // (администратор возвращает объект агенту сменой «Источник/ответственный»).
+    const officeRoute = officeObject
+    const route = buildCallRoute(commonPhone, officeRoute ? null : agent)
     const tel = telHref(route.dial)
-    const wa = waHref(agent)
+    const wa = officeRoute ? officeWaHref(commonPhone) : waHref(agent)
 
     if (!tel && !wa) {
       return NextResponse.json({ error: 'No call route and no WhatsApp' }, { status: 404 })
@@ -105,6 +120,9 @@ export async function GET(req: NextRequest) {
       agentId: route.agent?.id,
       // true — набран личный мобильный агента, false — общий номер агентства
       personal: route.personal,
+      // true — объект офиса Н15 (без личного агента): обе кнопки ведут на
+      // основной контакт офиса. Пометка для проверок, личных данных не выдаёт
+      office: officeRoute || undefined,
     })
   } catch (error) {
     console.error('Agent contact error:', error)

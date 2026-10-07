@@ -18,6 +18,9 @@
  *    агенту: номер в ответе принадлежит именно ответственному агенту объекта.
  * 3. Объект без ответственного агента: маршрут уходит на общий номер
  *    (source=reserve) — это отдельный канал, а не подмена личного номера.
+ *    Сюда же относятся объекты офиса Н15 (ownership=office): у них личного
+ *    агента нет по замыслу, и обе кнопки — «Позвонить» и «WhatsApp» — ведут
+ *    на основной контакт офиса (см. src/lib/object-ownership.ts).
  * 4. Контакты каждого активного агента (?id=<agentId>): телефон из профиля
  *    (phone) и WhatsApp (whatsapp, при пустоте — тот же телефон). Сверка идёт
  *    с базой, если задан DATABASE_URI и доступен модуль pg; без доступа к базе
@@ -191,7 +194,12 @@ async function main() {
   console.log('\nМаршрут по объекту (личный контакт ответственного агента):')
   const links = []
   const withAgent = objects.filter((o) => agentIdOf(o) !== null)
-  const withoutAgent = objects.filter((o) => agentIdOf(o) === null)
+  // Объекты делим надвое: объекты офиса Н15 (ownership=office) агента не имеют
+  // по замыслу — звонок и WhatsApp у них всегда на контакт офиса, даже если в
+  // старых данных остался прежний ответственный; остальные карточки без
+  // личного агента стоит назначить (см. src/lib/object-ownership.ts)
+  const officeObjects = objects.filter((o) => o.ownership === 'office')
+  const withoutAgent = objects.filter((o) => agentIdOf(o) === null && o.ownership !== 'office')
 
   // По одному объекту на каждого агента: так проверка ловит и «объект за Яной»,
   // и «объект за Анной», а не только первый найденный
@@ -249,6 +257,30 @@ async function main() {
   // не годится (у него нет карточки на сайте)
   if (reserve && withoutAgent.length) links.push({ label: `#${reserveProbe.id} «${reserveProbe.title}» (без агента)`, route: reserve })
 
+  // 3б. Объекты офиса Н15: личного агента нет, обе кнопки — на контакт офиса
+  console.log('\nОбъекты офиса Н15 (звонок и WhatsApp — на основной контакт офиса):')
+  if (!officeObjects.length) console.log('  • объектов офиса Н15 среди опубликованных нет')
+  else {
+    let officeFails = 0
+    for (const object of officeObjects) {
+      const route = await routeOf(`/api/agents/contact?object=${object.id}`)
+      if (!route) {
+        bad(`#${object.id} «${object.title}» (офис Н15): маршрут не ответил`, 'ожидается 200 с контактом офиса')
+        officeFails += 1
+      } else if (digits(route.tel) !== commonDigits) {
+        bad(`#${object.id} «${object.title}» (офис Н15): «Позвонить» ведёт на ${route.tel ?? 'ничего'}`, `ожидался общий номер офиса ${commonDigits}`)
+        officeFails += 1
+      } else if (route.wa && digits(route.wa) !== commonDigits) {
+        bad(`#${object.id} «${object.title}» (офис Н15): «WhatsApp» ведёт на ${route.wa}`, `ожидался общий номер офиса ${commonDigits}`)
+        officeFails += 1
+      } else {
+        ok(`#${object.id} «${object.title}» → офис Н15`, 'обе кнопки ведут на общий контакт агентства')
+      }
+      links.push({ label: `#${object.id} «${object.title}» (офис Н15)`, route })
+    }
+    if (!officeFails) console.log(`  • объектов офиса Н15 проверено: ${officeObjects.length}`)
+  }
+
   // 4. Контакты каждого активного агента: сверка с базой, если она доступна
   console.log('\nКонтакты агентов («Позвонить» — личный мобильный, «WhatsApp» — его WhatsApp):')
   if (agents.skipped) console.log(`  • сверка с базой пропущена — ${agents.skipped}`)
@@ -289,8 +321,12 @@ async function main() {
     if (inactive) console.log(`  • отключённых агентов: ${inactive} — их контакты не публикуются, звонок идёт на общий номер`)
   }
 
-  // 5. Объекты без ответственного агента — их назначают в CRM
+  // 5. Объекты без ответственного агента — их назначают в CRM. Объекты офиса
+  // Н15 сюда не попадают: агент им не нужен, звонки идут на контакт офиса
   console.log('\nОбъекты без ответственного агента (назначить в CRM):')
+  if (officeObjects.length) {
+    console.log(`  • объекты офиса Н15 (агент не требуется): ${officeObjects.length}`)
+  }
   if (!withoutAgent.length) ok('таких объектов нет', 'у всех опубликованных карточек есть ответственный агент')
   else {
     for (const object of withoutAgent.slice(0, 20)) {

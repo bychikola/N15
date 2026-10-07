@@ -36,5 +36,8 @@ export function objectToListItem(doc: Record<string, unknown>): ObjectListItem {
       ? doc.primaryImage
       : undefined) as ObjectListItem['primaryImage'],
     agent: doc.agent as ObjectListItem['agent'],
+    // Владелец карточки: объект офиса Н15 показывается на сайте как объект
+    // агентства (вместо имени личного агента) — см. ObjectCard
+    ownership: doc.ownership as string | undefined,
   }
 }

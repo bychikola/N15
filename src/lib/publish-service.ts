@@ -42,6 +42,9 @@ import {
 } from './publish-adapters'
 // Общий номер сайта для объявлений — только поле «Телефоны» настроек
 import { getPublicSiteSettings } from './site-settings'
+// Объект офиса Н15: в объявлении площадки вместо имени агента указывается
+// агентство (см. src/lib/object-ownership.ts)
+import { isOfficeOwnership } from './object-ownership'
 
 export interface PubItem {
   platform?: string
@@ -172,18 +175,24 @@ export async function toPublishObject(
     .filter((u): u is string => !!u)
 
   let agentName: string | null = null
-  const agentId = docNumber(doc.agent)
-  if (agentId != null) {
-    try {
-      const agent = await payload.findByID({
-        collection: 'agents',
-        id: agentId,
-        depth: 0,
-        overrideAccess: true,
-      })
-      agentName = ((agent as unknown as { name?: string }).name || '').trim() || 'Агент Н15'
-    } catch {
-      agentName = 'Агент Н15' // профиль удалён — объект всё равно закреплён за сотрудником
+  if (isOfficeOwnership(doc.ownership)) {
+    // Объект офиса Н15: личного агента нет, в объявлении указывается агентство
+    // (иначе публикация не прошла бы проверку обязательного поля «Агент»)
+    agentName = 'Агентство недвижимости Н15'
+  } else {
+    const agentId = docNumber(doc.agent)
+    if (agentId != null) {
+      try {
+        const agent = await payload.findByID({
+          collection: 'agents',
+          id: agentId,
+          depth: 0,
+          overrideAccess: true,
+        })
+        agentName = ((agent as unknown as { name?: string }).name || '').trim() || 'Агент Н15'
+      } catch {
+        agentName = 'Агент Н15' // профиль удалён — объект всё равно закреплён за сотрудником
+      }
     }
   }
 

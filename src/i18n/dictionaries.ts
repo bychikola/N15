@@ -567,6 +567,12 @@ export const ru = {
     },
     yourAgent: 'Ваш агент',
     leadingExpert: 'Ведущий эксперт',
+    // Объект офиса Н15 (владелец — агентство, личного агента нет): вместо имени
+    // сотрудника на карточке показывается агентство — см. ObjectCard и
+    // src/lib/object-ownership.ts
+    agencyName: 'Агентство недвижимости Н15',
+    agencyShort: 'Н15',
+    agencyHeading: 'Ваш менеджер',
     breadcrumbCatalog: 'Объекты',
     similarTitle: 'Ещё объекты',
     allCatalog: 'Все объекты',
@@ -1634,6 +1640,9 @@ export const ru = {
     filterAgent: 'Агент',
     filterAll: 'Все',
     filterAllAgents: 'Все агенты',
+    // Объекты офиса Н15 в фильтре «ответственный»: карточки без личного агента
+    // (см. src/lib/object-ownership.ts)
+    filterOffice: 'Офис Н15',
     filterAllStatuses: 'Все статусы',
     filterReset: 'Сбросить фильтры',
     filterFound: 'Найдено: %d',
@@ -1821,6 +1830,15 @@ export const ru = {
     objAgent: 'Агент',
     objAgentPh: 'Начните вводить имя',
     objAgentNotFound: 'Ничего не найдено',
+    // Источник / ответственный: кому принадлежит карточка — личному агенту или
+    // агентству Н15 (см. src/lib/object-ownership.ts)
+    objOwnership: 'Источник / ответственный',
+    objOwnershipAgent: 'Агент',
+    objOwnershipOffice: 'Офис Н15',
+    objOfficeNote:
+      'Объект агентства: на сайте вместо имени агента показано «Агентство недвижимости Н15», звонок и WhatsApp идут на основной контакт офиса. Личный агент не нужен — назначить его можно позже.',
+    // Кто фактически завёл карточку объекта (поле createdBy, видно администратору)
+    objCreatedBy: 'Добавил объект',
     objPhotos: 'Фотографии',
     objPhotosHint: 'Первая — обложка. Кнопки под фото меняют порядок.',
     objPhotosOrder: 'Перетащите фото, чтобы изменить порядок (или стрелки ↑↓)',
@@ -3858,6 +3876,11 @@ const os: Dict = {
     },
     yourAgent: 'Уæ агент',
     leadingExpert: 'Сæйраг эксперт',
+    // Объект офиса Н15 — на карточке показывается агентство; текст ждёт
+    // переводчика, фирменное название оставлено как есть
+    agencyName: 'Агентство недвижимости Н15',
+    agencyShort: 'Н15',
+    agencyHeading: 'Ваш менеджер',
     breadcrumbCatalog: 'Объекттæ',
     similarTitle: 'Маддæр объекттæ',
     allCatalog: 'Æппæт объекттæ',
@@ -4879,6 +4902,8 @@ const os: Dict = {
     filterAgent: 'Агент',
     filterAll: 'Æппæт',
     filterAllAgents: 'Æппæт агенттæ',
+    // Объекты офиса Н15 в фильтре — текст ждёт переводчика
+    filterOffice: 'Офис Н15',
     filterAllStatuses: 'Æппæт статустæ',
     filterReset: 'Сбросить фильтры',
     filterFound: 'Найдено: %d',
@@ -5034,6 +5059,13 @@ const os: Dict = {
     objAgent: 'Агент',
     objAgentPh: 'Начните вводить имя',
     objAgentNotFound: 'Ничего не найдено',
+    // Источник / ответственный — текст ждёт переводчика
+    objOwnership: 'Источник / ответственный',
+    objOwnershipAgent: 'Агент',
+    objOwnershipOffice: 'Офис Н15',
+    objOfficeNote:
+      'Объект агентства: на сайте вместо имени агента показано «Агентство недвижимости Н15», звонок и WhatsApp идут на основной контакт офиса. Личный агент не нужен — назначить его можно позже.',
+    objCreatedBy: 'Добавил объект',
     objPhotos: 'Къамтæ',
     objPhotosHint: 'Фыццаг — сæрæн. Фæтк ивынæн дæлдæр кнопкæтæ ис.',
     objPhotosOrder: 'Фото æрлас, фæтк ивынæн (æви стрелкæтæ ↑↓)',

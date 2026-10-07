@@ -41,6 +41,9 @@ import { COMMERCIAL_TYPES } from '@/lib/commercial-types'
 // партнёр / другая площадка) — общий справочник с формой CRM
 // (см. src/lib/object-origins.ts)
 import { OBJECT_ORIGINS } from '@/lib/object-origins'
+// Владелец карточки: личный агент или офис Н15 — общий справочник с формой CRM
+// и фильтром списка объектов (см. src/lib/object-ownership.ts)
+import { OBJECT_OWNERSHIPS, isOfficeOwnership } from '@/lib/object-ownership'
 // Публичный адрес объекта (slug): сборка из вида, места и площади —
 // см. src/lib/object-slug.ts. Раньше slug был служебным «object-<uuid>»,
 // а ссылки на карточки строились по числовому id: адрес /catalog/199 позволял
@@ -216,10 +219,16 @@ const validateComplexDeveloper: CollectionBeforeValidateHook = async ({ data, re
  *
  * Новому объекту агента проставляет хук objectsOwnershipHook, а он выполняется
  * до проверки полей — поэтому у агента поле всегда заполнено.
+ *
+ * Исключение — объект офиса Н15 (ownership=office): карточка принадлежит
+ * агентству, личного агента у неё нет, и звонки идут на основной контакт офиса
+ * (см. src/lib/object-ownership.ts). Такой объект сохраняется без агента, а
+ * назначить конкретного агента администратор может позже.
  */
-const validateResponsibleAgent: RelationshipFieldSingleValidation = (value, { operation }) => {
+const validateResponsibleAgent: RelationshipFieldSingleValidation = (value, { data, operation }) => {
   if (value) return true
   if (operation !== 'create') return true
+  if (isOfficeOwnership((data as { ownership?: unknown } | undefined)?.ownership)) return true
   return 'Укажите ответственного агента — по нему маршрутизируются звонки по объекту'
 }
 
@@ -419,6 +428,11 @@ const purchaseOptionsAccess = {
  * учётная запись. Выбирать ничего не нужно, и объект не потеряется —
  * без агента он был бы доступен только администратору.
  *
+ * Объект офиса Н15 (ownership=office) агента не получает вовсе: карточка
+ * принадлежит агентству, личный агент не нужен, а автор (createdBy) как раз и
+ * показывает администратору, кто её фактически завёл. Автоподстановка профиля
+ * агента такому объекту не делается.
+ *
  * При правке ответственного агента и автора меняет только администратор:
  * агент не передаёт свой объект другому и не забирает чужой (правку чужого
  * не пропускает access.update, поле «Агент» закрыто от агента на уровне
@@ -431,7 +445,7 @@ const objectsOwnershipHook: CollectionBeforeChangeHook = async ({ data, req, ope
   if (!user) return data
   if (operation === 'create') {
     if (user.id != null) data.createdBy = user.id
-    if (user.role === 'agent') {
+    if (user.role === 'agent' && !isOfficeOwnership(data.ownership)) {
       const mine = await myAgentIds(req as unknown as AccessReq)
       const own = mine.values().next().value
       if (own != null) data.agent = own
@@ -1443,6 +1457,26 @@ export const Objects: CollectionConfig = {
       type: 'upload',
       label: 'План этажа',
       relationTo: 'media',
+    },
+    {
+      // Источник / ответственный: кому принадлежит карточка — личному агенту
+      // или агентству (офис Н15). У объекта офиса личного ответственного нет:
+      // в публичной карточке вместо имени сотрудника показывается агентство, а
+      // кнопки «Позвонить» и «WhatsApp» ведут на основной контакт офиса (см.
+      // src/lib/object-ownership.ts и call-routing.ts). Поле публичное — по
+      // нему карточка сайта отличает объект офиса; закрытых сведений в нём
+      // нет. Значение необязательное: у старых карточек владелец = агент.
+      name: 'ownership',
+      type: 'select',
+      label: 'Источник / ответственный',
+      // Список — общий с формой CRM и фильтром списка объектов: подписи и
+      // значения не разъезжаются
+      options: OBJECT_OWNERSHIPS.map((o) => ({ label: o.label, value: o.value })),
+      defaultValue: 'agent',
+      admin: {
+        description:
+          'Кому принадлежит карточка: «Агент» — личному агенту, «Офис Н15» — агентству. У объекта офиса личного агента нет, на сайте показывается «Агентство недвижимости Н15», а звонок и WhatsApp идут на основной контакт офиса. Кто завёл карточку — в поле «Создал»',
+      },
     },
     {
       // Ответственный агент — тот, кто ведёт объект и кому АТС направляет

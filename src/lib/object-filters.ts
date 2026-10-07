@@ -19,9 +19,17 @@ export const OBJECT_STATUS_CODES = ['draft', 'published', 'archived'] as const
 
 export type ObjectStatusCode = (typeof OBJECT_STATUS_CODES)[number]
 
-/** Выбранные фильтры списка: id агента и код статуса строкой — как в форме */
+/**
+ * Особое значение фильтра «ответственный»: объекты офиса Н15 (карточки без
+ * личного агента, см. src/lib/object-ownership.ts). Приходит строкой из того
+ * же выпадающего списка, что id агента, но числом не является — поэтому
+ * проверяется отдельно, до разбора id.
+ */
+export const OBJECT_FILTER_OFFICE = 'office'
+
+/** Выбранные фильтры списка: ответственный (агент / офис Н15) и статус */
 export interface ObjectListFilters {
-  /** Ответственный агент ('' — все агенты) */
+  /** Ответственный: id агента, 'office' — объекты офиса, '' — все */
   agent: string
   /** Статус объекта ('' — все статусы) */
   status: string
@@ -34,9 +42,12 @@ export interface ObjectListFilters {
 export function objectListWhere({ agent, status }: ObjectListFilters): Where | undefined {
   const and: Where[] = []
   const agentId = Number(agent)
-  // id агента приходит из списка агентов строкой: пустое значение и мусор
-  // условием не становятся — иначе фильтр молча показал бы пустой список
-  if (agent && Number.isInteger(agentId) && agentId > 0) {
+  // Ответственный приходит из выпадающего списка строкой: 'office' —
+  // отдельная ветка, id агента — числом. Пустое значение и мусор условием не
+  // становятся — иначе фильтр молча показал бы пустой список
+  if (agent === OBJECT_FILTER_OFFICE) {
+    and.push({ ownership: { equals: 'office' } })
+  } else if (agent && Number.isInteger(agentId) && agentId > 0) {
     and.push({ agent: { equals: agentId } })
   }
   if (status) and.push({ status: { equals: status } })

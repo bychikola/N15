@@ -48,6 +48,9 @@ export interface ObjectListItem {
     name?: string
     photo?: { url?: string; focalPoint?: { x?: number; y?: number }; sizes?: { thumbnail?: { url?: string } } }
   }
+  /** Владелец карточки: 'office' — объект офиса Н15 (личного агента нет),
+   *  на карточке показывается агентство (см. src/lib/object-ownership.ts) */
+  ownership?: string
 }
 
 // Фокальная точка из админки (кроп при загрузке) — object-position для object-cover,
@@ -99,6 +102,12 @@ export default function ObjectCard({ obj, lang, t }: ObjectCardProps) {
   const agentInitials = obj.agent?.name
     ? obj.agent.name.split(' ').map((n) => n[0]).join('').slice(0, 2)
     : ''
+
+  // Объект офиса Н15: принадлежит агентству — вместо имени сотрудника
+  // показываем агентство, даже если на карточке остался прежний ответственный
+  // (владелец важнее связи; см. src/lib/object-ownership.ts). Фото в блоке нет:
+  // подставлять чужое лицо нельзя, поэтому монограмма «Н15».
+  const isOfficeObject = obj.ownership === 'office'
 
   // Публичный адрес карточки — человекочитаемый slug
   // («kvartira-vesennyaya-40m2-a1b2c3», см. src/lib/object-slug.ts). Номер
@@ -161,16 +170,18 @@ export default function ObjectCard({ obj, lang, t }: ObjectCardProps) {
           {publicAddressParts(obj.address).join(', ')}
         </p>
         {meta && <p className="object-card__meta text-[10px] tracking-[0.18em] uppercase text-[var(--n15-muted)] mb-2">{meta}</p>}
-        {obj.agent?.name && (
+        {(obj.agent?.name || isOfficeObject) && (
           <div className="object-card__agent flex items-center gap-2 mt-auto pt-2">
-            {obj.agent.photo?.url ? (
+            {!isOfficeObject && obj.agent?.photo?.url ? (
               <img src={obj.agent.photo.sizes?.thumbnail?.url || obj.agent.photo.url} alt={obj.agent.name} style={focalPosition(obj.agent.photo.focalPoint)} className="w-7 h-7 rounded-full object-cover" />
             ) : (
               <span className="object-card__avatar w-7 h-7 rounded-full bg-[var(--n15-charcoal)] border border-[var(--n15-gold)]/20 flex items-center justify-center text-[10px] font-[family-name:var(--font-display)] text-[var(--n15-gold)]">
-                {agentInitials}
+                {isOfficeObject ? 'Н15' : agentInitials}
               </span>
             )}
-            <span className="object-card__agent-name text-xs text-[var(--n15-muted)]">{obj.agent.name}</span>
+            <span className="object-card__agent-name text-xs text-[var(--n15-muted)]">
+              {isOfficeObject ? t.object.agencyName : obj.agent?.name}
+            </span>
           </div>
         )}
       </div>
