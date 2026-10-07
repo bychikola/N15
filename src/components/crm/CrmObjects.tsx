@@ -259,6 +259,18 @@ const fmt = (tpl: string, ...vals: (string | number)[]): string => {
 }
 const rub = (v: number) => new Intl.NumberFormat('ru-RU').format(v)
 
+/** id связи из документа Payload: число, строка-id или объект { id } */
+const relationshipId = (value: unknown): number | null => {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string' && value.trim() && Number.isFinite(Number(value))) return Number(value)
+  if (value && typeof value === 'object') {
+    const id = (value as { id?: unknown }).id
+    if (typeof id === 'number' && Number.isFinite(id)) return id
+    if (typeof id === 'string' && id.trim() && Number.isFinite(Number(id))) return Number(id)
+  }
+  return null
+}
+
 // «только что / N мин назад / N ч назад / N дн назад / дата» — для меток проверок
 const agoText = (t: Dict, isoAt?: string | null): string => {
   if (!isoAt) return '—'
@@ -354,6 +366,11 @@ const emptyForm = {
   // полный адрес — собранная строка, её видит агент и хранит объект
   corpus: '', fullAddress: '', apartment: '',
   lat: '', lng: '', description: '', status: 'draft', agent: '',
+  // Застройщик и его жилой комплекс — необязательная связь объекта со
+  // справочником «Застройщики» (раздел CRM /crm/developers). В списке
+  // комплексов показываются только комплексы выбранного застройщика; у
+  // объектов, заведённых до появления справочника, оба поля пусты
+  developer: '', complex: '',
   ownerName: '', ownerPhone: '', cadastralNumber: '',
   // Внутренние сведения агентства (закрытые поля объекта): происхождение
   // карточки, комиссия, партнёрские условия и заметка для команды. На сайте
@@ -992,6 +1009,11 @@ export const CrmObjects: FC<{
 }> = ({ t, isAdmin, myAgentId = null, ownObjectIds = [], autoOpen = false, autoEdit = null }) => {
   const [rows, setRows] = useState<ObjectRow[]>([])
   const [agents, setAgents] = useState<{ id: number; name: string }[]>([])
+  // Справочник застройщиков и их комплексов для полей карточки объекта
+  // (раздел CRM «Застройщики»). Архивных застройщиков в выборе помечаем —
+  // привязка к ним у старых объектов остаётся видимой
+  const [developers, setDevelopers] = useState<{ id: number; name: string; archived: boolean }[]>([])
+  const [complexes, setComplexes] = useState<{ id: number; name: string; developer: number | null }[]>([])
   const [form, setForm] = useState<FormState>(emptyForm)
   const [editId, setEditId] = useState<number | null>(null)
   const [photos, setPhotos] = useState<PhotoItem[]>([])
@@ -1131,6 +1153,12 @@ export const CrmObjects: FC<{
   // Чужой объект открыт только на просмотр — правки и сохранения в карточке нет
   const viewOnly = editId != null && !canEditPrivate
 
+  // Комплексы выбранного застройщика: в списке поля «Жилой комплекс» чужие
+  // комплексы не показываем (у объектов без застройщика список пуст)
+  const complexesForDeveloper = form.developer
+    ? complexes.filter((c) => String(c.developer) === form.developer)
+    : []
+
   const [dirty, setDirty] = useState(false)
   const skipNextDirty = useRef(true)
   const openCardMark = useCallback(() => {
@@ -1212,6 +1240,38 @@ export const CrmObjects: FC<{
     void tick()
     return () => { cancelled = true }
   }, [agentFilter, statusFilter, load])
+
+  // Застройщики и их комплексы — справочник для полей карточки объекта.
+  // Читают его сотрудники CRM (см. access коллекций Developers/Complexes);
+  // если схема ещё не досоздана или доступа нет, поля остаются пустыми и
+  // карточка не ломается
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const [devRes, cxRes] = await Promise.all([
+          fetch('/api/developers?limit=200&depth=0', { credentials: 'include' }),
+          fetch('/api/complexes?limit=500&depth=0', { credentials: 'include' }),
+        ])
+        if (cancelled) return
+        const devData = devRes.ok ? ((await devRes.json()) as { docs?: { id: number; name: string; status?: string }[] }) : { docs: [] }
+        const cxData = cxRes.ok ? ((await cxRes.json()) as { docs?: { id: number; name: string; developer?: unknown }[] }) : { docs: [] }
+        setDevelopers(
+          (devData.docs || [])
+            .map((d) => ({ id: d.id, name: d.name, archived: d.status === 'archived' }))
+            .sort((a, b) => a.name.localeCompare(b.name, 'ru')),
+        )
+        setComplexes(
+          (cxData.docs || [])
+            .map((c) => ({ id: c.id, name: c.name, developer: relationshipId(c.developer) }))
+            .sort((a, b) => a.name.localeCompare(b.name, 'ru')),
+        )
+      } catch {
+        // справочник недоступен — поля «Застройщик» и «Жилой комплекс» пустые
+      }
+    })()
+    return () => { cancelled = true }
+  }, [])
 
   // Автоматическая периодическая проверка площадок: пока страница открыта,
   // раз в минуту предлагаем серверу обработать объекты с наступившим сроком
@@ -1385,6 +1445,10 @@ export const CrmObjects: FC<{
       description: '',
       status: (o.status as string) || 'draft',
       agent: agentRel?.id != null ? String(agentRel.id) : '',
+      // Застройщик и жилой комплекс — связи объекта: в ответе с depth это
+      // объекты { id, name }, поэтому берём id. У объектов без привязки пусто
+      developer: relationshipId(o.developer) != null ? String(relationshipId(o.developer)) : '',
+      complex: relationshipId(o.complex) != null ? String(relationshipId(o.complex)) : '',
       ownerName: (o.ownerName as string) || '',
       // Номер показываем в том же виде, что и маска ввода («+7 (918) …»):
       // хук коллекции отдаёт его уже приведённым, повторное приведение
@@ -1947,6 +2011,12 @@ export const CrmObjects: FC<{
       // (в поле выбора это строка «—»), у остальных агент не участвует в
       // запросе — своего агента агенту проставляет хук коллекции при создании
       agent: form.agent ? Number(form.agent) : isAdmin ? null : undefined,
+      // Застройщик и жилой комплекс — необязательная связь со справочником
+      // «Застройщики». Пусто уходит null: снятый выбор сохраняется. В чужом
+      // объекте поля не отправляем (access полей в коллекции Objects), чтобы
+      // не затереть сохранённую привязку
+      developer: canEditPrivate ? (form.developer ? Number(form.developer) : null) : undefined,
+      complex: canEditPrivate ? (form.complex ? Number(form.complex) : null) : undefined,
       primaryImage: mediaIds[0],
       images: mediaIds.slice(1),
       // Поля собственника и кадастровый номер правят только администраторы:
@@ -2904,6 +2974,60 @@ export const CrmObjects: FC<{
               onAddressFound={applyMapAddress}
             />
           </div>
+
+          {/* Застройщик и жилой комплекс — необязательная связь со справочником
+              «Застройщики» (раздел CRM /crm/developers). В списке комплексов
+              только комплексы выбранного застройщика; у объектов, заведённых
+              до появления справочника, оба поля пусты. Сведения внутренние:
+              на сайте и в публичном API их нет (см. access полей
+              developer/complex в коллекции Objects) */}
+          {canEditPrivate && (
+            <div className="crm-fields-block span-2" style={{ gridColumn: '1 / -1' }}>
+              <div className="crm-block-head">
+                <strong>{t.crm.devObjectBlock}</strong>
+                <span>{t.crm.devObjectNote}</span>
+              </div>
+              <div className="crm-fields-grid">
+                <Field label={t.crm.devFieldDeveloper}>
+                  <select
+                    value={form.developer}
+                    onChange={(e) => {
+                      const next = e.target.value
+                      // Смена застройщика сбрасывает комплекс: комплекс
+                      // принадлежит только своему застройщику
+                      setForm((f) => ({ ...f, developer: next, complex: '' }))
+                    }}
+                    style={inputStyle}
+                  >
+                    <option value="">{t.crm.devFieldDeveloperEmpty}</option>
+                    {developers.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.archived ? `${d.name} (${t.crm.devStatusArchivedOption})` : d.name}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label={t.crm.devFieldComplex}>
+                  <select
+                    value={form.complex}
+                    onChange={(e) => set('complex', e.target.value)}
+                    style={inputStyle}
+                    disabled={!form.developer}
+                  >
+                    <option value="">
+                      {form.developer ? t.crm.devFieldComplexEmpty : t.crm.devFieldComplexHint}
+                    </option>
+                    {complexesForDeveloper.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </Field>
+              </div>
+              {form.developer && complexesForDeveloper.length === 0 && (
+                <p style={{ margin: '10px 0 0', color: '#817b70', fontSize: 11 }}>{t.crm.devFieldComplexNone}</p>
+              )}
+            </div>
+          )}
 
           {/* Блок «Собственник»: имя и телефон — закрытые сведения. Их видит
               и правит администратор, а агент — только в своём объекте (в

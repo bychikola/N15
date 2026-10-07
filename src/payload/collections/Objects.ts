@@ -1,4 +1,5 @@
-import type { CollectionBeforeChangeHook, CollectionConfig, Payload, RelationshipFieldSingleValidation, TextFieldSingleValidation, Where } from 'payload'
+import { APIError } from 'payload'
+import type { CollectionBeforeChangeHook, CollectionBeforeValidateHook, CollectionConfig, Payload, RelationshipFieldSingleValidation, TextFieldSingleValidation, Where } from 'payload'
 import { DISTRICT_OPTIONS, CITY_DISTRICT_OPTIONS } from '@/lib/districts'
 // Садовые товарищества — тот же справочник, что в разделах СТ/СНТ/СНО
 // на главной, в каталоге и форме CRM (landing-data.ts)
@@ -146,6 +147,60 @@ const validateCadastralNumber: TextFieldSingleValidation = (value, { data, opera
  */
 const validatePlotCadastralNumber: TextFieldSingleValidation = (value) =>
   cadastralFormatError(value) ?? true
+
+/** id связи из значения поля relationship — число, строка-id или объект { id } */
+function relationshipId(value: unknown): number | null {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null
+  if (typeof value === 'string' && value.trim()) {
+    const n = Number(value)
+    return Number.isFinite(n) ? n : null
+  }
+  if (value && typeof value === 'object') {
+    const id = (value as { id?: unknown }).id
+    if (typeof id === 'number' && Number.isFinite(id)) return id
+    if (typeof id === 'string' && id.trim() && Number.isFinite(Number(id))) return Number(id)
+  }
+  return null
+}
+
+/**
+ * Жилой комплекс должен принадлежать выбранному застройщику.
+ *
+ * Форма CRM показывает только комплексы выбранного застройщика, но прямой
+ * запрос к REST мог бы привязать чужой комплекс — и при смене застройщика в
+ * карточке остался бы комплекс прежней компании. Пару проверяем на сервере:
+ * запись с чужим комплексом отклоняем с понятной причиной.
+ */
+const validateComplexDeveloper: CollectionBeforeValidateHook = async ({ data, req, originalDoc }) => {
+  if (!data) return data
+  const prev = (originalDoc || {}) as Record<string, unknown>
+  const developerId = relationshipId(data.developer !== undefined ? data.developer : prev.developer)
+  const complexId = relationshipId(data.complex !== undefined ? data.complex : prev.complex)
+  if (!complexId) return data
+  if (!developerId) {
+    // APIError, а не Error: текст причины должен дойти до карточки объекта
+    throw new APIError('Выберите застройщика: жилой комплекс указывается только вместе с ним', 400)
+  }
+  let complex: { developer?: unknown } | null = null
+  try {
+    complex = (await req.payload.findByID({
+      collection: 'complexes',
+      id: complexId,
+      depth: 0,
+      overrideAccess: true,
+    })) as unknown as { developer?: unknown }
+  } catch {
+    // Комплекс не найден (удалён): связь считаем пустой и запись не роняем —
+    // карточку правят дальше, а поле комплекса снимется клиентом
+    return data
+  }
+  const ownerId = complex ? relationshipId(complex.developer) : null
+  if (ownerId == null) return data
+  if (ownerId !== developerId) {
+    throw new APIError('Жилой комплекс принадлежит другому застройщику — выберите комплекс выбранной компании', 400)
+  }
+  return data
+}
 
 /**
  * Ответственный агент обязателен для нового объекта: по нему маршрутизируются
@@ -738,6 +793,9 @@ export const Objects: CollectionConfig = {
         }
         return data
       },
+      // Застройщик и жилой комплекс должны совпадать (см. validateComplexDeveloper):
+      // чужой комплекс в паре отклоняем до записи
+      validateComplexDeveloper,
     ],
     beforeChange: [
       // Ответственный агент и автор карточки (см. шапку хука): первым —
@@ -1304,6 +1362,37 @@ export const Objects: CollectionConfig = {
         },
         { name: 'apartment', type: 'text', label: 'Квартира', access: exactAddressAccess },
       ],
+    },
+    {
+      // Застройщик объекта и его жилой комплекс — необязательная связь карточки
+      // со справочником застройщиков (коллекции developers/complexes, раздел
+      // CRM «Застройщики»). У объектов, заведённых до появления справочника,
+      // оба поля пусты. Связь внутренняя: в публичный API не отдаётся
+      // (privateFieldsAccess), поэтому сведения о застройщике и его контактах
+      // посетителю не попадают.
+      name: 'developer',
+      type: 'relationship',
+      relationTo: 'developers',
+      label: 'Застройщик',
+      access: privateFieldsAccess,
+      admin: {
+        description:
+          'Компания-застройщик объекта. Необязательно; в выборе — активные застройщики. На сайте не показывается',
+      },
+    },
+    {
+      // Жилой комплекс — только из комплексов выбранного застройщика: форму
+      // CRM список фильтрует, а сервер проверяет пару хуком
+      // validateComplexDeveloper (запись с чужим комплексом отклоняется)
+      name: 'complex',
+      type: 'relationship',
+      relationTo: 'complexes',
+      label: 'Жилой комплекс',
+      access: privateFieldsAccess,
+      admin: {
+        description:
+          'Жилой комплекс застройщика. Сначала выберите застройщика — в списке только его комплексы. На сайте не показывается',
+      },
     },
     {
       name: 'coordinates',

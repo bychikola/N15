@@ -31,6 +31,11 @@ export function CrmShell({ user, t, active, children }: Props) {
     // очереди — служебные данные источника: раздел только для администратора
     // (та же проверка на странице /crm/sources)
     ...(isAdmin ? [{ id: 'sources', href: '/crm/sources', label: t.crm.navSources }] : []),
+    // «Застройщики»: компании-застройщики и их жилые комплексы. Раздел только
+    // для администратора — в карточке контакт представителя (персональные
+    // данные), а заводить и править справочник может только администратор
+    // (та же проверка на странице /crm/developers)
+    ...(isAdmin ? [{ id: 'developers', href: '/crm/developers', label: t.crm.navDevelopers }] : []),
     // «Архив объектов»: снятые с продажи объекты остаются в базе, но скрыты
     // с сайта, из каталога, поиска и с площадок публикации (src/lib/archive.ts)
     { id: 'archive', href: '/crm/archive', label: t.crm.navArchive },
