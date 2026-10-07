@@ -14,6 +14,9 @@ import SelectionCta from '@/components/home/SelectionCta'
 import OwnersSection from '@/components/home/OwnersSection'
 import AboutSection from '@/components/home/AboutSection'
 import ContactSection from '@/components/home/ContactSection'
+// Блок «Отзывы клиентов» на главной: те же карточки, что на странице /reviews
+import { ReviewsSection } from '@/components/reviews/ReviewsSection'
+import { loadPublishedReviews } from '@/lib/review-service'
 import { GoalLink } from '@/components/analytics/GoalLink'
 // Звонок в подвале главной — тем же номером, что в шапке: tel:-ссылка
 // собирается из номера настроек (см. src/lib/call-routing.ts)
@@ -185,6 +188,11 @@ export default async function HomePage({ params, searchParams }: PageProps) {
   // (коллекции regions и settlements, см. src/lib/interregional-service.ts)
   const interregionalRegions = await loadInterregionalRegions(payload)
 
+  // Отзывы клиентов для блока на главной: только опубликованные, свежие
+  // сверху. Сводку (средняя оценка и число отзывов) считает сервер по всей
+  // выдаче — она не зависит от того, сколько карточек попало в блок
+  const { reviews, stats } = await loadPublishedReviews(payload)
+
   // Телефон из глобала — только поле «Телефоны» (fallback — из прототипа)
   const { phones: sitePhones } = await getPublicSiteSettings(['phones'], payload)
   const phone = sitePhones?.[0]?.phone || undefined
@@ -244,6 +252,17 @@ export default async function HomePage({ params, searchParams }: PageProps) {
             его объект (тексты и условия — со страницы направления) */}
         <OwnersSection t={t} lang={lang} />
         <AboutSection t={t} />
+        {/* Отзывы — перед контактами: клиент видит, как прошли сделки других,
+            и может оставить свой отзыв, не уходя со страницы (полный список —
+            на странице /reviews). Персональные данные форма не собирает */}
+        <ReviewsSection
+          reviews={reviews}
+          stats={stats}
+          limit={3}
+          allHref={`/${lang}/reviews`}
+          heading={t.reviews.title}
+          lead={t.reviews.lead}
+        />
         <ContactSection t={t} phone={phone} />
         <footer className="lp-footer">
           <a className="lp-brand" href="#top">

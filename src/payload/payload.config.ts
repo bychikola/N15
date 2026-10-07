@@ -70,6 +70,10 @@ import { SourceObjects } from './collections/SourceObjects'
 // комплекс» в карточке объекта
 import { Developers } from './collections/Developers'
 import { Complexes } from './collections/Complexes'
+// «Отзывы клиентов»: отзывы посетителей с сайта — на публичную страницу
+// /reviews попадают только после проверки в CRM (раздел /crm/reviews,
+// см. src/lib/reviews.ts, src/lib/review-service.ts)
+import { Reviews } from './collections/Reviews'
 import { seedInterregional } from '@/lib/interregional-service'
 // Перевод старых объектов на человекочитаемые публичные адреса
 // (см. src/lib/object-slug-backfill.ts)
@@ -128,7 +132,7 @@ export default buildConfig({
     abortOnLimit: true,
     responseOnLimit: `Файл больше ${PHOTO_MAX_LABEL} — допустимы ${PHOTO_FORMATS_LABEL} до ${PHOTO_MAX_LABEL}`,
   },
-  collections: [Users, Media, Objects, Agents, Applications, Tasks, Messages, Blog, News, NewsReviews, Pages, Customers, Emails, MailAttachments, AgentTasks, MarketListings, LegalDocuments, LegalReports, Advertisers, Advertisements, AdvertisingRequests, AdvertisingMaterials, BoardAds, BoardMaterials, Regions, Settlements, SiteVisits, Visitors, VisitorEvents, AnalyticsAccess, OwnerApplications, OwnerMaterials, SourceObjects, Developers, Complexes],
+  collections: [Users, Media, Objects, Agents, Applications, Tasks, Messages, Blog, News, NewsReviews, Pages, Customers, Emails, MailAttachments, AgentTasks, MarketListings, LegalDocuments, LegalReports, Advertisers, Advertisements, AdvertisingRequests, AdvertisingMaterials, BoardAds, BoardMaterials, Regions, Settlements, SiteVisits, Visitors, VisitorEvents, AnalyticsAccess, OwnerApplications, OwnerMaterials, SourceObjects, Developers, Complexes, Reviews],
   globals: [SiteSettings, MailSettings, AgentSettings, NewsSettings, PlatformSettings, ObjectSourceSettings],
   editor: lexicalEditor(),
   i18n: {

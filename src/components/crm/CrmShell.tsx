@@ -46,6 +46,10 @@ export function CrmShell({ user, t, active, children }: Props) {
     // «Доска»: очередь модерации объявлений с сайта (src/lib/board.ts).
     // Раздел открыт всей команде — объявлений со временем будет много
     { id: 'board', href: '/crm/board', label: t.crm.navBoard },
+    // «Отзывы»: отзывы клиентов с сайта ждут проверки перед публикацией
+    // (src/lib/reviews.ts). Раздел открыт всей команде — отзывы касаются
+    // работы агентов, и очередь не должна зависеть от одного человека
+    { id: 'reviews', href: '/crm/reviews', label: t.crm.navReviews },
     // «Новости на проверку»: официальные новости о недвижимости ждут
     // подтверждения перед публикацией в блоге (src/lib/news.ts)
     { id: 'news', href: '/crm/news', label: t.crm.navNews },

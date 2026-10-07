@@ -1466,6 +1466,106 @@ html[data-theme='dark'] .lp-featured .object-card { border: 0; }
 .ir-region-plus { transition: transform .2s; }
 .ir-region[open] > summary .ir-region-plus { transform: rotate(45deg); }
 
+/* ── Отзывы клиентов ─────────────────────────────
+   Публичный раздел /reviews и блок на главной: сводка оценок, сетка карточек
+   и форма отправки в модальном окне. Цвета — из токенов темы, поэтому блок
+   одинаково читается в светлой и тёмной теме (§6 ux-ui-rules.md): текст и
+   цифры — золотом (читается на обеих поверхностях), зелёный — тонкой
+   декоративной линией карточки, а не текстом. */
+.review-summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 20px; margin: 0 0 28px; }
+.review-summary__score {
+  font-family: var(--font-display);
+  font-size: 46px;
+  line-height: 1;
+  color: var(--n15-gold);
+}
+.review-summary__meta { color: var(--n15-muted); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
+.review-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 18px; }
+.review-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 22px;
+  border-radius: 14px;
+  background: var(--card-bg);
+  border: 1px solid color-mix(in srgb, var(--n15-gold) 22%, transparent);
+  border-top: 2px solid color-mix(in srgb, var(--n15-green) 55%, transparent);
+  box-shadow: 0 12px 32px color-mix(in srgb, var(--n15-green) 7%, transparent);
+}
+.review-card__top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.review-card__name { margin: 0; font-family: var(--font-display); font-size: 19px; color: var(--heading); }
+.review-card__service {
+  display: inline-block;
+  margin-top: 7px;
+  padding: 3px 11px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--n15-gold) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--n15-gold) 35%, transparent);
+  color: var(--n15-gold);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+.review-card__date { flex: 0 0 auto; color: var(--n15-muted); font-size: 11px; white-space: nowrap; }
+.review-card__text { margin: 0; color: var(--foreground); font-size: 14px; line-height: 1.65; }
+.review-stars { display: inline-flex; gap: 3px; }
+.review-star { font-size: 17px; line-height: 1; color: color-mix(in srgb, var(--n15-gold) 28%, transparent); }
+.review-star--on { color: var(--n15-gold); }
+.review-empty {
+  text-align: center;
+  padding: 46px 20px;
+  border: 1px dashed color-mix(in srgb, var(--n15-gold) 30%, transparent);
+  border-radius: 14px;
+}
+.review-empty strong { display: block; margin-bottom: 8px; font-family: var(--font-display); font-size: 20px; color: var(--heading); }
+.review-empty p { margin: 0 auto; max-width: 430px; color: var(--n15-muted); font-size: 14px; line-height: 1.65; }
+.review-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 30px; }
+
+/* Модальное окно формы отзыва — уже калькулятора; поля на тёмной карточке
+   окна (та же палитра, что у .lp-calc-modal). Инпуты 16px — iOS не
+   увеличивает страницу при фокусе (§5 ux-ui-rules.md). */
+.review-modal { width: min(560px, 100%); }
+.review-form { display: flex; flex-direction: column; gap: 16px; }
+.review-form__label { display: block; margin-bottom: 7px; color: rgba(215, 186, 139, .9); font-size: 10px; text-transform: uppercase; letter-spacing: .1em; }
+.review-form__input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 11px 13px;
+  background: rgba(255, 255, 255, .06);
+  border: 1px solid rgba(215, 186, 139, .3);
+  border-radius: 10px;
+  color: #fff;
+  font: 16px Arial, Helvetica, sans-serif;
+}
+.review-form__input::placeholder { color: rgba(255, 255, 255, .38); }
+.review-form__input:focus { outline: none; border-color: #d7ba8b; }
+.review-form__hint { margin: 8px 0 0; color: rgba(255, 255, 255, .5); font-size: 11px; line-height: 1.5; }
+.review-form__stars { display: flex; gap: 4px; }
+.review-form__star {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  font-size: 27px;
+  line-height: 1;
+  color: rgba(215, 186, 139, .35);
+  transition: color .15s, transform .15s;
+}
+.review-form__star:hover { color: rgba(215, 186, 139, .7); }
+.review-form__star--on { color: #d7ba8b; }
+.review-form__error { margin: 0; color: #e4a79b; font-size: 12px; }
+.review-form__done { padding: 18px 6px 4px; text-align: center; }
+.review-form__done strong { display: block; margin-bottom: 10px; font-family: 'New Standard', Georgia, serif; font-size: 24px; color: #fff; }
+.review-form__done p { margin: 0; color: rgba(255, 255, 255, .62); font-size: 13px; line-height: 1.7; }
+@media (max-width: 520px) {
+  .review-summary__score { font-size: 38px; }
+  .review-grid { grid-template-columns: 1fr; }
+}
+
 /* ── Печать правовых документов и страниц сайта ──
    Требование владельца: документы должны печататься с телефона и с компьютера
    как обычный лист А4. Кнопки «Распечатать», «Скачать PDF» и «Скачать DOCX» на

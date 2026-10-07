@@ -21,6 +21,8 @@ export const Footer: FC = () => {
     { href: `/${lang}/about/agents`, label: t.footer.agents },
     { href: `/${lang}/blog`, label: t.footer.blog },
     { href: `/${lang}/contacts`, label: t.footer.contacts },
+    // Отзывы клиентов: список опубликованных отзывов и форма «Оставить отзыв»
+    { href: `/${lang}/reviews`, label: t.footer.reviews },
     // Страница рекламы: тот же адрес, куда ведёт кнопка «Ваша реклама» в герое
     { href: `/${lang}/advertising`, label: t.footer.advertising },
     // Раздел «Документы»: согласия, политика, оферта и правила с печатной
