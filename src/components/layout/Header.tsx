@@ -120,6 +120,11 @@ export const Header: FC = () => {
     { href: `/${lang}/sell`, label: t.nav.sell },
     { href: `/${lang}/catalog?type=rent`, label: t.nav.rent },
     { href: `/${lang}/newbuildings`, label: t.nav.newBuildings },
+    // «Застройщики» — пункт внутри раздела «Новостройки»: компании, которые
+    // строят новостройки (страница /[lang]/newbuildings/developers).
+    // Отдельным пунктом верхнего меню не выносим — там уже 6 разделов (см.
+    // §4 ux-ui-rules.md), поэтому живёт в выпадающем «Недвижимость»
+    { href: `/${lang}/newbuildings/developers`, label: t.nav.developers },
     { href: `/${lang}/interregional`, label: t.nav.interregional },
     { href: `/${lang}/foreign`, label: t.nav.foreign },
   ]

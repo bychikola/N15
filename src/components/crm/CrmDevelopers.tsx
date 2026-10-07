@@ -32,6 +32,9 @@ interface DeveloperRow {
   description: string
   website: string
   status: string
+  // Публикация на сайте (поле showOnSite коллекции Developers): по умолчанию
+  // выключена, включает администратор
+  showOnSite: boolean
   logoId: number | null
   logoUrl: string | null
   contacts: DeveloperContacts
@@ -122,6 +125,9 @@ const emptyDevForm = {
   description: '',
   website: '',
   status: 'active',
+  // Новый застройщик по умолчанию не публикуется: показ на сайте включает
+  // администратор (см. поле showOnSite коллекции Developers)
+  showOnSite: false,
   contactName: '',
   contactPhone: '',
   contactEmail: '',
@@ -179,6 +185,7 @@ export const CrmDevelopers: FC<Props> = ({ t }) => {
             description: String(d.description || ''),
             website: String(d.website || ''),
             status: String(d.status || 'active'),
+            showOnSite: d.showOnSite === true,
             logoId: relId(d.logo),
             logoUrl: logo && typeof logo === 'object' ? logo.url || null : null,
             contacts: {
@@ -243,6 +250,7 @@ export const CrmDevelopers: FC<Props> = ({ t }) => {
       description: d.description,
       website: d.website,
       status: d.status === 'archived' ? 'archived' : 'active',
+      showOnSite: d.showOnSite,
       contactName: d.contacts.contactName || '',
       contactPhone: d.contacts.contactPhone || '',
       contactEmail: d.contacts.contactEmail || '',
@@ -282,6 +290,8 @@ export const CrmDevelopers: FC<Props> = ({ t }) => {
         description: form.description.trim() || null,
         website: form.website.trim() || null,
         status: form.status,
+        // Публикация на сайте — переключатель администратора (поле showOnSite)
+        showOnSite: form.showOnSite,
         contacts: {
           contactName: form.contactName.trim() || null,
           contactPhone: form.contactPhone.trim() || null,
@@ -470,10 +480,16 @@ export const CrmDevelopers: FC<Props> = ({ t }) => {
                 )}
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontFamily: "'New Standard', Georgia, serif", fontSize: 16, overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.name}</div>
-                  {isDeveloperArchived(d.status) && (
+                  {isDeveloperArchived(d.status) ? (
                     <span style={{ display: 'inline-block', marginTop: 3, padding: '3px 9px', borderRadius: 999, background: '#efeadf', color: '#817b70', fontSize: 9, textTransform: 'uppercase', letterSpacing: '.06em' }}>
                       {DEVELOPER_STATUS_LABELS.archived}
                     </span>
+                  ) : (
+                    d.showOnSite && (
+                      <span style={{ display: 'inline-block', marginTop: 3, padding: '3px 9px', borderRadius: 999, background: '#eef3e8', color: '#5b7a4e', fontSize: 9, textTransform: 'uppercase', letterSpacing: '.06em' }}>
+                        {t.crm.devShowOnSiteBadge}
+                      </span>
+                    )
                   )}
                 </div>
               </div>
@@ -572,6 +588,24 @@ export const CrmDevelopers: FC<Props> = ({ t }) => {
               {t.crm.devDescription}
               <textarea rows={3} value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} style={inputStyle} />
             </label>
+            {/* Публикация на сайте: отдельный переключатель администратора,
+                по умолчанию выключен. Архивные компании на сайте не
+                показываются независимо от него (поле showOnSite коллекции
+                Developers) */}
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label style={{ ...labelStyle, flexDirection: 'row', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={form.showOnSite}
+                  onChange={(e) => setForm((f) => ({ ...f, showOnSite: e.target.checked }))}
+                  style={{ width: 18, height: 18, accentColor: '#a7814e', flex: 'none' }}
+                />
+                {t.crm.devShowOnSite}
+              </label>
+              <p style={{ margin: '6px 0 0', color: '#9b958a', fontSize: 10, lineHeight: 1.5, maxWidth: 620 }}>
+                {t.crm.devShowOnSiteHint}
+              </p>
+            </div>
           </div>
 
           {/* Контакт ответственного представителя — персональные данные,
