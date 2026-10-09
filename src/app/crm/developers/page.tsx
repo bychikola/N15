@@ -26,9 +26,15 @@ export default async function CrmDevelopersPage() {
   if (!canAccessCrm(user)) redirect('/crm')
   if (user.role !== 'admin') redirect('/crm')
 
+  // Базовый адрес коллекции комплексов в админке: маршрут админки задаётся
+  // переменной окружения (см. routes.admin в src/payload/payload.config.ts).
+  // По нему CRM открывает полную карточку ЖК — описание, планировки, сроки,
+  // фотоотчёты и настройки формы обратной связи правятся там.
+  const complexAdminHref = `${process.env.ADMIN_ROUTE || '/admin'}/collections/complexes`
+
   return (
     <CrmShell user={user} t={t} active="developers">
-      <CrmDevelopers t={t} />
+      <CrmDevelopers t={t} complexAdminHref={complexAdminHref} />
     </CrmShell>
   )
 }

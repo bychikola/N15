@@ -2642,6 +2642,9 @@ export const ru = {
     devComplexAdd: 'Добавить комплекс',
     devComplexNew: 'Новый комплекс',
     devComplexEdit: 'Редактировать',
+    // Ссылка на полную карточку комплекса в админке: описание, планировки,
+    // сроки сдачи, фотоотчёты и настройки карточки обратной связи
+    devComplexFull: 'Полная карточка',
     devComplexName: 'Название комплекса',
     devComplexNamePh: 'ЖК «Весенний»',
     devComplexLocality: 'Населённый пункт',
@@ -3336,6 +3339,51 @@ export const ru = {
     newbuildingsBlockText:
       'Компании, которые строят новостройки. На странице застройщика — его жилые комплексы и объекты в продаже.',
     newbuildingsBlockCta: 'Смотреть застройщиков',
+    // Кнопка на карточке комплекса в списке на странице застройщика
+    complexMore: 'Подробнее о комплексе',
+  },
+  // Публичная страница жилого комплекса (страница
+  // /[lang]/newbuildings/complexes/[id]): блоки карточки ЖК — описание,
+  // планировки, сроки сдачи, помещения, способы покупки, вопросы и форма.
+  // Тексты русские — осетинская версия ждёт переводчика, как у новых разделов.
+  complex: {
+    developer: 'Застройщик',
+    backToDeveloper: 'К застройщику',
+    aboutTitle: 'Описание комплекса',
+    noDescription: 'Описание комплекса появится позже.',
+    planningTitle: 'Планировочные решения',
+    completionTitle: 'Сроки сдачи',
+    quarter: 'квартал',
+    premisesTitle: 'Помещения и инфраструктура',
+    premisesParking: 'Паркинг',
+    premisesStorage: 'Кладовые',
+    premisesCommercial: 'Коммерческие помещения',
+    purchaseTitle: 'Способы приобретения',
+    purchaseMortgage: 'Ипотека',
+    purchaseFamilyMortgage: 'Семейная ипотека',
+    purchaseMilitaryMortgage: 'Военная ипотека',
+    purchaseInstallment: 'Рассрочка',
+    purchaseCash: 'Наличный расчёт',
+    faqTitle: 'Вопросы и ответы',
+    photoReportsTitle: 'Фотоотчёты со стройки',
+    // Карточка обратной связи: заголовок, пояснение и подпись кнопки можно
+    // задать в админке (группа feedback коллекции complexes) — это значения
+    // по умолчанию. Поля «имя, телефон, комментарий» — форма на странице ЖК
+    feedbackTitle: 'Получить консультацию',
+    feedbackText:
+      'Оставьте контакты — расскажем об условиях, свободных квартирах и ходе строительства.',
+    feedbackButton: 'Получить консультацию',
+    feedbackButtonDetails: 'Узнать подробнее',
+    feedbackName: 'Имя',
+    feedbackNamePlaceholder: 'Как к вам обращаться',
+    feedbackPhone: 'Телефон',
+    feedbackPhonePlaceholder: '+7 (___) ___-__-__',
+    feedbackComment: 'Комментарий',
+    feedbackCommentPlaceholder: 'Какой корпус или планировка интересует (необязательно)',
+    feedbackSending: 'Отправляем…',
+    feedbackError: 'Не удалось отправить заявку. Попробуйте ещё раз',
+    feedbackSentTitle: 'Заявка отправлена',
+    feedbackSentText: 'Спасибо! Мы свяжемся с вами в ближайшее время.',
   },
   // Публичные отзывы клиентов: страница /[lang]/reviews и блок на главной.
   // Показываются только отзывы, прошедшие проверку модератора; форма собирает
@@ -5841,6 +5889,9 @@ const os: Dict = {
     devComplexAdd: 'Добавить комплекс',
     devComplexNew: 'Новый комплекс',
     devComplexEdit: 'Редактировать',
+    // Ссылка на полную карточку комплекса в админке: описание, планировки,
+    // сроки сдачи, фотоотчёты и настройки карточки обратной связи
+    devComplexFull: 'Полная карточка',
     devComplexName: 'Название комплекса',
     devComplexNamePh: 'ЖК «Весенний»',
     devComplexLocality: 'Населённый пункт',
@@ -6494,6 +6545,45 @@ const os: Dict = {
     newbuildingsBlockText:
       'Компании, которые строят новостройки. На странице застройщика — его жилые комплексы и объекты в продаже.',
     newbuildingsBlockCta: 'Смотреть застройщиков',
+    complexMore: 'Подробнее о комплексе',
+  },
+  // Страница жилого комплекса (см. секцию ru выше): русские тексты,
+  // осетинская версия ждёт переводчика.
+  complex: {
+    developer: 'Застройщик',
+    backToDeveloper: 'К застройщику',
+    aboutTitle: 'Описание комплекса',
+    noDescription: 'Описание комплекса появится позже.',
+    planningTitle: 'Планировочные решения',
+    completionTitle: 'Сроки сдачи',
+    quarter: 'квартал',
+    premisesTitle: 'Помещения и инфраструктура',
+    premisesParking: 'Паркинг',
+    premisesStorage: 'Кладовые',
+    premisesCommercial: 'Коммерческие помещения',
+    purchaseTitle: 'Способы приобретения',
+    purchaseMortgage: 'Ипотека',
+    purchaseFamilyMortgage: 'Семейная ипотека',
+    purchaseMilitaryMortgage: 'Военная ипотека',
+    purchaseInstallment: 'Рассрочка',
+    purchaseCash: 'Наличный расчёт',
+    faqTitle: 'Вопросы и ответы',
+    photoReportsTitle: 'Фотоотчёты со стройки',
+    feedbackTitle: 'Получить консультацию',
+    feedbackText:
+      'Оставьте контакты — расскажем об условиях, свободных квартирах и ходе строительства.',
+    feedbackButton: 'Получить консультацию',
+    feedbackButtonDetails: 'Узнать подробнее',
+    feedbackName: 'Имя',
+    feedbackNamePlaceholder: 'Как к вам обращаться',
+    feedbackPhone: 'Телефон',
+    feedbackPhonePlaceholder: '+7 (___) ___-__-__',
+    feedbackComment: 'Комментарий',
+    feedbackCommentPlaceholder: 'Какой корпус или планировка интересует (необязательно)',
+    feedbackSending: 'Отправляем…',
+    feedbackError: 'Не удалось отправить заявку. Попробуйте ещё раз',
+    feedbackSentTitle: 'Заявка отправлена',
+    feedbackSentText: 'Спасибо! Мы свяжемся с вами в ближайшее время.',
   },
   // Публичные отзывы клиентов (страница /[lang]/reviews и блок на главной).
   // Тексты пока русские — ждут переводчика, как у остальных новых разделов.

@@ -142,9 +142,16 @@ type ComplexFormState = typeof emptyComplexForm
 
 interface Props {
   t: Dict
+  /**
+   * Базовый адрес коллекции комплексов в админке — по нему открывается полная
+   * карточка ЖК (описание, планировки, сроки, фотоотчёты, форма обратной
+   * связи). Считает серверная страница: маршрут админки задан переменной
+   * окружения (см. src/app/crm/developers/page.tsx).
+   */
+  complexAdminHref?: string
 }
 
-export const CrmDevelopers: FC<Props> = ({ t }) => {
+export const CrmDevelopers: FC<Props> = ({ t, complexAdminHref }) => {
   const [developers, setDevelopers] = useState<DeveloperRow[]>([])
   const [complexes, setComplexes] = useState<ComplexRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -661,6 +668,19 @@ export const CrmDevelopers: FC<Props> = ({ t }) => {
                       <button type="button" onClick={() => { setComplexForm({ id: c.id, name: c.name, locality: c.locality, street: c.street }); setComplexError(''); setComplexNote('') }} style={smallBtnStyle}>
                         {t.crm.devComplexEdit}
                       </button>
+                      {/* Полная карточка ЖК — в админке: здесь правятся только
+                          название и адрес, остальные блоки (описание,
+                          планировки, сроки, фотоотчёты, форма) ведёт админка */}
+                      {complexAdminHref && (
+                        <a
+                          href={`${complexAdminHref}/${c.id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ ...smallBtnStyle, textDecoration: 'none' }}
+                        >
+                          {t.crm.devComplexFull}
+                        </a>
+                      )}
                       <button type="button" onClick={() => void removeComplex(c)} style={smallBtnStyle}>
                         {t.crm.devDelete}
                       </button>

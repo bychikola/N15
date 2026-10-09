@@ -199,12 +199,21 @@ export default async function DeveloperPage({ params }: PageProps) {
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {complexes.map((c) => (
-                  <div key={c.id} className="border border-[var(--n15-gold)]/10 p-5">
-                    <div className="font-[family-name:var(--font-display)] text-lg text-[var(--n15-white)]">
+                  // Карточка ведёт на страницу комплекса: там описание,
+                  // планировки, сроки сдачи, фотоотчёты и форма заявки
+                  <Link
+                    key={c.id}
+                    href={`/${lang}/newbuildings/complexes/${c.id}`}
+                    className="group flex flex-col border border-[var(--n15-gold)]/10 hover:border-[var(--n15-gold)]/30 transition-colors duration-300 p-5"
+                  >
+                    <div className="font-[family-name:var(--font-display)] text-lg text-[var(--n15-white)] group-hover:text-[var(--n15-gold)] transition-colors">
                       {c.name}
                     </div>
                     {c.place && <div className="mt-2 text-xs text-[var(--n15-muted)]">{c.place}</div>}
-                  </div>
+                    <span className="mt-3 text-[11px] tracking-wider uppercase text-[var(--n15-gold)]">
+                      {t.developers.complexMore} →
+                    </span>
+                  </Link>
                 ))}
               </div>
             )}
