@@ -439,9 +439,13 @@ function floorNumber(v: string): number | null {
 // поэтому прямоугольники остаются одного размера, а подписи и строки значений
 // («Любой») стоят на одних линиях. Для длинных подписей (например «Населённый
 // пункт» и «Садоводческие товарищества») — компактный вариант с меньшим кеглем.
+// На телефоне (до 640 px) подпись занимает одну строку меньшим кеглем и с
+// меньшим слотом высоты: анкета фильтра должна быть собранной, а не длинной
+// (см. §11 ux-ui-rules.md — каталог на 390 px). Плотнее становится только
+// мобильный вид: с 640 px — прежние кегль и слот.
 const labelCls = (compact = false) =>
-  `${compact ? 'text-[9px] tracking-[0.15em]' : 'text-[10px] tracking-[0.2em]'} uppercase leading-[1.5] min-h-[30px] text-[var(--n15-muted)]`
-const ddBtnCls = 'flex items-center justify-between gap-3 w-full px-4 py-2.5 text-sm text-[var(--n15-silver)] border border-[var(--n15-gold)]/20 bg-[var(--n15-black)]/40 hover:border-[var(--n15-gold)]/40 transition-colors'
+  `${compact ? 'text-[9px] tracking-[0.12em] sm:tracking-[0.15em]' : 'text-[10px] tracking-[0.15em] sm:tracking-[0.2em]'} uppercase leading-[1.3] sm:leading-[1.5] min-h-[16px] sm:min-h-[30px] text-[var(--n15-muted)]`
+const ddBtnCls = 'flex items-center justify-between gap-2 sm:gap-3 w-full px-3 py-2 sm:px-4 sm:py-2.5 text-sm text-[var(--n15-silver)] border border-[var(--n15-gold)]/20 bg-[var(--n15-black)]/40 hover:border-[var(--n15-gold)]/40 transition-colors'
 
 /** Одна строка раскрытого списка: заголовок группы (СНТ/СНО/ДНТ — не
  *  выбирается) или пункт с названием товарищества/нас. пункта */
@@ -797,8 +801,11 @@ export function FeatureToggle({ label, on, onToggle }: { label: string; on: bool
 }
 
 /** Поле диапазона «от/до»: цена, площадь, жилая площадь, площадь кухни, этаж
- *  и этажность выглядят и работают одинаково — разметка одна на всех */
-const rangeInputCls = 'w-full px-3 py-2 text-sm bg-[var(--n15-black)]/40 border border-[var(--n15-gold)]/20 text-[var(--n15-silver)] placeholder:text-[var(--n15-muted)] focus:outline-none focus:border-[var(--n15-gold)]/50'
+ *  и этажность выглядят и работают одинаково — разметка одна на всех.
+ *  min-w-0 — поля пары делят узкую ячейку на телефоне (два фильтра в ряд),
+ *  без него input не даёт себя ужать. Горизонтальный отступ на телефоне
+ *  меньше: так пара «от/до» влезает в половину строки. */
+const rangeInputCls = 'w-full min-w-0 px-2 py-2 sm:px-3 text-sm bg-[var(--n15-black)]/40 border border-[var(--n15-gold)]/20 text-[var(--n15-silver)] placeholder:text-[var(--n15-muted)] focus:outline-none focus:border-[var(--n15-gold)]/50'
 
 export function RangeInputs({ from, to, onFrom, onTo, step = 'any', min = '0', fromHint = 'от', toHint = 'до' }: {
   from: string
@@ -813,7 +820,7 @@ export function RangeInputs({ from, to, onFrom, onTo, step = 'any', min = '0', f
   toHint?: string
 }) {
   return (
-    <div className="flex gap-2">
+    <div className="flex gap-1.5 sm:gap-2">
       <input type="number" min={min} step={step} placeholder={fromHint} value={from}
         onChange={(e) => onFrom(e.target.value)} className={rangeInputCls} />
       <input type="number" min={min} step={step} placeholder={toHint} value={to}
@@ -1026,20 +1033,25 @@ export default function CatalogFilters({ state, onChange, t, cityRegions, knownC
   // «Площадь участка, сотки/га/м²» (у остальных категорий — просто «Площадь»)
   const areaLabel = isLand ? `${t.catalog.plotAreaLabel}, ${unitName}` : t.catalog.areaLabel
   const unitBtn = (u: AreaUnit) =>
-    `px-3 py-1.5 text-[10px] tracking-wider uppercase border transition-all duration-300 cursor-pointer ${
+    `px-2 py-1.5 sm:px-3 text-[10px] tracking-wider uppercase border transition-all duration-300 cursor-pointer ${
       areaUnit === u
         ? 'border-[var(--n15-gold)] text-[var(--n15-gold)] bg-[var(--n15-gold)]/8'
         : 'border-[var(--n15-gold)]/20 text-[var(--n15-muted)] hover:border-[var(--n15-gold)]/40 hover:text-[var(--n15-silver)]'
     }`
 
   return (
-    <div ref={panelRef} className="flex flex-wrap items-end gap-3 p-4 border border-[var(--n15-gold)]/10 bg-[var(--n15-black)]/30">
-      <div className="w-48">
+    // Телефон: сетка из двух колонок — фильтры стоят парами и панель не
+    // вытягивается в длинную анкету (см. §11 ux-ui-rules.md). Широкие фильтры
+    // («Варианты покупки», «Город», длинные списки) занимают обе колонки
+    // (col-span-2), ряды кнопок — тоже. С 640 px — прежний flex с фиксированными
+    // ширинами полей (sm:w-* ниже): вид на десктопе не меняется.
+    <div ref={panelRef} className="grid grid-cols-2 gap-x-3 gap-y-2.5 p-3 sm:flex sm:flex-wrap sm:items-end sm:gap-3 sm:p-4 border border-[var(--n15-gold)]/10 bg-[var(--n15-black)]/30">
+      <div className="sm:w-48">
         <Dropdown label={t.catalog.dealLabel} value={state.type} options={typeOptions}
           open={openId === 'type'} onToggle={() => toggle('type')} onClose={close}
           onSelect={(v) => apply({ type: v })} />
       </div>
-      <div className="w-48">
+      <div className="sm:w-48">
         <Dropdown label={t.catalog.typeLabel} value={state.category} options={categoryOptions}
           open={openId === 'category'} onToggle={() => toggle('category')} onClose={close}
           onSelect={(v) => apply({ category: v })} />
@@ -1049,7 +1061,7 @@ export default function CatalogFilters({ state, onChange, t, cityRegions, knownC
           категорию, поэтому выбор ставит и её (см. houseTypeCategory), а
           сменившаяся на чужую категория снимает подкатегорию (см. apply) */}
       {showHouseType && (
-        <div className="w-48">
+        <div className="sm:w-48">
           <Dropdown label={t.catalog.houseTypeLabel} value={state.houseType} options={houseTypeOptions}
             compactLabel
             open={openId === 'houseType'} onToggle={() => toggle('houseType')} onClose={close}
@@ -1060,7 +1072,7 @@ export default function CatalogFilters({ state, onChange, t, cityRegions, knownC
           бизнес, офис, торговое помещение, свободное назначение, склад,
           производство. Категория у них одна, и выбор её ставит */}
       {showCommercialType && (
-        <div className="w-56">
+        <div className="sm:w-56">
           <Dropdown label={t.catalog.commercialTypeLabel} value={state.commercialType} options={commercialTypeOptions}
             compactLabel
             open={openId === 'commercialType'} onToggle={() => toggle('commercialType')} onClose={close}
@@ -1071,7 +1083,7 @@ export default function CatalogFilters({ state, onChange, t, cityRegions, knownC
           если у него отмечен любой из выбранных вариантов. У аренды и
           участков фильтра нет: вариантов покупки у них не бывает */}
       {showPurchase && (
-        <div className="w-full sm:w-64">
+        <div className="col-span-2 sm:w-64">
           <PurchaseDropdown label={t.catalog.purchaseLabel} anyLabel={t.catalog.purchaseAny} value={state.purchase}
             open={openId === 'purchase'} onToggle={() => toggle('purchase')} onClose={close}
             onToggleOption={(v) => {
@@ -1093,12 +1105,12 @@ export default function CatalogFilters({ state, onChange, t, cityRegions, knownC
           межрегиональных направлений нет: в списке только Осетия (см.
           regionValuesFor), а район, населённые пункты и товарищества рядом с
           ней остаются — это и есть структура поиска участков */}
-      <div className="w-full sm:w-64">
+      <div className="col-span-2 sm:w-64">
         <CityDropdown label={t.catalog.cityLabel} regions={shownRegions} place={cityPlace}
           regionKey={state.cityRegion} onPlace={pickPlace} onRegion={pickRegion} onClear={clearCity} t={t}
           open={openId === 'city'} onToggle={() => toggle('city')} onClose={close} />
       </div>
-      <div className="w-48">
+      <div className="sm:w-48">
         <Dropdown label={t.catalog.districtLabel} value={state.district}
           options={DISTRICT_OPTIONS.map((d) => ({ value: d, label: d }))}
           open={openId === 'district'} onToggle={() => toggle('district')} onClose={close}
@@ -1111,20 +1123,20 @@ export default function CatalogFilters({ state, onChange, t, cityRegions, knownC
             apply({ ...patch, ...dropInterregionalCity(v) })
           }} />
       </div>
-      <div className="w-48">
+      <div className="sm:w-48">
         <Dropdown label={t.catalog.cityDistrictLabel} value={state.cityDistrict}
           options={CITY_DISTRICT_OPTIONS.map((d) => ({ value: d, label: d }))}
           open={openId === 'cityDistrict'} onToggle={() => toggle('cityDistrict')} onClose={close}
           onSelect={(v) => apply({ cityDistrict: v, ...dropInterregionalCity(v) })} />
       </div>
-      <div className="w-48">
+      <div className="sm:w-48">
         {/* «Населённый пункт» — длинная подпись: компактный шрифт, чтобы помещалась в одну строку */}
         <Dropdown label={t.catalog.localityLabel} value={state.locality}
           options={localityOptions} compactLabel
           open={openId === 'locality'} onToggle={() => toggle('locality')} onClose={close}
           onSelect={(v) => apply({ locality: v, ...dropInterregionalCity(v) })} />
       </div>
-      <div className="w-56">
+      <div className="sm:w-56">
         {/* Садоводческие товарищества: список сгруппирован по категориям
             СНТ/СНО/ДНТ — товарищества живут только внутри Владикавказского
             городского округа и не относятся к районам республики */}
@@ -1135,12 +1147,12 @@ export default function CatalogFilters({ state, onChange, t, cityRegions, knownC
           open={openId === 'snt'} onToggle={() => toggle('snt')} onClose={close}
           onSelect={(v) => apply({ snt: v, ...dropInterregionalCity(v) })} />
       </div>
-      <div className="w-48">
+      <div className="sm:w-48">
         <div className={labelCls() + ' mb-1'}>{t.catalog.priceLabel}</div>
         <RangeInputs from={state.priceMin} to={state.priceMax}
           onFrom={(v) => apply({ priceMin: v })} onTo={(v) => apply({ priceMax: v })} />
       </div>
-      <div className="w-52">
+      <div className="sm:w-52">
         {/* Площадь: диапазон «от/до». У участков это «Площадь участка» и
             единицу можно переключить на сотки или гектары (в базе площадь
             всё равно в м² — пересчитывает buildWhere), дробные значения
@@ -1148,8 +1160,10 @@ export default function CatalogFilters({ state, onChange, t, cityRegions, knownC
         <div className={labelCls() + ' mb-1'}>{areaLabel}</div>
         <RangeInputs from={state.areaMin} to={state.areaMax} fromHint={areaPh('от')} toHint={areaPh('до')}
           onFrom={(v) => apply({ areaMin: v })} onTo={(v) => apply({ areaMax: v })} />
+        {/* Кнопки единицы площади: на телефоне ячейка вдвое уже — кнопки
+            переносятся (flex-wrap), а не вылезают за рамку панели */}
         {isLand && (
-          <div className="flex gap-1 mt-2">
+          <div className="flex flex-wrap gap-1 mt-1.5 sm:mt-2">
             <button type="button" onClick={() => apply({ areaUnit: 'sqm' })} className={unitBtn('sqm')}>
               {t.catalog.sqm}
             </button>
@@ -1162,7 +1176,9 @@ export default function CatalogFilters({ state, onChange, t, cityRegions, knownC
           </div>
         )}
       </div>
-      <div>
+      {/* Комнат — 5 кнопок: на телефоне не влезают в половину строки, поэтому
+          ряд занимает обе колонки сетки фильтров */}
+      <div className="col-span-2">
         <div className={labelCls() + ' mb-1'}>{t.catalog.roomsLabel}</div>
         <div className="flex gap-1">
           {['', '1', '2', '3', '4'].map((r) => (
@@ -1179,10 +1195,12 @@ export default function CatalogFilters({ state, onChange, t, cityRegions, knownC
       </div>
       {/* ——— Второй ряд — характеристики объекта. Ширина во весь ряд:
           фильтров много, и в первом ряду им тесно; показывается по кнопке
-          «Показать ещё фильтры» (см. moreOpen) ——— */}
+          «Показать ещё фильтры» (см. moreOpen). На телефоне — та же сетка из
+          двух колонок: поля идут парами, а с 640 px снова flex с фиксированными
+          ширинами (sm:w-*) ——— */}
       {moreOpen && (
-        <div className="w-full flex flex-wrap items-end gap-3 pt-4 mt-1 border-t border-[var(--n15-gold)]/10">
-          <div className="w-56">
+        <div className="col-span-2 grid grid-cols-2 gap-x-3 gap-y-2.5 pt-3 mt-0.5 sm:flex sm:flex-wrap sm:items-end sm:gap-3 sm:pt-4 sm:mt-1 border-t border-[var(--n15-gold)]/10">
+          <div className="sm:w-56">
             {/* Улица — свободный ввод: адреса агенты пишут руками, поэтому
                 ищем вхождение, а не точное совпадение (см. buildWhere) */}
             <div className={labelCls() + ' mb-1'}>{t.catalog.streetLabel}</div>
@@ -1195,18 +1213,18 @@ export default function CatalogFilters({ state, onChange, t, cityRegions, knownC
               фильтр ищет именно участки. Поиск точный: номер сверяется с
               найденным сервером списком id (см. buildWhere) */}
           {isLand && (
-            <div className="w-56">
+            <div className="sm:w-56">
               <div className={labelCls(true) + ' mb-1'}>{t.catalog.cadastralLabel}</div>
               <input type="text" value={state.cadastral} placeholder={t.catalog.cadastralPlaceholder}
                 inputMode="numeric" onChange={(e) => apply({ cadastral: e.target.value })} className={rangeInputCls} />
             </div>
           )}
-          <div className="w-44">
+          <div className="sm:w-44">
             <div className={labelCls() + ' mb-1'}>{t.catalog.livingAreaLabel}</div>
             <RangeInputs from={state.livingAreaMin} to={state.livingAreaMax}
               onFrom={(v) => apply({ livingAreaMin: v })} onTo={(v) => apply({ livingAreaMax: v })} />
           </div>
-          <div className="w-44">
+          <div className="sm:w-44">
             <div className={labelCls() + ' mb-1'}>{t.catalog.kitchenAreaLabel}</div>
             <RangeInputs from={state.kitchenAreaMin} to={state.kitchenAreaMax}
               onFrom={(v) => apply({ kitchenAreaMin: v })} onTo={(v) => apply({ kitchenAreaMax: v })} />
@@ -1214,19 +1232,19 @@ export default function CatalogFilters({ state, onChange, t, cityRegions, knownC
           {/* Этаж и этажность — диапазоны «от/до»: этаж у квартиры, комнаты и
               гаража, этажность у дома и у дома квартиры. Числа целые, ввод
               фильтруется в buildWhere (floorNumber) */}
-          <div className="w-40">
+          <div className="sm:w-40">
             <div className={labelCls() + ' mb-1'}>{t.catalog.floorLabel}</div>
             <RangeInputs from={state.floorMin} to={state.floorMax} step="1" min="1"
               onFrom={(v) => apply({ floorMin: v })} onTo={(v) => apply({ floorMax: v })} />
           </div>
-          <div className="w-40">
+          <div className="sm:w-40">
             <div className={labelCls() + ' mb-1'}>{t.catalog.floorsLabel}</div>
             <RangeInputs from={state.floorsMin} to={state.floorsMax} step="1" min="1"
               onFrom={(v) => apply({ floorsMin: v })} onTo={(v) => apply({ floorsMax: v })} />
           </div>
           {/* Отопление: список значений словаря (t.object.heatingOptions),
               в базе поле текстовое — совпадение ищется по фрагменту (HEATING_FILTERS) */}
-          <div className="w-48">
+          <div className="sm:w-48">
             <Dropdown label={t.catalog.heatingLabel} value={state.heating} compactLabel
               options={HEATING_FILTERS.map((h) => ({ value: h.value, label: t.object.heatingOptions[h.value] }))}
               open={openId === 'heating'} onToggle={() => toggle('heating')} onClose={close}
@@ -1234,7 +1252,7 @@ export default function CatalogFilters({ state, onChange, t, cityRegions, knownC
           </div>
           {/* Парковка: тот же приём, что у отопления (t.catalog.parkingOptions,
               PARKING_FILTERS) */}
-          <div className="w-48">
+          <div className="sm:w-48">
             <Dropdown label={t.catalog.parkingLabel} value={state.parking} compactLabel
               options={PARKING_FILTERS.map((p) => ({ value: p.value, label: t.catalog.parkingOptions[p.value] }))}
               open={openId === 'parking'} onToggle={() => toggle('parking')} onClose={close}
@@ -1242,21 +1260,22 @@ export default function CatalogFilters({ state, onChange, t, cityRegions, knownC
           </div>
           {/* Материал дома и газ — такие же текстовые поля (BUILDING_FILTERS,
               GAS_FILTERS): «кирпич» найдёт «Кирпичный» и «кирпич» */}
-          <div className="w-48">
+          <div className="sm:w-48">
             <Dropdown label={t.catalog.buildingLabel} value={state.building} compactLabel
               options={BUILDING_FILTERS.map((b) => ({ value: b.value, label: t.catalog.buildingOptions[b.value] }))}
               open={openId === 'building'} onToggle={() => toggle('building')} onClose={close}
               onSelect={(v) => apply({ building: v })} />
           </div>
-          <div className="w-44">
+          <div className="sm:w-44">
             <Dropdown label={t.catalog.gasLabel} value={state.gas} compactLabel
               options={GAS_FILTERS.map((g) => ({ value: g.value, label: t.catalog.gasOptions[g.value] }))}
               open={openId === 'gas'} onToggle={() => toggle('gas')} onClose={close}
               onSelect={(v) => apply({ gas: v })} />
           </div>
           {/* Признаки объекта — переключатели «есть»: у каждого свой фрагмент
-              значения в текстовом поле (см. buildWhere) */}
-          <div>
+              значения в текстовом поле (см. buildWhere). Три подписи в половину
+              строки не влезают — на телефоне занимают обе колонки */}
+          <div className="col-span-2 sm:col-span-1">
             <div className={labelCls() + ' mb-1'}>{t.catalog.featuresLabel}</div>
             <div className="flex flex-wrap gap-1">
               <FeatureToggle label={t.catalog.individualHeatingLabel} on={state.individualHeating === '1'}
@@ -1272,7 +1291,7 @@ export default function CatalogFilters({ state, onChange, t, cityRegions, knownC
       {/* Кнопки панели: подобрать (показать выдачу), свернуть/раскрыть второй
           ряд, посмотреть выдачу на карте и сбросить всё. Сброс — у правого
           края: это не действие поиска, а его отмена */}
-      <div className="w-full flex flex-wrap items-center gap-3 pt-4 mt-1 border-t border-[var(--n15-gold)]/10">
+      <div className="col-span-2 flex flex-wrap items-center gap-2 sm:gap-3 pt-3 sm:pt-4 mt-0.5 sm:mt-1 border-t border-[var(--n15-gold)]/10">
         <button type="button" onClick={onSubmit}
           className="px-6 py-3 text-xs uppercase tracking-wider bg-[var(--n15-gold)] text-[var(--n15-black)] hover:bg-[var(--n15-gold)]/90 transition-colors cursor-pointer">
           {t.catalog.submitFilters}
