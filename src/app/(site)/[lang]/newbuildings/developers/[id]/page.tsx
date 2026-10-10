@@ -225,12 +225,9 @@ export default async function DeveloperPage({ params }: PageProps) {
               {t.developers.objectsTitle}
             </h2>
             {objects.length === 0 ? (
-              <div>
-                <p className="text-sm text-[var(--n15-muted)] mb-5">{t.developers.objectsEmpty}</p>
-                <Button variant="outline" href={`/${lang}/catalog`}>
-                  {t.services.buy.cta}
-                </Button>
-              </div>
+              // Объектов у компании ещё нет — в общий каталог не отправляем:
+              // подборка была бы чужой. Показываем только строку ожидания
+              <p className="text-sm text-[var(--n15-muted)]">{t.developers.objectsSoon}</p>
             ) : (
               <>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-10">
@@ -239,7 +236,10 @@ export default async function DeveloperPage({ params }: PageProps) {
                   ))}
                 </div>
                 <div className="mt-10">
-                  <Button variant="outline" href={`/${lang}/catalog`}>
+                  {/* Кнопка открывает каталог с подборкой этой компании, а не
+                      общий: идентификатор уходит параметром адреса и сужает
+                      выдачу (см. /api/objects/by-developer) */}
+                  <Button variant="outline" href={`/${lang}/catalog?developer=${dev.id}`}>
                     {t.services.buy.cta}
                   </Button>
                 </div>

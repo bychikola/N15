@@ -198,10 +198,31 @@ export default function CatalogContent({ cityRegions, knownCities }: CatalogCont
   const cadastralNumber = filters.cadastral.trim()
   const cadastralPending = cadastralNumber !== '' && cadastral?.number !== cadastralNumber
 
-  const where = useMemo(
-    () => buildWhere(filters, q, cityRegions, knownCities, cadastralNumber ? (cadastral?.ids ?? null) : null),
-    [filters, q, cityRegions, knownCities, cadastralNumber, cadastral],
-  )
+  // Подборка «Объекты застройщика»: id компании приходит параметром адреса
+  // (/catalog?developer=4), а id её объектов — из серверного маршрута
+  // (/api/objects/by-developer): связь объекта с застройщиком закрыта для
+  // гостя (privateFieldsAccess), и публичный API не принимает её в where.
+  // Пока id не пришли, выдачу не грузим (developerPending) — иначе каталог на
+  // секунду показал бы «ничего не найдено» по ещё не подгруженной подборке
+  const developerId = useMemo(() => {
+    const raw = searchParams.get('developer') ?? ''
+    return /^\d+$/.test(raw) ? parseInt(raw, 10) : null
+  }, [searchParams])
+  const [developer, setDeveloper] = useState<{ id: number; ids: number[] } | null>(null)
+  const developerPending = developerId !== null && developer?.id !== developerId
+
+  const where = useMemo(() => {
+    const base = buildWhere(filters, q, cityRegions, knownCities, cadastralNumber ? (cadastral?.ids ?? null) : null)
+    if (developerId === null) return base
+    // Подборка компании сужает обычный where условием по id её объектов.
+    // Пустой список — «ничего не найдено»: несуществующий id вместо пустого in
+    // (у пустого списка в SQL получается некорректное «id in ()»), как у кадастра
+    const and = Array.isArray((base as { and?: unknown }).and)
+      ? (base as { and: Record<string, unknown>[] }).and
+      : []
+    const ids = developer?.id === developerId ? developer.ids : []
+    return { and: [...and, { id: { in: ids.length ? ids : [-1] } }] }
+  }, [filters, q, cityRegions, knownCities, cadastralNumber, cadastral, developerId, developer])
   const sortParam = sort || '-createdAt'
 
   // Debounced search: write q to URL after 300ms (only q — filters/sort handled below)
@@ -295,15 +316,33 @@ export default function CatalogContent({ cityRegions, knownCities }: CatalogCont
     }
   }, [cadastralNumber])
 
+  // Подборка застройщика: серверный маршрут отдаёт id опубликованных объектов
+  // компании (связь с застройщиком гостю недоступна для запроса, см. where
+  // выше). Параметр адреса меняется только переходом, поэтому запрос один на
+  // компанию, без задержки — в отличие от кадастрового номера, который вводят
+  // посимвольно
+  useEffect(() => {
+    if (developerId === null) return
+    const controller = new AbortController()
+    fetch(`/api/objects/by-developer?developer=${developerId}`, { signal: controller.signal })
+      .then((res) => res.json())
+      .then((data) => setDeveloper({ id: developerId, ids: Array.isArray(data?.ids) ? data.ids : [] }))
+      // Запрос не удался (сеть, сервер) — считаем, что объектов нет: повторять
+      // молча нельзя, клиент увидит пустую подборку
+      .catch(() => { if (!controller.signal.aborted) setDeveloper({ id: developerId, ids: [] }) })
+    return () => controller.abort()
+  }, [developerId])
+
   // (re)load first page on filter/sort/search change.
   // All setState calls happen after await, so no synchronous setState in the effect body.
   useEffect(() => {
     let cancelled = false
     async function run() {
-      // Номер ещё ищется — выдачу не грузим: условие по нему в where ещё не
-      // собрано (см. cadastralPending). Загрузка уже показана (setLoading в
-      // onChangeFilters), поэтому экран не «моргает» прошлой выдачей
-      if (cadastralPending) return
+      // Номер или подборка застройщика ещё ищутся — выдачу не грузим: условие
+      // по ним в where ещё не собрано (см. cadastralPending/developerPending).
+      // Загрузка уже показана (setLoading в onChangeFilters), поэтому экран не
+      // «моргает» прошлой выдачей
+      if (cadastralPending || developerPending) return
       try {
         const params = new URLSearchParams({ limit: String(PAGE_SIZE), page: '1', depth: '2', sort: sortParam })
         if (Object.keys(where).length) params.set('where', JSON.stringify(where))
@@ -321,11 +360,11 @@ export default function CatalogContent({ cityRegions, knownCities }: CatalogCont
     }
     void run()
     return () => { cancelled = true }
-    // cadastralPending — в зависимостях наравне с where: поиск номера может
-    // закончиться «ничего не найдено», и дерево условий при этом не изменится
-    // (в обоих случаях один и тот же несуществующий id) — без этой зависимости
-    // выдача осталась бы в состоянии загрузки навсегда
-  }, [where, sortParam, cadastralPending])
+    // cadastralPending/developerPending — в зависимостях наравне с where: поиск
+    // может закончиться «ничего не найдено», и дерево условий при этом не
+    // изменится (в обоих случаях один и тот же несуществующий id) — без этих
+    // зависимостей выдача осталась бы в состоянии загрузки навсегда
+  }, [where, sortParam, cadastralPending, developerPending])
 
   const loadMore = useCallback(async () => {
     setLoadingMore(true)
@@ -485,11 +524,16 @@ export default function CatalogContent({ cityRegions, knownCities }: CatalogCont
               Регион и город без объектов — это «пока подбираются»: вместо
               пустого списка предлагаем оставить заявку (см. nothingInRegion) */}
           <p className="text-center text-[var(--n15-muted)] text-lg mb-4">
-            {filters.city || filters.cityRegion
-              ? t.catalog.nothingInRegion
-              : filters.locality
-                ? t.catalog.nothingInLocality
-                : t.catalog.nothingFound}
+            {/* Подборка застройщика без объектов — «скоро появятся», а не
+                общее «ничего не найдено»: компания заведена, публикаций ещё
+                нет. При своих фильтрах у пустой выдачи причина другая */}
+            {developerId !== null && !hasFilters
+              ? t.developers.objectsSoon
+              : filters.city || filters.cityRegion
+                ? t.catalog.nothingInRegion
+                : filters.locality
+                  ? t.catalog.nothingInLocality
+                  : t.catalog.nothingFound}
           </p>
           <p className="text-center mb-8">
             <button onClick={clearAll}
