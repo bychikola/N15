@@ -25,6 +25,9 @@ import { OBJECT_CATEGORY_VALUES, HOUSE_TYPES, houseTypeOf, houseTypeCategory, is
 // Подкатегории коммерции — общий справочник со схемой (Objects.commercialType)
 // и формой CRM: готовый бизнес, офис, торговое помещение и т.д.
 import { COMMERCIAL_TYPES, isCommercialType } from '@/lib/commercial-types'
+// Тип жилья квартиры — вторичное жильё или новостройка (поле market). Общий
+// справочник со схемой коллекции и формой CRM (см. src/lib/object-market.ts)
+import { OBJECT_MARKETS, OBJECT_MARKET_VALUES } from '@/lib/object-market'
 
 // Допустимые значения select-фильтров — опции одноимённых полей объекта
 // (src/payload/collections/Objects.ts). Где-запрос к /api/objects с чужим
@@ -194,13 +197,31 @@ export interface FiltersState {
    *  отмечен любой из выбранных вариантов. Взаимоисключается с арендой и
    *  участками: у них вариантов покупки не бывает, фильтр снимается */
   purchase: string
+  /** Тип жилья квартиры — код OBJECT_MARKETS: '' — не выбран, 'new' —
+   *  новостройка, 'secondary' — вторичное жильё. Заданный тип жилья сужает
+   *  выдачу до квартир (пометка есть только у них, см. buildWhere) и
+   *  переключает панель в режим подборки: категория, тип дома и тип коммерции
+   *  уступают место типу жилья, а у новостроек — ещё застройщику и ЖК */
+  market: string
+  /** Застройщик подборки новостроек — id компании строкой ('' — не выбран).
+   *  Связь объекта с застройщиком закрыта для гостя (privateFieldsAccess),
+   *  поэтому в where её нет: id уходят в серверный маршрут подборки
+   *  (/api/objects/newbuildings), а каталог фильтрует выдачу по их
+   *  результату. У ссылки со страницы компании (?developer=<id>) то же поле
+   *  включает подборку компании — см. CatalogContent */
+  developer: string
+  /** Жилой комплекс подборки новостроек — id комплекса строкой ('' — не
+   *  выбран). Имеет смысл только у выбранного застройщика: список ЖК зависит
+   *  от него, чужая пара снимается при выборе (см. apply). Поле закрыто для
+   *  гостя, фильтруется тем же серверным маршрутом, что и застройщик */
+  complex: string
 }
 
 export const emptyFilters: FiltersState = {
   type: '', category: '', rooms: '', floorMin: '', floorMax: '', floorsMin: '', floorsMax: '', heating: '', parking: '', building: '', gas: '',
   individualHeating: '', elevator: '', closedYard: '', street: '', cadastral: '', livingAreaMin: '', livingAreaMax: '', kitchenAreaMin: '', kitchenAreaMax: '',
   priceMin: '', priceMax: '', areaMin: '', areaMax: '', areaUnit: '', district: '', cityDistrict: '', locality: '', snt: '', city: '', cityRegion: '',
-  houseType: '', commercialType: '', purchase: '',
+  houseType: '', commercialType: '', purchase: '', market: '', developer: '', complex: '',
 }
 
 /**
@@ -306,6 +327,11 @@ export function buildWhere(
   // «Дома с участком» — дома с заполненной площадью участка: отдельной
   // категории в базе нет (см. HOUSE_TYPES)
   if (houseType?.plot) conds.push({ plotArea: { greater_than: 0 } })
+  // Тип жилья: пометка есть только у квартир (см. object-market.ts), поэтому
+  // условие само сужает выдачу до квартир выбранного рынка — вторичного жилья
+  // или новостроек. Застройщика и ЖК здесь нет: их поля закрыты для гостя, и
+  // подборку новостроек сужает серверный маршрут (см. CatalogContent)
+  if (f.market && isKnown(f.market, OBJECT_MARKET_VALUES)) conds.push({ market: { equals: f.market } })
   // Подкатегория коммерции: поля нет у объектов других категорий, поэтому
   // условие ставим только у коммерции (категория не выбрана — фильтр её сам
   // и задаёт, см. apply в CatalogFilters)
@@ -763,6 +789,22 @@ function CityList({ label, regions, place, regionKey, onPlace, onRegion, onClear
   )
 }
 
+/** Застройщик подборки новостроек: id компании и её название для списка.
+ *  Справочник developers закрыт для гостя (privateFieldsAccess), поэтому
+ *  список собирает сервер страницы каталога (см. catalog/page.tsx) */
+export interface DeveloperOption {
+  id: number
+  name: string
+}
+
+/** Жилой комплекс подборки новостроек: имя и застройщик — по нему список ЖК
+ *  сужается, когда выбрана компания (см. apply) */
+export interface ComplexOption {
+  id: number
+  name: string
+  developerId: number
+}
+
 interface CatalogFiltersProps {
   state: FiltersState
   onChange: (patch: Partial<FiltersState>) => void
@@ -772,6 +814,12 @@ interface CatalogFiltersProps {
   cityRegions: CityFilterRegion[]
   /** Допустимые значения фильтра «Город» — для сверки городов из ссылок */
   knownCities: readonly string[]
+  /** Застройщики подборки новостроек — опубликованные компании. Показываются
+   *  в фильтре «Застройщик» режима «Новостройка» */
+  developers: DeveloperOption[]
+  /** Жилые комплексы подборки новостроек — с застройщиком каждого: список ЖК
+   *  зависит от выбранной компании */
+  complexes: ComplexOption[]
   /** Нажатие «Подобрать»: выдача обновляется сразу при смене фильтра,
    *  поэтому кнопка только показывает её (каталог прокручивает к списку) */
   onSubmit?: () => void
@@ -781,7 +829,8 @@ interface CatalogFiltersProps {
 
 /** Ключи выпадающих списков панели — по одному на фильтр. Открытым может быть
  *  только один: ключ лежит в openId, остальные списки закрыты */
-type DropdownId = 'type' | 'category' | 'houseType' | 'commercialType' | 'purchase' | 'city' | 'district'
+type DropdownId = 'type' | 'category' | 'market' | 'developer' | 'complex' | 'houseType' | 'commercialType'
+  | 'purchase' | 'city' | 'district'
   | 'cityDistrict' | 'locality' | 'snt' | 'heating' | 'parking' | 'building' | 'gas'
 
 /** Переключатель-признак («Лифт», «Закрытый двор», «Индивидуальное
@@ -829,7 +878,7 @@ export function RangeInputs({ from, to, onFrom, onTo, step = 'any', min = '0', f
   )
 }
 
-export default function CatalogFilters({ state, onChange, t, cityRegions, knownCities, onSubmit, onShowMap }: CatalogFiltersProps) {
+export default function CatalogFilters({ state, onChange, t, cityRegions, knownCities, developers, complexes, onSubmit, onShowMap }: CatalogFiltersProps) {
   // Открытый выпадающий список панели. Один на все фильтры: открытие нового
   // закрывает прежний, повторное нажатие на кнопку — закрывает открытый.
   // Списки рисуются поверх друг друга, и несколько открытых окон сразу
@@ -876,6 +925,28 @@ export default function CatalogFilters({ state, onChange, t, cityRegions, knownC
 
   const typeOptions = Object.entries(t.typeLabels).map(([value, label]) => ({ value, label }))
   const categoryOptions = Object.entries(t.categoryLabels).map(([value, label]) => ({ value, label }))
+  // Тип жилья квартиры: подборка целиком — вторичное жильё или новостройки.
+  // Коды общие со схемой коллекции (OBJECT_MARKETS), подписи — из словаря
+  const marketOptions = OBJECT_MARKETS.map((m) => ({ value: m.value, label: t.catalog.marketOptions[m.value] }))
+  // Режим подборки по типу жилья: категория, тип дома и тип коммерции уступают
+  // место типу жилья (пометка есть только у квартир), а у новостроек рядом
+  // появляются застройщик и ЖК
+  const marketMode = state.market !== ''
+  const newbuildings = state.market === 'new'
+  const developerOptions = developers.map((d) => ({ value: String(d.id), label: d.name }))
+  // Список ЖК зависит от выбранной компании: без неё показываем комплексы всех
+  // открытых застройщиков и подписываем их компанией — одноимённые комплексы
+  // разных застройщиков в списке иначе не различить
+  const developerNames = new Map(developers.map((d) => [String(d.id), d.name]))
+  const complexOptions = complexes
+    .filter((c) => !state.developer || String(c.developerId) === state.developer)
+    .map((c) => {
+      const owner = developerNames.get(String(c.developerId))
+      return {
+        value: String(c.id),
+        label: !state.developer && owner ? `${c.name} — ${owner}` : c.name,
+      }
+    })
   // Пункты зависят от выбранного района: показываем только его нас. пункты
   const localityOptions = state.district
     ? (LOCALITIES_BY_DISTRICT[state.district] || []).map((l) => ({ value: l, label: l }))
@@ -891,8 +962,9 @@ export default function CatalogFilters({ state, onChange, t, cityRegions, knownC
   // категорий (дом, таунхаус, дача, коттедж, часть дома), «Тип коммерции» —
   // у коммерции. Категория не выбрана — показываем оба: клиент может начать
   // поиск с подкатегории, категорию ей задаёт сам выбор (см. apply)
-  const showHouseType = !state.category || isHouseCategoryCode(state.category)
-  const showCommercialType = !state.category || state.category === 'commercial'
+  // В режиме подборки по типу жилья категории нет — подкатегории не показываем
+  const showHouseType = !marketMode && (!state.category || isHouseCategoryCode(state.category))
+  const showCommercialType = !marketMode && (!state.category || state.category === 'commercial')
   const houseTypeOptions = HOUSE_TYPES.map((h) => ({ value: h.value, label: t.catalog.houseTypes[h.value] }))
   const commercialTypeOptions = COMMERCIAL_TYPES.map((c) => ({ value: c.value, label: t.catalog.commercialTypes[c.value] }))
   // Сколько фильтров второго ряда задано — видно на кнопке: свёрнутый ряд не
@@ -1023,6 +1095,31 @@ export default function CatalogFilters({ state, onChange, t, cityRegions, knownC
     if (patch.category !== undefined && patch.category !== 'land') {
       out.cadastral = ''
     }
+    // Смена типа жилья: панель переключается в режим подборки, где категории,
+    // типа дома и типа коммерции нет (пометка есть только у квартир), поэтому
+    // снимаем их — иначе в поле остался бы выбор, который ничего не фильтрует.
+    // Застройщик и ЖК бывают только у новостроек: у вторичного жилья связей с
+    // ними не бывает, отметки снимаем вместе с типом жилья
+    if (patch.market !== undefined && patch.market !== state.market) {
+      out.category = ''
+      out.houseType = ''
+      out.commercialType = ''
+      if (patch.market !== 'new') {
+        out.developer = ''
+        out.complex = ''
+      }
+    }
+    // Смена застройщика: ЖК выбирается из списка компании, поэтому чужой
+    // комплекс снимаем — иначе в поле остался бы ЖК другого застройщика, а
+    // выдача по такой паре была бы всегда пустой. «Любой» застройщик снимает
+    // и ЖК: каскад «застройщик → ЖК» сбрасывается целиком
+    if (patch.developer !== undefined && patch.developer !== state.developer) {
+      const nextComplex = patch.complex !== undefined ? patch.complex : state.complex
+      if (nextComplex
+        && !complexes.some((c) => String(c.id) === nextComplex && String(c.developerId) === patch.developer)) {
+        out.complex = ''
+      }
+    }
     onChange(out)
   }
 
@@ -1051,11 +1148,43 @@ export default function CatalogFilters({ state, onChange, t, cityRegions, knownC
           open={openId === 'type'} onToggle={() => toggle('type')} onClose={close}
           onSelect={(v) => apply({ type: v })} />
       </div>
+      {/* «Тип» (категория) в подборке по типу жилья не показываем: тип жилья
+          есть только у квартир (см. marketMode) */}
+      {!marketMode && (
+        <div className="sm:w-48">
+          <Dropdown label={t.catalog.typeLabel} value={state.category} options={categoryOptions}
+            open={openId === 'category'} onToggle={() => toggle('category')} onClose={close}
+            onSelect={(v) => apply({ category: v })} />
+        </div>
+      )}
+      {/* «Тип жилья» — подборка целиком: вторичное жильё или новостройки.
+          Выбор сужает выдачу до квартир этого рынка и переключает панель в
+          режим подборки (см. apply). Приходящая ссылкой с раздела
+          «Новостройки» подборка открывается с market=new */}
       <div className="sm:w-48">
-        <Dropdown label={t.catalog.typeLabel} value={state.category} options={categoryOptions}
-          open={openId === 'category'} onToggle={() => toggle('category')} onClose={close}
-          onSelect={(v) => apply({ category: v })} />
+        <Dropdown label={t.catalog.marketLabel} value={state.market} options={marketOptions}
+          open={openId === 'market'} onToggle={() => toggle('market')} onClose={close}
+          onSelect={(v) => apply({ market: v })} />
       </div>
+      {/* Застройщик и ЖК — только у новостроек: у вторичного жилья связей с
+          ними не бывает. Список ЖК сужается выбранной компанией (см. apply) */}
+      {newbuildings && (
+        <div className="sm:w-56">
+          <Dropdown label={t.catalog.developerLabel} value={state.developer} options={developerOptions}
+            open={openId === 'developer'} onToggle={() => toggle('developer')} onClose={close}
+            onSelect={(v) => apply({ developer: v })} />
+        </div>
+      )}
+      {newbuildings && (
+        <div className="sm:w-56">
+          {/* «Жилой комплекс» — длинная подпись: компактный шрифт, чтобы
+              помещалась в одну строку (как у «Населённого пункта») */}
+          <Dropdown label={t.catalog.complexLabel} value={state.complex} options={complexOptions}
+            compactLabel
+            open={openId === 'complex'} onToggle={() => toggle('complex')} onClose={close}
+            onSelect={(v) => apply({ complex: v })} />
+        </div>
+      )}
       {/* «Тип дома» — подкатегории домов (отдельные дома, дома с участком,
           дачи, коттеджи, таунхаусы, части домов). Подкатегория уточняет
           категорию, поэтому выбор ставит и её (см. houseTypeCategory), а

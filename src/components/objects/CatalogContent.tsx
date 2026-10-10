@@ -4,9 +4,12 @@ import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useI18n } from '@/i18n/i18n-provider'
 import ObjectCard, { type ObjectListItem } from '@/components/objects/ObjectCard'
-import CatalogFilters, { buildWhere, cityValuesFor, regionValuesFor, emptyFilters, purchaseValues, OBJECT_TYPES, OBJECT_CATEGORIES, OBJECT_HEATING, OBJECT_ROOMS, OBJECT_BUILDING, OBJECT_GAS, OBJECT_PARKING, type FiltersState } from '@/components/objects/CatalogFilters'
+import CatalogFilters, { buildWhere, cityValuesFor, regionValuesFor, emptyFilters, purchaseValues, OBJECT_TYPES, OBJECT_CATEGORIES, OBJECT_HEATING, OBJECT_ROOMS, OBJECT_BUILDING, OBJECT_GAS, OBJECT_PARKING, type FiltersState, type DeveloperOption, type ComplexOption } from '@/components/objects/CatalogFilters'
 import { HOUSE_TYPE_VALUES, houseTypeCategory } from '@/lib/object-categories'
 import { COMMERCIAL_TYPE_VALUES } from '@/lib/commercial-types'
+// Тип жилья квартиры — вторичное жильё или новостройка (поле market): по нему
+// каталог открывает подборку новостроек (см. src/lib/object-market.ts)
+import { OBJECT_MARKET_VALUES } from '@/lib/object-market'
 import CategoryChips from '@/components/objects/CategoryChips'
 import CatalogMap from '@/components/objects/CatalogMap'
 import { LeadForm } from '@/components/forms/LeadForm'
@@ -61,6 +64,12 @@ const URL_PARAM: Record<keyof FiltersState, string> = {
   // Кадастровый номер участка (см. cadastral в FiltersState)
   cadastral: 'cadastral',
   purchase: 'purchase',
+  // Тип жилья квартиры и подборка новостроек: застройщик и ЖК уходят в URL
+  // теми же именами, что у подборки компании (?developer=<id>) — ссылка с её
+  // страницы открывает каталог как раньше
+  market: 'market',
+  developer: 'developer',
+  complex: 'complex',
 }
 
 // Значения select-фильтров сверяем с опциями полей (списки и зачем — см.
@@ -68,6 +77,9 @@ const URL_PARAM: Record<keyof FiltersState, string> = {
 // Города межрегионального справочника приходят из CRM (knownCities);
 // у участков список городов свой — только Владикавказ (cityValuesFor).
 const isKnown = (v: string, options: readonly string[]) => options.includes(v)
+
+/** id из ссылки (застройщик, ЖК подборки): только цифры, остальное — «не выбран» */
+const idParam = (v: string): string => (/^\d+$/.test(v) ? v : '')
 
 /** Единицы площади фильтра участков: м², сотки, гектары (см. area-format) */
 const AREA_UNITS = ['sqm', 'are', 'ha'] as const
@@ -154,6 +166,13 @@ function filtersFromParams(sp: URLSearchParams, cityRegions: readonly CityFilter
     // Чужие значения отбрасываем, порядок приводим к порядку списка (см.
     // purchaseValues) — ссылка с теми же отметками читается одинаково
     purchase: purchaseValues(sp.get('purchase') ?? '').join(','),
+    // Тип жилья — код справочника (market): чужие значения устаревших ссылок
+    // отбрасываем, как у прочих select-фильтров. Застройщик и ЖК — только
+    // цифровые id: связь с компанией закрыта для гостя, и спрашивают её не
+    // where, а серверный маршрут подборки (см. newbuildingsMode ниже)
+    market: isKnown(sp.get(URL_PARAM.market) ?? '', OBJECT_MARKET_VALUES) ? (sp.get(URL_PARAM.market) as string) : '',
+    developer: idParam(sp.get(URL_PARAM.developer) ?? ''),
+    complex: idParam(sp.get(URL_PARAM.complex) ?? ''),
   }
 }
 
@@ -163,12 +182,17 @@ interface CatalogContentProps {
   cityRegions: CityFilterRegion[]
   /** Допустимые значения фильтра «Город» — для сверки ссылок */
   knownCities: string[]
+  /** Застройщики подборки новостроек — опубликованные компании (см. страницу
+   *  каталога): справочник закрыт для гостя, список собирает сервер */
+  developers: DeveloperOption[]
+  /** Жилые комплексы подборки новостроек — с застройщиком каждого */
+  complexes: ComplexOption[]
 }
 
 /** Выдача каталога: поиск, фильтры, карточки объектов и подгрузка следующих
  *  страниц. Данные — клиентские запросы к /api/objects; справочник фильтра
- *  «Город» приходит с сервера (см. страницу каталога) */
-export default function CatalogContent({ cityRegions, knownCities }: CatalogContentProps) {
+ *  «Город» и списки застройщиков и ЖК приходят с сервера (см. страницу каталога) */
+export default function CatalogContent({ cityRegions, knownCities, developers, complexes }: CatalogContentProps) {
   const searchParams = useSearchParams()
   const router = useRouter()
   const { lang, t } = useI18n()
@@ -198,31 +222,46 @@ export default function CatalogContent({ cityRegions, knownCities }: CatalogCont
   const cadastralNumber = filters.cadastral.trim()
   const cadastralPending = cadastralNumber !== '' && cadastral?.number !== cadastralNumber
 
-  // Подборка «Объекты застройщика»: id компании приходит параметром адреса
-  // (/catalog?developer=4), а id её объектов — из серверного маршрута
-  // (/api/objects/by-developer): связь объекта с застройщиком закрыта для
-  // гостя (privateFieldsAccess), и публичный API не принимает её в where.
-  // Пока id не пришли, выдачу не грузим (developerPending) — иначе каталог на
+  // Подборка по id: застройщик и ЖК — закрытые для гостя поля (см.
+  // privateFieldsAccess в Objects.ts), и публичный API не принимает их в where.
+  // Поэтому id подходящих объектов отдаёт серверный маршрут, а каталог сужает
+  // выдачу условием id: { in } (см. where ниже). Два режима:
+  // «Объекты застройщика» (/catalog?developer=4, маршрут by-developer) и
+  // «Новостройки» (market=new, маршрут newbuildings, сужается застройщиком и
+  // ЖК). Пока id не пришли, выдачу не грузим (…Pending) — иначе каталог на
   // секунду показал бы «ничего не найдено» по ещё не подгруженной подборке
-  const developerId = useMemo(() => {
-    const raw = searchParams.get('developer') ?? ''
-    return /^\d+$/.test(raw) ? parseInt(raw, 10) : null
-  }, [searchParams])
-  const [developer, setDeveloper] = useState<{ id: number; ids: number[] } | null>(null)
-  const developerPending = developerId !== null && developer?.id !== developerId
+  const newbuildingsMode = filters.market === 'new'
+  const developerId = filters.developer ? parseInt(filters.developer, 10) : null
+  const complexId = filters.complex ? parseInt(filters.complex, 10) : null
+  // Подборка компании — прежний режим: id компании без типа жилья. В подборке
+  // новостроек тот же id сужает её до одной компании, а не включает режим
+  const companyMode = !newbuildingsMode && developerId !== null
+
+  const [company, setCompany] = useState<{ id: number; ids: number[] } | null>(null)
+  const companyPending = companyMode && company?.id !== developerId
+  // Ключ подборки новостроек — застройщик и ЖК, по которым она собрана: пока
+  // он не совпадает с полем фильтра, подборка ещё грузится
+  const newbuildingsKey = `${developerId ?? ''}|${complexId ?? ''}`
+  const [newbuildings, setNewbuildings] = useState<{ key: string; ids: number[] } | null>(null)
+  const newbuildingsPending = newbuildingsMode && newbuildings?.key !== newbuildingsKey
 
   const where = useMemo(() => {
     const base = buildWhere(filters, q, cityRegions, knownCities, cadastralNumber ? (cadastral?.ids ?? null) : null)
-    if (developerId === null) return base
-    // Подборка компании сужает обычный where условием по id её объектов.
-    // Пустой список — «ничего не найдено»: несуществующий id вместо пустого in
-    // (у пустого списка в SQL получается некорректное «id in ()»), как у кадастра
+    // id активной подборки: null — подборки нет, where не сужается
+    const pickedIds = newbuildingsMode
+      ? (newbuildings?.key === newbuildingsKey ? newbuildings.ids : null)
+      : companyMode
+        ? (company?.id === developerId ? company.ids : null)
+        : null
+    if (pickedIds === null) return base
+    // Подборка сужает обычный where условием по id её объектов. Пустой список —
+    // «ничего не найдено»: несуществующий id вместо пустого in (у пустого
+    // списка в SQL получается некорректное «id in ()»), как у кадастра
     const and = Array.isArray((base as { and?: unknown }).and)
       ? (base as { and: Record<string, unknown>[] }).and
       : []
-    const ids = developer?.id === developerId ? developer.ids : []
-    return { and: [...and, { id: { in: ids.length ? ids : [-1] } }] }
-  }, [filters, q, cityRegions, knownCities, cadastralNumber, cadastral, developerId, developer])
+    return { and: [...and, { id: { in: pickedIds.length ? pickedIds : [-1] } }] }
+  }, [filters, q, cityRegions, knownCities, cadastralNumber, cadastral, newbuildingsMode, newbuildingsKey, newbuildings, companyMode, company, developerId])
   const sortParam = sort || '-createdAt'
 
   // Debounced search: write q to URL after 300ms (only q — filters/sort handled below)
@@ -316,33 +355,52 @@ export default function CatalogContent({ cityRegions, knownCities }: CatalogCont
     }
   }, [cadastralNumber])
 
-  // Подборка застройщика: серверный маршрут отдаёт id опубликованных объектов
+  // Подборка компании: серверный маршрут отдаёт id опубликованных объектов
   // компании (связь с застройщиком гостю недоступна для запроса, см. where
   // выше). Параметр адреса меняется только переходом, поэтому запрос один на
   // компанию, без задержки — в отличие от кадастрового номера, который вводят
   // посимвольно
   useEffect(() => {
-    if (developerId === null) return
+    if (!companyMode || developerId === null) return
     const controller = new AbortController()
     fetch(`/api/objects/by-developer?developer=${developerId}`, { signal: controller.signal })
       .then((res) => res.json())
-      .then((data) => setDeveloper({ id: developerId, ids: Array.isArray(data?.ids) ? data.ids : [] }))
+      .then((data) => setCompany({ id: developerId, ids: Array.isArray(data?.ids) ? data.ids : [] }))
       // Запрос не удался (сеть, сервер) — считаем, что объектов нет: повторять
       // молча нельзя, клиент увидит пустую подборку
-      .catch(() => { if (!controller.signal.aborted) setDeveloper({ id: developerId, ids: [] }) })
+      .catch(() => { if (!controller.signal.aborted) setCompany({ id: developerId, ids: [] }) })
     return () => controller.abort()
-  }, [developerId])
+  }, [companyMode, developerId])
+
+  // Подборка новостроек: серверный маршрут отдаёт id опубликованных квартир-
+  // новостроек с привязкой к застройщику, суженных выбранными компанией и ЖК
+  // (см. /api/objects/newbuildings). Тип жилья и категорию уже ставит where
+  // (см. buildWhere), здесь — только закрытые связи
+  useEffect(() => {
+    if (!newbuildingsMode) return
+    const params = new URLSearchParams()
+    if (developerId !== null) params.set('developer', String(developerId))
+    if (complexId !== null) params.set('complex', String(complexId))
+    const controller = new AbortController()
+    fetch(`/api/objects/newbuildings?${params}`, { signal: controller.signal })
+      .then((res) => res.json())
+      .then((data) => setNewbuildings({ key: newbuildingsKey, ids: Array.isArray(data?.ids) ? data.ids : [] }))
+      // Запрос не удался (сеть, сервер) — считаем, что предложений нет:
+      // повторять молча нельзя, клиент увидит пустую подборку
+      .catch(() => { if (!controller.signal.aborted) setNewbuildings({ key: newbuildingsKey, ids: [] }) })
+    return () => controller.abort()
+  }, [newbuildingsMode, developerId, complexId, newbuildingsKey])
 
   // (re)load first page on filter/sort/search change.
   // All setState calls happen after await, so no synchronous setState in the effect body.
   useEffect(() => {
     let cancelled = false
     async function run() {
-      // Номер или подборка застройщика ещё ищутся — выдачу не грузим: условие
-      // по ним в where ещё не собрано (см. cadastralPending/developerPending).
-      // Загрузка уже показана (setLoading в onChangeFilters), поэтому экран не
-      // «моргает» прошлой выдачей
-      if (cadastralPending || developerPending) return
+      // Номер, подборка компании или подборка новостроек ещё ищутся — выдачу не
+      // грузим: условие по ним в where ещё не собрано (см. cadastralPending/
+      // companyPending/newbuildingsPending). Загрузка уже показана (setLoading в
+      // onChangeFilters), поэтому экран не «моргает» прошлой выдачей
+      if (cadastralPending || companyPending || newbuildingsPending) return
       try {
         const params = new URLSearchParams({ limit: String(PAGE_SIZE), page: '1', depth: '2', sort: sortParam })
         if (Object.keys(where).length) params.set('where', JSON.stringify(where))
@@ -360,11 +418,12 @@ export default function CatalogContent({ cityRegions, knownCities }: CatalogCont
     }
     void run()
     return () => { cancelled = true }
-    // cadastralPending/developerPending — в зависимостях наравне с where: поиск
-    // может закончиться «ничего не найдено», и дерево условий при этом не
-    // изменится (в обоих случаях один и тот же несуществующий id) — без этих
-    // зависимостей выдача осталась бы в состоянии загрузки навсегда
-  }, [where, sortParam, cadastralPending, developerPending])
+    // cadastralPending/companyPending/newbuildingsPending — в зависимостях
+    // наравне с where: поиск может закончиться «ничего не найдено», и дерево
+    // условий при этом не изменится (в обоих случаях один и тот же
+    // несуществующий id) — без этих зависимостей выдача осталась бы в
+    // состоянии загрузки навсегда
+  }, [where, sortParam, cadastralPending, companyPending, newbuildingsPending])
 
   const loadMore = useCallback(async () => {
     setLoadingMore(true)
@@ -387,6 +446,14 @@ export default function CatalogContent({ cityRegions, knownCities }: CatalogCont
   }, [])
 
   const hasFilters = useMemo(() => Object.values(filters).some(Boolean) || q !== '', [filters, q])
+  // Фильтры самой подборки (тип жилья, застройщик, ЖК) — не уточнения, а её
+  // рамки: пустая подборка при них значит «новостроек нет», а не «под фильтры
+  // ничего не подошло» (см. пустую выдачу ниже)
+  const hasExtraFilters = useMemo(
+    () => q !== '' || (Object.keys(filters) as (keyof FiltersState)[])
+      .some((k) => Boolean(filters[k]) && k !== 'market' && k !== 'developer' && k !== 'complex'),
+    [filters, q],
+  )
   const showMore = objects.length < totalDocs
 
   // Выдача начинается здесь: «Подобрать» и «Показать на карте» в панели
@@ -435,14 +502,23 @@ export default function CatalogContent({ cityRegions, knownCities }: CatalogCont
       </div>
 
       {/* Полоса категорий — над фильтрами: категория это первый выбор
-          клиента, остальные фильтры её уточняют */}
+          клиента, остальные фильтры её уточняют. В подборке по типу жилья
+          категория не выбирается: клик по категории выходит из подборки
+          целиком (вместе с застройщиком и ЖК — они были её частью) */}
       <CategoryChips
         value={filters.category}
-        onChange={(category) => { onChangeFilters({ category }); }}
+        onChange={(category) => {
+          onChangeFilters(
+            filters.market || filters.developer || filters.complex
+              ? { category, market: '', developer: '', complex: '' }
+              : { category },
+          )
+        }}
       />
 
       <CatalogFilters state={filters} onChange={onChangeFilters} t={t}
         cityRegions={cityRegions} knownCities={knownCities}
+        developers={developers} complexes={complexes}
         onSubmit={scrollToResults} onShowMap={showMap} />
 
       {/* Сброс фильтров + вид выдачи и сортировка. Числа найденных объектов
@@ -524,16 +600,20 @@ export default function CatalogContent({ cityRegions, knownCities }: CatalogCont
               Регион и город без объектов — это «пока подбираются»: вместо
               пустого списка предлагаем оставить заявку (см. nothingInRegion) */}
           <p className="text-center text-[var(--n15-muted)] text-lg mb-4">
-            {/* Подборка застройщика без объектов — «скоро появятся», а не
-                общее «ничего не найдено»: компания заведена, публикаций ещё
-                нет. При своих фильтрах у пустой выдачи причина другая */}
-            {developerId !== null && !hasFilters
-              ? t.developers.objectsSoon
-              : filters.city || filters.cityRegion
-                ? t.catalog.nothingInRegion
-                : filters.locality
-                  ? t.catalog.nothingInLocality
-                  : t.catalog.nothingFound}
+            {/* Пустая подборка названа своей причиной, а не общим «ничего не
+                найдено»: у новостроек — «предложений пока нет» (сданные дома
+                продаются до конца, но выборка может быть пуста), у подборки
+                компании — «скоро появятся». При своих фильтрах причина другая:
+                под них ничего не подошло */}
+            {newbuildingsMode && !hasExtraFilters
+              ? t.catalog.newbuildingsEmpty
+              : companyMode && !hasExtraFilters
+                ? t.developers.objectsSoon
+                : filters.city || filters.cityRegion
+                  ? t.catalog.nothingInRegion
+                  : filters.locality
+                    ? t.catalog.nothingInLocality
+                    : t.catalog.nothingFound}
           </p>
           <p className="text-center mb-8">
             <button onClick={clearAll}

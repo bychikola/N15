@@ -28,6 +28,9 @@ const ALLOWED_FIELDS = new Set([
   'type',
   'category',
   'commercialType',
+  // Тип жилья квартиры — вторичное жильё или новостройка (поле market, см.
+  // src/lib/object-market.ts): по нему каталог открывает подборку новостроек
+  'market',
   'price',
   'area',
   'plotArea',

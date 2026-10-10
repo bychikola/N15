@@ -6,9 +6,12 @@ interface PageProps {
   params: Promise<{ lang: string }>
 }
 
-// Страница направления «Новостройки». Под шагами — блок-ссылка на раздел
-// «Застройщики» (страница /[lang]/newbuildings/developers): компании, которые
-// строят новостройки, с их жилыми комплексами и объектами в продаже.
+// Страница направления «Новостройки». Главная кнопка открывает подборку
+// новостроек в каталоге (market=new): опубликованные квартиры-новостройки с
+// привязкой к застройщику, их можно сузить застройщиком и ЖК. Под шагами —
+// блок-ссылка на раздел «Застройщики» (страница
+// /[lang]/newbuildings/developers): компании, которые строят новостройки, с их
+// жилыми комплексами и объектами в продаже.
 export default async function NewbuildingsPage({ params }: PageProps) {
   const { lang } = await params
   const t = getDictionary(lang)
@@ -17,7 +20,7 @@ export default async function NewbuildingsPage({ params }: PageProps) {
     <DirectionPage
       t={t}
       direction={t.directions.newbuildings}
-      primary={{ label: t.services.buy.cta, href: `/${lang}/catalog` }}
+      primary={{ label: t.services.buy.cta, href: `/${lang}/catalog?market=new` }}
       secondary={{ label: t.directions.ctaRequest, href: `/${lang}/contacts` }}
     >
       <div className="mb-12 border border-[var(--n15-gold)]/10 p-6 md:p-8">
