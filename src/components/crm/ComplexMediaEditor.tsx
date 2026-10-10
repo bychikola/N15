@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState, type ChangeEvent, type FC } from 'react'
 import type { Dict } from '@/i18n/dictionaries'
 import { PHOTO_MAX_BYTES, PHOTO_MAX_LABEL, photoSizeLabel, isAllowedPhoto } from '@/lib/photo-rules'
+import { PDF_MIME, hasPdfMagic } from '@/lib/document-rules'
 import { ComplexUnitsEditor } from './ComplexUnitsEditor'
 
 /**
@@ -151,6 +152,22 @@ function move<T>(arr: T[], from: number, to: number): T[] {
 /** PDF ли это (by mime). Для превью планировки выбираем картинку или документ */
 const isPdf = (ref: MediaLike) =>
   ref.mimeType === 'application/pdf' || /\.pdf$/i.test(ref.filename)
+
+/**
+ * PDF ли это по содержимому файла (%PDF-), а не по MIME-типу от браузера.
+ * iPhone Safari из «Файлов», Android Chrome при выборе из облака и часть
+ * настольных браузеров отдают настоящий PDF с пустым типом или как
+ * application/octet-stream, а иногда и без расширения в имени — проверка по
+ * file.type и имени отвергала его ещё до отправки. Читаем первые 5 байт:
+ * для файла любого размера это дёшево.
+ */
+async function hasPdfContent(file: File): Promise<boolean> {
+  try {
+    return hasPdfMagic(new Uint8Array(await file.slice(0, 5).arrayBuffer()))
+  } catch {
+    return false
+  }
+}
 
 const inputStyle: React.CSSProperties = {
   width: '100%',
@@ -384,9 +401,15 @@ export const ComplexMediaEditor: FC<Props> = ({ complexId, t, onClose, onSaved }
 
   /** Отправка одного файла: изображения — в media, PDF — в complex-documents */
   const uploadFile = useCallback(async (file: File, kind: 'image' | 'pdf' | 'auto'): Promise<UploadResult> => {
+    // PDF определяем по содержимому (%PDF-), а не только по file.type и имени:
+    // так же решает и сервер (см. src/lib/document-rules.ts), поэтому кнопка
+    // работает одинаково на всех устройствах. Для изображений содержимое не
+    // читаем — там своё правило (isAllowedPhoto).
+    const pdfByContent = kind === 'image' ? false : await hasPdfContent(file)
+    const pdfByHint = (file.type || '').toLowerCase() === PDF_MIME || /\.pdf$/i.test(file.name)
+    const fileIsPdf = pdfByContent || pdfByHint
     // auto — кнопка планировок принимает и картинки, и PDF: маршрут выбираем
     // по самому файлу
-    const fileIsPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name)
     const target = kind === 'auto' ? (fileIsPdf ? 'pdf' : 'image') : kind
     if (target === 'image') {
       if (!isAllowedPhoto({ name: file.name, type: file.type })) {
@@ -399,7 +422,14 @@ export const ComplexMediaEditor: FC<Props> = ({ complexId, t, onClose, onSaved }
       return { ok: false, error: `${t.crm.mediaUploadTooBig} ${photoSizeLabel(file.size)} — ${PHOTO_MAX_LABEL}` }
     }
     const fd = new FormData()
-    fd.append('file', file)
+    // Имя нужно хранилищу и подписи под кнопкой. Часть браузеров (Android при
+    // «Поделиться») отдаёт файл без имени — тогда multipart-часть уходит без
+    // filename, сервер видит поле, а не файл, и отвечает no_file: подставляем
+    // понятное имя по определённому формату.
+    const named = file.name.trim()
+      ? file
+      : new File([file], target === 'pdf' ? 'presentation.pdf' : 'photo.jpg', { type: file.type })
+    fd.append('file', named)
     const url = target === 'pdf' ? '/api/crm/documents/upload' : '/api/crm/upload'
     try {
       const res = await fetch(url, { method: 'POST', body: fd, credentials: 'include' })

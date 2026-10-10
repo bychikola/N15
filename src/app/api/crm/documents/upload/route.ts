@@ -3,6 +3,7 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 import { canAccessCrm, getCrmUser } from '@/app/crm/auth'
 import { PHOTO_MAX_BYTES, PHOTO_MAX_LABEL } from '@/lib/photo-rules'
+import { PDF_MIME, hasPdfMagic } from '@/lib/document-rules'
 
 /**
  * Загрузка PDF-документа ЖК из CRM: презентация комплекса и планировки в PDF
@@ -45,12 +46,13 @@ export async function POST(req: NextRequest) {
 
   const original = Buffer.from(await file.arrayBuffer())
 
-  // Формат определяем по «магии» самого файла, а не по file.type: на iPhone
-  // Safari отдаёт PDF с пустым типом или как application/octet-stream (баг
-  // FormData), и проверка по MIME отвергала настоящую презентацию — кнопка
-  // «Загрузить презентацию» на телефоне не срабатывала. Заголовок %PDF- есть
-  // у любого PDF и подделать его расширением нельзя.
-  if (original.subarray(0, 5).toString('latin1') !== '%PDF-') {
+  // Формат определяем по «магии» самого файла, а не по file.type: iPhone
+  // Safari, Android Chrome при выборе из облака и часть настольных браузеров
+  // отдают настоящий PDF с пустым типом или как application/octet-stream, а
+  // иногда и без расширения в имени. Проверка по MIME отвергала такую
+  // презентацию — кнопка «Загрузить презентацию» не срабатывала. Заголовок
+  // «%PDF-» есть у любого PDF и расширением не подделывается.
+  if (!hasPdfMagic(original)) {
     return fail(415, 'bad_type', 'Нужен PDF-файл')
   }
 
@@ -61,7 +63,7 @@ export async function POST(req: NextRequest) {
       data: { title: file.name.replace(/\.[^.]+$/, '') },
       file: {
         data: original,
-        mimetype: 'application/pdf',
+        mimetype: PDF_MIME,
         name: file.name,
         size: original.length,
       },
