@@ -201,6 +201,8 @@ export interface BoardAdDetail {
   /** Фотографии для показа: у опубликованного — копии в media, у предпросмотра — присланные */
   photos: BoardPhoto[]
   authorKind: string
+  /** board — подача на доске, owner — объявление из заявки собственника */
+  source: string
   authorName: string
   publishedAt: string | null
   expiresAt: string | null
@@ -283,6 +285,7 @@ export async function loadBoardAd(
     // (их видит только автор и команда, см. доступ к board-materials)
     photos: visible ? photosOf(doc.publicPhotos) : photosOf(doc.photos),
     authorKind: str(doc.authorKind) || 'private',
+    source: str(doc.source) || 'board',
     authorName: str(doc.contactName),
     publishedAt: str(doc.publishedAt) || null,
     expiresAt: str(doc.expiresAt) || null,

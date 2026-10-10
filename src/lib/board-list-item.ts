@@ -43,6 +43,11 @@ export interface BoardListItem {
   locality: string
   /** private | agency */
   authorKind: string
+  /**
+   * Источник объявления: board — обычная подача на доске, owner — объявление
+   * собрано из заявки собственника (пометка «От собственника»)
+   */
+  source: string
   /** Имя, которое автор указал для связи */
   authorName: string
   publishedAt: string | null
@@ -80,6 +85,7 @@ export function boardToListItem(doc: Record<string, unknown>): BoardListItem {
     district: str(addr.cityDistrict) || str(addr.district),
     locality: str(addr.locality) || str(addr.city),
     authorKind: str(doc.authorKind) || 'private',
+    source: str(doc.source) || 'board',
     authorName: str(doc.contactName),
     publishedAt: str(doc.publishedAt) || null,
     photo: cover,

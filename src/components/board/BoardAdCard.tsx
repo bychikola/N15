@@ -50,6 +50,10 @@ export const BoardAdCard: FC<BoardAdCardProps> = ({ ad, lang, t }) => {
   const photo = ad.photo
   const coverSrc = photo?.sizes?.card?.url || photo?.sizes?.thumbnail?.url || photo?.url
   const isAgency = ad.authorKind === 'agency'
+  // Объявление из заявки собственника (source: owner): на карточке это
+  // «От собственника» — контакт в объявлении принадлежит владельцу, а не
+  // агентству (см. publishOwnerApplicationToBoard в src/lib/owner-service.ts)
+  const isOwner = ad.source === 'owner'
 
   return (
     <a href={`/${lang}/board/${ad.id}`} className="object-card group block flex h-full flex-col bg-[var(--search-bg)]">
@@ -74,8 +78,11 @@ export const BoardAdCard: FC<BoardAdCardProps> = ({ ad, lang, t }) => {
             {ad.dealType === 'rent' ? t.object.rent : t.object.sale}
           </span>
           {/* Объявления агентства помечаем бронзовым значком — как варианты
-              покупки у объектов каталога, тот же класс оформления */}
+              покупки у объектов каталога, тот же класс оформления. Подача
+              собственника — своей пометкой: покупатель сразу видит, что
+              имеет дело с владельцем, а не с агентством */}
           {isAgency && <span className="object-card__badge">{t.board.authorAgency}</span>}
+          {isOwner && !isAgency && <span className="object-card__badge">{t.board.authorOwner}</span>}
         </span>
         <div className="object-card__overlay" />
         <div className="object-card__price-wrap absolute bottom-3 left-4 right-4 z-10">
@@ -99,7 +106,7 @@ export const BoardAdCard: FC<BoardAdCardProps> = ({ ad, lang, t }) => {
             {isAgency ? 'Н15' : (ad.authorName || '—').trim().split(' ').map((n) => n[0]).join('').slice(0, 2)}
           </span>
           <span className="object-card__agent-name text-xs text-[var(--n15-muted)]">
-            {isAgency ? t.board.authorAgency : t.board.authorPrivate}
+            {isAgency ? t.board.authorAgency : isOwner ? t.board.authorOwner : t.board.authorPrivate}
           </span>
         </div>
       </div>

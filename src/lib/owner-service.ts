@@ -31,9 +31,14 @@ import {
 } from './owner-applications'
 import { categoryLabel } from './object-categories'
 import { storedFilePath } from './upload-paths'
+import { boardVisible } from './board'
+import { publishBoardAd } from './board-service'
 
 /** Кто выполняет действие: администратор из CRM или система (маршрут с сайта) */
-export type OwnerActor = { id?: number | string; name?: string; email?: string } | null | undefined
+export type OwnerActor =
+  | { id?: number | string; name?: string; email?: string; role?: string | null }
+  | null
+  | undefined
 
 const str = (v: unknown): string => (typeof v === 'string' ? v.trim() : '')
 
@@ -54,6 +59,16 @@ const refId = (value: unknown): number | null => {
   const n = typeof raw === 'number' ? raw : Number(raw)
   return Number.isInteger(n) && n > 0 ? n : null
 }
+
+/** Объявление доски, связанное с заявкой (doc.boardAd, depth 1) — или null */
+const linkedBoardAd = (doc: Record<string, unknown>): Record<string, unknown> | null => {
+  const value = doc.boardAd
+  return value && typeof value === 'object' ? (value as Record<string, unknown>) : null
+}
+
+/** id объявления доски, связанного с заявкой — или null */
+const linkedBoardAdId = (doc: Record<string, unknown>): number | null =>
+  refId(doc.boardAd ?? null)
 
 /**
  * Ответственный агент по заявке. У нового объекта каталога агент обязателен
@@ -86,6 +101,8 @@ export interface OwnerActionResult {
   error?: string
   /** Идентификатор созданного объекта (для действия «Создать объект») */
   objectId?: number
+  /** Идентификатор опубликованного объявления доски (для «Опубликовать на доске») */
+  boardAdId?: number
   /** Итоговый статус заявки */
   status?: string
 }
@@ -137,29 +154,39 @@ export async function setOwnerStatus(
     return { ok: false, error: 'Неизвестный статус заявки' }
   }
   if (status === 'published') {
+    // «Опубликовано» ставится только тогда, когда объявление заявки реально
+    // видно на публичной доске (или объект заявки вышел в каталог). Заявка не
+    // может стать «Опубликовано» «на словах»: это защита от статуса, за
+    // которым ничего не стоит (см. publishOwnerApplicationToBoard)
+    const board = linkedBoardAd(doc)
+    const boardLive = board ? boardVisible(board as never) : false
     const linked = linkedObjectId(doc as OwnerApplicationLike)
-    if (!linked) {
+    if (!boardLive && !linked) {
       return {
         ok: false,
-        error: 'Сначала создайте объект по заявке — без него статус «Опубликовано» недоступен',
+        error:
+          'Сначала опубликуйте объявление на доске (или заведите объект каталога) — без этого статус «Опубликовано» недоступен',
       }
     }
-    let objectStatus: string | null = null
-    try {
-      const object = await payload.findByID({
-        collection: 'objects',
-        id: linked,
-        depth: 0,
-        overrideAccess: true,
-      })
-      objectStatus = str((object as { status?: unknown } | null)?.status) || null
-    } catch {
-      return { ok: false, error: 'Объект заявки не найден — создайте его заново' }
-    }
-    if (objectStatus !== 'published') {
-      return {
-        ok: false,
-        error: 'Объект ещё не опубликован: откройте его карточку и опубликуйте — заявка станет «Опубликовано» автоматически',
+    if (!boardLive && linked) {
+      let objectStatus: string | null = null
+      try {
+        const object = await payload.findByID({
+          collection: 'objects',
+          id: linked,
+          depth: 0,
+          overrideAccess: true,
+        })
+        objectStatus = str((object as { status?: unknown } | null)?.status) || null
+      } catch {
+        return { ok: false, error: 'Объект заявки не найден — создайте его заново' }
+      }
+      if (objectStatus !== 'published') {
+        return {
+          ok: false,
+          error:
+            'Объект ещё не опубликован: откройте его карточку и опубликуйте — заявка станет «Опубликовано» автоматически',
+        }
       }
     }
   }
@@ -188,9 +215,9 @@ export async function setOwnerStatus(
  * от доступности SMS-провайдера). Из «Новой» заявка переходит в «Телефон
  * подтверждён»; если она уже ушла дальше, статус не откатывается.
  *
- * При ручном подтверждении администратор обязан назначить ответственного
- * агента (agentId или уже сохранённый в заявке): объект из заявки без агента
- * не заводится, а подтверждение — тот момент, когда заявка переходит в работу.
+ * Ответственного агента подтверждение больше не требует: заявка собственника
+ * идёт на доску объявлений, где агент не нужен. Если администратор выбрал
+ * агента сам (готовит объект каталога), выбор сохраняется.
  */
 export async function confirmOwnerPhone(
   payload: Payload,
@@ -212,9 +239,16 @@ export async function confirmOwnerPhone(
     status,
   }
   if (method === 'admin') {
-    const agent = await resolveOwnerAgent(payload, opts.agentId, doc as Record<string, unknown>)
-    if (!agent.ok) return agent
-    data.agent = agent.id
+    // Ответственный агент для заявки больше не обязателен: объявление
+    // собственника публикуется прямо на доске, и агент для этого не нужен.
+    // Если администратор всё же выбрал агента (готовит объект в каталог),
+    // сохраняем выбор — без проверки «обязательно выберите»
+    const explicit = refId(opts.agentId)
+    if (explicit != null) {
+      const agent = await resolveOwnerAgent(payload, explicit, {})
+      if (!agent.ok) return agent
+      data.agent = agent.id
+    }
   }
 
   try {
@@ -399,6 +433,209 @@ export async function createObjectFromApplication(
 }
 
 /**
+ * Фотографии заявки → закрытое хранилище доски (board-materials). Возвращает
+ * id созданных файлов: их кладут в объявление, а при публикации доски копии
+ * уходят в открытое media (см. publishBoardAd). Нечитаемое фото публикацию не
+ * роняет — пропускаем и пишем строку в лог сервера.
+ */
+async function copyOwnerPhotosToBoard(
+  payload: Payload,
+  doc: Record<string, unknown>,
+  authorId: number,
+): Promise<number[]> {
+  const photos = Array.isArray(doc.photos) ? doc.photos : []
+  const alt = ownerObjectTitle(doc as OwnerApplicationLike) || 'Фотография объекта'
+  const out: number[] = []
+  let index = 0
+  for (const item of photos) {
+    index += 1
+    // Поле-загрузка отдаёт либо сам документ хранилища, либо обёртку { file }:
+    // принимаем оба вида, чтобы перенос не зависел от глубины выборки
+    const rawFile = (item as { file?: unknown })?.file
+    const source = (rawFile && typeof rawFile === 'object' ? rawFile : item) as {
+      filename?: unknown
+      mimeType?: unknown
+    }
+    const filename = str(source.filename)
+    if (!filename) continue
+    const filePath = storedFilePath('owner-materials', filename)
+    if (!filePath) {
+      console.error(`Заявки собственников: подозрительное имя файла фото — ${filename}`)
+      continue
+    }
+    try {
+      const bytes = await fs.readFile(filePath)
+      // Имя уникально: фото из разных заявок могут называться одинаково
+      const name = `owner-${String(doc.id ?? 'app')}-${index}-${filename}`
+      const created = await payload.create({
+        collection: 'board-materials',
+        data: { alt: `${alt} — фото ${index}`, author: authorId },
+        file: {
+          data: bytes,
+          mimetype: str(source.mimeType) || 'image/jpeg',
+          name,
+          size: bytes.length,
+        },
+        depth: 0,
+        overrideAccess: true,
+      })
+      out.push(Number(created.id))
+    } catch (error) {
+      console.error(`Заявки собственников: не удалось перенести фото ${filename}:`, error)
+    }
+  }
+  return out
+}
+
+/**
+ * Публикация объявления собственника на доске объявлений.
+ *
+ * Заявка, которую владелец оставил сам через публичную форму (/sell), после
+ * подтверждения телефона и одобрения администратором попадает прямо на доску:
+ * объект каталога из неё не заводится — доска и каталог разные базы, и
+ * смешивать их не нужно. Ответственный агент при этом не требуется.
+ *
+ * Порядок: собираем карточку из данных заявки, переносим фото из закрытого
+ * хранилища заявок в закрытое хранилище доски, публикуем (копии фото уходят
+ * в media) и ставим заявке «Опубликовано» — но только после того, как
+ * объявление реально стало видно на сайте. Контакт в карточке — телефон
+ * владельца из заявки; номер агентства или агента сюда не подставляется.
+ */
+export async function publishOwnerApplicationToBoard(
+  payload: Payload,
+  id: number,
+  user?: OwnerActor,
+): Promise<OwnerActionResult> {
+  if (user?.role !== 'admin') {
+    return { ok: false, error: 'Опубликовать объявление может только администратор' }
+  }
+  const app = await findOwnerApplication(payload, id)
+  if (!app) return { ok: false, error: 'Заявка не найдена' }
+  if (!app.phoneConfirmedAt) {
+    return {
+      ok: false,
+      error: 'Сначала подтвердите телефон собственника — без этого объявление публиковать нельзя',
+    }
+  }
+  if (app.status === 'rejected' || app.status === 'duplicate') {
+    return { ok: false, error: 'Заявка закрыта: смените её статус, если решили вернуть её в работу' }
+  }
+  // Повторное нажатие безопасно: объявление уже опубликовано — отдаём его id
+  const already = linkedBoardAdId(app)
+  if (already) return { ok: true, boardAdId: already, status: 'published' }
+
+  // Автор объявления — администратор, который публикует: поле «Автор» в доске
+  // обязательное. Публично объявление всё равно «От собственника» — вид
+  // автора задаёт источник (см. BoardAds.ts), а контакт берётся из заявки
+  const authorId = actorId(user)
+  if (!authorId) return { ok: false, error: 'Не удалось определить администратора' }
+
+  const photoIds = await copyOwnerPhotosToBoard(payload, app as Record<string, unknown>, authorId)
+  if (!photoIds.length) {
+    return {
+      ok: false,
+      error: 'В заявке нет фотографий — попросите собственника добавить хотя бы одно фото',
+    }
+  }
+
+  const title = ownerObjectTitle(app as OwnerApplicationLike).slice(0, 120)
+  const address = {
+    city: str(app.address?.city) || 'Владикавказ',
+    district: str(app.address?.district) || undefined,
+    cityDistrict: str(app.address?.cityDistrict) || undefined,
+    locality: str(app.address?.locality) || undefined,
+    snt: str(app.address?.snt) || undefined,
+    street: str(app.address?.street) || undefined,
+    house: str(app.address?.house) || undefined,
+  }
+  const addressLine = [address.city, address.locality, address.street].map(str).filter(Boolean).join(', ')
+  const description = str(app.description) || [title, addressLine].filter(Boolean).join('. ')
+
+  let boardAdId: number
+  try {
+    const created = await payload.create({
+      collection: 'board-ads',
+      data: {
+        title,
+        dealType: app.type === 'rent' ? 'rent' : 'sale',
+        category: app.category || 'apartment',
+        price: numOrNull(app.price) ?? 0,
+        area: numOrNull(app.area) ?? undefined,
+        areaUnit: str(app.areaUnit) || 'sqm',
+        plotArea: numOrNull(app.plotArea) ?? undefined,
+        plotAreaUnit: str(app.plotAreaUnit) || undefined,
+        rooms: numOrNull(app.rooms) ?? undefined,
+        floor: numOrNull(app.floor) ?? undefined,
+        totalFloors: numOrNull(app.totalFloors) ?? undefined,
+        description,
+        address,
+        // Точный адрес на доске закрыт: собственник не давал согласия в форме
+        // доски. На сайте видны улица, район и город (см. boardShowsExactAddress)
+        showExactAddress: false,
+        contactName: str(app.ownerName),
+        phone: str(app.ownerPhone),
+        photos: photoIds,
+        author: authorId,
+        source: 'owner',
+        ownerApplication: id,
+        status: 'pending',
+        // Согласие владелец дал при подаче заявки (152-ФЗ) — переносим отметку,
+        // чтобы объявление прошло проверку публикации без нового согласия
+        consent: true,
+        consentRules: true,
+      },
+      depth: 0,
+      overrideAccess: true,
+    })
+    boardAdId = Number(created.id)
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) }
+  }
+
+  // Публикация: копирует фото в media и ставит статус «Опубликовано».
+  // Право публиковать проверяет хук коллекции — передаём администратора
+  const published = await publishBoardAd(payload, boardAdId, user)
+  if (!published.ok) {
+    return { ok: false, error: published.error || 'Не удалось опубликовать объявление на доске' }
+  }
+
+  // «Опубликовано» — только если объявление реально видно на публичной доске
+  const board = (await payload
+    .findByID({ collection: 'board-ads', id: boardAdId, depth: 0, overrideAccess: true })
+    .catch(() => null)) as unknown as Record<string, unknown> | null
+  if (!board || !boardVisible(board as never)) {
+    return {
+      ok: false,
+      error: 'Объявление создано, но не стало видно на доске — проверьте его в разделе «Доска»',
+    }
+  }
+
+  try {
+    await payload.update({
+      collection: 'owner-applications',
+      id,
+      data: {
+        boardAd: boardAdId,
+        status: 'published',
+        history: [
+          ...historyOf(app as Record<string, unknown>),
+          historyEntry(
+            'Опубликовано на доске объявлений',
+            user,
+            `Объявление №${boardAdId}, контакт — собственник`,
+          ),
+        ],
+      },
+      depth: 0,
+      overrideAccess: true,
+    })
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) }
+  }
+  return { ok: true, boardAdId, status: 'published' }
+}
+
+/**
  * Пометка «Дубль»: заявка совпала с объектом, который уже есть в базе.
  * Второй объект не создаётся — администратор увидел совпадение и связал
  * заявку с существующей карточкой (см. findOwnerDuplicates).
@@ -471,7 +708,14 @@ export async function addOwnerComment(
 /** Действия администратора из CRM: одно действие — один вызов */
 export interface OwnerActionInput {
   id: number
-  action: 'confirm_phone' | 'status' | 'create_object' | 'assign_agent' | 'duplicate' | 'comment'
+  action:
+    | 'confirm_phone'
+    | 'status'
+    | 'create_object'
+    | 'assign_agent'
+    | 'duplicate'
+    | 'comment'
+    | 'publish_board'
   status?: string
   objectId?: number
   agentId?: number
@@ -499,6 +743,8 @@ export async function applyOwnerAction(
     }
     case 'create_object':
       return createObjectFromApplication(payload, id, user, input.agentId)
+    case 'publish_board':
+      return publishOwnerApplicationToBoard(payload, id, user)
     case 'assign_agent':
       return assignOwnerAgent(payload, id, Number(input.agentId), { user, note: input.note })
     case 'duplicate':
@@ -562,9 +808,13 @@ export interface OwnerBoardRow {
   verifyCodeSentAt: string | null
   consent: boolean
   consentAt: string | null
-  /** Ответственный агент: назначается при подтверждении телефона */
+  /** Ответственный агент: нужен только для объекта каталога, для доски не обязателен */
   agentId: number | null
   agentName: string | null
+  /** Объявление доски, собранное из этой заявки (null — заявка на доску не выкладывалась) */
+  boardAdId: number | null
+  /** Объявление доски опубликовано и видно на сайте */
+  boardPublished: boolean
   objectId: number | null
   objectSlug: string | null
   objectTitle: string | null
@@ -618,6 +868,8 @@ async function ownerBoardRowFromDoc(
     object: (doc.matchedObject ?? null) as number | { id?: number } | null,
   })
   const agentId = linkedObjectId({ object: (doc.agent ?? null) as number | { id?: number } | null })
+  const boardAd = linkedBoardAd(doc)
+  const boardAdId = linkedBoardAdId(doc)
 
   let duplicates: OwnerDuplicate[] = []
   if (withDuplicates) {
@@ -659,6 +911,8 @@ async function ownerBoardRowFromDoc(
     consentAt: str(doc.consentAt) || null,
     agentId,
     agentName: agentDoc ? str(agentDoc.name) || null : null,
+    boardAdId,
+    boardPublished: boardAd ? boardVisible(boardAd as never) : false,
     objectId,
     objectSlug: linked ? str(linked.slug) || null : null,
     objectTitle: linked ? str(linked.title) || null : null,

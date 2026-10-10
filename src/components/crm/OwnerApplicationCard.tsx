@@ -135,15 +135,15 @@ export const OwnerApplicationCard: FC<Props> = ({ t, row, agents }) => {
   const deal = row.type === 'rent' ? t.crm.ownDealRent : t.crm.ownDealSale
   const objectId = row.objectId ?? createdObjectId
   const objectTitle = row.objectTitle || (objectId ? `Объект №${objectId}` : '')
-  // Агент обязателен для подтверждения и создания объекта; сохранённым считаем,
-  // когда выбранное в поле совпадает с записанным в заявке
+  // Агент нужен только для объекта каталога; для публикации на доске — нет
+  // (там контакт собственника). Сохранённым считаем выбор, совпавший с заявкой
   const agentPicked = Number(agent) > 0
   const agentSaved = row.agentId != null && String(row.agentId) === agent
 
   const act = async (
     action: string,
     extra: { note?: string; objectId?: number; agentId?: number; status?: string } = {},
-  ): Promise<{ objectId?: number } | null> => {
+  ): Promise<{ objectId?: number; boardAdId?: number } | null> => {
     if (busy) return null
     setBusy(true)
     setError('')
@@ -154,7 +154,9 @@ export const OwnerApplicationCard: FC<Props> = ({ t, row, agents }) => {
         credentials: 'include',
         body: JSON.stringify({ id: row.id, action, ...extra }),
       })
-      const data = (await res.json().catch(() => null)) as { error?: string; objectId?: number } | null
+      const data = (await res.json().catch(() => null)) as
+        | { error?: string; objectId?: number; boardAdId?: number }
+        | null
       if (!res.ok) {
         setError(data?.error || t.crm.ownActionFailed)
         return null
@@ -256,10 +258,9 @@ export const OwnerApplicationCard: FC<Props> = ({ t, row, agents }) => {
           {!confirmed && (
             <button
               type="button"
-              onClick={() => void act('confirm_phone', { agentId: Number(agent) })}
-              disabled={busy || !agentPicked}
-              title={!agentPicked ? t.crm.ownNeedAgent : ''}
-              style={{ ...btnStyle, opacity: busy || !agentPicked ? 0.45 : 1, cursor: agentPicked ? 'pointer' : 'not-allowed' }}
+              onClick={() => void act('confirm_phone', { agentId: Number(agent) || undefined })}
+              disabled={busy}
+              style={btnStyle}
             >
               {t.crm.ownConfirmPhone}
             </button>
@@ -272,9 +273,9 @@ export const OwnerApplicationCard: FC<Props> = ({ t, row, agents }) => {
         )}
       </div>
 
-      {/* Ответственный агент по заявке: без него объект не завести — по нему
-          маршрутизируются звонки клиентов. Назначается при подтверждении
-          телефона; для заявок, подтверждённых кодом из SMS, — отдельной кнопкой */}
+      {/* Ответственный агент по заявке: нужен только для объекта каталога —
+          по нему маршрутизируются звонки клиентов. Для публикации на доске
+          агент не нужен: там покупатель звонит самому собственнику */}
       <div style={{ border: '1px solid #f0e8da', borderRadius: 10, padding: '12px 14px', marginBottom: 18, background: '#fdfbf7' }}>
         <div style={sectionTitle}>{t.crm.ownAgent}</div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
@@ -304,6 +305,31 @@ export const OwnerApplicationCard: FC<Props> = ({ t, row, agents }) => {
             ? `${t.crm.ownConsentYes}${row.consentAt ? ` · ${dateText(row.consentAt)}` : ''}`
             : t.crm.ownConsentNo}
         </div>
+      </div>
+
+      {/* Объявление на доске: заявка вышла на доску объявлений с телефоном
+          владельца — объекта каталога при этом не появляется */}
+      <div style={{ marginBottom: 18 }}>
+        <div style={sectionTitle}>{t.crm.ownBoardAd}</div>
+        {row.boardAdId ? (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', fontSize: 13 }}>
+            <span style={{ color: row.boardPublished ? '#3f6b34' : '#8d6b40' }}>
+              {row.boardPublished ? t.crm.ownBoardPublished : t.crm.ownBoardAdNone}
+              {` · №${row.boardAdId}`}
+            </span>
+            <a
+              href={`/ru/board/${row.boardAdId}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ ...btnStyle, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
+            >
+              {t.crm.ownBoardOpen}
+            </a>
+          </div>
+        ) : (
+          <span style={{ fontSize: 13, color: '#817b70' }}>{t.crm.ownBoardAdNone}</span>
+        )}
+        <p style={{ margin: '8px 0 0', fontSize: 11, color: '#817b70' }}>{t.crm.ownBoardHint}</p>
       </div>
 
       {/* Объект в базе: созданный из заявки или найденный дубль */}
@@ -388,15 +414,16 @@ export const OwnerApplicationCard: FC<Props> = ({ t, row, agents }) => {
           {t.crm.ownCommentSave}
         </button>
         {/* Смена статуса вручную: любое значение из пути заявки, кроме
-            «Опубликовано» — этот статус появляется у заявки только вместе с
-            публикацией её объекта (см. syncOwnerApplicationOnPublish) */}
+            «Опубликовано» — этот статус появляется только вместе с публикацией
+            объявления на доске или объекта в каталоге (см.
+            syncOwnerApplicationOnPublish, publishOwnerApplicationToBoard) */}
         <select
           value={status}
           onChange={(e) => setStatus(e.target.value)}
           style={{ ...inputStyle, cursor: 'pointer' }}
           aria-label={t.crm.ownStatusLabel}
         >
-          {(objectId
+          {(objectId || row.boardAdId
             ? OWNER_APPLICATION_STATUSES
             : OWNER_APPLICATION_STATUSES.filter((s) => s.value !== 'published')
           ).map((s) => (
@@ -430,8 +457,27 @@ export const OwnerApplicationCard: FC<Props> = ({ t, row, agents }) => {
             {t.crm.ownCreateObject}
           </button>
         )}
+        {/* Публикация на доске: агент не нужен, объект каталога не заводится —
+            объявление выходит с телефоном собственника. Доступна после
+            подтверждения телефона и только пока объявления нет */}
+        {!row.boardAdId && (
+          <button
+            type="button"
+            onClick={() => void act('publish_board')}
+            disabled={busy || !confirmed}
+            title={!confirmed ? t.crm.ownNeedPhone : t.crm.ownBoardHint}
+            style={{
+              ...btnGold,
+              marginLeft: objectId ? 'auto' : undefined,
+              opacity: busy || !confirmed ? 0.45 : 1,
+              cursor: confirmed ? 'pointer' : 'not-allowed',
+            }}
+          >
+            {t.crm.ownPublishBoard}
+          </button>
+        )}
       </div>
-      {!objectId && (
+      {!objectId && !row.boardAdId && (
         <p style={{ margin: '0 0 16px', fontSize: 11, color: '#817b70' }}>{t.crm.ownPublishedLocked}</p>
       )}
 

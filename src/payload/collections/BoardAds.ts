@@ -95,7 +95,16 @@ export const BoardAds: CollectionConfig = {
           typeof authorRaw === 'object' && authorRaw && 'id' in authorRaw
             ? Number((authorRaw as { id: unknown }).id)
             : Number(authorRaw)
-        if (Number.isInteger(authorId) && authorId > 0) {
+
+        // Объявление из заявки собственника (source: 'owner'): технически его
+        // заводит сотрудник (поле «Автор» обязательное), но на сайте это
+        // «От собственника», а не «Агентство Н15» — роль автора тут ни при
+        // чём, поэтому вид автора задаём жёстко (см. BoardAds.source)
+        const ownerSource = String(data.source ?? prev.source ?? '') === 'owner'
+        if (ownerSource) {
+          if (Number.isInteger(authorId) && authorId > 0) data.author = authorId
+          data.authorKind = 'private'
+        } else if (Number.isInteger(authorId) && authorId > 0) {
           const author = await req.payload
             .findByID({ collection: 'users', id: authorId, depth: 0, overrideAccess: true })
             .catch(() => null)
@@ -506,6 +515,40 @@ export const BoardAds: CollectionConfig = {
               admin: {
                 description:
                   'Заполняется, только если объявление завели из объекта каталога. Автоматического переноса объектов на доску нет — базы раздельные',
+              },
+            },
+            {
+              // Источник объявления. «От собственника» — объявление собрано из
+              // заявки, которую владелец оставил сам через публичную форму
+              // (коллекция owner-applications), и опубликовано администратором.
+              // На сайте такие объявления помечаются «От собственника», а в
+              // карточке указан телефон владельца — номер агентства или агента
+              // сюда не подставляется никогда (см. publishOwnerApplicationToBoard
+              // в src/lib/owner-service.ts)
+              name: 'source',
+              type: 'select',
+              label: 'Источник',
+              defaultValue: 'board',
+              index: true,
+              options: [
+                { label: 'Подача на доске', value: 'board' },
+                { label: 'От собственника', value: 'owner' },
+              ],
+              admin: {
+                description:
+                  '«Подача на доске» — форму заполнил автор на /board/new; «От собственника» — объявление собрано из заявки собственника. Менять вручную не нужно',
+              },
+            },
+            {
+              name: 'ownerApplication',
+              type: 'relationship',
+              relationTo: 'owner-applications',
+              label: 'Заявка собственника',
+              index: true,
+              admin: {
+                readOnly: true,
+                description:
+                  'Заполняется, если объявление собрано из заявки собственника. У обычной подачи с доски пусто',
               },
             },
             {

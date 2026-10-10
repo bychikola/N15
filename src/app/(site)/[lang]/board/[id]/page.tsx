@@ -91,6 +91,9 @@ export default async function BoardAdPage({ params }: PageProps) {
       : ''
 
   const isAgency = ad.authorKind === 'agency'
+  // Объявление из заявки собственника: на сайте это «От собственника», а
+  // контакт — телефон владельца, а не агентства (см. publishOwnerApplicationToBoard)
+  const isOwner = ad.source === 'owner'
   const categoryLabel = t.categoryLabels[ad.category as keyof typeof t.categoryLabels] || ad.category
 
   // Характеристики — парами «подпись — значение», пустые не показываем
@@ -138,7 +141,7 @@ export default async function BoardAdPage({ params }: PageProps) {
                 {categoryLabel}
               </span>
               <span className="text-[10px] tracking-[0.2em] uppercase text-[var(--n15-white)] border border-[var(--n15-gold)]/30 px-3 py-1">
-                {isAgency ? t.board.authorAgency : t.board.authorPrivate}
+                {isAgency ? t.board.authorAgency : isOwner ? t.board.authorOwner : t.board.authorPrivate}
               </span>
             </div>
 
@@ -212,7 +215,11 @@ export default async function BoardAdPage({ params }: PageProps) {
                     {isAgency ? t.board.authorAgency : ad.authorName}
                   </p>
                   <p className="text-xs text-[var(--n15-muted)] mt-1 mb-4">
-                    {isAgency ? t.board.authorAgencyHint : t.board.authorPrivateHint}
+                    {isAgency
+                      ? t.board.authorAgencyHint
+                      : isOwner
+                        ? t.board.authorOwnerHint
+                        : t.board.authorPrivateHint}
                   </p>
                   <BoardPhoneButton t={t} adId={ad.id} />
 

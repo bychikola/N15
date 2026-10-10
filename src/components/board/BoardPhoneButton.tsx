@@ -2,6 +2,7 @@
 
 import { useState, type FC } from 'react'
 import type { Dict } from '@/i18n/dictionaries'
+import { telDigits, telHref, waDigits } from '@/lib/call-routing'
 
 /**
  * «Показать телефон» — номер автора объявления.
@@ -10,6 +11,16 @@ import type { Dict } from '@/i18n/dictionaries'
  * и открытый номер — это персональные данные, доступные любому сборщику.
  * Номер приходит ответом на нажатие (маршрут /api/board/ads/phone, с лимитом
  * по IP) и показывается ссылкой tel: — по ней уже звонит сам браузер.
+ *
+ * Номер всегда принадлежит автору объявления: у объявления собственника это
+ * его телефон из заявки, у обычной подачи — телефон с формы. Общий номер Н15
+ * сюда не подставляется ни при каких данных — иначе клиент дозвонился бы не
+ * тому (см. publishOwnerApplicationToBoard в src/lib/owner-service.ts).
+ *
+ * После показа номера рядом с ним две кнопки: «Позвонить» (tel:) и «WhatsApp»
+ * (wa.me). WhatsApp показываем, только если из номера складывается полный
+ * номер: «восьмёрка» превращается в код страны, а обрывок ссылки не даёт —
+ * такая кнопка вела бы в пустоту.
  *
  * Пока номер не запрошен, кнопка ничего не обещает лишнего: подсказка под ней
  * говорит, что номер откроется после нажатия.
@@ -43,14 +54,31 @@ export const BoardPhoneButton: FC<{ t: Dict; adId: number }> = ({ t, adId }) => 
   }
 
   if (phone) {
+    // Кнопки ведут на тот же номер, что показан выше: подмены на номер
+    // агентства или агента здесь нет (см. telHref/waDigits)
+    const callHref = telHref(telDigits(phone))
+    const waLink = waDigits(phone)
     return (
       <div>
-        <a
-          href={`tel:${phone.replace(/[^\d+]/g, '')}`}
-          className="n15-cta-green flex items-center justify-center gap-2 w-full px-4 py-3 text-sm tracking-wider uppercase border border-[var(--n15-gold)]/40 transition-all duration-300"
-        >
-          {phone}
-        </a>
+        <p className="mb-3 text-lg font-semibold tracking-wide text-[var(--heading)]">{phone}</p>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <a
+            href={callHref}
+            className="n15-cta-green flex flex-1 items-center justify-center gap-2 px-4 py-3 text-sm tracking-wider uppercase border border-[var(--n15-gold)]/40 transition-all duration-300"
+          >
+            {t.board.callBtn}
+          </a>
+          {waLink.length >= 10 && (
+            <a
+              href={`https://wa.me/${waLink}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="n15-cta-green flex flex-1 items-center justify-center gap-2 px-4 py-3 text-sm tracking-wider uppercase border border-[var(--n15-gold)]/40 transition-all duration-300"
+            >
+              {t.board.whatsappBtn}
+            </a>
+          )}
+        </div>
         <p className="mt-2 text-[11px] text-[var(--n15-muted)]">{t.board.phoneHint}</p>
       </div>
     )
