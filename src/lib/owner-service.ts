@@ -34,6 +34,7 @@ import { categoryLabel } from './object-categories'
 import { storedFilePath } from './upload-paths'
 import { boardVisible } from './board'
 import { publishBoardAd } from './board-service'
+import { ownerManageLinkState } from './owner-manage-link'
 
 /** Кто выполняет действие: администратор из CRM или система (маршрут с сайта) */
 export type OwnerActor =
@@ -938,6 +939,13 @@ export interface OwnerBoardRow {
   boardAdId: number | null
   /** Объявление доски опубликовано и видно на сайте */
   boardPublished: boolean
+  /**
+   * Личная ссылка управления объявлением: активна ли она и до какого срока
+   * (см. owner-manage-link). Только для полной карточки — в списке не читается.
+   */
+  manageLinkActive: boolean
+  manageLinkIssuedAt: string | null
+  manageLinkExpiresAt: string | null
   objectId: number | null
   objectSlug: string | null
   objectTitle: string | null
@@ -1043,6 +1051,11 @@ async function ownerBoardRowFromDoc(
     agentName: agentDoc ? str(agentDoc.name) || null : null,
     boardAdId,
     boardPublished: boardAd ? boardVisible(boardAd as never) : false,
+    // Состояние ссылки управления дозаполняется только для полной карточки
+    // (loadOwnerApplication): в списке это лишний запрос на каждую строку
+    manageLinkActive: false,
+    manageLinkIssuedAt: null,
+    manageLinkExpiresAt: null,
     objectId,
     objectSlug: linked ? str(linked.slug) || null : null,
     objectTitle: linked ? str(linked.title) || null : null,
@@ -1119,7 +1132,17 @@ export async function loadOwnerApplication(
       overrideAccess: true,
     })
     if (!doc) return null
-    return await ownerBoardRowFromDoc(payload, doc as unknown as Record<string, unknown>, true)
+    const row = await ownerBoardRowFromDoc(payload, doc as unknown as Record<string, unknown>, true)
+    // Ссылка управления привязана к объявлению доски: если объявление есть,
+    // показываем её состояние (активна / до какого срока), чтобы администратор
+    // мог перевыпустить или отозвать ссылку прямо из карточки
+    if (row.boardAdId) {
+      const state = await ownerManageLinkState(payload, row.boardAdId)
+      row.manageLinkActive = state.active
+      row.manageLinkIssuedAt = state.issuedAt
+      row.manageLinkExpiresAt = state.expiresAt
+    }
+    return row
   } catch {
     return null
   }

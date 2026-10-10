@@ -191,6 +191,76 @@ export async function issueOwnerManageLink(
   return { ok: true, url: ownerManageLinkUrl(token, opts.origin), token, expiresAt, boardAdId: id }
 }
 
+export interface OwnerManageLinkState {
+  /** Есть активная (не отозванная и не истёкшая) ссылка на объявление */
+  active: boolean
+  issuedAt: string | null
+  expiresAt: string | null
+}
+
+/**
+ * Состояние ссылки управления для объявления: есть ли активная ссылка и до
+ * какого срока. Сам токен здесь не возвращается — его в базе нет, — поэтому
+ * администратор в CRM видит только факт «ссылка активна» и может её
+ * перевыпустить (тогда прежняя гаснет) или отозвать.
+ */
+export async function ownerManageLinkState(
+  payload: Payload,
+  boardAdId: number,
+): Promise<OwnerManageLinkState> {
+  const id = Number(boardAdId)
+  if (!Number.isInteger(id) || id <= 0) return { active: false, issuedAt: null, expiresAt: null }
+  try {
+    const res = await payload.find({
+      collection: 'owner-manage-links',
+      where: { and: [{ boardAd: { equals: id } }, { revokedAt: { exists: false } }] },
+      sort: '-issuedAt',
+      limit: 1,
+      depth: 0,
+      overrideAccess: true,
+    })
+    const doc = res.docs[0] as unknown as Record<string, unknown> | undefined
+    // Просроченную ссылку активной не считаем: ей уже нельзя воспользоваться
+    if (!doc || ownerManageLinkExpired(doc.expiresAt)) {
+      return { active: false, issuedAt: null, expiresAt: null }
+    }
+    return {
+      active: true,
+      issuedAt: typeof doc.issuedAt === 'string' ? doc.issuedAt : null,
+      expiresAt: typeof doc.expiresAt === 'string' ? doc.expiresAt : null,
+    }
+  } catch (error) {
+    console.error('Ссылки управления: не удалось прочитать состояние ссылки:', error)
+    return { active: false, issuedAt: null, expiresAt: null }
+  }
+}
+
+/**
+ * Отзыв ссылок управления для объявления: все активные ссылки гасятся
+ * (revokedAt), и ни одна из них больше не работает — даже до истечения срока
+ * (см. resolveOwnerManageLink). Идемпотентно: если активных ссылок нет,
+ * ничего не меняется и ошибки нет.
+ */
+export async function revokeOwnerManageLinks(
+  payload: Payload,
+  boardAdId: number,
+): Promise<{ ok: boolean; error?: string }> {
+  const id = Number(boardAdId)
+  if (!Number.isInteger(id) || id <= 0) return { ok: false, error: 'Не указано объявление' }
+  try {
+    await payload.update({
+      collection: 'owner-manage-links',
+      where: { and: [{ boardAd: { equals: id } }, { revokedAt: { exists: false } }] },
+      data: { revokedAt: new Date().toISOString() },
+      overrideAccess: true,
+    })
+  } catch (error) {
+    console.error('Ссылки управления: не удалось отозвать ссылку:', error)
+    return { ok: false, error: 'Не удалось отозвать ссылку — попробуйте ещё раз' }
+  }
+  return { ok: true }
+}
+
 export interface ResolvedOwnerManageLink {
   linkId: number
   boardAdId: number

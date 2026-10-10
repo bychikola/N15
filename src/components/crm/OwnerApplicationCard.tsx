@@ -7,6 +7,7 @@ import type { OwnerBoardRow } from '@/lib/owner-service'
 import { OWNER_APPLICATION_STATUSES } from '@/lib/owner-applications'
 import { AgentPicker } from '@/components/crm/AgentPicker'
 import { OwnerContactConfirm } from '@/components/crm/OwnerContactConfirm'
+import { OwnerManageLink } from '@/components/crm/OwnerManageLink'
 
 /**
  * Полная карточка одной заявки собственника (страница
@@ -360,6 +361,11 @@ export const OwnerApplicationCard: FC<Props> = ({ t, row, agents }) => {
         )}
         <p style={{ margin: '8px 0 0', fontSize: 11, color: '#817b70' }}>{t.crm.ownBoardHint}</p>
       </div>
+
+      {/* Личная ссылка управления объявлением: администратор выдаёт её
+          собственнику после подтверждения контакта, копирует, перевыпускает
+          и отзывает (см. OwnerManageLink, src/lib/owner-manage-link.ts) */}
+      <OwnerManageLink t={t} row={row} />
 
       {/* Объект в базе: созданный из заявки или найденный дубль */}
       <div style={{ marginBottom: 18 }}>
