@@ -20,6 +20,11 @@ export const PURCHASE_OPTIONS = [
   { value: 'installment', label: 'Рассрочка' },
   { value: 'maternityCapital', label: 'Материнский капитал' },
   { value: 'noDownPayment', label: 'Без первоначального взноса' },
+  // Наличный расчёт — способ оплаты машино-мест и коммерческих помещений в
+  // составе ЖК (см. src/lib/complex-units.ts). Новое значение дописывается
+  // в конец списка: порядок совпадает с enum в базе, а drizzle-push умеет
+  // только дописывать значения в конец (см. src/lib/object-categories.ts)
+  { value: 'cash', label: 'Наличные' },
 ] as const
 
 export type PurchaseOption = (typeof PURCHASE_OPTIONS)[number]['value']
@@ -33,15 +38,18 @@ export const isPurchaseOption = (v: unknown): v is PurchaseOption =>
 
 /**
  * Категории, к которым применимы варианты покупки: квартиры (новостройки —
- * тоже квартиры, отдельной категории у них нет), дома, таунхаусы и коммерция.
+ * тоже квартиры, отдельной категории у них нет), дома, таунхаусы, коммерция
+ * и гаражи. Гараж добавлен ради машино-мест в составе ЖК: у них те же
+ * программы оплаты — наличные, рассрочка, ипотека (см.
+ * src/lib/complex-units.ts).
  */
-const PURCHASE_CATEGORIES = ['apartment', 'house', 'townhouse', 'commercial']
+const PURCHASE_CATEGORIES = ['apartment', 'house', 'townhouse', 'commercial', 'garage']
 
 /**
  * Применимы ли варианты покупки к категории (без учёта типа сделки).
- * Спрашивает фильтр каталога: у остальных категорий (участок, гараж,
- * комната, дача, коттедж, часть дома) поля вариантов нет в схеме, поэтому
- * фильтр по ним был бы всегда пустым — его там не показываем.
+ * Спрашивает фильтр каталога: у остальных категорий (участок, комната, дача,
+ * коттедж, часть дома) поля вариантов нет в схеме, поэтому фильтр по ним был
+ * бы всегда пустым — его там не показываем.
  */
 export const purchaseCategoriesApply = (category?: string | null): boolean =>
   PURCHASE_CATEGORIES.includes(category ?? '')

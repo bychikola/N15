@@ -32,6 +32,10 @@ import { isOwnObjectDoc, ownObjectsWhere } from '@/lib/object-access'
 // список и правила с каталогом, страницей объекта и фильтрами,
 // см. src/lib/purchase-options.ts
 import { PURCHASE_OPTIONS, purchaseOptionsApply } from '@/lib/purchase-options'
+// Объекты новостройки (машино-места и коммерческие помещения в ЖК): их
+// категории и статус готовности — общий справочник с формой CRM
+// (см. src/lib/complex-units.ts)
+import { UNIT_STATUSES, isUnitCategory } from '@/lib/complex-units'
 // Категории объектов — общий справочник с фильтрами каталога, чипами главной
 // и формой CRM (см. src/lib/object-categories.ts): порядок значений совпадает
 // с порядком enum в базе
@@ -1024,6 +1028,40 @@ export const Objects: CollectionConfig = {
           return purchaseOptionsApply(s?.type, s?.category)
         },
         description: 'Отмечайте только подтверждённые варианты: одобрение банка не гарантируется',
+      },
+    },
+    {
+      // Статус готовности объекта новостройки — машино-места или
+      // коммерческого помещения в составе ЖК (категории «гараж» и
+      // «коммерческая», см. src/lib/complex-units.ts). Это не публикация
+      // карточки (status: черновик/опубликован/архив), а состояние самого
+      // объекта для покупателя: свободен, забронирован или уже реализован.
+      // У обычных объектов поле пустое и в форме не показывается — там же
+      // виден и блок «Условия оплаты» ниже.
+      name: 'unitStatus',
+      type: 'select',
+      label: 'Статус объекта в ЖК',
+      options: UNIT_STATUSES.map((s) => ({ label: s.label, value: s.value })),
+      access: purchaseOptionsAccess,
+      admin: {
+        condition: (_data, siblingData) => isUnitCategory((siblingData as { category?: string } | undefined)?.category),
+        description:
+          'Для машино-мест и коммерческих помещений в составе ЖК: «Доступен», «Забронирован» или «Реализован». Публикация самой карточки — отдельное поле «Статус»',
+      },
+    },
+    {
+      // Условия оплаты объекта новостройки: первоначальный взнос, срок
+      // рассрочки, порядок расчёта. Свободный текст рядом с вариантами
+      // покупки (purchaseOptions) — те показывают, какие программы доступны,
+      // а здесь — их условия.
+      name: 'paymentTerms',
+      type: 'textarea',
+      label: 'Условия оплаты',
+      access: purchaseOptionsAccess,
+      admin: {
+        condition: (_data, siblingData) => isUnitCategory((siblingData as { category?: string } | undefined)?.category),
+        description:
+          'Например: «Первоначальный взнос 30%, рассрочка на 12 месяцев без процентов». Для машино-мест и коммерческих помещений в ЖК',
       },
     },
     {

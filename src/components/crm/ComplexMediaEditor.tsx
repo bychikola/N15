@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState, type ChangeEvent, type FC } from 'react'
 import type { Dict } from '@/i18n/dictionaries'
 import { PHOTO_MAX_BYTES, PHOTO_MAX_LABEL, photoSizeLabel, isAllowedPhoto } from '@/lib/photo-rules'
+import { ComplexUnitsEditor } from './ComplexUnitsEditor'
 
 /**
  * Редактор карточки ЖК в CRM. Открывается кнопкой «Редактировать» у комплекса
@@ -233,6 +234,9 @@ export const ComplexMediaEditor: FC<Props> = ({ complexId, t, onClose, onSaved }
   const [name, setName] = useState('')
   const [locality, setLocality] = useState('')
   const [street, setStreet] = useState('')
+  // Застройщик комплекса — нужен разделу «Машино-места и коммерческие
+  // помещения» (ComplexUnitsEditor): без него новый объект к ЖК не привязать
+  const [developerId, setDeveloperId] = useState<number | null>(null)
 
   const [plannings, setPlannings] = useState<PlanningItem[]>([])
   const [parking, setParking] = useState<MediaGroup>({ description: '', photos: [] })
@@ -272,6 +276,15 @@ export const ComplexMediaEditor: FC<Props> = ({ complexId, t, onClose, onSaved }
       setName(String(doc.name || ''))
       setLocality(String(doc.locality || ''))
       setStreet(String(doc.street || ''))
+      // Застройщик приходит объектом (depth=1) или числом-id — берём id
+      const devRef = doc.developer
+      const devId =
+        devRef && typeof devRef === 'object'
+          ? Number((devRef as { id?: unknown }).id)
+          : devRef != null
+            ? Number(devRef)
+            : NaN
+      setDeveloperId(Number.isFinite(devId) ? devId : null)
       setPlannings(
         (Array.isArray(doc.plannings) ? doc.plannings : []).flatMap((raw) => {
           const item = raw as Record<string, unknown>
@@ -780,6 +793,12 @@ export const ComplexMediaEditor: FC<Props> = ({ complexId, t, onClose, onSaved }
               </div>
             )}
           </div>
+
+          {/* ── Машино-места и коммерческие помещения ── */}
+          {/* Отдельные объекты новостройки: заводит администратор, каждый
+              сохраняется как объект коллекции objects с привязкой к этому ЖК
+              и его застройщику (см. ComplexUnitsEditor.tsx) */}
+          <ComplexUnitsEditor complexId={complexId} developerId={developerId} t={t} />
 
           {/* ── Способы приобретения ── */}
           <div style={sectionStyle}>
