@@ -194,17 +194,18 @@ export const OwnerApplicationsBoard: FC<Props> = ({ t, rows, status, agents }) =
       ) : (
         rows.map((row) => {
           const confirmed = Boolean(row.phoneConfirmedAt)
-          // Публикация на доске: телефон подтверждён, контакт подтверждён вручную
-          // и есть отдельное согласие на показ номера (см. publishOwnerApplicationToBoard)
+          // Публикация на доске: контакт подтверждён вручную и есть отдельное
+          // согласие на показ номера. Отдельное подтверждение телефона (SMS-код
+          // или вторая ручная отметка) для доски не требуется — единственный
+          // способ подтверждения контакта и есть ручная отметка администратора
+          // (см. publishOwnerApplicationToBoard)
           const contactConfirmed = Boolean(row.contactConfirmedAt)
-          const canPublish = confirmed && contactConfirmed && row.publishPhoneConsent
-          const publishHint = !confirmed
-            ? t.crm.ownNeedPhone
-            : !contactConfirmed
-              ? t.crm.ownNeedContact
-              : !row.publishPhoneConsent
-                ? t.crm.ownNeedPhoneConsent
-                : t.crm.ownBoardHint
+          const canPublish = contactConfirmed && row.publishPhoneConsent
+          const publishHint = !contactConfirmed
+            ? t.crm.ownNeedContact
+            : !row.publishPhoneConsent
+              ? t.crm.ownNeedPhoneConsent
+              : t.crm.ownBoardHint
           const deal = row.type === 'rent' ? t.crm.ownDealRent : t.crm.ownDealSale
           // Ответственный агент: без него заявку не подтвердить и объект не завести
           const agentPick = agentPicks[row.id] ?? (row.agentId ? String(row.agentId) : '')
@@ -485,8 +486,8 @@ export const OwnerApplicationsBoard: FC<Props> = ({ t, rows, status, agents }) =
                 )}
                 {/* Публикация на доске: объект каталога не заводится, агент не
                     нужен — объявление выходит с телефоном собственника. Кнопка
-                    активна после подтверждения телефона и контакта, а также
-                    отдельного согласия на номер — и только до публикации */}
+                    активна после ручного подтверждения контакта и отдельного
+                    согласия на номер — и только до публикации */}
                 {!row.boardAdId && (
                   <button
                     type="button"

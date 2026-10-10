@@ -133,17 +133,16 @@ export const OwnerApplicationCard: FC<Props> = ({ t, row, agents }) => {
   const [createdObjectId, setCreatedObjectId] = useState<number | null>(null)
 
   const confirmed = Boolean(row.phoneConfirmedAt)
-  // Публикация на доске: телефон подтверждён, контакт подтверждён вручную и
-  // получено отдельное согласие на показ номера — иначе кнопка недоступна
+  // Публикация на доске: контакт подтверждён вручную и получено отдельное
+  // согласие на показ номера — иначе кнопка недоступна. Отдельное
+  // подтверждение телефона для доски не требуется (см. ниже про объект каталога)
   const contactConfirmed = Boolean(row.contactConfirmedAt)
-  const canPublish = confirmed && contactConfirmed && row.publishPhoneConsent
-  const publishHint = !confirmed
-    ? t.crm.ownNeedPhone
-    : !contactConfirmed
-      ? t.crm.ownNeedContact
-      : !row.publishPhoneConsent
-        ? t.crm.ownNeedPhoneConsent
-        : t.crm.ownBoardHint
+  const canPublish = contactConfirmed && row.publishPhoneConsent
+  const publishHint = !contactConfirmed
+    ? t.crm.ownNeedContact
+    : !row.publishPhoneConsent
+      ? t.crm.ownNeedPhoneConsent
+      : t.crm.ownBoardHint
   const deal = row.type === 'rent' ? t.crm.ownDealRent : t.crm.ownDealSale
   const objectId = row.objectId ?? createdObjectId
   const objectTitle = row.objectTitle || (objectId ? `Объект №${objectId}` : '')
@@ -488,9 +487,9 @@ export const OwnerApplicationCard: FC<Props> = ({ t, row, agents }) => {
           </button>
         )}
         {/* Публикация на доске: агент не нужен, объект каталога не заводится —
-            объявление выходит с телефоном собственника. Доступна после
-            подтверждения телефона, подтверждения контакта и отдельного
-            согласия на показ номера — и только пока объявления нет */}
+            объявление выходит с телефоном собственника. Доступна после ручного
+            подтверждения контакта и отдельного согласия на показ номера — и
+            только пока объявления нет */}
         {!row.boardAdId && (
           <button
             type="button"
