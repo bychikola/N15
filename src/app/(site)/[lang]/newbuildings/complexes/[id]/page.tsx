@@ -5,6 +5,7 @@ import { notFound } from 'next/navigation'
 import { Header } from '@/components/layout/Header'
 import { Footer } from '@/components/layout/Footer'
 import { SectionWrapper } from '@/components/ui/SectionWrapper'
+import { PhotoGrid } from '@/components/ui/PhotoGrid'
 import { PurchaseFaq } from '@/components/purchase/PurchaseFaq'
 import { ComplexFeedbackForm } from '@/components/complexes/ComplexFeedbackForm'
 import { getDictionary } from '@/i18n/dictionaries'
@@ -23,36 +24,54 @@ interface MediaDoc {
   sizes?: Record<string, { url?: string } | undefined>
 }
 
-/** Ссылка на изображение: card-размер, иначе оригинал. null — картинки нет */
-function mediaOf(value: unknown, size: 'card' | 'hero' = 'card'): { url: string; alt: string } | null {
-  if (!value || typeof value !== 'object') return null
-  const media = value as MediaDoc
-  const url = (size && media.sizes?.[size]?.url) || media.url
-  if (!url) return null
-  return { url, alt: String(media.alt || '') }
+/** Слайд для лайтбокса PhotoGrid: оригинал для просмотра, card — плитка, thumbnail — лента */
+interface Slide {
+  url: string
+  alt: string
+  thumb?: string
+  tile?: string
 }
 
-/** Список изображений поля upload hasMany — без пустых мест */
-function mediaList(value: unknown, size: 'card' | 'hero' = 'card'): { url: string; alt: string }[] {
+/**
+ * Изображение для лайтбокса: `url` — оригинал (полноэкранный просмотр с
+ * ресайзом средствами next/image), `tile` — card 800px для плитки,
+ * `thumb` — thumbnail для ленты миниатюр. null — картинки нет.
+ */
+function slideOf(value: unknown): Slide | null {
+  if (!value || typeof value !== 'object') return null
+  const media = value as MediaDoc
+  if (!media.url) return null
+  return {
+    url: media.url,
+    alt: String(media.alt || ''),
+    thumb: media.sizes?.thumbnail?.url || media.sizes?.card?.url || media.url,
+    tile: media.sizes?.card?.url || media.sizes?.thumbnail?.url || media.url,
+  }
+}
+
+/** Список слайдов поля upload hasMany — без пустых мест */
+function slideList(value: unknown): Slide[] {
   if (!Array.isArray(value)) return []
   return value.flatMap((item) => {
-    const media = mediaOf(item, size)
-    return media ? [media] : []
+    const slide = slideOf(item)
+    return slide ? [slide] : []
   })
 }
 
 /**
  * Файл раздела «Медиа и документы»: изображение из media или PDF из
- * complex-documents. У изображения берём card-размер, у PDF — оригинал:
- * размеры PDF не собираются (см. src/payload/collections/ComplexDocuments.ts).
+ * complex-documents. У изображения на плитку берём card-размер, а `full` —
+ * оригинал: планировку открывают в новой вкладке на весь экран (на телефоне
+ * так её можно приблизить). У PDF размеры не собираются, поэтому url и full —
+ * один и тот же файл (см. src/payload/collections/ComplexDocuments.ts).
  */
-function fileOf(value: unknown): { url: string; alt: string; pdf: boolean } | null {
+function fileOf(value: unknown): { url: string; full: string; alt: string; pdf: boolean } | null {
   if (!value || typeof value !== 'object') return null
   const media = value as MediaDoc
   const pdf = media.mimeType === 'application/pdf' || /\.pdf$/i.test(String(media.url || ''))
   const url = pdf ? media.url : media.sizes?.card?.url || media.url
   if (!url) return null
-  return { url, alt: String(media.alt || ''), pdf: Boolean(pdf) }
+  return { url, full: String(media.url || url), alt: String(media.alt || ''), pdf: Boolean(pdf) }
 }
 
 /** Дата из ISO в «01.09.2026» — разбором строки, без сдвига часового пояса */
@@ -149,14 +168,12 @@ export default async function ComplexPage({ params }: PageProps) {
       building: String(item.building || '').trim(),
     }]
   })
-  const planningImages = planningCards.length
-    ? []
-    : mediaList(doc.planningImages).map((image) => ({ ...image, pdf: false, name: '', rooms: '', area: '', building: '' }))
+  const planningImages = planningCards.length ? [] : slideList(doc.planningImages)
 
   // Галерея ЖК: фотографии и рендеры комплекса. Главное изображение — первым
   const galleryAll = (Array.isArray(doc.gallery) ? doc.gallery : []).flatMap((raw) => {
     const item = raw as Record<string, unknown>
-    const photo = mediaOf(item.photo)
+    const photo = slideOf(item.photo)
     return photo ? [{ ...photo, isMain: item.isMain === true }] : []
   })
   const galleryMain = galleryAll.find((g) => g.isMain) || null
@@ -165,10 +182,10 @@ export default async function ComplexPage({ params }: PageProps) {
   // Паркинг и кладовые: описание и фотографии — показываются в разделе помещений
   const parking = (doc.parking && typeof doc.parking === 'object' ? doc.parking : {}) as Record<string, unknown>
   const parkingText = String(parking.description || '').trim()
-  const parkingPhotos = mediaList(parking.photos)
+  const parkingPhotos = slideList(parking.photos)
   const storerooms = (doc.storerooms && typeof doc.storerooms === 'object' ? doc.storerooms : {}) as Record<string, unknown>
   const storeroomsText = String(storerooms.description || '').trim()
-  const storeroomsPhotos = mediaList(storerooms.photos)
+  const storeroomsPhotos = slideList(storerooms.photos)
 
   // Презентация ЖК: PDF-файл, на странице — кнопка «Смотреть презентацию»
   const presentation = fileOf(doc.presentation)
@@ -213,7 +230,7 @@ export default async function ComplexPage({ params }: PageProps) {
     .map((report) => ({
       date: formatDate(report.date),
       stage: String(report.stage || '').trim(),
-      photos: mediaList(report.photos),
+      photos: slideList(report.photos),
     }))
     .filter((report) => report.date || report.stage || report.photos.length > 0)
 
@@ -319,12 +336,20 @@ export default async function ComplexPage({ params }: PageProps) {
                           {t.complex.planningDownload}
                         </a>
                       ) : (
-                        <img
-                          src={item.url}
-                          alt={item.alt || item.name || `${name} — ${t.complex.planningTitle}`}
-                          loading="lazy"
-                          className="h-44 w-full border border-[var(--n15-gold)]/10 object-cover"
-                        />
+                        <a
+                          href={item.full}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label={`${t.complex.planningDownload}: ${item.name || t.complex.planningTitle}`}
+                          className="block"
+                        >
+                          <img
+                            src={item.url}
+                            alt={item.alt || item.name || `${name} — ${t.complex.planningTitle}`}
+                            loading="lazy"
+                            className="h-44 w-full border border-[var(--n15-gold)]/10 object-cover"
+                          />
+                        </a>
                       )}
                       {(item.name || item.rooms || item.area || item.building) && (
                         <div className="mt-3">
@@ -357,38 +382,17 @@ export default async function ComplexPage({ params }: PageProps) {
                 </div>
               )}
               {planningImages.length > 0 && (
-                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-                  {planningImages.map((image, index) => (
-                    <img
-                      key={index}
-                      src={image.url}
-                      alt={image.alt || `${name} — ${t.complex.planningTitle}`}
-                      loading="lazy"
-                      className="h-44 w-full border border-[var(--n15-gold)]/10 object-cover"
-                    />
-                  ))}
-                </div>
+                <PhotoGrid slides={planningImages} />
               )}
             </section>
           )}
 
-          {/* Галерея ЖК: фотографии и рендеры комплекса (главное — первым) */}
+          {/* Галерея ЖК: фотографии и рендеры комплекса (главное — первым).
+              Плитка открывает полноэкранный просмотр со свайпами (PhotoGrid) */}
           {gallery.length > 0 && (
             <section className="mb-14">
               <BlockTitle>{t.complex.galleryTitle}</BlockTitle>
-              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-                {gallery.map((image, index) => (
-                  <img
-                    key={index}
-                    src={image.url}
-                    alt={image.alt || `${name} — ${t.complex.galleryTitle}`}
-                    loading="lazy"
-                    className={`w-full border border-[var(--n15-gold)]/10 object-cover ${
-                      index === 0 && galleryMain ? 'col-span-2 h-64 sm:col-span-3 sm:h-96' : 'h-40'
-                    }`}
-                  />
-                ))}
-              </div>
+              <PhotoGrid slides={gallery} />
             </section>
           )}
 
@@ -461,17 +465,7 @@ export default async function ComplexPage({ params }: PageProps) {
                         </p>
                       )}
                       {parkingPhotos.length > 0 && (
-                        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                          {parkingPhotos.map((image, index) => (
-                            <img
-                              key={index}
-                              src={image.url}
-                              alt={image.alt || `${name} — ${t.complex.parkingTitle}`}
-                              loading="lazy"
-                              className="h-28 w-full border border-[var(--n15-gold)]/10 object-cover"
-                            />
-                          ))}
-                        </div>
+                        <PhotoGrid slides={parkingPhotos} layout="grid" />
                       )}
                     </div>
                   )}
@@ -486,17 +480,7 @@ export default async function ComplexPage({ params }: PageProps) {
                         </p>
                       )}
                       {storeroomsPhotos.length > 0 && (
-                        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                          {storeroomsPhotos.map((image, index) => (
-                            <img
-                              key={index}
-                              src={image.url}
-                              alt={image.alt || `${name} — ${t.complex.storeroomsTitle}`}
-                              loading="lazy"
-                              className="h-28 w-full border border-[var(--n15-gold)]/10 object-cover"
-                            />
-                          ))}
-                        </div>
+                        <PhotoGrid slides={storeroomsPhotos} layout="grid" />
                       )}
                     </div>
                   )}
@@ -555,19 +539,7 @@ export default async function ComplexPage({ params }: PageProps) {
                         </span>
                       )}
                     </div>
-                    {report.photos.length > 0 && (
-                      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-                        {report.photos.map((image, photoIndex) => (
-                          <img
-                            key={photoIndex}
-                            src={image.url}
-                            alt={image.alt || report.stage || `${name} — ${t.complex.photoReportsTitle}`}
-                            loading="lazy"
-                            className="h-40 w-full border border-[var(--n15-gold)]/10 object-cover"
-                          />
-                        ))}
-                      </div>
-                    )}
+                    {report.photos.length > 0 && <PhotoGrid slides={report.photos} />}
                   </div>
                 ))}
               </div>

@@ -26,6 +26,14 @@ function localPath(u: string): string {
 
 interface Props {
   slides: Slide[]
+  /**
+   * `mosaic` (по умолчанию) — первая плитка крупная 2×2, как на карточке объекта
+   * и объявления доски. `grid` — ровная сетка одинаковых плиток: для небольших
+   * наборов в узкой колонке (фотографии паркинга и кладовых на странице ЖК).
+   */
+  layout?: 'mosaic' | 'grid'
+  /** Высота плитки в раскладке `grid` — по умолчанию компактные 28 (112 px) */
+  tileClassName?: string
 }
 
 /**
@@ -33,9 +41,11 @@ interface Props {
  * первая плитка — большая (2×2), остальные — по 1×1, всё object-cover.
  * Показываются первые 6 плиток (3 ряда); если фото больше — на последней
  * видимой плитке оверлей «+N», клик раскрывает остальные.
- * Клик по плитке открывает полноэкранный лайтбокс.
+ * Клик по плитке открывает полноэкранный лайтбокс: листается свайпами и
+ * стрелками, закрывается крестиком, Esc и кликом по подложке (§11).
  */
-export const PhotoGrid: FC<Props> = ({ slides }) => {
+export const PhotoGrid: FC<Props> = ({ slides, layout = 'mosaic', tileClassName }) => {
+  const mosaic = layout !== 'grid'
   const { t } = useI18n()
   const [lightbox, setLightbox] = useState(false)
   const [lightboxIdx, setLightboxIdx] = useState(0)
@@ -124,7 +134,13 @@ export const PhotoGrid: FC<Props> = ({ slides }) => {
 
   return (
     <div>
-      <div className="grid grid-cols-2 md:grid-cols-3 auto-rows-[150px] md:auto-rows-[176px] gap-3">
+      <div
+        className={
+          mosaic
+            ? 'grid grid-cols-2 md:grid-cols-3 auto-rows-[150px] md:auto-rows-[176px] gap-3'
+            : 'grid grid-cols-2 sm:grid-cols-3 gap-3'
+        }
+      >
         {visibleSlides.map((slide, i) => {
           const isCollapseTile = hiddenCount > 0 && i === COLLAPSE_AT - 1
           return (
@@ -133,7 +149,7 @@ export const PhotoGrid: FC<Props> = ({ slides }) => {
               onClick={() => (isCollapseTile ? setExpanded(true) : openLightbox(i))}
               data-more-count={isCollapseTile ? `+${hiddenCount}` : undefined}
               className={`photo-grid__tile relative overflow-hidden bg-[var(--n15-black)] border border-[var(--n15-gold)]/10 group cursor-pointer ${
-                i === 0 ? 'col-span-2 row-span-2' : ''
+                mosaic ? (i === 0 ? 'col-span-2 row-span-2' : '') : `w-full ${tileClassName || 'h-28'}`
               }`}
               aria-label={isCollapseTile ? `+${hiddenCount}` : `${t.slider.openFullscreen} ${i + 1}`}
             >
