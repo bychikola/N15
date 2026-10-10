@@ -150,6 +150,12 @@ export default async function ObjectPage({ params }: PageProps) {
     ownership?: string
     primaryImage?: { id: number; url?: string; alt?: string; filename?: string; sizes?: { thumbnail?: { url?: string }; card?: { url?: string } } }
     images?: { id: number; url?: string; alt?: string; filename?: string; sizes?: { thumbnail?: { url?: string }; card?: { url?: string } } }[]
+    // Объекты новостройки в составе ЖК (машино-места, коммерческие
+    // помещения): статус готовности, условия оплаты и планировка — поля
+    // только у категорий «гараж»/«коммерческая» (см. src/lib/complex-units.ts)
+    unitStatus?: string
+    paymentTerms?: string
+    floorPlan?: { url?: string; alt?: string; mimeType?: string; sizes?: { card?: { url?: string } } }
   }
 
   // Плитки сетки грузят card (800px) — большая плитка 2×2 и retina-экраны
@@ -169,6 +175,17 @@ export default async function ObjectPage({ params }: PageProps) {
         (option): option is keyof typeof t.object.purchaseOptions => option in t.object.purchaseOptions,
       )
     : []
+  // Объект новостройки (машино-место или коммерческое помещение в составе ЖК):
+  // статус готовности, условия оплаты и планировка. Поля есть только у этих
+  // категорий (см. src/lib/complex-units.ts), поэтому у обычных объектов
+  // строки и блок планировки не показываются
+  const unitStatusLabel =
+    obj.unitStatus && obj.unitStatus in t.units.statuses
+      ? t.units.statuses[obj.unitStatus as keyof typeof t.units.statuses]
+      : ''
+  const floorPlanFull = obj.floorPlan?.url || ''
+  const floorPlanCard = obj.floorPlan?.sizes?.card?.url || floorPlanFull
+  const floorPlanPdf = obj.floorPlan?.mimeType === 'application/pdf'
   // Характеристики дома из реестра: показываем только подтверждённые агентом
   // (пустые и «не найдено» в housePublic не попадают) — с источником и датой
   const houseItems = (obj.housePublic?.items || [])
@@ -374,6 +391,10 @@ export default async function ObjectPage({ params }: PageProps) {
                     // показываем их как записано
                     { label: t.object.elevator, value: obj.elevator ?? null },
                     { label: t.object.parking, value: obj.parking ?? null },
+                    // Статус и условия оплаты — только у объектов новостройки
+                    // в составе ЖК (у остальных значения пустые и строк нет)
+                    { label: t.units.status, value: unitStatusLabel || null },
+                    { label: t.units.terms, value: obj.paymentTerms ?? null },
                   ].filter((f) => f.value).map((f, i) => (
                     <div key={f.label}
                       className={`flex justify-between items-baseline gap-4 py-4 border-b border-[var(--n15-gold)]/15 ${
@@ -419,6 +440,42 @@ export default async function ObjectPage({ params }: PageProps) {
                         </span>
                       ))}
                     </div>
+                  </div>
+                )}
+
+                {/* Планировка объекта новостройки: у машино-мест и помещений
+                    ЖК это отдельное поле (floorPlan). Картинку открываем в
+                    новой вкладке на весь экран, PDF — ссылкой */}
+                {floorPlanFull && (
+                  <div className="mt-8">
+                    <h2 className="text-xl font-[family-name:var(--font-display)] text-[var(--n15-white)] mb-4">
+                      {t.units.planning}
+                    </h2>
+                    {floorPlanPdf ? (
+                      <a
+                        href={floorPlanFull}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center border border-[var(--n15-gold)]/40 px-6 py-3 text-xs uppercase tracking-wider text-[var(--n15-gold)] transition-colors hover:bg-[var(--n15-gold)]/10"
+                      >
+                        {t.units.planningPdf}
+                      </a>
+                    ) : (
+                      <a
+                        href={floorPlanFull}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label={`${obj.title} — ${t.units.planning}`}
+                        className="block max-w-xl"
+                      >
+                        <img
+                          src={floorPlanCard}
+                          alt={`${obj.title} — ${t.units.planning}`}
+                          loading="lazy"
+                          className="w-full border border-[var(--n15-gold)]/10 bg-[var(--n15-black)]/30 object-contain"
+                        />
+                      </a>
+                    )}
                   </div>
                 )}
               </div>

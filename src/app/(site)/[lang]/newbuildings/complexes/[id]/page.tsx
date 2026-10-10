@@ -8,7 +8,11 @@ import { SectionWrapper } from '@/components/ui/SectionWrapper'
 import { PhotoGrid } from '@/components/ui/PhotoGrid'
 import { PurchaseFaq } from '@/components/purchase/PurchaseFaq'
 import { ComplexFeedbackForm } from '@/components/complexes/ComplexFeedbackForm'
+import ComplexUnits, { type ComplexUnit } from '@/components/complexes/ComplexUnits'
 import { getDictionary } from '@/i18n/dictionaries'
+// Категории объектов новостройки — машино-места и коммерческие помещения
+// (см. src/lib/complex-units.ts)
+import { UNIT_CATEGORIES } from '@/lib/complex-units'
 
 export const dynamic = 'force-dynamic'
 
@@ -201,12 +205,13 @@ export default async function ComplexPage({ params }: PageProps) {
     })
     .filter((item) => item.building || item.period)
 
-  // Помещения и инфраструктура, способы приобретения — чипами
+  // Помещения и инфраструктура, способы приобретения — чипами. Паркинг и
+  // коммерческие помещения здесь не чипами: это активные кнопки раздела
+  // объектов новостройки ниже (ComplexUnits) — они открывают подборку
+  // машино-мест и помещений этого ЖК
   const premises = (doc.premises && typeof doc.premises === 'object' ? doc.premises : {}) as Record<string, unknown>
   const premiseItems: string[] = []
-  if (premises.parking) premiseItems.push(t.complex.premisesParking)
   if (premises.storage) premiseItems.push(t.complex.premisesStorage)
-  if (premises.commercial) premiseItems.push(t.complex.premisesCommercial)
   if (String(premises.other || '').trim()) premiseItems.push(String(premises.other).trim())
 
   const purchaseMethods = (
@@ -219,6 +224,66 @@ export default async function ComplexPage({ params }: PageProps) {
   if (purchaseMethods.installment) purchaseItems.push(t.complex.purchaseInstallment)
   if (purchaseMethods.cash) purchaseItems.push(t.complex.purchaseCash)
   if (String(purchaseMethods.other || '').trim()) purchaseItems.push(String(purchaseMethods.other).trim())
+
+  // Объекты новостройки: машино-места (категория «гараж») и коммерческие
+  // помещения этого ЖК. Связь объекта с комплексом закрыта для гостя
+  // (privateFieldsAccess в Objects.ts), поэтому читаем сервером с
+  // overrideAccess — как и сам комплекс. Реализованные объекты («Реализован»)
+  // в подборку не попадают: их отсеивает unitOf ниже, а не where, — у объектов
+  // без статуса unitStatus = null, и not_equals отбросил бы и их
+  const { docs: unitDocs } = await payload.find({
+    collection: 'objects',
+    where: {
+      and: [
+        { status: { equals: 'published' } },
+        { complex: { equals: complexId } },
+        { category: { in: [...UNIT_CATEGORIES] } },
+      ],
+    },
+    sort: '-createdAt',
+    limit: 100,
+    depth: 2,
+    overrideAccess: true,
+  })
+
+  const unitOf = (raw: unknown): ComplexUnit | null => {
+    const u = raw as Record<string, unknown>
+    const id = Number(u.id)
+    if (!Number.isInteger(id)) return null
+    // Реализованный объект — уже не предложение: на странице не показываем
+    if (String(u.unitStatus || '') === 'sold') return null
+    const price = typeof u.price === 'number' ? u.price : Number(u.price)
+    if (!Number.isFinite(price)) return null
+    const category = String(u.category || '')
+    // Фото: главное, иначе первое из галереи; планировка — отдельное поле
+    const photoDoc = u.primaryImage || (Array.isArray(u.images) ? u.images[0] : null)
+    const photo = fileOf(photoDoc)
+    const plan = fileOf(u.floorPlan)
+    return {
+      id,
+      slug: String(u.slug || '') || undefined,
+      title:
+        String(u.title || '').trim() ||
+        t.categoryLabels[category as keyof typeof t.categoryLabels] ||
+        category,
+      category,
+      area: typeof u.area === 'number' ? u.area : undefined,
+      price,
+      purchaseOptions: (Array.isArray(u.purchaseOptions) ? u.purchaseOptions : []).map(String),
+      paymentTerms: String(u.paymentTerms || '').trim() || undefined,
+      unitStatus: String(u.unitStatus || '') || undefined,
+      photo: photo ? { url: photo.url, alt: photo.alt } : undefined,
+      floorPlan: plan ? { url: plan.url, full: plan.full, pdf: plan.pdf } : undefined,
+    }
+  }
+
+  const unitItems = unitDocs.map(unitOf).filter((u): u is ComplexUnit => u !== null)
+  const parkingUnits = unitItems.filter((u) => u.category === 'garage')
+  const commercialUnits = unitItems.filter((u) => u.category === 'commercial')
+  // Кнопку типа показываем, если он помечен в комплексе или уже заведены
+  // объекты: без этого тип с объектами, но без отметки, пропал бы
+  const showParkingUnits = premises.parking === true || parkingUnits.length > 0
+  const showCommercialUnits = premises.commercial === true || commercialUnits.length > 0
 
   // Вопросы и ответы — общий аккордеон сайта (PurchaseFaq)
   const faq = ((Array.isArray(doc.faq) ? doc.faq : []) as Record<string, unknown>[])
@@ -442,17 +507,19 @@ export default async function ComplexPage({ params }: PageProps) {
             <section className="mb-14 grid gap-6 md:grid-cols-2">
               {(premiseItems.length > 0 || parkingText || parkingPhotos.length > 0 || storeroomsText || storeroomsPhotos.length > 0) && (
                 <div className="border border-[var(--n15-gold)]/10 p-6">
+                  {/* Заголовок карточки показываем всегда, когда она есть:
+                      чипов может и не остаться (паркинг и коммерция ушли
+                      кнопками в раздел объектов новостройки), а описания
+                      паркинга и кладовых — нет */}
+                  <h3 className="mb-4 text-lg font-[family-name:var(--font-display)] text-[var(--n15-white)]">
+                    {t.complex.premisesTitle}
+                  </h3>
                   {premiseItems.length > 0 && (
-                    <>
-                      <h3 className="mb-4 text-lg font-[family-name:var(--font-display)] text-[var(--n15-white)]">
-                        {t.complex.premisesTitle}
-                      </h3>
-                      <div className="flex flex-wrap gap-2">
-                        {premiseItems.map((item, index) => (
-                          <Chip key={index}>{item}</Chip>
-                        ))}
-                      </div>
-                    </>
+                    <div className="flex flex-wrap gap-2">
+                      {premiseItems.map((item, index) => (
+                        <Chip key={index}>{item}</Chip>
+                      ))}
+                    </div>
                   )}
                   {(parkingText || parkingPhotos.length > 0) && (
                     <div className={premiseItems.length > 0 ? 'mt-6 border-t border-[var(--n15-gold)]/10 pt-5' : ''}>
@@ -499,6 +566,19 @@ export default async function ComplexPage({ params }: PageProps) {
                 </div>
               )}
             </section>
+          )}
+
+          {/* Объекты новостройки: кнопки «Паркинг» и «Коммерческие помещения»
+              открывают только машино-места и помещения этого ЖК. Реализованные
+              объекты сюда не попадают, у пустого типа — «Предложения скоро
+              появятся» без перехода в общий каталог (см. ComplexUnits) */}
+          {(showParkingUnits || showCommercialUnits) && (
+            <ComplexUnits
+              parking={parkingUnits}
+              commercial={commercialUnits}
+              parkingVisible={showParkingUnits}
+              commercialVisible={showCommercialUnits}
+            />
           )}
 
           {/* Вопросы и ответы — раскрывающийся список */}
