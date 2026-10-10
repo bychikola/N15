@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { canAccessCrm, getCrmUser } from '@/app/crm/auth'
-import { PHOTO_MAX_BYTES, PHOTO_MAX_LABEL, photoExtension } from '@/lib/photo-rules'
+import { PHOTO_MAX_BYTES, PHOTO_MAX_LABEL } from '@/lib/photo-rules'
 
 /**
  * Загрузка PDF-документа ЖК из CRM: презентация комплекса и планировки в PDF
@@ -39,19 +39,23 @@ export async function POST(req: NextRequest) {
   const file = form?.get('file')
   if (!file || !(file instanceof File)) return fail(400, 'no_file', 'Файл не приложен')
 
-  // Только PDF: и по MIME-типу, и по расширению — часть браузеров отдаёт
-  // file.type пустым
-  const type = (file.type || '').toLowerCase()
-  const isPdf = type === 'application/pdf' || (!type && photoExtension(file.name) === 'pdf')
-  if (!isPdf) return fail(415, 'bad_type', 'Нужен PDF-файл')
-
   if (file.size > PHOTO_MAX_BYTES) {
     return fail(413, 'too_large', `Файл больше ${PHOTO_MAX_LABEL} — выберите поменьше`)
   }
 
+  const original = Buffer.from(await file.arrayBuffer())
+
+  // Формат определяем по «магии» самого файла, а не по file.type: на iPhone
+  // Safari отдаёт PDF с пустым типом или как application/octet-stream (баг
+  // FormData), и проверка по MIME отвергала настоящую презентацию — кнопка
+  // «Загрузить презентацию» на телефоне не срабатывала. Заголовок %PDF- есть
+  // у любого PDF и подделать его расширением нельзя.
+  if (original.subarray(0, 5).toString('latin1') !== '%PDF-') {
+    return fail(415, 'bad_type', 'Нужен PDF-файл')
+  }
+
   try {
     const payload = await getPayload({ config })
-    const original = Buffer.from(await file.arrayBuffer())
     const doc = await payload.create({
       collection: 'complex-documents',
       data: { title: file.name.replace(/\.[^.]+$/, '') },
