@@ -29,6 +29,10 @@ import { AgentPicker } from '@/components/crm/AgentPicker'
 // Категории объектов: полный список значений, правила участка и домовых
 // категорий — общий справочник схемы коллекции (src/lib/object-categories.ts)
 import { OBJECT_CATEGORIES, isHouseCategoryCode, isPlotCategoryCode, isPrivateHouseCode } from '@/lib/object-categories'
+// Рынок жилья (вторичное / новостройка) и правило показа блока застройщика —
+// общий справочник со схемой коллекции Objects (см. src/lib/object-market.ts):
+// пометка только у квартир, у новостройки появляются застройщик, ЖК и дом/корпус
+import { OBJECT_MARKETS, isObjectMarket, developerBlockApplies } from '@/lib/object-market'
 // Площадь участков: м² ↔ сотки ↔ гектары (1 сотка = 100 м², 1 га = 10000 м²),
 // чтение «11,5» с запятой — дробные значения разрешены
 import { areaNumberText, areaUnitOf, parseAreaNumber, sqmToUnit, unitToSqm, type AreaUnit } from '@/lib/area-format'
@@ -344,6 +348,10 @@ const hasPlotInfo = (o: Record<string, unknown>): boolean =>
 
 const emptyForm = {
   title: '', type: 'sale', category: 'apartment', price: '', area: '', areaUnit: 'sqm', livingArea: '',
+  // Рынок жилья — только у квартир: «вторичное» или «новостройка» (коды из
+  // src/lib/object-market.ts). Пусто — не указано. От пометки зависит показ
+  // блока «Застройщик и жилой комплекс» (см. developerBlockApplies)
+  market: '',
   // Земельный участок (м², 6 соток = 600 м²) — отдельное поле дома,
   // таунхауса и коммерции: у базы отдыха это площадь земли, отдельная от
   // площади здания. Участвует в рыночной оценке (см. src/lib/valuation.ts).
@@ -1174,6 +1182,16 @@ export const CrmObjects: FC<{
   const complexesForDeveloper = form.developer
     ? complexes.filter((c) => String(c.developer) === form.developer)
     : []
+  // Блок «Застройщик и жилой комплекс»: у квартиры он относится к
+  // новостройке, у объектов новостройки в ЖК (машино-места и коммерции) —
+  // нужен всегда. Сохранённую связь показываем независимо от пометки, чтобы
+  // у карточки, заведённой до появления выбора, застройщик не пропал из формы
+  // (см. src/lib/object-market.ts)
+  const showDeveloperBlock = developerBlockApplies(
+    form.category,
+    form.market,
+    Boolean(form.developer || form.complex),
+  )
 
   const [dirty, setDirty] = useState(false)
   const skipNextDirty = useRef(true)
@@ -1421,6 +1439,9 @@ export const CrmObjects: FC<{
       title: (o.title as string) || '',
       type: (o.type as string) || 'sale',
       category: (o.category as string) || 'apartment',
+      // Рынок жилья: неизвестный/устаревший код читаем как «не указано» —
+      // в списке поля такому значению соответствия нет
+      market: isObjectMarket(o.market) ? o.market : '',
       price: o.price != null ? String(o.price) : '',
       area: o.area != null
         ? areaUnit === 'sqm'
@@ -1970,6 +1991,10 @@ export const CrmObjects: FC<{
       title: form.title.trim(),
       type: form.type,
       category: form.category,
+      // Рынок жилья — только у квартир: у остальных категорий поле не
+      // отправляем (сервер и так снял бы значение), чтобы не затереть
+      // сохранённое. У квартиры снятый выбор уходит null — пометка стирается
+      market: form.category === 'apartment' ? (isObjectMarket(form.market) ? form.market : null) : undefined,
       price: form.price ? Number(form.price) : undefined,
       area,
       areaUnit: form.category === 'land' ? areaUnit : undefined,
@@ -2252,6 +2277,9 @@ export const CrmObjects: FC<{
       // Тип коммерции бывает только у коммерческой категории: у остальных
       // поле скрыто, и выбранное значение в нём оставаться не должно
       commercialType: v === 'commercial' ? prev.commercialType : '',
+      // Рынок жилья — только у квартир: при смене категории пометку снимаем,
+      // иначе она осталась бы скрытой в карточке (сервер её тоже снимет)
+      market: v === 'apartment' ? prev.market : '',
     }))
   }
 
@@ -2601,6 +2629,21 @@ export const CrmObjects: FC<{
               ))}
             </select>
           </Field>
+          {/* Рынок жилья — только у квартир: вторичное жильё или новостройка.
+              Выбор «Новостройка» показывает ниже блок «Застройщик и жилой
+              комплекс» (developer/complex) — застройщик, ЖК и дом/корпус
+              (дом и корпус заполняются в блоке «Адрес»). Сданный дом тоже
+              может быть новостройкой — готовность на выбор не влияет */}
+          {form.category === 'apartment' && (
+            <Field label={t.crm.objMarket}>
+              <select value={form.market} onChange={(e) => set('market', e.target.value)} style={inputStyle}>
+                <option value="">{t.crm.objMarketNone}</option>
+                {OBJECT_MARKETS.map((m) => (
+                  <option key={m.value} value={m.value}>{m.label}</option>
+                ))}
+              </select>
+            </Field>
+          )}
           {/* Подкатегория коммерции — только у категории «коммерческая»: по
               ней есть фильтр в каталоге (см. COMMERCIAL_TYPES) */}
           {isCommercial && (
@@ -3023,7 +3066,7 @@ export const CrmObjects: FC<{
               до появления справочника, оба поля пусты. Сведения внутренние:
               на сайте и в публичном API их нет (см. access полей
               developer/complex в коллекции Objects) */}
-          {canEditPrivate && (
+          {canEditPrivate && showDeveloperBlock && (
             <div className="crm-fields-block span-2" style={{ gridColumn: '1 / -1' }}>
               <div className="crm-block-head">
                 <strong>{t.crm.devObjectBlock}</strong>

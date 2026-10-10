@@ -40,6 +40,9 @@ import { UNIT_STATUSES, isUnitCategory } from '@/lib/complex-units'
 // и формой CRM (см. src/lib/object-categories.ts): порядок значений совпадает
 // с порядком enum в базе
 import { OBJECT_CATEGORIES, isPlotCategoryCode, isHouseCategoryCode } from '@/lib/object-categories'
+// Рынок жилья (вторичное / новостройка) — общий справочник с формой CRM
+// (см. src/lib/object-market.ts): пометка только у квартир
+import { OBJECT_MARKETS, isObjectMarket } from '@/lib/object-market'
 import { COMMERCIAL_TYPES } from '@/lib/commercial-types'
 // Происхождение объекта (N15 / собственник / NMarket.PRO / застройщик /
 // партнёр / другая площадка) — общий справочник с формой CRM
@@ -790,6 +793,11 @@ export const Objects: CollectionConfig = {
             }
           }
         }
+        // «Тип жилья» — тоже необязательный select: пустую строку из формы
+        // приводим к null («не указано»), иначе Payload отклонит значение
+        if (typeof data.market === 'string' && !data.market.trim()) {
+          data.market = null
+        }
         return data
       },
       async ({ data, operation, req }) => {
@@ -867,6 +875,16 @@ export const Objects: CollectionConfig = {
         const dealType = data.type !== undefined ? data.type : prevType
         if (data.purchaseOptions !== undefined || data.type !== undefined || data.category !== undefined) {
           if (!purchaseOptionsApply(dealType, category)) data.purchaseOptions = []
+        }
+        // «Тип жилья» (вторичное / новостройка) бывает только у квартир: у
+        // остальных категорий значение снимаем — как варианты покупки выше.
+        // У квартиры присланное значение проверяем по справочнику (мусор не
+        // пропускаем), а если поле не трогали — сохранённую пометку не стираем
+        if (data.market !== undefined || data.category !== undefined) {
+          if (category !== 'apartment') data.market = null
+          else if (data.market !== undefined && data.market !== null && !isObjectMarket(data.market)) {
+            data.market = null
+          }
         }
         // force=true приходит query-параметром (см. flagFromReq)
         if (flagFromReq(req, 'force')) return data
@@ -987,6 +1005,24 @@ export const Objects: CollectionConfig = {
       // (см. src/lib/object-categories.ts); порядок значений — как в enum базы
       options: OBJECT_CATEGORIES.map((c) => ({ label: c.label, value: c.value })),
       required: true,
+    },
+    {
+      // Рынок жилья — вторичное жильё или новостройка. Пометка только у
+      // квартир: у остальных категорий значение снимает нормализация ниже
+      // (как варианты покупки у аренды и участков). Справочник общий с формой
+      // CRM (см. src/lib/object-market.ts). Поле необязательное: у карточек,
+      // заведённых до его появления, рынок «не указан». Новостройкой может
+      // быть и сданный дом — готовность на пометку не влияет. Застройщик и ЖК
+      // (поля developer/complex) связаны с пометкой только в форме: на сервере
+      // она их не требует и не чистит.
+      name: 'market',
+      type: 'select',
+      label: 'Тип жилья',
+      options: OBJECT_MARKETS.map((m) => ({ label: m.label, value: m.value })),
+      admin: {
+        description:
+          'Только для квартир: вторичное жильё или новостройка. У новостройки заполняются застройщик, ЖК и дом/корпус',
+      },
     },
     {
       // Подкатегория коммерческой недвижимости: готовый бизнес, офис, торговое
