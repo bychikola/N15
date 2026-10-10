@@ -118,6 +118,12 @@ export const BoardAdForm: FC<Props> = ({ lang, initial = null }) => {
   // Файл и ссылка на превью — вместе: ссылку создаём один раз при выборе,
   // иначе при каждом удалении превью пересоздавались бы и мигали
   const [photos, setPhotos] = useState<{ file: File; url: string }[]>([])
+  // Главное фото — порядок в списке и есть главное: выбранный снимок уходит
+  // первым, из начала списка берётся обложка (см. withMainPhotoFirst).
+  // Ключ: existing:<id> для уже загруженного, new:<номер> для нового файла
+  const [mainKey, setMainKey] = useState<string>(() =>
+    initial?.photos?.[0] ? `existing:${initial.photos[0].id}` : '',
+  )
   const [consentData, setConsentData] = useState(false)
   const [consentRules, setConsentRules] = useState(false)
   const [sending, setSending] = useState(false)
@@ -151,7 +157,11 @@ export const BoardAdForm: FC<Props> = ({ lang, initial = null }) => {
     setError('')
   }
 
-  const removeExisting = (id: number) => setExistingPhotos((prev) => prev.filter((p) => p.id !== id))
+  const removeExisting = (id: number) => {
+    setExistingPhotos((prev) => prev.filter((p) => p.id !== id))
+    // Убрали главное — главным станет первый оставшийся (см. mainEffective)
+    if (mainKey === `existing:${id}`) setMainKey('')
+  }
 
   const removePhoto = (index: number) => {
     setPhotos((prev) => {
@@ -159,7 +169,23 @@ export const BoardAdForm: FC<Props> = ({ lang, initial = null }) => {
       if (target) URL.revokeObjectURL(target.url)
       return prev.filter((_, i) => i !== index)
     })
+    // Индексы новых файлов после удалённого сдвигаются — ключ главного
+    // пересчитываем, иначе он указал бы на чужой снимок
+    setMainKey((prev) => {
+      if (!prev.startsWith('new:')) return prev
+      const at = Number(prev.slice(4))
+      if (at === index) return ''
+      return at > index ? `new:${at - 1}` : prev
+    })
   }
+
+  // Ключи фотографий в порядке показа: сначала прежние, потом только что
+  // выбранные. Пустой или устаревший ключ означает «главное — первое фото»
+  const photoKeys = [
+    ...existingPhotos.map((p) => `existing:${p.id}`),
+    ...photos.map((_, i) => `new:${i}`),
+  ]
+  const mainEffective = mainKey && photoKeys.includes(mainKey) ? mainKey : photoKeys[0] || ''
 
   const requiredFilled =
     form.title.trim() && form.price.trim() && form.description.trim() && form.contactName.trim() && form.phone.trim()
@@ -187,6 +213,8 @@ export const BoardAdForm: FC<Props> = ({ lang, initial = null }) => {
       const body = new FormData()
       for (const [key, value] of Object.entries(form)) body.append(key, String(value).trim())
       for (const photo of photos) body.append('photos', photo.file)
+      // Какое фото автор выбрал главным — сервер поставит его первым
+      if (mainEffective) body.append('mainPhoto', mainEffective)
 
       let url = '/api/board/ads'
       if (initial) {
@@ -458,37 +486,73 @@ export const BoardAdForm: FC<Props> = ({ lang, initial = null }) => {
             {/* Прежние фотографии: их видит автор (свои файлы из закрытого
                 хранилища), убрать можно крестиком — при сохранении список
                 оставленных уходит на сервер */}
-            {existingPhotos.map((photo) => (
-              <div key={`existing-${photo.id}`} className="relative w-24">
-                <img src={photo.thumb || photo.url} alt="" className="w-24 h-24 object-cover border border-[var(--n15-gold)]/20" />
-                <button
-                  type="button"
-                  onClick={() => removeExisting(photo.id)}
-                  aria-label={t.board.formPhotoRemove}
-                  className="absolute -top-2 -right-2 w-6 h-6 grid place-items-center bg-[var(--n15-black)] border border-[var(--n15-gold)]/40 text-[var(--n15-gold)] text-xs cursor-pointer"
-                >
-                  ✕
-                </button>
-              </div>
-            ))}
-            {photos.map((photo, index) => (
-              <div key={`${photo.file.name}-${index}`} className="relative w-24">
-                {/* Превью из выбранного файла: на сервер он уйдёт только при отправке */}
-                <img
-                  src={photo.url}
-                  alt=""
-                  className="w-24 h-24 object-cover border border-[var(--n15-gold)]/20"
-                />
-                <button
-                  type="button"
-                  onClick={() => removePhoto(index)}
-                  aria-label={t.board.formPhotoRemove}
-                  className="absolute -top-2 -right-2 w-6 h-6 grid place-items-center bg-[var(--n15-black)] border border-[var(--n15-gold)]/40 text-[var(--n15-gold)] text-xs cursor-pointer"
-                >
-                  ✕
-                </button>
-              </div>
-            ))}
+            {existingPhotos.map((photo) => {
+              const key = `existing:${photo.id}`
+              return (
+                <div key={key} className="w-24">
+                  <div className="relative">
+                    <img src={photo.thumb || photo.url} alt="" className="w-24 h-24 object-cover border border-[var(--n15-gold)]/20" />
+                    <button
+                      type="button"
+                      onClick={() => removeExisting(photo.id)}
+                      aria-label={t.board.formPhotoRemove}
+                      className="absolute -top-2 -right-2 w-6 h-6 grid place-items-center bg-[var(--n15-black)] border border-[var(--n15-gold)]/40 text-[var(--n15-gold)] text-xs cursor-pointer"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  {mainEffective === key ? (
+                    <span className="mt-1 block text-center text-[10px] uppercase tracking-wider text-[var(--n15-gold)]">
+                      {t.board.formPhotoMain}
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setMainKey(key)}
+                      className="mt-1 block w-full text-center text-[10px] leading-tight uppercase tracking-wider text-[var(--n15-muted)] hover:text-[var(--n15-gold)] transition-colors cursor-pointer"
+                    >
+                      {t.board.formPhotoMakeMain}
+                    </button>
+                  )}
+                </div>
+              )
+            })}
+            {photos.map((photo, index) => {
+              const key = `new:${index}`
+              return (
+                <div key={`${photo.file.name}-${index}`} className="w-24">
+                  <div className="relative">
+                    {/* Превью из выбранного файла: на сервер он уйдёт только при отправке */}
+                    <img
+                      src={photo.url}
+                      alt=""
+                      className="w-24 h-24 object-cover border border-[var(--n15-gold)]/20"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removePhoto(index)}
+                      aria-label={t.board.formPhotoRemove}
+                      className="absolute -top-2 -right-2 w-6 h-6 grid place-items-center bg-[var(--n15-black)] border border-[var(--n15-gold)]/40 text-[var(--n15-gold)] text-xs cursor-pointer"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  {mainEffective === key ? (
+                    <span className="mt-1 block text-center text-[10px] uppercase tracking-wider text-[var(--n15-gold)]">
+                      {t.board.formPhotoMain}
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setMainKey(key)}
+                      className="mt-1 block w-full text-center text-[10px] leading-tight uppercase tracking-wider text-[var(--n15-muted)] hover:text-[var(--n15-gold)] transition-colors cursor-pointer"
+                    >
+                      {t.board.formPhotoMakeMain}
+                    </button>
+                  )}
+                </div>
+              )
+            })}
           </div>
         )}
       </section>

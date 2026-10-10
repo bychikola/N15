@@ -3,7 +3,7 @@ import { getPayload } from 'payload'
 import config from '@payload-config'
 import { countActiveBoardAds, loadBoardList, BOARD_PAGE_SIZE } from '@/lib/board-service'
 import { BOARD_MAX_ACTIVE_PER_USER, BOARD_MAX_PHOTOS } from '@/lib/board'
-import { boardPhotosFromForm, parseBoardAdForm } from '@/lib/board-form'
+import { boardPhotosFromForm, parseBoardAdForm, withMainPhotoFirst } from '@/lib/board-form'
 import { clientIp, rateLimited } from '@/lib/rate-limit'
 
 /**
@@ -190,11 +190,20 @@ export async function POST(req: NextRequest) {
     }
 
     // --- Объявление -----------------------------------------------------------
+    // Главное фото — первым: обложка берётся из начала списка (см.
+    // withMainPhotoFirst). Ключ new:<номер> указывает на порядок отправленных
+    // файлов; неизвестное значение ничего не меняет
+    const orderedPhotoIds = withMainPhotoFirst(
+      photoIds,
+      files.map((_, i) => `new:${i}`),
+      String(form.get('mainPhoto') || ''),
+    )
+
     const ad = await payload.create({
       collection: 'board-ads',
       data: {
         ...parsed.data,
-        photos: photoIds,
+        photos: orderedPhotoIds,
         author: authorId,
         status: 'pending',
         consent: true,

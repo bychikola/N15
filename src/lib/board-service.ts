@@ -25,7 +25,7 @@ import {
   boardVisible,
   type BoardAddressLike,
 } from './board'
-import { parseBoardAdForm } from './board-form'
+import { parseBoardAdForm, withMainPhotoFirst } from './board-form'
 import { sendBoardMail } from './board-mail'
 import { storedFilePath } from './upload-paths'
 
@@ -727,7 +727,14 @@ export async function updateBoardAdByAuthor(
     }
   }
 
-  const photos = [...keep, ...newIds]
+  // Главное фото — первым: обложка берётся из начала списка (см.
+  // withMainPhotoFirst). Ключ из формы: existing:<id> для оставленного снимка
+  // или new:<номер> для только что выбранного файла
+  const photos = withMainPhotoFirst(
+    [...keep, ...newIds],
+    [...keep.map((pid) => `existing:${pid}`), ...newIds.map((_, i) => `new:${i}`)],
+    String(form.get('mainPhoto') || ''),
+  )
   if (!photos.length) return { ok: false, error: 'Оставьте хотя бы одну фотографию объекта' }
 
   // Прежние копии для сайта: удаляем и очищаем — при публикации сделаются заново

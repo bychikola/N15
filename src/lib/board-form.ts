@@ -149,6 +149,25 @@ export function parseBoardAdForm(form: FormData): { ok: true; data: BoardAdInput
   }
 }
 
+/**
+ * Главное фото — первым в списке. Обложка карточки и первый кадр галереи
+ * берутся из начала списка фотографий (см. boardToListItem и страницу
+ * объявления), поэтому выбор автора «сделать главным» — это перестановка,
+ * а не отдельное поле в базе: порядок фотографий и есть главное.
+ *
+ * Ключ приходит из формы: `existing:<id>` — уже загруженный снимок,
+ * `new:<порядковый номер>` — только что выбранный файл. items и keys идут
+ * в одном порядке (keys[i] описывает items[i]); неизвестный ключ игнорируем —
+ * форму может прислать кто угодно, а падать из-за этого объявлению незачем.
+ */
+export function withMainPhotoFirst<T>(items: T[], keys: string[], main: string | undefined): T[] {
+  if (!main) return items
+  const at = keys.indexOf(main)
+  // Уже первое или такого снимка нет — порядок не трогаем
+  if (at <= 0) return items
+  return [items[at], ...items.slice(0, at), ...items.slice(at + 1)]
+}
+
 /** Новые фотографии из формы — с проверкой формата и размера */
 export function boardPhotosFromForm(form: FormData): { ok: true; files: File[] } | { ok: false; error: string } {
   const files = form.getAll('photos').filter((f): f is File => f instanceof File && f.size > 0)
