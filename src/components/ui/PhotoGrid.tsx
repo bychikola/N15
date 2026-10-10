@@ -34,6 +34,13 @@ interface Props {
   layout?: 'mosaic' | 'grid'
   /** Высота плитки в раскладке `grid` — по умолчанию компактные 28 (112 px) */
   tileClassName?: string
+  /**
+   * Кнопка-триггер вместо сетки миниатюр: показывается компактная кнопка с
+   * этой подписью («Паркинг · Фото»), клик открывает тот же лайтбокс с
+   * перелистыванием. Плитки не рендерятся — для блоков, где фотографии
+   * уместнее спрятать за одну кнопку.
+   */
+  triggerLabel?: string
 }
 
 /**
@@ -44,7 +51,7 @@ interface Props {
  * Клик по плитке открывает полноэкранный лайтбокс: листается свайпами и
  * стрелками, закрывается крестиком, Esc и кликом по подложке (§11).
  */
-export const PhotoGrid: FC<Props> = ({ slides, layout = 'mosaic', tileClassName }) => {
+export const PhotoGrid: FC<Props> = ({ slides, layout = 'mosaic', tileClassName, triggerLabel }) => {
   const mosaic = layout !== 'grid'
   const { t } = useI18n()
   const [lightbox, setLightbox] = useState(false)
@@ -134,35 +141,53 @@ export const PhotoGrid: FC<Props> = ({ slides, layout = 'mosaic', tileClassName 
 
   return (
     <div>
-      <div
-        className={
-          mosaic
-            ? 'grid grid-cols-2 md:grid-cols-3 auto-rows-[150px] md:auto-rows-[176px] gap-3'
-            : 'grid grid-cols-2 sm:grid-cols-3 gap-3'
-        }
-      >
-        {visibleSlides.map((slide, i) => {
-          const isCollapseTile = hiddenCount > 0 && i === COLLAPSE_AT - 1
-          return (
-            <button
-              key={i}
-              onClick={() => (isCollapseTile ? setExpanded(true) : openLightbox(i))}
-              data-more-count={isCollapseTile ? `+${hiddenCount}` : undefined}
-              className={`photo-grid__tile relative overflow-hidden bg-[var(--n15-black)] border border-[var(--n15-gold)]/10 group cursor-pointer ${
-                mosaic ? (i === 0 ? 'col-span-2 row-span-2' : '') : `w-full ${tileClassName || 'h-28'}`
-              }`}
-              aria-label={isCollapseTile ? `+${hiddenCount}` : `${t.slider.openFullscreen} ${i + 1}`}
-            >
-              <img
-                src={slide.tile || slide.thumb || slide.url}
-                alt={slide.alt}
-                loading={i === 0 ? 'eager' : 'lazy'}
-                className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-              />
-            </button>
-          )
-        })}
-      </div>
+      {triggerLabel ? (
+        <button
+          type="button"
+          onClick={() => openLightbox(0)}
+          aria-label={`${triggerLabel}. ${t.slider.openFullscreen}`}
+          className="group inline-flex min-h-[44px] cursor-pointer items-center gap-3 border border-[var(--n15-gold)]/25 px-5 py-3 transition-colors hover:border-[var(--n15-gold)]/60 hover:bg-[var(--n15-gold)]/10"
+        >
+          <svg width="22" height="22" viewBox="0 0 22 22" fill="none" aria-hidden="true" className="shrink-0 text-[var(--n15-gold)]">
+            <rect x="2.5" y="5" width="17" height="12" stroke="currentColor" strokeWidth="1.2" />
+            <path d="M2.5 14 L8 9.5 L12 12.5 L19.5 5" stroke="currentColor" strokeWidth="1.2" />
+            <circle cx="15.5" cy="8.5" r="1.4" stroke="currentColor" strokeWidth="1" />
+          </svg>
+          <span className="font-[family-name:var(--font-display)] text-sm text-[var(--n15-white)] transition-colors group-hover:text-[var(--n15-gold)]">
+            {triggerLabel}
+          </span>
+        </button>
+      ) : (
+        <div
+          className={
+            mosaic
+              ? 'grid grid-cols-2 md:grid-cols-3 auto-rows-[150px] md:auto-rows-[176px] gap-3'
+              : 'grid grid-cols-2 sm:grid-cols-3 gap-3'
+          }
+        >
+          {visibleSlides.map((slide, i) => {
+            const isCollapseTile = hiddenCount > 0 && i === COLLAPSE_AT - 1
+            return (
+              <button
+                key={i}
+                onClick={() => (isCollapseTile ? setExpanded(true) : openLightbox(i))}
+                data-more-count={isCollapseTile ? `+${hiddenCount}` : undefined}
+                className={`photo-grid__tile relative overflow-hidden bg-[var(--n15-black)] border border-[var(--n15-gold)]/10 group cursor-pointer ${
+                  mosaic ? (i === 0 ? 'col-span-2 row-span-2' : '') : `w-full ${tileClassName || 'h-28'}`
+                }`}
+                aria-label={isCollapseTile ? `+${hiddenCount}` : `${t.slider.openFullscreen} ${i + 1}`}
+              >
+                <img
+                  src={slide.tile || slide.thumb || slide.url}
+                  alt={slide.alt}
+                  loading={i === 0 ? 'eager' : 'lazy'}
+                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                />
+              </button>
+            )
+          })}
+        </div>
+      )}
 
       {/* ── Fullscreen Lightbox (как в ImageSlider) ── */}
       {lightbox && (

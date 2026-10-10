@@ -9,6 +9,7 @@ import { PhotoGrid } from '@/components/ui/PhotoGrid'
 import { PurchaseFaq } from '@/components/purchase/PurchaseFaq'
 import { ComplexFeedbackForm } from '@/components/complexes/ComplexFeedbackForm'
 import ComplexUnits, { type ComplexUnit } from '@/components/complexes/ComplexUnits'
+import ComplexPlannings from '@/components/complexes/ComplexPlannings'
 import { getDictionary } from '@/i18n/dictionaries'
 // Категории объектов новостройки — машино-места и коммерческие помещения
 // (см. src/lib/complex-units.ts)
@@ -164,13 +165,17 @@ export default async function ComplexPage({ params }: PageProps) {
     const file = fileOf(item.image) || fileOf(item.document)
     if (!file) return []
     const area = item.area != null && item.area !== '' ? String(item.area).replace('.', ',') : ''
-    return [{
-      ...file,
-      name: String(item.name || '').trim(),
-      rooms: String(item.rooms || '').trim(),
-      area,
-      building: String(item.building || '').trim(),
-    }]
+    const name = String(item.name || '').trim()
+    const rooms = String(item.rooms || '').trim()
+    const building = String(item.building || '').trim()
+    // Подпись кнопки: ведущее число комнат даёт «2-комнатная», иначе текст как
+    // введён («Студия», «Кухня-гостиная + спальня»), иначе название планировки
+    const digits = /^\s*(\d+)/.exec(rooms)
+    const head = digits
+      ? `${digits[1]}-${t.complex.planningRoomSuffix}`
+      : rooms || name || t.complex.planningLabel
+    const label = [head, area ? `${area} ${t.complex.areaUnit}` : '', building].filter(Boolean).join(' · ')
+    return [{ ...file, name, rooms, area, building, label }]
   })
   const planningImages = planningCards.length ? [] : slideList(doc.planningImages)
 
@@ -378,7 +383,8 @@ export default async function ComplexPage({ params }: PageProps) {
             </section>
           )}
 
-          {/* Планировочные решения: описание, карточки планировок и старые схемы */}
+          {/* Планировочные решения: описание, компактные кнопки планировок
+              (клик открывает план крупно — ComplexPlannings) и старые схемы */}
           {(planningText || planningCards.length > 0 || planningImages.length > 0) && (
             <section className="mb-14">
               <BlockTitle>{t.complex.planningTitle}</BlockTitle>
@@ -388,63 +394,19 @@ export default async function ComplexPage({ params }: PageProps) {
                 </p>
               )}
               {planningCards.length > 0 && (
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {planningCards.map((item, index) => (
-                    <div key={index} className="border border-[var(--n15-gold)]/10 p-4">
-                      {item.pdf ? (
-                        <a
-                          href={item.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex h-44 w-full items-center justify-center border border-[var(--n15-gold)]/15 text-sm text-[var(--n15-gold)] transition-colors hover:bg-[var(--n15-gold)]/10"
-                        >
-                          {t.complex.planningDownload}
-                        </a>
-                      ) : (
-                        <a
-                          href={item.full}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          aria-label={`${t.complex.planningDownload}: ${item.name || t.complex.planningTitle}`}
-                          className="block"
-                        >
-                          <img
-                            src={item.url}
-                            alt={item.alt || item.name || `${name} — ${t.complex.planningTitle}`}
-                            loading="lazy"
-                            className="h-44 w-full border border-[var(--n15-gold)]/10 object-cover"
-                          />
-                        </a>
-                      )}
-                      {(item.name || item.rooms || item.area || item.building) && (
-                        <div className="mt-3">
-                          {item.name && (
-                            <div className="font-[family-name:var(--font-display)] text-base text-[var(--n15-white)]">
-                              {item.name}
-                            </div>
-                          )}
-                          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--n15-muted)]">
-                            {item.rooms && (
-                              <span>
-                                <span className="text-[var(--n15-gold)]">{t.complex.planningRooms}:</span> {item.rooms}
-                              </span>
-                            )}
-                            {item.area && (
-                              <span>
-                                <span className="text-[var(--n15-gold)]">{t.complex.planningArea}:</span> {item.area} {t.complex.areaUnit}
-                              </span>
-                            )}
-                            {item.building && (
-                              <span>
-                                <span className="text-[var(--n15-gold)]">{t.complex.planningBuilding}:</span> {item.building}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
+                <ComplexPlannings
+                  items={planningCards.map((item) => ({
+                    label: item.label,
+                    name: item.name,
+                    rooms: item.rooms,
+                    area: item.area,
+                    building: item.building,
+                    thumb: item.url,
+                    full: item.full,
+                    alt: item.alt,
+                    pdf: item.pdf,
+                  }))}
+                />
               )}
               {planningImages.length > 0 && (
                 <PhotoGrid slides={planningImages} />
@@ -497,7 +459,8 @@ export default async function ComplexPage({ params }: PageProps) {
 
           {/* Помещения и инфраструктура / способы приобретения — двумя карточками.
               В карточке помещений — отметки «что есть» чипами, ниже паркинг и
-              кладовые с описанием и фотографиями (раздел «Медиа и документы») */}
+              кладовые с описанием и кнопкой-галереей фото («Паркинг · Фото»,
+              «Кладовые · Фото» — раздел «Медиа и документы») */}
           {(premiseItems.length > 0 ||
             purchaseItems.length > 0 ||
             parkingText ||
@@ -532,7 +495,7 @@ export default async function ComplexPage({ params }: PageProps) {
                         </p>
                       )}
                       {parkingPhotos.length > 0 && (
-                        <PhotoGrid slides={parkingPhotos} layout="grid" />
+                        <PhotoGrid slides={parkingPhotos} triggerLabel={t.complex.parkingPhotosButton} />
                       )}
                     </div>
                   )}
@@ -547,7 +510,7 @@ export default async function ComplexPage({ params }: PageProps) {
                         </p>
                       )}
                       {storeroomsPhotos.length > 0 && (
-                        <PhotoGrid slides={storeroomsPhotos} layout="grid" />
+                        <PhotoGrid slides={storeroomsPhotos} triggerLabel={t.complex.storeroomsPhotosButton} />
                       )}
                     </div>
                   )}

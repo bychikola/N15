@@ -3644,6 +3644,17 @@ export const ru = {
     storeroomsTitle: 'Кладовые',
     presentationTitle: 'Презентация ЖК',
     presentationButton: 'Смотреть презентацию',
+    // Компактные кнопки планировок и крупный просмотр: подпись собирает
+    // страница ЖК («1-комнатная · 44,5 м²»), здесь — служебные слова и
+    // подписи кнопок увеличения
+    planningRoomSuffix: 'комнатная',
+    planningLabel: 'Планировка',
+    planningZoomIn: 'Увеличить',
+    planningZoomOut: 'Уменьшить',
+    planningResetZoom: 'Обычный размер',
+    // Фотографии паркинга и кладовых прячутся за одной кнопкой-галереей
+    parkingPhotosButton: 'Паркинг · Фото',
+    storeroomsPhotosButton: 'Кладовые · Фото',
     areaUnit: 'м²',
     // Карточка обратной связи: заголовок, пояснение и подпись кнопки можно
     // задать в админке (группа feedback коллекции complexes) — это значения
@@ -7135,6 +7146,14 @@ const os: Dict = {
     storeroomsTitle: 'Кладовые',
     presentationTitle: 'Презентация ЖК',
     presentationButton: 'Смотреть презентацию',
+    // См. русскую секцию: тексты те же, осетинская версия ждёт переводчика
+    planningRoomSuffix: 'комнатная',
+    planningLabel: 'Планировка',
+    planningZoomIn: 'Увеличить',
+    planningZoomOut: 'Уменьшить',
+    planningResetZoom: 'Обычный размер',
+    parkingPhotosButton: 'Паркинг · Фото',
+    storeroomsPhotosButton: 'Кладовые · Фото',
     areaUnit: 'м²',
     feedbackTitle: 'Получить консультацию',
     feedbackText:
