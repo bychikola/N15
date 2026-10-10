@@ -48,6 +48,39 @@ const actorId = (user: OwnerActor): number | undefined => {
   return Number.isInteger(id) ? id : undefined
 }
 
+/** id связи (агент, объект) из числа, строки или объекта { id }; null — нет */
+const refId = (value: unknown): number | null => {
+  const raw = value && typeof value === 'object' ? (value as { id?: unknown }).id : value
+  const n = typeof raw === 'number' ? raw : Number(raw)
+  return Number.isInteger(n) && n > 0 ? n : null
+}
+
+/**
+ * Ответственный агент по заявке. У нового объекта каталога агент обязателен
+ * (validateResponsibleAgent в Objects.ts): по нему маршрутизируются звонки
+ * клиентов (см. src/lib/call-routing.ts) и строится доступ к карточке.
+ * Порядок: агент, выбранный администратором сейчас (explicit), затем уже
+ * сохранённый в заявке (doc.agent). Если агента нет или профиль не найден —
+ * понятная ошибка: и подтвердить заявку, и завести объект без агента нельзя.
+ */
+async function resolveOwnerAgent(
+  payload: Payload,
+  explicit: unknown,
+  doc: Record<string, unknown>,
+): Promise<{ ok: true; id: number } | { ok: false; error: string }> {
+  const id = refId(explicit) ?? refId(doc.agent)
+  if (id == null) {
+    return { ok: false, error: 'Выберите ответственного агента — без него объект из заявки не заводится' }
+  }
+  try {
+    const agent = await payload.findByID({ collection: 'agents', id, depth: 0, overrideAccess: true })
+    if (!agent?.id) return { ok: false, error: 'Ответственный агент не найден — выберите агента из списка' }
+  } catch {
+    return { ok: false, error: 'Ответственный агент не найден — выберите агента из списка' }
+  }
+  return { ok: true, id }
+}
+
 export interface OwnerActionResult {
   ok: boolean
   error?: string
@@ -85,6 +118,12 @@ function historyEntry(action: string, user: OwnerActor, note?: string): Record<s
 /**
  * Смена статуса заявки с записью в историю. Отдельная функция, а не правка
  * полем: в CRM каждое действие обязано оставить след, кто его сделал.
+ *
+ * Статус «Опубликовано» вручную не ставится: его заявка получает только
+ * тогда, когда объект по ней фактически создан и опубликован в каталоге
+ * (см. syncOwnerApplicationOnPublish). Пока объекта нет — попытка отклоняется
+ * с понятной причиной: раньше «Опубликовано» можно было выставить у заявки,
+ * по которой объекта ещё не было.
  */
 export async function setOwnerStatus(
   payload: Payload,
@@ -96,6 +135,33 @@ export async function setOwnerStatus(
   if (!doc) return { ok: false, error: 'Заявка не найдена' }
   if (!OWNER_APPLICATION_STATUSES.some((s) => s.value === status)) {
     return { ok: false, error: 'Неизвестный статус заявки' }
+  }
+  if (status === 'published') {
+    const linked = linkedObjectId(doc as OwnerApplicationLike)
+    if (!linked) {
+      return {
+        ok: false,
+        error: 'Сначала создайте объект по заявке — без него статус «Опубликовано» недоступен',
+      }
+    }
+    let objectStatus: string | null = null
+    try {
+      const object = await payload.findByID({
+        collection: 'objects',
+        id: linked,
+        depth: 0,
+        overrideAccess: true,
+      })
+      objectStatus = str((object as { status?: unknown } | null)?.status) || null
+    } catch {
+      return { ok: false, error: 'Объект заявки не найден — создайте его заново' }
+    }
+    if (objectStatus !== 'published') {
+      return {
+        ok: false,
+        error: 'Объект ещё не опубликован: откройте его карточку и опубликуйте — заявка станет «Опубликовано» автоматически',
+      }
+    }
   }
   try {
     await payload.update({
@@ -121,28 +187,42 @@ export async function setOwnerStatus(
  * администратор вручную (требование этапа: подтверждение не должно зависеть
  * от доступности SMS-провайдера). Из «Новой» заявка переходит в «Телефон
  * подтверждён»; если она уже ушла дальше, статус не откатывается.
+ *
+ * При ручном подтверждении администратор обязан назначить ответственного
+ * агента (agentId или уже сохранённый в заявке): объект из заявки без агента
+ * не заводится, а подтверждение — тот момент, когда заявка переходит в работу.
  */
 export async function confirmOwnerPhone(
   payload: Payload,
   id: number,
   method: 'code' | 'admin',
-  opts: { user?: OwnerActor; note?: string } = {},
+  opts: { user?: OwnerActor; note?: string; agentId?: number } = {},
 ): Promise<OwnerActionResult> {
   const doc = await findOwnerApplication(payload, id)
   if (!doc) return { ok: false, error: 'Заявка не найдена' }
   const now = new Date().toISOString()
   const status =
     doc.status === 'new' || !doc.status ? 'phone_confirmed' : (doc.status as OwnerApplicationStatus)
+
+  const data: Record<string, unknown> = {
+    phoneConfirmedAt: doc.phoneConfirmedAt || now,
+    phoneConfirmMethod: doc.phoneConfirmMethod || method,
+    // Код после успешной проверки обнуляем: повторно он не сработает
+    verifyCodeHash: null,
+    status,
+  }
+  if (method === 'admin') {
+    const agent = await resolveOwnerAgent(payload, opts.agentId, doc as Record<string, unknown>)
+    if (!agent.ok) return agent
+    data.agent = agent.id
+  }
+
   try {
     await payload.update({
       collection: 'owner-applications',
       id,
       data: {
-        phoneConfirmedAt: doc.phoneConfirmedAt || now,
-        phoneConfirmMethod: doc.phoneConfirmMethod || method,
-        // Код после успешной проверки обнуляем: повторно он не сработает
-        verifyCodeHash: null,
-        status,
+        ...data,
         history: [
           ...historyOf(doc),
           historyEntry(
@@ -156,6 +236,38 @@ export async function confirmOwnerPhone(
       overrideAccess: true,
     })
     return { ok: true, status }
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) }
+  }
+}
+
+/**
+ * Назначение ответственного агента отдельным действием. Нужно, когда телефон
+ * подтвердил сам собственник кодом из SMS: агента в этом случае администратор
+ * ставит позже — иначе объект из заявки не завести.
+ */
+export async function assignOwnerAgent(
+  payload: Payload,
+  id: number,
+  agentId: number,
+  opts: { user?: OwnerActor; note?: string } = {},
+): Promise<OwnerActionResult> {
+  const doc = await findOwnerApplication(payload, id)
+  if (!doc) return { ok: false, error: 'Заявка не найдена' }
+  const agent = await resolveOwnerAgent(payload, agentId, {})
+  if (!agent.ok) return agent
+  try {
+    await payload.update({
+      collection: 'owner-applications',
+      id,
+      data: {
+        agent: agent.id,
+        history: [...historyOf(doc), historyEntry('Назначен ответственный агент', opts.user, opts.note)],
+      },
+      depth: 0,
+      overrideAccess: true,
+    })
+    return { ok: true }
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) }
   }
@@ -214,15 +326,19 @@ export async function copyOwnerPhotos(
 
 /**
  * Создание объекта из одобренной заявки. Условия: телефон собственника
- * подтверждён и объект по заявке ещё не создан — иначе вернётся ошибка.
- * Объект заводится черновиком с происхождением «собственник»: публикация
- * в каталог — отдельное осознанное действие в карточке объекта. После
- * создания заявка связывается с объектом и получает статус «Одобрено».
+ * подтверждён, назначен ответственный агент и объект по заявке ещё не создан —
+ * иначе вернётся ошибка. Объект заводится полноценной карточкой-черновиком с
+ * происхождением «собственник», ответственным агентом и автором (createdBy):
+ * публикация в каталог — отдельное осознанное действие в карточке объекта, а
+ * появляется он сразу в разделе «Объекты». После создания заявка связывается
+ * с объектом и получает статус «Одобрено»; статус «Опубликовано» заявка
+ * получит, когда объект выйдет в каталог (см. syncOwnerApplicationOnPublish).
  */
 export async function createObjectFromApplication(
   payload: Payload,
   id: number,
   user?: OwnerActor,
+  agentId?: number,
 ): Promise<OwnerActionResult> {
   const app = await findOwnerApplication(payload, id)
   if (!app) return { ok: false, error: 'Заявка не найдена' }
@@ -234,12 +350,23 @@ export async function createObjectFromApplication(
     return { ok: false, error: 'Заявка закрыта: смените её статус, если решили вернуть её в работу' }
   }
 
+  // Ответственный агент обязателен: без него validateResponsibleAgent
+  // отклонит создание, а поле просто заполняется до проверки
+  const agent = await resolveOwnerAgent(payload, agentId, app as Record<string, unknown>)
+  if (!agent.ok) return agent
+
   const photoIds = await copyOwnerPhotos(payload, app as Record<string, unknown>)
+  const author = actorId(user)
   let objectId: number
   try {
     const created = await payload.create({
       collection: 'objects',
-      data: ownerObjectData(app, photoIds),
+      data: {
+        ...ownerObjectData(app, photoIds, agent.id),
+        // Автор карточки — учётная запись администратора: объект остаётся
+        // доступен и виден в разделе «Объекты» (см. createdBy в Objects.ts)
+        ...(author ? { createdBy: author } : {}),
+      },
       depth: 0,
       overrideAccess: true,
     })
@@ -254,6 +381,7 @@ export async function createObjectFromApplication(
       id,
       data: {
         object: objectId,
+        agent: agent.id,
         status: 'approved',
         history: [
           ...historyOf(app as Record<string, unknown>),
@@ -343,9 +471,10 @@ export async function addOwnerComment(
 /** Действия администратора из CRM: одно действие — один вызов */
 export interface OwnerActionInput {
   id: number
-  action: 'confirm_phone' | 'status' | 'create_object' | 'duplicate' | 'comment'
+  action: 'confirm_phone' | 'status' | 'create_object' | 'assign_agent' | 'duplicate' | 'comment'
   status?: string
   objectId?: number
+  agentId?: number
   note?: string
 }
 
@@ -360,7 +489,7 @@ export async function applyOwnerAction(
 
   switch (input.action) {
     case 'confirm_phone':
-      return confirmOwnerPhone(payload, id, 'admin', { user, note: input.note })
+      return confirmOwnerPhone(payload, id, 'admin', { user, note: input.note, agentId: input.agentId })
     case 'status': {
       const status = str(input.status)
       if (!OWNER_APPLICATION_STATUSES.some((s) => s.value === status)) {
@@ -369,7 +498,9 @@ export async function applyOwnerAction(
       return setOwnerStatus(payload, id, status as OwnerApplicationStatus, { user, note: input.note })
     }
     case 'create_object':
-      return createObjectFromApplication(payload, id, user)
+      return createObjectFromApplication(payload, id, user, input.agentId)
+    case 'assign_agent':
+      return assignOwnerAgent(payload, id, Number(input.agentId), { user, note: input.note })
     case 'duplicate':
       return markOwnerDuplicate(payload, id, Number(input.objectId), { user, note: input.note })
     case 'comment':
@@ -431,6 +562,9 @@ export interface OwnerBoardRow {
   verifyCodeSentAt: string | null
   consent: boolean
   consentAt: string | null
+  /** Ответственный агент: назначается при подтверждении телефона */
+  agentId: number | null
+  agentName: string | null
   objectId: number | null
   objectSlug: string | null
   objectTitle: string | null
@@ -478,10 +612,12 @@ async function ownerBoardRowFromDoc(
   const status = str(doc.status) || 'new'
   const linked = (doc.object as Record<string, unknown> | null) || null
   const matched = (doc.matchedObject as Record<string, unknown> | null) || null
+  const agentDoc = (doc.agent as Record<string, unknown> | null) || null
   const objectId = linkedObjectId(doc as OwnerApplicationLike)
   const matchedObjectId = linkedObjectId({
     object: (doc.matchedObject ?? null) as number | { id?: number } | null,
   })
+  const agentId = linkedObjectId({ object: (doc.agent ?? null) as number | { id?: number } | null })
 
   let duplicates: OwnerDuplicate[] = []
   if (withDuplicates) {
@@ -521,6 +657,8 @@ async function ownerBoardRowFromDoc(
     verifyCodeSentAt: str(doc.verifyCodeSentAt) || null,
     consent: doc.consent === true,
     consentAt: str(doc.consentAt) || null,
+    agentId,
+    agentName: agentDoc ? str(agentDoc.name) || null : null,
     objectId,
     objectSlug: linked ? str(linked.slug) || null : null,
     objectTitle: linked ? str(linked.title) || null : null,

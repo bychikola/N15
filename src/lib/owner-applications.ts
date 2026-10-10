@@ -354,9 +354,15 @@ export const ownerDescriptionLexical = (value: string) => ({
  * Черновик объекта из одобренной заявки: данные собственника, адрес, цена и
  * характеристики, описание — и ничего лишнего. Статус — черновик, источник —
  * «собственник»: объект попадает в каталог только после публикации в CRM.
- * Номер объекта идёт из базы, а не из заявки.
+ * Номер объекта идёт из базы, а не из заявки. Ответственный агент обязателен:
+ * его id передаёт сервис заявок (agentId) — без него объект не создаётся
+ * (см. validateResponsibleAgent в Objects.ts).
  */
-export function ownerObjectData(app: OwnerApplicationLike, photoIds: number[] = []): Record<string, unknown> {
+export function ownerObjectData(
+  app: OwnerApplicationLike,
+  photoIds: number[] = [],
+  agentId: number | null = null,
+): Record<string, unknown> {
   const addr = app.address || {}
   const address: Record<string, unknown> = {
     city: text(addr.city) || 'Владикавказ',
@@ -373,6 +379,10 @@ export function ownerObjectData(app: OwnerApplicationLike, photoIds: number[] = 
     category: app.category || 'apartment',
     status: 'draft',
     origin: 'owner',
+    // Ответственный агент обязателен для нового объекта (validateResponsibleAgent
+    // в Objects.ts): без него создание отклоняется — вызывающая сторона обязана
+    // передать агента (см. createObjectFromApplication)
+    agent: agentId ?? undefined,
     price: num(app.price) || 0,
     area: num(app.area) || undefined,
     areaUnit: text(app.areaUnit) || undefined,

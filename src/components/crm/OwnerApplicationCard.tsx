@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import type { Dict } from '@/i18n/dictionaries'
 import type { OwnerBoardRow } from '@/lib/owner-service'
 import { OWNER_APPLICATION_STATUSES } from '@/lib/owner-applications'
+import { AgentPicker } from '@/components/crm/AgentPicker'
 
 /**
  * Полная карточка одной заявки собственника (страница
@@ -26,6 +27,8 @@ import { OWNER_APPLICATION_STATUSES } from '@/lib/owner-applications'
 interface Props {
   t: Dict
   row: OwnerBoardRow
+  /** Активные агенты — для назначения ответственного по заявке */
+  agents: { id: number; name: string }[]
 }
 
 const cardStyle: React.CSSProperties = {
@@ -116,12 +119,14 @@ function Field({ label, value }: { label: string; value: ReactNode }) {
   )
 }
 
-export const OwnerApplicationCard: FC<Props> = ({ t, row }) => {
+export const OwnerApplicationCard: FC<Props> = ({ t, row, agents }) => {
   const router = useRouter()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [comment, setComment] = useState(row.internalComment ?? '')
   const [status, setStatus] = useState(row.status)
+  // Ответственный агент по заявке: выбранный в поле id строкой ('' — не выбран)
+  const [agent, setAgent] = useState(row.agentId ? String(row.agentId) : '')
   // Объект, созданный прямо сейчас: ссылку «Открыть объект» показываем сразу,
   // не дожидаясь обновления страницы
   const [createdObjectId, setCreatedObjectId] = useState<number | null>(null)
@@ -130,10 +135,14 @@ export const OwnerApplicationCard: FC<Props> = ({ t, row }) => {
   const deal = row.type === 'rent' ? t.crm.ownDealRent : t.crm.ownDealSale
   const objectId = row.objectId ?? createdObjectId
   const objectTitle = row.objectTitle || (objectId ? `Объект №${objectId}` : '')
+  // Агент обязателен для подтверждения и создания объекта; сохранённым считаем,
+  // когда выбранное в поле совпадает с записанным в заявке
+  const agentPicked = Number(agent) > 0
+  const agentSaved = row.agentId != null && String(row.agentId) === agent
 
   const act = async (
     action: string,
-    extra: { note?: string; objectId?: number; status?: string } = {},
+    extra: { note?: string; objectId?: number; agentId?: number; status?: string } = {},
   ): Promise<{ objectId?: number } | null> => {
     if (busy) return null
     setBusy(true)
@@ -245,7 +254,13 @@ export const OwnerApplicationCard: FC<Props> = ({ t, row }) => {
             {confirmed && row.phoneConfirmedAt ? ` · ${dateText(row.phoneConfirmedAt)}` : ''}
           </span>
           {!confirmed && (
-            <button type="button" onClick={() => void act('confirm_phone')} disabled={busy} style={btnStyle}>
+            <button
+              type="button"
+              onClick={() => void act('confirm_phone', { agentId: Number(agent) })}
+              disabled={busy || !agentPicked}
+              title={!agentPicked ? t.crm.ownNeedAgent : ''}
+              style={{ ...btnStyle, opacity: busy || !agentPicked ? 0.45 : 1, cursor: agentPicked ? 'pointer' : 'not-allowed' }}
+            >
               {t.crm.ownConfirmPhone}
             </button>
           )}
@@ -255,6 +270,30 @@ export const OwnerApplicationCard: FC<Props> = ({ t, row }) => {
             {t.crm.ownCodeSent}: {dateText(row.verifyCodeSentAt)}
           </p>
         )}
+      </div>
+
+      {/* Ответственный агент по заявке: без него объект не завести — по нему
+          маршрутизируются звонки клиентов. Назначается при подтверждении
+          телефона; для заявок, подтверждённых кодом из SMS, — отдельной кнопкой */}
+      <div style={{ border: '1px solid #f0e8da', borderRadius: 10, padding: '12px 14px', marginBottom: 18, background: '#fdfbf7' }}>
+        <div style={sectionTitle}>{t.crm.ownAgent}</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
+          <div style={{ minWidth: 220, flex: '0 1 320px' }}>
+            <AgentPicker t={t} agents={agents} value={agent} onChange={setAgent} />
+          </div>
+          <button
+            type="button"
+            onClick={() => void act('assign_agent', { agentId: Number(agent) })}
+            disabled={busy || !agentPicked || agentSaved}
+            style={{ ...btnStyle, opacity: busy || !agentPicked || agentSaved ? 0.45 : 1, cursor: agentPicked && !agentSaved ? 'pointer' : 'not-allowed' }}
+          >
+            {t.crm.ownAgentSave}
+          </button>
+          {row.agentName && agentSaved && (
+            <span style={{ fontSize: 11, color: '#3f6b34' }}>{row.agentName}</span>
+          )}
+        </div>
+        <p style={{ margin: '8px 0 0', fontSize: 11, color: '#817b70' }}>{t.crm.ownAgentHint}</p>
       </div>
 
       {/* Согласие на обработку данных — фиксируем получение и его дату */}
@@ -348,14 +387,19 @@ export const OwnerApplicationCard: FC<Props> = ({ t, row }) => {
         <button type="button" onClick={() => void act('comment', { note: comment })} disabled={busy} style={btnStyle}>
           {t.crm.ownCommentSave}
         </button>
-        {/* Смена статуса вручную: любое значение из пути заявки */}
+        {/* Смена статуса вручную: любое значение из пути заявки, кроме
+            «Опубликовано» — этот статус появляется у заявки только вместе с
+            публикацией её объекта (см. syncOwnerApplicationOnPublish) */}
         <select
           value={status}
           onChange={(e) => setStatus(e.target.value)}
           style={{ ...inputStyle, cursor: 'pointer' }}
           aria-label={t.crm.ownStatusLabel}
         >
-          {OWNER_APPLICATION_STATUSES.map((s) => (
+          {(objectId
+            ? OWNER_APPLICATION_STATUSES
+            : OWNER_APPLICATION_STATUSES.filter((s) => s.value !== 'published')
+          ).map((s) => (
             <option key={s.value} value={s.value}>
               {s.label}
             </option>
@@ -364,24 +408,32 @@ export const OwnerApplicationCard: FC<Props> = ({ t, row }) => {
         <button type="button" onClick={() => void act('status', { status })} disabled={busy} style={btnStyle}>
           {t.crm.ownSetStatus}
         </button>
-        {/* Объект заводится только вручную и только после подтверждения
-            телефона — до этого кнопка недоступна */}
+        {/* Объект заводится только вручную, только после подтверждения
+            телефона и с ответственным агентом — до этого кнопка недоступна */}
         {!objectId && (
           <button
             type="button"
             onClick={() => {
-              void act('create_object').then((res) => {
+              void act('create_object', { agentId: Number(agent) || undefined }).then((res) => {
                 if (res?.objectId) setCreatedObjectId(res.objectId)
               })
             }}
-            disabled={busy || !confirmed}
-            title={!confirmed ? t.crm.ownNeedPhone : ''}
-            style={{ ...btnGold, marginLeft: 'auto', opacity: busy || !confirmed ? 0.45 : 1, cursor: confirmed ? 'pointer' : 'not-allowed' }}
+            disabled={busy || !confirmed || !agentPicked}
+            title={!confirmed ? t.crm.ownNeedPhone : !agentPicked ? t.crm.ownNeedAgent : ''}
+            style={{
+              ...btnGold,
+              marginLeft: 'auto',
+              opacity: busy || !confirmed || !agentPicked ? 0.45 : 1,
+              cursor: confirmed && agentPicked ? 'pointer' : 'not-allowed',
+            }}
           >
             {t.crm.ownCreateObject}
           </button>
         )}
       </div>
+      {!objectId && (
+        <p style={{ margin: '0 0 16px', fontSize: 11, color: '#817b70' }}>{t.crm.ownPublishedLocked}</p>
+      )}
 
       <div>
         <div style={sectionTitle}>{t.crm.ownHistory}</div>

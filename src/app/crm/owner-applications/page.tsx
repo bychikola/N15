@@ -47,6 +47,28 @@ export default async function CrmOwnerApplicationsPage({ searchParams }: PagePro
   const payload = await getPayload({ config })
   const rows = await loadOwnerBoard(payload, { status: filter || undefined })
 
+  // Ответственных агентов выбирает администратор при подтверждении телефона и
+  // заведении объекта: у объекта из заявки агент обязателен (маршрутизация
+  // звонков и доступ к карточке). Список — активные профили агентства.
+  let agents: { id: number; name: string }[] = []
+  try {
+    const res = await payload.find({
+      collection: 'agents',
+      where: { isActive: { equals: true } },
+      sort: 'sortOrder',
+      limit: 200,
+      depth: 0,
+      overrideAccess: true,
+    })
+    agents = res.docs
+      .map((doc) => ({ id: Number(doc.id), name: String((doc as { name?: unknown }).name || '').trim() }))
+      .filter((agent) => Number.isFinite(agent.id) && agent.name)
+  } catch (e) {
+    // Без списка агентов подтвердить заявку и завести объект нельзя: раздел
+    // не роняем — сервер вернёт понятную ошибку (см. resolveOwnerAgent)
+    console.error('Заявки собственников: не удалось прочитать список агентов:', e)
+  }
+
   return (
     <CrmShell user={user} t={t} active="owner-applications">
       <h2 style={{ margin: '0 0 6px', fontFamily: "'New Standard', Georgia, serif", fontWeight: 400, fontSize: 22 }}>
@@ -55,7 +77,7 @@ export default async function CrmOwnerApplicationsPage({ searchParams }: PagePro
       <p style={{ margin: '0 0 18px', color: '#817b70', fontSize: 11, lineHeight: 1.55, maxWidth: 760 }}>
         {t.crm.ownSubtitle}
       </p>
-      <OwnerApplicationsBoard t={t} rows={rows} status={filter} />
+      <OwnerApplicationsBoard t={t} rows={rows} status={filter} agents={agents} />
     </CrmShell>
   )
 }

@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = (await req.json().catch(() => null)) as
-      | { id?: number; action?: string; status?: string; objectId?: number; note?: string }
+      | { id?: number; action?: string; status?: string; objectId?: number; agentId?: number; note?: string }
       | null
     if (!body || typeof body !== 'object') {
       return NextResponse.json({ error: 'Некорректный запрос' }, { status: 400 })
@@ -37,6 +37,7 @@ export async function POST(req: NextRequest) {
         action: body.action as OwnerActionInput['action'],
         status: body.status,
         objectId: body.objectId,
+        agentId: body.agentId,
         note: body.note,
       },
       user,

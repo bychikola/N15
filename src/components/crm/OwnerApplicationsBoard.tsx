@@ -29,6 +29,8 @@ interface Props {
   rows: OwnerBoardRow[]
   /** Выбранный фильтр статуса ('' — все) */
   status: string
+  /** Активные агенты — для назначения ответственного по заявке */
+  agents: { id: number; name: string }[]
 }
 
 const cardStyle: React.CSSProperties = {
@@ -101,15 +103,21 @@ const confirmLabel = (t: Dict, method: string | null): string =>
       ? t.crm.ownVerifiedAdmin
       : t.crm.ownNotVerified
 
-export const OwnerApplicationsBoard: FC<Props> = ({ t, rows, status }) => {
+export const OwnerApplicationsBoard: FC<Props> = ({ t, rows, status, agents }) => {
   const router = useRouter()
   const [busy, setBusy] = useState<number | null>(null)
   const [error, setError] = useState('')
   // Комментарии и выбранные статусы живут по заявкам: ключ — id заявки
   const [comments, setComments] = useState<Record<number, string>>({})
   const [statuses, setStatuses] = useState<Record<number, string>>({})
+  // Выбранный ответственный агент по каждой заявке: ключ — id заявки
+  const [agentPicks, setAgentPicks] = useState<Record<number, string>>({})
 
-  const act = async (id: number, action: string, extra: { note?: string; objectId?: number; status?: string } = {}) => {
+  const act = async (
+    id: number,
+    action: string,
+    extra: { note?: string; objectId?: number; agentId?: number; status?: string } = {},
+  ) => {
     if (busy) return
     setBusy(id)
     setError('')
@@ -178,6 +186,10 @@ export const OwnerApplicationsBoard: FC<Props> = ({ t, rows, status }) => {
         rows.map((row) => {
           const confirmed = Boolean(row.phoneConfirmedAt)
           const deal = row.type === 'rent' ? t.crm.ownDealRent : t.crm.ownDealSale
+          // Ответственный агент: без него заявку не подтвердить и объект не завести
+          const agentPick = agentPicks[row.id] ?? (row.agentId ? String(row.agentId) : '')
+          const agentPicked = Number(agentPick) > 0
+          const agentSaved = row.agentId != null && String(row.agentId) === agentPick
           const areaLine = [
             row.area ? `${row.area} м²` : '',
             row.plotArea ? `участок ${row.plotArea} м²` : '',
@@ -218,8 +230,40 @@ export const OwnerApplicationsBoard: FC<Props> = ({ t, rows, status }) => {
                   {confirmLabel(t, row.phoneConfirmMethod)}
                   {confirmed && row.phoneConfirmedAt ? ` · ${dateText(row.phoneConfirmedAt)}` : ''}
                 </span>
+                {/* Ответственный агент: обязателен для подтверждения и заведения
+                    объекта — по нему маршрутизируются звонки клиентов */}
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#817b70', fontSize: 11 }}>
+                  {t.crm.ownAgent}:
+                  <select
+                    value={agentPick}
+                    onChange={(e) => setAgentPicks((prev) => ({ ...prev, [row.id]: e.target.value }))}
+                    style={{ ...inputStyle, cursor: 'pointer' }}
+                    aria-label={t.crm.ownAgent}
+                  >
+                    <option value="">{t.crm.ownAgentNone}</option>
+                    {agents.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => void act(row.id, 'assign_agent', { agentId: Number(agentPick) })}
+                  disabled={busy === row.id || !agentPicked || agentSaved}
+                  style={{ ...btnStyle, opacity: !agentPicked || agentSaved ? 0.45 : 1 }}
+                >
+                  {t.crm.ownAgentSave}
+                </button>
                 {!confirmed && (
-                  <button type="button" onClick={() => void act(row.id, 'confirm_phone')} disabled={busy === row.id} style={btnStyle}>
+                  <button
+                    type="button"
+                    onClick={() => void act(row.id, 'confirm_phone', { agentId: Number(agentPick) })}
+                    disabled={busy === row.id || !agentPicked}
+                    title={!agentPicked ? t.crm.ownNeedAgent : ''}
+                    style={{ ...btnStyle, opacity: !agentPicked ? 0.45 : 1 }}
+                  >
                     {t.crm.ownConfirmPhone}
                   </button>
                 )}
@@ -272,7 +316,14 @@ export const OwnerApplicationsBoard: FC<Props> = ({ t, rows, status }) => {
                     <a href={`/crm/objects?edit=${row.objectId}`} style={{ color: '#927046' }}>
                       {row.objectTitle || `Объект №${row.objectId}`}
                     </a>{' '}
-                    {row.objectStatus ? `(${row.objectStatus === 'published' ? t.crm.ownObjectPublished : row.objectStatus === 'draft' ? t.crm.ownObjectDraft : row.objectStatus})` : ''}
+                    {row.objectStatus ? `(${row.objectStatus === 'published' ? t.crm.ownObjectPublished : row.objectStatus === 'draft' ? t.crm.ownObjectDraft : row.objectStatus})` : ''}{' '}
+                    {/* После создания объекта — прямая кнопка в его карточку */}
+                    <a
+                      href={`/crm/objects?edit=${row.objectId}`}
+                      style={{ ...btnStyle, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', marginLeft: 6 }}
+                    >
+                      {t.crm.ownOpenObject}
+                    </a>
                   </>
                 ) : (
                   <span style={{ color: '#817b70' }}>{t.crm.ownNoObject}</span>
@@ -340,14 +391,19 @@ export const OwnerApplicationsBoard: FC<Props> = ({ t, rows, status }) => {
                 >
                   {t.crm.ownCommentSave}
                 </button>
-                {/* Смена статуса вручную: любое значение из пути заявки */}
+                {/* Смена статуса вручную: любое значение из пути заявки, кроме
+                    «Опубликовано» — этот статус появляется вместе с публикацией
+                    объекта (см. syncOwnerApplicationOnPublish) */}
                 <select
                   value={statuses[row.id] ?? row.status}
                   onChange={(e) => setStatuses((prev) => ({ ...prev, [row.id]: e.target.value }))}
                   style={{ ...inputStyle, cursor: 'pointer' }}
                   aria-label={t.crm.ownStatusLabel}
                 >
-                  {OWNER_APPLICATION_STATUSES.map((s) => (
+                  {(row.objectId
+                    ? OWNER_APPLICATION_STATUSES
+                    : OWNER_APPLICATION_STATUSES.filter((s) => s.value !== 'published')
+                  ).map((s) => (
                     <option key={s.value} value={s.value}>
                       {s.label}
                     </option>
@@ -361,15 +417,20 @@ export const OwnerApplicationsBoard: FC<Props> = ({ t, rows, status }) => {
                 >
                   {t.crm.ownSetStatus}
                 </button>
-                {/* Объект создаётся только вручную и только после подтверждения
-                    телефона — до этого кнопка недоступна */}
+                {/* Объект создаётся только вручную, только после подтверждения
+                    телефона и с ответственным агентом */}
                 {!row.objectId && (
                   <button
                     type="button"
-                    onClick={() => void act(row.id, 'create_object')}
-                    disabled={busy === row.id || !confirmed}
-                    title={!confirmed ? t.crm.ownNeedPhone : ''}
-                    style={{ ...btnGold, marginLeft: 'auto', opacity: busy === row.id || !confirmed ? 0.45 : 1, cursor: confirmed ? 'pointer' : 'not-allowed' }}
+                    onClick={() => void act(row.id, 'create_object', { agentId: Number(agentPick) || undefined })}
+                    disabled={busy === row.id || !confirmed || !agentPicked}
+                    title={!confirmed ? t.crm.ownNeedPhone : !agentPicked ? t.crm.ownNeedAgent : ''}
+                    style={{
+                      ...btnGold,
+                      marginLeft: 'auto',
+                      opacity: busy === row.id || !confirmed || !agentPicked ? 0.45 : 1,
+                      cursor: confirmed && agentPicked ? 'pointer' : 'not-allowed',
+                    }}
                   >
                     {t.crm.ownCreateObject}
                   </button>
