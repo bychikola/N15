@@ -201,3 +201,8 @@ body{margin:0}.crm-sidebar{box-sizing:border-box}.crm-chat-panel{box-sizing:bord
   .crm-site-stats-range input{flex:1;min-width:0;font-size:16px;padding:9px 10px}
   .crm-site-stats-filter a,.crm-site-stats-filter button{padding:10px 12px}
 }
+
+/* Счётчик неразобранных заявок собственников в меню CRM: пункт растягиваем
+   на всю ширину, цифра — золотой пилюлей справа (тема сайдбара — тёмная) */
+.crm-nav a.crm-nav-owner{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.crm-nav-badge{min-width:20px;height:20px;padding:0 6px;border-radius:10px;background:#c6a069;color:#20211e;display:grid;place-items:center;font:700 11px Arial,Helvetica,sans-serif;letter-spacing:0;line-height:1}

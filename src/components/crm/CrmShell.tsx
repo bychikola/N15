@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import type { Dict } from '@/i18n/dictionaries'
 import type { CrmUser } from '@/app/crm/auth'
@@ -12,9 +12,15 @@ interface Props {
   children: ReactNode
 }
 
+/** Статусы заявки собственника, которые сотрудник ещё не разобрал */
+const OWNER_QUEUE_STATUSES = ['new', 'checking']
+
 export function CrmShell({ user, t, active, children }: Props) {
   const isAdmin = user.role === 'admin'
-  const navItems = [
+  // Счётчик неразобранных заявок собственников: сколько клиентских объектов
+  // ждут проверки. Рядом с пунктом меню его видно с любой страницы CRM
+  const [ownerQueue, setOwnerQueue] = useState(0)
+  const navItems: { id: string; href: string; label: string; badge?: number }[] = [
     { id: 'overview', href: '/crm', label: t.crm.navOverview },
     { id: 'leads', href: '/crm/leads', label: t.crm.navLeads },
     { id: 'messages', href: '/crm/messages', label: t.crm.navMessages },
@@ -25,7 +31,9 @@ export function CrmShell({ user, t, active, children }: Props) {
     // телефона и проверки в каталог не попадают. Раздел только для
     // администратора: в заявке телефон и адрес собственника
     // (та же проверка на странице /crm/owner-applications)
-    ...(isAdmin ? [{ id: 'owner-applications', href: '/crm/owner-applications', label: t.crm.navOwnerApplications }] : []),
+    ...(isAdmin
+      ? [{ id: 'owner-applications', href: '/crm/owner-applications', label: t.crm.navOwnerApplications, badge: ownerQueue }]
+      : []),
     // «Источники объектов»: очередь объектов из внешних каналов (партнёрский
     // JSON-фид, заявки собственников). В настройках лежат доступы каналов, в
     // очереди — служебные данные источника: раздел только для администратора
@@ -89,6 +97,34 @@ export function CrmShell({ user, t, active, children }: Props) {
     return () => clearInterval(timer)
   }, [])
 
+  // Число неразобранных заявок собственников: считается тем же REST-ом
+  // Payload, что и таблица коллекции, — доступ к ней закрыт для всех, кроме
+  // администратора, поэтому и запрос уходит только под админской сессией.
+  // limit=1: нужен не список, а totalDocs; ошибку молча пропускаем — счётчик
+  // не должен мешать работе CRM
+  useEffect(() => {
+    if (!isAdmin) return
+    let cancelled = false
+    const params = new URLSearchParams({ limit: '1', depth: '0' })
+    OWNER_QUEUE_STATUSES.forEach((status, i) => params.append(`where[status][in][${i}]`, status))
+    const load = async () => {
+      try {
+        const res = await fetch(`/api/owner-applications?${params}`, { credentials: 'include' })
+        if (!res.ok) return
+        const data = (await res.json().catch(() => null)) as { totalDocs?: number } | null
+        if (!cancelled) setOwnerQueue(Number(data?.totalDocs) || 0)
+      } catch {
+        /* счётчик — вспомогательная подсказка, без него страница работает */
+      }
+    }
+    void load()
+    const timer = setInterval(() => void load(), 60 * 1000)
+    return () => {
+      cancelled = true
+      clearInterval(timer)
+    }
+  }, [isAdmin])
+
   const signOut = async () => {
     await fetch('/api/users/logout', { method: 'POST', credentials: 'include' })
     window.location.href = '/'
@@ -105,8 +141,20 @@ export function CrmShell({ user, t, active, children }: Props) {
         </div>
         <nav className="crm-nav" aria-label="Разделы CRM">
           {navItems.map((item) => (
-            <Link key={item.id} href={item.href} style={active === item.id ? { background: 'rgba(198,160,105,.14)', color: '#e4c89f' } : undefined}>
-              {item.label}
+            <Link
+              key={item.id}
+              href={item.href}
+              className={item.badge ? 'crm-nav-owner' : undefined}
+              style={active === item.id ? { background: 'rgba(198,160,105,.14)', color: '#e4c89f' } : undefined}
+            >
+              <span>{item.label}</span>
+              {/* Заметный счётчик новых заявок: цифра на золоте рядом с
+                  пунктом «Заявки собственников», пока заявка не разобрана */}
+              {item.badge ? (
+                <span className="crm-nav-badge" aria-label={`${t.crm.navOwnerApplications}: ${item.badge}`}>
+                  {item.badge}
+                </span>
+              ) : null}
             </Link>
           ))}
           {/* На телефоне меню кабинета сворачивается в сетку — рядом с разделами

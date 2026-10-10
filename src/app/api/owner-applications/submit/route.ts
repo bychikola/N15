@@ -138,7 +138,10 @@ export async function POST(req: NextRequest) {
       data: {
         ...parsed.data,
         photos: photoIds,
-        status: 'new',
+        // Заявка с сайта сразу встаёт «На проверке»: её место — очередь
+        // проверки, а не «Новая». До подтверждения телефона и одобрения
+        // администратором объекта в каталоге нет (см. owner-service)
+        status: 'checking',
         source: 'site',
         consent: true,
         consentAt: now.toISOString(),
@@ -152,7 +155,7 @@ export async function POST(req: NextRequest) {
         history: [
           {
             at: now.toISOString(),
-            action: 'Заявка с сайта',
+            action: 'Заявка с сайта — на проверке',
             note: `Фотографий: ${photoIds.length}`,
           },
         ],
