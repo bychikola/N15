@@ -19,6 +19,7 @@ interface PageProps {
 interface MediaDoc {
   url?: string
   alt?: string
+  mimeType?: string
   sizes?: Record<string, { url?: string } | undefined>
 }
 
@@ -38,6 +39,20 @@ function mediaList(value: unknown, size: 'card' | 'hero' = 'card'): { url: strin
     const media = mediaOf(item, size)
     return media ? [media] : []
   })
+}
+
+/**
+ * Файл раздела «Медиа и документы»: изображение из media или PDF из
+ * complex-documents. У изображения берём card-размер, у PDF — оригинал:
+ * размеры PDF не собираются (см. src/payload/collections/ComplexDocuments.ts).
+ */
+function fileOf(value: unknown): { url: string; alt: string; pdf: boolean } | null {
+  if (!value || typeof value !== 'object') return null
+  const media = value as MediaDoc
+  const pdf = media.mimeType === 'application/pdf' || /\.pdf$/i.test(String(media.url || ''))
+  const url = pdf ? media.url : media.sizes?.card?.url || media.url
+  if (!url) return null
+  return { url, alt: String(media.alt || ''), pdf: Boolean(pdf) }
 }
 
 /** Дата из ISO в «01.09.2026» — разбором строки, без сдвига часового пояса */
@@ -115,9 +130,48 @@ export default async function ComplexPage({ params }: PageProps) {
   const place = [doc.locality, doc.street].filter(Boolean).join(', ')
   const description = String(doc.description || '').trim()
 
-  // Планировочные решения: текст и изображения/схемы
+  // Планировочные решения: текст и планировки. Новый раздел «Медиа и документы»
+  // (plannings) — каждая планировка с подписью, комнатами, площадью и корпусом;
+  // у комплексов со старым полем planningImages картинки берём оттуда — без
+  // характеристик
   const planningText = String(doc.planningText || '').trim()
-  const planningImages = mediaList(doc.planningImages)
+  const planningCards = (Array.isArray(doc.plannings) ? doc.plannings : []).flatMap((raw) => {
+    const item = raw as Record<string, unknown>
+    // Планировка — изображение (image) или PDF (document)
+    const file = fileOf(item.image) || fileOf(item.document)
+    if (!file) return []
+    const area = item.area != null && item.area !== '' ? String(item.area).replace('.', ',') : ''
+    return [{
+      ...file,
+      name: String(item.name || '').trim(),
+      rooms: String(item.rooms || '').trim(),
+      area,
+      building: String(item.building || '').trim(),
+    }]
+  })
+  const planningImages = planningCards.length
+    ? []
+    : mediaList(doc.planningImages).map((image) => ({ ...image, pdf: false, name: '', rooms: '', area: '', building: '' }))
+
+  // Галерея ЖК: фотографии и рендеры комплекса. Главное изображение — первым
+  const galleryAll = (Array.isArray(doc.gallery) ? doc.gallery : []).flatMap((raw) => {
+    const item = raw as Record<string, unknown>
+    const photo = mediaOf(item.photo)
+    return photo ? [{ ...photo, isMain: item.isMain === true }] : []
+  })
+  const galleryMain = galleryAll.find((g) => g.isMain) || null
+  const gallery = galleryMain ? [galleryMain, ...galleryAll.filter((g) => g !== galleryMain)] : galleryAll
+
+  // Паркинг и кладовые: описание и фотографии — показываются в разделе помещений
+  const parking = (doc.parking && typeof doc.parking === 'object' ? doc.parking : {}) as Record<string, unknown>
+  const parkingText = String(parking.description || '').trim()
+  const parkingPhotos = mediaList(parking.photos)
+  const storerooms = (doc.storerooms && typeof doc.storerooms === 'object' ? doc.storerooms : {}) as Record<string, unknown>
+  const storeroomsText = String(storerooms.description || '').trim()
+  const storeroomsPhotos = mediaList(storerooms.photos)
+
+  // Презентация ЖК: PDF-файл, на странице — кнопка «Смотреть презентацию»
+  const presentation = fileOf(doc.presentation)
 
   // Сроки сдачи: корпус/очередь и квартал с годом
   const completion = (Array.isArray(doc.completion) ? doc.completion : []) as Record<string, unknown>[]
@@ -242,14 +296,65 @@ export default async function ComplexPage({ params }: PageProps) {
             </section>
           )}
 
-          {/* Планировочные решения: описание и изображения/схемы */}
-          {(planningText || planningImages.length > 0) && (
+          {/* Планировочные решения: описание, карточки планировок и старые схемы */}
+          {(planningText || planningCards.length > 0 || planningImages.length > 0) && (
             <section className="mb-14">
               <BlockTitle>{t.complex.planningTitle}</BlockTitle>
               {planningText && (
                 <p className="mb-6 max-w-3xl text-sm leading-relaxed text-[var(--n15-muted)] whitespace-pre-line">
                   {planningText}
                 </p>
+              )}
+              {planningCards.length > 0 && (
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  {planningCards.map((item, index) => (
+                    <div key={index} className="border border-[var(--n15-gold)]/10 p-4">
+                      {item.pdf ? (
+                        <a
+                          href={item.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex h-44 w-full items-center justify-center border border-[var(--n15-gold)]/15 text-sm text-[var(--n15-gold)] transition-colors hover:bg-[var(--n15-gold)]/10"
+                        >
+                          {t.complex.planningDownload}
+                        </a>
+                      ) : (
+                        <img
+                          src={item.url}
+                          alt={item.alt || item.name || `${name} — ${t.complex.planningTitle}`}
+                          loading="lazy"
+                          className="h-44 w-full border border-[var(--n15-gold)]/10 object-cover"
+                        />
+                      )}
+                      {(item.name || item.rooms || item.area || item.building) && (
+                        <div className="mt-3">
+                          {item.name && (
+                            <div className="font-[family-name:var(--font-display)] text-base text-[var(--n15-white)]">
+                              {item.name}
+                            </div>
+                          )}
+                          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--n15-muted)]">
+                            {item.rooms && (
+                              <span>
+                                <span className="text-[var(--n15-gold)]">{t.complex.planningRooms}:</span> {item.rooms}
+                              </span>
+                            )}
+                            {item.area && (
+                              <span>
+                                <span className="text-[var(--n15-gold)]">{t.complex.planningArea}:</span> {item.area} {t.complex.areaUnit}
+                              </span>
+                            )}
+                            {item.building && (
+                              <span>
+                                <span className="text-[var(--n15-gold)]">{t.complex.planningBuilding}:</span> {item.building}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
               )}
               {planningImages.length > 0 && (
                 <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
@@ -264,6 +369,41 @@ export default async function ComplexPage({ params }: PageProps) {
                   ))}
                 </div>
               )}
+            </section>
+          )}
+
+          {/* Галерея ЖК: фотографии и рендеры комплекса (главное — первым) */}
+          {gallery.length > 0 && (
+            <section className="mb-14">
+              <BlockTitle>{t.complex.galleryTitle}</BlockTitle>
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+                {gallery.map((image, index) => (
+                  <img
+                    key={index}
+                    src={image.url}
+                    alt={image.alt || `${name} — ${t.complex.galleryTitle}`}
+                    loading="lazy"
+                    className={`w-full border border-[var(--n15-gold)]/10 object-cover ${
+                      index === 0 && galleryMain ? 'col-span-2 h-64 sm:col-span-3 sm:h-96' : 'h-40'
+                    }`}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Презентация ЖК: кнопка открывает PDF в новой вкладке */}
+          {presentation && (
+            <section className="mb-14">
+              <BlockTitle>{t.complex.presentationTitle}</BlockTitle>
+              <a
+                href={presentation.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center border border-[var(--n15-gold)]/40 px-6 py-3 text-xs uppercase tracking-wider text-[var(--n15-gold)] transition-colors hover:bg-[var(--n15-gold)]/10"
+              >
+                {t.complex.presentationButton}
+              </a>
             </section>
           )}
 
@@ -286,19 +426,80 @@ export default async function ComplexPage({ params }: PageProps) {
             </section>
           )}
 
-          {/* Помещения и инфраструктура / способы приобретения — двумя карточками */}
-          {(premiseItems.length > 0 || purchaseItems.length > 0) && (
+          {/* Помещения и инфраструктура / способы приобретения — двумя карточками.
+              В карточке помещений — отметки «что есть» чипами, ниже паркинг и
+              кладовые с описанием и фотографиями (раздел «Медиа и документы») */}
+          {(premiseItems.length > 0 ||
+            purchaseItems.length > 0 ||
+            parkingText ||
+            parkingPhotos.length > 0 ||
+            storeroomsText ||
+            storeroomsPhotos.length > 0) && (
             <section className="mb-14 grid gap-6 md:grid-cols-2">
-              {premiseItems.length > 0 && (
+              {(premiseItems.length > 0 || parkingText || parkingPhotos.length > 0 || storeroomsText || storeroomsPhotos.length > 0) && (
                 <div className="border border-[var(--n15-gold)]/10 p-6">
-                  <h3 className="mb-4 text-lg font-[family-name:var(--font-display)] text-[var(--n15-white)]">
-                    {t.complex.premisesTitle}
-                  </h3>
-                  <div className="flex flex-wrap gap-2">
-                    {premiseItems.map((item, index) => (
-                      <Chip key={index}>{item}</Chip>
-                    ))}
-                  </div>
+                  {premiseItems.length > 0 && (
+                    <>
+                      <h3 className="mb-4 text-lg font-[family-name:var(--font-display)] text-[var(--n15-white)]">
+                        {t.complex.premisesTitle}
+                      </h3>
+                      <div className="flex flex-wrap gap-2">
+                        {premiseItems.map((item, index) => (
+                          <Chip key={index}>{item}</Chip>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                  {(parkingText || parkingPhotos.length > 0) && (
+                    <div className={premiseItems.length > 0 ? 'mt-6 border-t border-[var(--n15-gold)]/10 pt-5' : ''}>
+                      <h4 className="mb-3 font-[family-name:var(--font-display)] text-base text-[var(--n15-white)]">
+                        {t.complex.parkingTitle}
+                      </h4>
+                      {parkingText && (
+                        <p className="mb-3 text-sm leading-relaxed text-[var(--n15-muted)] whitespace-pre-line">
+                          {parkingText}
+                        </p>
+                      )}
+                      {parkingPhotos.length > 0 && (
+                        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                          {parkingPhotos.map((image, index) => (
+                            <img
+                              key={index}
+                              src={image.url}
+                              alt={image.alt || `${name} — ${t.complex.parkingTitle}`}
+                              loading="lazy"
+                              className="h-28 w-full border border-[var(--n15-gold)]/10 object-cover"
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {(storeroomsText || storeroomsPhotos.length > 0) && (
+                    <div className={premiseItems.length > 0 || parkingText || parkingPhotos.length > 0 ? 'mt-6 border-t border-[var(--n15-gold)]/10 pt-5' : ''}>
+                      <h4 className="mb-3 font-[family-name:var(--font-display)] text-base text-[var(--n15-white)]">
+                        {t.complex.storeroomsTitle}
+                      </h4>
+                      {storeroomsText && (
+                        <p className="mb-3 text-sm leading-relaxed text-[var(--n15-muted)] whitespace-pre-line">
+                          {storeroomsText}
+                        </p>
+                      )}
+                      {storeroomsPhotos.length > 0 && (
+                        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                          {storeroomsPhotos.map((image, index) => (
+                            <img
+                              key={index}
+                              src={image.url}
+                              alt={image.alt || `${name} — ${t.complex.storeroomsTitle}`}
+                              loading="lazy"
+                              className="h-28 w-full border border-[var(--n15-gold)]/10 object-cover"
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
               {purchaseItems.length > 0 && (

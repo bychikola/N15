@@ -106,10 +106,194 @@ export const Complexes: CollectionConfig = {
           type: 'upload',
           relationTo: 'media',
           hasMany: true,
-          label: 'Изображения и схемы планировок',
+          label: 'Изображения и схемы планировок (старое поле)',
           admin: {
-            description: 'Планы этажей и схемы планировок. Порядок — как загружены',
+            description:
+              'Прежний список картинок без подписей. Оставлен для уже загруженных комплексов — новые планировки ведите в разделе «Медиа и документы», он показывается на сайте вместо этого поля',
           },
+        },
+      ],
+    },
+
+    // ── Медиа и документы ──────────────────────────────────────────────────
+    // Единый раздел медиа комплекса: планировки с подписями, паркинг, кладовые,
+    // галерея, PDF-презентация и фотоотчёты. Файлы загружаются кнопкой из CRM
+    // (см. CrmDevelopers.tsx, ComplexMediaEditor.tsx) — хранятся в media и
+    // complex-documents, поля держат ссылки на них.
+    {
+      type: 'collapsible',
+      label: 'Медиа и документы',
+      admin: {
+        initCollapsed: true,
+        description:
+          'Планировки, паркинг, кладовые, галерея, презентация и фотоотчёты. Всё, что загружено здесь, показывается на странице этого ЖК на сайте',
+      },
+      fields: [
+        // Планировки: изображение или PDF, к каждой — название, комнаты,
+        // площадь и, при необходимости, корпус
+        {
+          name: 'plannings',
+          type: 'array',
+          label: 'Планировки',
+          labels: { singular: 'Планировка', plural: 'Планировки' },
+          admin: {
+            description:
+              'Каждая запись — файл планировки (изображение или PDF) и её характеристики. Показываются блоком «Планировочные решения» на странице ЖК',
+          },
+          fields: [
+            {
+              name: 'image',
+              type: 'upload',
+              relationTo: 'media',
+              label: 'Изображение планировки',
+              admin: { description: 'Картинка планировки (JPG, PNG, WEBP)' },
+            },
+            {
+              name: 'document',
+              type: 'upload',
+              relationTo: 'complex-documents',
+              label: 'PDF планировки',
+              admin: { description: 'PDF-файл планировки — вместо изображения' },
+            },
+            {
+              name: 'name',
+              type: 'text',
+              label: 'Название',
+              admin: { description: 'Например: «Студия», «2-комнатная, угловая»' },
+            },
+            {
+              name: 'rooms',
+              type: 'text',
+              label: 'Комнаты',
+              admin: { description: 'Например: «Студия», «2 комнаты», «Кухня-гостиная + спальня»' },
+            },
+            {
+              name: 'area',
+              type: 'number',
+              label: 'Площадь, м²',
+              admin: { description: 'Например: 42.5' },
+            },
+            {
+              name: 'building',
+              type: 'text',
+              label: 'Корпус',
+              admin: { description: 'Если планировка относится к конкретному корпусу' },
+            },
+          ],
+        },
+
+        // Паркинг: фотографии и краткое описание
+        {
+          name: 'parking',
+          type: 'group',
+          label: 'Паркинг',
+          fields: [
+            {
+              name: 'description',
+              type: 'textarea',
+              label: 'Описание паркинга',
+              admin: { description: 'Тип паркинга, количество мест, как купить' },
+            },
+            {
+              name: 'photos',
+              type: 'upload',
+              relationTo: 'media',
+              hasMany: true,
+              label: 'Фотографии паркинга',
+            },
+          ],
+        },
+
+        // Кладовые: фотографии/схемы и описание
+        {
+          name: 'storerooms',
+          type: 'group',
+          label: 'Кладовые',
+          fields: [
+            {
+              name: 'description',
+              type: 'textarea',
+              label: 'Описание кладовых',
+              admin: { description: 'Размеры, расположение, как купить' },
+            },
+            {
+              name: 'photos',
+              type: 'upload',
+              relationTo: 'media',
+              hasMany: true,
+              label: 'Фотографии и схемы кладовых',
+            },
+          ],
+        },
+
+        // Галерея ЖК: фотографии и рендеры комплекса
+        {
+          name: 'gallery',
+          type: 'array',
+          label: 'Галерея ЖК',
+          labels: { singular: 'Изображение', plural: 'Галерея' },
+          admin: {
+            description:
+              'Фотографии и рендеры комплекса. Порядок задаёт показ на сайте; «Главное изображение» — одно на комплекс',
+          },
+          fields: [
+            {
+              name: 'photo',
+              type: 'upload',
+              relationTo: 'media',
+              label: 'Фотография',
+            },
+            {
+              name: 'isMain',
+              type: 'checkbox',
+              label: 'Главное изображение',
+              admin: { description: 'Одно главное изображение комплекса — обложка галереи' },
+            },
+          ],
+        },
+
+        // Презентация ЖК: PDF, показывается кнопкой «Смотреть презентацию»
+        {
+          name: 'presentation',
+          type: 'upload',
+          relationTo: 'complex-documents',
+          label: 'Презентация ЖК (PDF)',
+          admin: {
+            description:
+              'PDF-файл презентации. На странице ЖК появляется кнопка «Смотреть презентацию». Файл можно заменить, загрузив новый',
+          },
+        },
+
+        // Фотоотчёты со стройки: дата, этап и фотографии
+        {
+          name: 'photoReports',
+          type: 'array',
+          label: 'Фотоотчёты строительства',
+          labels: { singular: 'Фотоотчёт', plural: 'Фотоотчёты' },
+          admin: {
+            description: 'Каждая запись — дата и подпись этапа строительства, к ней прикладываются фото',
+          },
+          fields: [
+            {
+              name: 'date',
+              type: 'date',
+              label: 'Дата отчёта',
+              admin: { date: { pickerAppearance: 'dayOnly', displayFormat: 'dd.MM.yyyy' } },
+            },
+            {
+              name: 'stage',
+              type: 'text',
+              label: 'Этап строительства',
+              admin: { description: 'Например: «Возведение 3-го этажа», «Установка лифтов»' },
+            },
+            {
+              name: 'photos',
+              type: 'upload',
+              relationTo: 'media',
+              hasMany: true,
+              label: 'Фотографии',
+            },
+          ],
         },
       ],
     },
@@ -264,45 +448,6 @@ export const Complexes: CollectionConfig = {
                 { label: 'Получить консультацию', value: 'consultation' },
                 { label: 'Узнать подробнее', value: 'details' },
               ],
-            },
-          ],
-        },
-      ],
-    },
-
-    // ── Фотоотчёты со стройки ──────────────────────────────────────────────
-    {
-      type: 'collapsible',
-      label: 'Фотоотчёты со стройки',
-      admin: { initCollapsed: true },
-      fields: [
-        {
-          name: 'photoReports',
-          type: 'array',
-          label: 'Фотоотчёты',
-          labels: { singular: 'Фотоотчёт', plural: 'Фотоотчёты' },
-          admin: {
-            description: 'Каждая запись — дата и подпись этапа строительства, к ней прикладываются фото',
-          },
-          fields: [
-            {
-              name: 'date',
-              type: 'date',
-              label: 'Дата',
-              admin: { date: { pickerAppearance: 'dayOnly', displayFormat: 'dd.MM.yyyy' } },
-            },
-            {
-              name: 'stage',
-              type: 'text',
-              label: 'Этап строительства',
-              admin: { description: 'Например: «Возведение 3-го этажа», «Установка лифтов»' },
-            },
-            {
-              name: 'photos',
-              type: 'upload',
-              relationTo: 'media',
-              hasMany: true,
-              label: 'Фотографии',
             },
           ],
         },

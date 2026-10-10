@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, type FC } from 'react'
 import type { Dict } from '@/i18n/dictionaries'
 import { DEVELOPER_STATUS_LABELS, isDeveloperArchived } from '@/lib/developers'
+import { ComplexMediaEditor } from './ComplexMediaEditor'
 
 /**
  * Раздел CRM «Застройщики»: карточки компаний-застройщиков и их жилые
@@ -172,6 +173,11 @@ export const CrmDevelopers: FC<Props> = ({ t, complexAdminHref }) => {
   const [complexSaving, setComplexSaving] = useState(false)
   const [complexError, setComplexError] = useState('')
   const [complexNote, setComplexNote] = useState('')
+  // Открытая карточка ЖК в редакторе «Медиа и документы» (см.
+  // ComplexMediaEditor): id комплекса или null. Правка комплексa ведётся
+  // здесь, а не в быстрой форме названия/адреса — в редакторе те же поля и
+  // загрузчики файлов
+  const [mediaEditorId, setMediaEditorId] = useState<number | null>(null)
 
   const load = useCallback(async () => {
     try {
@@ -248,6 +254,7 @@ export const CrmDevelopers: FC<Props> = ({ t, complexAdminHref }) => {
     setComplexForm(null)
     setComplexError('')
     setComplexNote('')
+    setMediaEditorId(null)
   }
 
   const openEdit = (d: DeveloperRow) => {
@@ -270,6 +277,7 @@ export const CrmDevelopers: FC<Props> = ({ t, complexAdminHref }) => {
     setComplexForm(null)
     setComplexError('')
     setComplexNote('')
+    setMediaEditorId(null)
   }
 
   const closeEditor = () => {
@@ -280,6 +288,7 @@ export const CrmDevelopers: FC<Props> = ({ t, complexAdminHref }) => {
     setLogoError('')
     setComplexError('')
     setComplexNote('')
+    setMediaEditorId(null)
   }
 
   const saveDeveloper = async () => {
@@ -665,12 +674,12 @@ export const CrmDevelopers: FC<Props> = ({ t, complexAdminHref }) => {
                           {[c.locality, c.street].filter(Boolean).join(', ') || '—'}
                         </div>
                       </div>
-                      <button type="button" onClick={() => { setComplexForm({ id: c.id, name: c.name, locality: c.locality, street: c.street }); setComplexError(''); setComplexNote('') }} style={smallBtnStyle}>
+                      {/* «Редактировать» открывает раздел «Медиа и документы»
+                          (см. ComplexMediaEditor): название, адрес, планировки,
+                          паркинг, кладовые, галерея, презентация, фотоотчёты */}
+                      <button type="button" onClick={() => { setMediaEditorId(c.id); setComplexForm(null); setComplexError(''); setComplexNote('') }} style={smallBtnStyle}>
                         {t.crm.devComplexEdit}
                       </button>
-                      {/* Полная карточка ЖК — в админке: здесь правятся только
-                          название и адрес, остальные блоки (описание,
-                          планировки, сроки, фотоотчёты, форма) ведёт админка */}
                       {complexAdminHref && (
                         <a
                           href={`${complexAdminHref}/${c.id}`}
@@ -719,6 +728,19 @@ export const CrmDevelopers: FC<Props> = ({ t, complexAdminHref }) => {
                 </button>
               )}
               {complexNote && <p style={{ margin: '10px 0 0', color: '#5b7a4e', fontSize: 11 }}>{complexNote}</p>}
+
+              {/* Редактор «Медиа и документы» выбранного ЖК: открывается кнопкой
+                  «Редактировать» у комплекса. После сохранения список
+                  застройщика перечитывается — название комплекса могло
+                  измениться */}
+              {mediaEditorId != null && (
+                <ComplexMediaEditor
+                  complexId={mediaEditorId}
+                  t={t}
+                  onClose={() => setMediaEditorId(null)}
+                  onSaved={() => void load()}
+                />
+              )}
             </div>
           ) : (
             <p style={{ margin: '16px 0 0', color: '#9b958a', fontSize: 11 }}>{t.crm.devComplexesAfterSave}</p>
