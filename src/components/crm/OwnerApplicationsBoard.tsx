@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import type { Dict } from '@/i18n/dictionaries'
 import type { OwnerBoardRow } from '@/lib/owner-service'
 import { OWNER_APPLICATION_STATUSES } from '@/lib/owner-applications'
+import { OwnerContactConfirm } from '@/components/crm/OwnerContactConfirm'
 
 /**
  * Раздел CRM «Заявки собственников» — очередь приёмки объектов от владельцев.
@@ -15,8 +16,9 @@ import { OWNER_APPLICATION_STATUSES } from '@/lib/owner-applications'
  * администратор видит телефон и адрес собственника, источник, дату
  * поступления, фотографии, найденные совпадения с базой и историю — и ведёт
  * заявку по статусам: подтверждает телефон вручную (если SMS не ушла),
- * ставит «На проверке», «Подтверждён собственник», создаёт объект (черновик)
- * или связывает заявку с найденным дублем.
+ * вручную подтверждает контакт (WhatsApp или звонок, с согласием на показ
+ * номера — см. OwnerContactConfirm), ставит «На проверке», «Подтверждён
+ * собственник», создаёт объект (черновик) или связывает заявку с дублем.
  *
  * Все действия идут маршрутом /api/crm/owner-applications/action: он ещё раз
  * проверяет, что вошедший — администратор, и только потом меняет данные
@@ -116,7 +118,14 @@ export const OwnerApplicationsBoard: FC<Props> = ({ t, rows, status, agents }) =
   const act = async (
     id: number,
     action: string,
-    extra: { note?: string; objectId?: number; agentId?: number; status?: string } = {},
+    extra: {
+      note?: string
+      objectId?: number
+      agentId?: number
+      status?: string
+      method?: string
+      consent?: boolean
+    } = {},
   ) => {
     if (busy) return
     setBusy(id)
@@ -185,6 +194,17 @@ export const OwnerApplicationsBoard: FC<Props> = ({ t, rows, status, agents }) =
       ) : (
         rows.map((row) => {
           const confirmed = Boolean(row.phoneConfirmedAt)
+          // Публикация на доске: телефон подтверждён, контакт подтверждён вручную
+          // и есть отдельное согласие на показ номера (см. publishOwnerApplicationToBoard)
+          const contactConfirmed = Boolean(row.contactConfirmedAt)
+          const canPublish = confirmed && contactConfirmed && row.publishPhoneConsent
+          const publishHint = !confirmed
+            ? t.crm.ownNeedPhone
+            : !contactConfirmed
+              ? t.crm.ownNeedContact
+              : !row.publishPhoneConsent
+                ? t.crm.ownNeedPhoneConsent
+                : t.crm.ownBoardHint
           const deal = row.type === 'rent' ? t.crm.ownDealRent : t.crm.ownDealSale
           // Ответственный агент: без него заявку не подтвердить и объект не завести
           const agentPick = agentPicks[row.id] ?? (row.agentId ? String(row.agentId) : '')
@@ -277,6 +297,15 @@ export const OwnerApplicationsBoard: FC<Props> = ({ t, rows, status, agents }) =
                   {t.crm.ownCodeSent}: {dateText(row.verifyCodeSentAt)}
                 </p>
               )}
+
+              {/* Ручное подтверждение контакта: WhatsApp/звонок, способ, дата и
+                  администратор, отдельное согласие на показ номера */}
+              <OwnerContactConfirm
+                t={t}
+                row={row}
+                busy={busy === row.id}
+                onAction={(action, extra) => void act(row.id, action, extra)}
+              />
 
               {row.photos.length > 0 && (
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
@@ -456,18 +485,19 @@ export const OwnerApplicationsBoard: FC<Props> = ({ t, rows, status, agents }) =
                 )}
                 {/* Публикация на доске: объект каталога не заводится, агент не
                     нужен — объявление выходит с телефоном собственника. Кнопка
-                    активна после подтверждения телефона и только до публикации */}
+                    активна после подтверждения телефона и контакта, а также
+                    отдельного согласия на номер — и только до публикации */}
                 {!row.boardAdId && (
                   <button
                     type="button"
                     onClick={() => void act(row.id, 'publish_board')}
-                    disabled={busy === row.id || !confirmed}
-                    title={!confirmed ? t.crm.ownNeedPhone : t.crm.ownBoardHint}
+                    disabled={busy === row.id || !canPublish}
+                    title={publishHint}
                     style={{
                       ...btnGold,
                       marginLeft: row.objectId ? 'auto' : undefined,
-                      opacity: busy === row.id || !confirmed ? 0.45 : 1,
-                      cursor: confirmed ? 'pointer' : 'not-allowed',
+                      opacity: busy === row.id || !canPublish ? 0.45 : 1,
+                      cursor: canPublish ? 'pointer' : 'not-allowed',
                     }}
                   >
                     {t.crm.ownPublishBoard}

@@ -25,6 +25,7 @@ import {
   ownerSourceLabel,
   ownerStatusLabel,
   OWNER_APPLICATION_STATUSES,
+  OWNER_CONTACT_METHODS,
   type OwnerApplicationLike,
   type OwnerApplicationStatus,
   type OwnerDuplicate,
@@ -308,6 +309,93 @@ export async function assignOwnerAgent(
 }
 
 /**
+ * Ручное подтверждение контакта с собственником — отдельный этап приёмки.
+ * Администратор сам связывается с владельцем (WhatsApp или телефонный звонок),
+ * выбирает способ и отмечает контакт подтверждённым: сохраняются дата, способ
+ * и администратор. Без этого шага и отдельного согласия на публикацию номера
+ * объявление на доске не выходит (см. publishOwnerApplicationToBoard).
+ *
+ * Повторный вызов не сбрасывает уже проставленную дату: первый контакт и есть
+ * момент подтверждения, а смена способа фиксируется в истории.
+ */
+export async function confirmOwnerContact(
+  payload: Payload,
+  id: number,
+  method: string,
+  opts: { user?: OwnerActor; note?: string } = {},
+): Promise<OwnerActionResult> {
+  const doc = await findOwnerApplication(payload, id)
+  if (!doc) return { ok: false, error: 'Заявка не найдена' }
+  const known = OWNER_CONTACT_METHODS.find((m) => m.value === method)
+  if (!known) {
+    return { ok: false, error: 'Выберите способ подтверждения: WhatsApp или телефонный звонок' }
+  }
+  const now = new Date().toISOString()
+  const who = actorId(opts.user)
+  try {
+    await payload.update({
+      collection: 'owner-applications',
+      id,
+      data: {
+        contactConfirmedAt: str(doc.contactConfirmedAt) || now,
+        contactConfirmMethod: method,
+        ...(who ? { contactConfirmedBy: who } : {}),
+        history: [
+          ...historyOf(doc),
+          historyEntry(`Контакт подтверждён: ${known.label}`, opts.user, opts.note),
+        ],
+      },
+      depth: 0,
+      overrideAccess: true,
+    })
+    return { ok: true }
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) }
+  }
+}
+
+/**
+ * Отдельное согласие собственника на публикацию его номера. Нужно именно
+ * отдельно от согласия на обработку данных: пока телефона в объявлении нет,
+ * достаточно личного согласия, а показ номера на доске требует явной отметки.
+ * Снятие отметки тоже фиксируется в истории — согласие можно отозвать.
+ */
+export async function setOwnerPhoneConsent(
+  payload: Payload,
+  id: number,
+  consent: boolean,
+  opts: { user?: OwnerActor } = {},
+): Promise<OwnerActionResult> {
+  const doc = await findOwnerApplication(payload, id)
+  if (!doc) return { ok: false, error: 'Заявка не найдена' }
+  const granted = consent === true
+  try {
+    await payload.update({
+      collection: 'owner-applications',
+      id,
+      data: {
+        publishPhoneConsent: granted,
+        publishPhoneConsentAt: granted
+          ? str(doc.publishPhoneConsentAt) || new Date().toISOString()
+          : null,
+        history: [
+          ...historyOf(doc),
+          historyEntry(
+            granted ? 'Согласие на публикацию номера: получено' : 'Согласие на публикацию номера: отозвано',
+            opts.user,
+          ),
+        ],
+      },
+      depth: 0,
+      overrideAccess: true,
+    })
+    return { ok: true }
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) }
+  }
+}
+
+/**
  * Копирование фотографий заявки в открытое хранилище media. Файлы лежат
  * в закрытом owner-materials и читаются с диска по имени из документа —
  * имя проверяет storedFilePath (защита от «../» в имени). Нечитаемая
@@ -500,6 +588,10 @@ async function copyOwnerPhotosToBoard(
  * в media) и ставим заявке «Опубликовано» — но только после того, как
  * объявление реально стало видно на сайте. Контакт в карточке — телефон
  * владельца из заявки; номер агентства или агента сюда не подставляется.
+ *
+ * Условия публикации: телефон подтверждён, контакт с собственником подтверждён
+ * вручную (WhatsApp или звонок) и получено отдельное согласие на показ номера
+ * (publishPhoneConsent).
  */
 export async function publishOwnerApplicationToBoard(
   payload: Payload,
@@ -515,6 +607,21 @@ export async function publishOwnerApplicationToBoard(
     return {
       ok: false,
       error: 'Сначала подтвердите телефон собственника — без этого объявление публиковать нельзя',
+    }
+  }
+  // Ручное подтверждение контакта и отдельное согласие на показ номера —
+  // обязательные условия публикации: администратор должен быть уверен, что
+  // связался именно с владельцем и что тот разрешил показывать телефон
+  if (!app.contactConfirmedAt) {
+    return {
+      ok: false,
+      error: 'Сначала подтвердите контакт с собственником — позвоните или напишите в WhatsApp и отметьте это',
+    }
+  }
+  if (app.publishPhoneConsent !== true) {
+    return {
+      ok: false,
+      error: 'Нужно отдельное согласие собственника на публикацию номера — отметьте его в карточке заявки',
     }
   }
   if (app.status === 'rejected' || app.status === 'duplicate') {
@@ -710,6 +817,8 @@ export interface OwnerActionInput {
   id: number
   action:
     | 'confirm_phone'
+    | 'confirm_contact'
+    | 'phone_consent'
     | 'status'
     | 'create_object'
     | 'assign_agent'
@@ -720,6 +829,10 @@ export interface OwnerActionInput {
   objectId?: number
   agentId?: number
   note?: string
+  /** Способ подтверждения контакта (для действия «Контакт подтверждён») */
+  method?: string
+  /** Отдельное согласие на публикацию номера (для действия «Согласие») */
+  consent?: boolean
 }
 
 /** Выполнить действие администратора из CRM. Права проверяет маршрут. */
@@ -734,6 +847,10 @@ export async function applyOwnerAction(
   switch (input.action) {
     case 'confirm_phone':
       return confirmOwnerPhone(payload, id, 'admin', { user, note: input.note, agentId: input.agentId })
+    case 'confirm_contact':
+      return confirmOwnerContact(payload, id, str(input.method), { user, note: input.note })
+    case 'phone_consent':
+      return setOwnerPhoneConsent(payload, id, input.consent === true, { user })
     case 'status': {
       const status = str(input.status)
       if (!OWNER_APPLICATION_STATUSES.some((s) => s.value === status)) {
@@ -806,6 +923,14 @@ export interface OwnerBoardRow {
   phoneConfirmedAt: string | null
   phoneConfirmMethod: string | null
   verifyCodeSentAt: string | null
+  /** Ручное подтверждение контакта: дата, способ (WhatsApp / звонок), кто подтвердил */
+  contactConfirmedAt: string | null
+  contactConfirmMethod: string | null
+  contactConfirmedById: number | null
+  contactConfirmedByName: string | null
+  /** Отдельное согласие собственника на показ номера в объявлении */
+  publishPhoneConsent: boolean
+  publishPhoneConsentAt: string | null
   consent: boolean
   consentAt: string | null
   /** Ответственный агент: нужен только для объекта каталога, для доски не обязателен */
@@ -863,6 +988,7 @@ async function ownerBoardRowFromDoc(
   const linked = (doc.object as Record<string, unknown> | null) || null
   const matched = (doc.matchedObject as Record<string, unknown> | null) || null
   const agentDoc = (doc.agent as Record<string, unknown> | null) || null
+  const contactConfirmedBy = (doc.contactConfirmedBy as Record<string, unknown> | null) || null
   const objectId = linkedObjectId(doc as OwnerApplicationLike)
   const matchedObjectId = linkedObjectId({
     object: (doc.matchedObject ?? null) as number | { id?: number } | null,
@@ -907,6 +1033,12 @@ async function ownerBoardRowFromDoc(
     phoneConfirmedAt: str(doc.phoneConfirmedAt) || null,
     phoneConfirmMethod: str(doc.phoneConfirmMethod) || null,
     verifyCodeSentAt: str(doc.verifyCodeSentAt) || null,
+    contactConfirmedAt: str(doc.contactConfirmedAt) || null,
+    contactConfirmMethod: str(doc.contactConfirmMethod) || null,
+    contactConfirmedById: contactConfirmedBy ? refId(doc.contactConfirmedBy) : null,
+    contactConfirmedByName: contactConfirmedBy ? str(contactConfirmedBy.name) || null : null,
+    publishPhoneConsent: doc.publishPhoneConsent === true,
+    publishPhoneConsentAt: str(doc.publishPhoneConsentAt) || null,
     consent: doc.consent === true,
     consentAt: str(doc.consentAt) || null,
     agentId,

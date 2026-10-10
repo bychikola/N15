@@ -77,6 +77,22 @@ export const OWNER_CONFIRM_METHODS = [
   { value: 'admin', label: 'Подтвердил администратор' },
 ] as const
 
+/**
+ * Способ ручного подтверждения контакта с собственником — отдельный этап
+ * приёмки: администратор сам связывается с владельцем по WhatsApp или
+ * телефонным звонком и только после этого отмечает контакт подтверждённым.
+ * Публикация объявления на доске возможна лишь после этого шага и отдельного
+ * согласия собственника на показ номера.
+ */
+export const OWNER_CONTACT_METHODS = [
+  { value: 'whatsapp', label: 'WhatsApp' },
+  { value: 'call', label: 'Телефонный звонок' },
+] as const
+
+/** Подпись способа подтверждения контакта; пустая строка — способ не выбран */
+export const ownerContactMethodLabel = (value?: string | null): string =>
+  OWNER_CONTACT_METHODS.find((m) => m.value === value)?.label || ''
+
 /** Черновик объекта для формы: только те поля, что есть в заявке */
 export interface OwnerApplicationLike {
   id?: number

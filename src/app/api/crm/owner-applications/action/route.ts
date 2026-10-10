@@ -24,7 +24,16 @@ export async function POST(req: NextRequest) {
     }
 
     const body = (await req.json().catch(() => null)) as
-      | { id?: number; action?: string; status?: string; objectId?: number; agentId?: number; note?: string }
+      | {
+          id?: number
+          action?: string
+          status?: string
+          objectId?: number
+          agentId?: number
+          note?: string
+          method?: string
+          consent?: boolean
+        }
       | null
     if (!body || typeof body !== 'object') {
       return NextResponse.json({ error: 'Некорректный запрос' }, { status: 400 })
@@ -39,6 +48,8 @@ export async function POST(req: NextRequest) {
         objectId: body.objectId,
         agentId: body.agentId,
         note: body.note,
+        method: body.method,
+        consent: body.consent,
       },
       user,
     )

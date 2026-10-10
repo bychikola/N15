@@ -6,6 +6,7 @@ import {
   OWNER_APPLICATION_SOURCES,
   OWNER_APPLICATION_STATUSES,
   OWNER_CONFIRM_METHODS,
+  OWNER_CONTACT_METHODS,
 } from '@/lib/owner-applications'
 import { formatRuPhone } from '@/lib/phone'
 import { SNT_AREAS } from '@/components/home/landing-data'
@@ -22,6 +23,12 @@ import { SNT_AREAS } from '@/components/home/landing-data'
  * Одобрено → Опубликовано, отдельно — Отклонено и Дубль. Телефон
  * подтверждается кодом из SMS, а если отправка недоступна — вручную
  * администратором (способ виден в поле «Способ подтверждения»).
+ *
+ * Отдельный этап — ручное подтверждение контакта: администратор связывается
+ * с собственником по WhatsApp или звонком, отмечает способ, дату и себя
+ * (contactConfirmedAt, contactConfirmMethod, contactConfirmedBy). Публикация
+ * объявления на доске возможна только после подтверждения контакта и
+ * отдельного согласия на показ номера (publishPhoneConsent).
  *
  * Дубли ищутся автоматически по телефону, кадастровому номеру, адресу и
  * совпадению характеристик с фотографиями (см. findOwnerDuplicates в
@@ -316,6 +323,57 @@ export const OwnerApplications: CollectionConfig = {
         readOnly: true,
         description: 'Код из SMS или ручная отметка администратора',
       },
+    },
+    {
+      // Ручное подтверждение контакта — отдельный этап приёмки: администратор
+      // сам связывается с собственником (WhatsApp или звонок) и фиксирует это.
+      // Публикация на доске открывается только после этого шага
+      // (см. publishOwnerApplicationToBoard в src/lib/owner-service.ts)
+      name: 'contactConfirmedAt',
+      type: 'date',
+      label: 'Контакт подтверждён',
+      admin: {
+        readOnly: true,
+        description: 'Когда администратор связался с собственником и подтвердил контакт',
+      },
+    },
+    {
+      name: 'contactConfirmMethod',
+      type: 'select',
+      label: 'Способ подтверждения контакта',
+      options: OWNER_CONTACT_METHODS.map((m) => ({ label: m.label, value: m.value })),
+      admin: {
+        readOnly: true,
+        description: 'Как администратор связался с собственником: WhatsApp или телефонный звонок',
+      },
+    },
+    {
+      name: 'contactConfirmedBy',
+      type: 'relationship',
+      relationTo: 'users',
+      label: 'Контакт подтвердил',
+      admin: {
+        readOnly: true,
+        description: 'Администратор, который подтвердил контакт с собственником',
+      },
+    },
+    {
+      // Отдельное согласие собственника на публикацию его номера: одного
+      // согласия на обработку данных для показа телефона недостаточно —
+      // публикация на доске открывается только с этой отметкой
+      name: 'publishPhoneConsent',
+      type: 'checkbox',
+      label: 'Согласие на публикацию номера',
+      admin: {
+        description:
+          'Отдельное согласие собственника на показ его телефона в объявлении на доске',
+      },
+    },
+    {
+      name: 'publishPhoneConsentAt',
+      type: 'date',
+      label: 'Дата согласия на публикацию',
+      admin: { readOnly: true, description: 'Когда получено согласие на публикацию номера' },
     },
     {
       name: 'consent',
