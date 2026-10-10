@@ -11,8 +11,9 @@ import { isHouseCategoryCode } from '@/lib/object-categories'
  * Оформление — то же, что у карточки каталога (классы .object-card* в
  * globals.css): размер 4/3, бейдж сделки, цена поверх фото, мета строкой.
  * Разница по существу одна: вместо агента показан тот, кто разместил, —
- * «Агентство Н15» или «Частное лицо»; по этой подписи покупатель сразу
- * понимает, с кем имеет дело. Телефон в карточке не показывается вовсе —
+ * имя собственника (для подачи частного лица) или «Агентство Н15»; по этой
+ * подписи покупатель сразу понимает, с кем имеет дело. Данные агентства чужому
+ * объявлению не подставляются. Телефон в карточке не показывается вовсе —
  * он отдаётся кнопкой на странице объявления.
  */
 interface BoardAdCardProps {
@@ -106,7 +107,13 @@ export const BoardAdCard: FC<BoardAdCardProps> = ({ ad, lang, t }) => {
             {isAgency ? 'Н15' : (ad.authorName || '—').trim().split(' ').map((n) => n[0]).join('').slice(0, 2)}
           </span>
           <span className="object-card__agent-name text-xs text-[var(--n15-muted)]">
-            {isAgency ? t.board.authorAgency : isOwner ? t.board.authorOwner : t.board.authorPrivate}
+            {/* Имя того, кто разместил объявление: собственник или агентство.
+                Данные агента чужому объявлению не подставляются — у подачи
+                собственника это его имя (см. boardToListItem), а если имени
+                нет, показываем хотя бы вид автора */}
+            {isAgency
+              ? t.board.authorAgency
+              : ad.authorName || (isOwner ? t.board.authorOwner : t.board.authorPrivate)}
           </span>
         </div>
       </div>
