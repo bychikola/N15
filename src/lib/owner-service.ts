@@ -463,6 +463,86 @@ const photoOf = (item: unknown): OwnerBoardPhoto | null => {
 }
 
 /**
+ * Документ заявки → строка для карточки CRM. Одна и та же сборка для списка
+ * (loadOwnerBoard) и для полной карточки заявки (loadOwnerApplication):
+ * поля не расходятся, администратор видит ровно то, что отправил собственник.
+ * Совпадения с объектами базы считаются на лету и опционально: у закрытых
+ * заявок искать уже нечего, а каждый поиск — это несколько запросов к базе.
+ */
+async function ownerBoardRowFromDoc(
+  payload: Payload,
+  doc: Record<string, unknown>,
+  withDuplicates: boolean,
+): Promise<OwnerBoardRow> {
+  const addr = (doc.address as Record<string, unknown> | null) || null
+  const status = str(doc.status) || 'new'
+  const linked = (doc.object as Record<string, unknown> | null) || null
+  const matched = (doc.matchedObject as Record<string, unknown> | null) || null
+  const objectId = linkedObjectId(doc as OwnerApplicationLike)
+  const matchedObjectId = linkedObjectId({
+    object: (doc.matchedObject ?? null) as number | { id?: number } | null,
+  })
+
+  let duplicates: OwnerDuplicate[] = []
+  if (withDuplicates) {
+    try {
+      duplicates = await findOwnerDuplicates(payload, doc as unknown as OwnerApplicationLike)
+    } catch (error) {
+      console.error('Заявки собственников: не удалось найти совпадения:', error)
+    }
+  }
+
+  return {
+    id: Number(doc.id),
+    status,
+    statusLabel: ownerStatusLabel(status),
+    source: str(doc.source) || 'site',
+    sourceLabel: ownerSourceLabel(str(doc.source)),
+    receivedAt: str(doc.receivedAt) || null,
+    ownerName: str(doc.ownerName),
+    ownerPhone: str(doc.ownerPhone),
+    type: str(doc.type) || 'sale',
+    category: str(doc.category),
+    categoryTitle: categoryLabel(str(doc.category)),
+    price: numOrNull(doc.price),
+    area: numOrNull(doc.area),
+    areaUnit: str(doc.areaUnit) || null,
+    plotArea: numOrNull(doc.plotArea),
+    plotAreaUnit: str(doc.plotAreaUnit) || null,
+    rooms: numOrNull(doc.rooms),
+    floor: numOrNull(doc.floor),
+    totalFloors: numOrNull(doc.totalFloors),
+    cadastralNumber: str(doc.cadastralNumber) || null,
+    address: ownerAddressLine(addr),
+    description: str(doc.description),
+    photos: (Array.isArray(doc.photos) ? doc.photos : []).map(photoOf).filter((p): p is OwnerBoardPhoto => Boolean(p)),
+    phoneConfirmedAt: str(doc.phoneConfirmedAt) || null,
+    phoneConfirmMethod: str(doc.phoneConfirmMethod) || null,
+    verifyCodeSentAt: str(doc.verifyCodeSentAt) || null,
+    consent: doc.consent === true,
+    consentAt: str(doc.consentAt) || null,
+    objectId,
+    objectSlug: linked ? str(linked.slug) || null : null,
+    objectTitle: linked ? str(linked.title) || null : null,
+    objectStatus: linked ? str(linked.status) || null : null,
+    matchedObjectId,
+    matchedObjectTitle: matched ? str(matched.title) || null : null,
+    internalComment: str(doc.internalComment) || null,
+    history: (Array.isArray(doc.history) ? doc.history : []).map((h) => {
+      const e = (h || {}) as Record<string, unknown>
+      const by = (e.by || {}) as Record<string, unknown>
+      return {
+        at: str(e.at) || null,
+        action: str(e.action),
+        note: str(e.note) || null,
+        by: typeof e.by === 'object' && e.by ? str(by.name) || null : null,
+      }
+    }),
+    duplicates,
+  }
+}
+
+/**
  * Заявки для раздела CRM «Заявки собственников». Совпадения с объектами
  * считаются на лету (findOwnerDuplicates) и только для открытых заявок:
  * у закрытых (отклонена, дубль, опубликована) искать уже нечего, а каждый
@@ -488,75 +568,39 @@ export async function loadOwnerBoard(
   const maxSearches = 30
   for (const raw of res.docs) {
     const doc = raw as unknown as Record<string, unknown>
-    const addr = (doc.address as Record<string, unknown> | null) || null
-    const status = str(doc.status) || 'new'
-    const linked = (doc.object as Record<string, unknown> | null) || null
-    const matched = (doc.matchedObject as Record<string, unknown> | null) || null
-    const objectId = linkedObjectId(doc as OwnerApplicationLike)
-    const matchedObjectId = linkedObjectId({
-      object: (doc.matchedObject ?? null) as number | { id?: number } | null,
-    })
-
-    let duplicates: OwnerDuplicate[] = []
-    if (isOpenOwnerStatus(status) && searched < maxSearches) {
-      searched += 1
-      try {
-        duplicates = await findOwnerDuplicates(payload, doc as unknown as OwnerApplicationLike)
-      } catch (error) {
-        console.error('Заявки собственников: не удалось найти совпадения:', error)
-      }
-    }
-
-    rows.push({
-      id: Number(doc.id),
-      status,
-      statusLabel: ownerStatusLabel(status),
-      source: str(doc.source) || 'site',
-      sourceLabel: ownerSourceLabel(str(doc.source)),
-      receivedAt: str(doc.receivedAt) || null,
-      ownerName: str(doc.ownerName),
-      ownerPhone: str(doc.ownerPhone),
-      type: str(doc.type) || 'sale',
-      category: str(doc.category),
-      categoryTitle: categoryLabel(str(doc.category)),
-      price: numOrNull(doc.price),
-      area: numOrNull(doc.area),
-      areaUnit: str(doc.areaUnit) || null,
-      plotArea: numOrNull(doc.plotArea),
-      plotAreaUnit: str(doc.plotAreaUnit) || null,
-      rooms: numOrNull(doc.rooms),
-      floor: numOrNull(doc.floor),
-      totalFloors: numOrNull(doc.totalFloors),
-      cadastralNumber: str(doc.cadastralNumber) || null,
-      address: ownerAddressLine(addr),
-      description: str(doc.description),
-      photos: (Array.isArray(doc.photos) ? doc.photos : []).map(photoOf).filter((p): p is OwnerBoardPhoto => Boolean(p)),
-      phoneConfirmedAt: str(doc.phoneConfirmedAt) || null,
-      phoneConfirmMethod: str(doc.phoneConfirmMethod) || null,
-      verifyCodeSentAt: str(doc.verifyCodeSentAt) || null,
-      consent: doc.consent === true,
-      consentAt: str(doc.consentAt) || null,
-      objectId,
-      objectSlug: linked ? str(linked.slug) || null : null,
-      objectTitle: linked ? str(linked.title) || null : null,
-      objectStatus: linked ? str(linked.status) || null : null,
-      matchedObjectId,
-      matchedObjectTitle: matched ? str(matched.title) || null : null,
-      internalComment: str(doc.internalComment) || null,
-      history: (Array.isArray(doc.history) ? doc.history : []).map((h) => {
-        const e = (h || {}) as Record<string, unknown>
-        const by = (e.by || {}) as Record<string, unknown>
-        return {
-          at: str(e.at) || null,
-          action: str(e.action),
-          note: str(e.note) || null,
-          by: typeof e.by === 'object' && e.by ? str(by.name) || null : null,
-        }
-      }),
-      duplicates,
-    })
+    const open = isOpenOwnerStatus(str(doc.status) || 'new')
+    const withDuplicates = open && searched < maxSearches
+    if (withDuplicates) searched += 1
+    rows.push(await ownerBoardRowFromDoc(payload, doc, withDuplicates))
   }
   return rows
+}
+
+/**
+ * Полная карточка одной заявки: та же строка, что и в списке, но без
+ * ограничения очереди — администратор открыл заявку целиком, чтобы увидеть
+ * все данные собственника, историю и комментарий (см. страницу
+ * /crm/owner-applications/[id]). Совпадения с базой здесь ищутся всегда:
+ * по одной заявке это недорого, а решение «дубль или нет» принимается
+ * именно в карточке. null — заявки нет (удалена) или она недоступна.
+ */
+export async function loadOwnerApplication(
+  payload: Payload,
+  id: number,
+): Promise<OwnerBoardRow | null> {
+  if (!Number.isInteger(id) || id <= 0) return null
+  try {
+    const doc = await payload.findByID({
+      collection: 'owner-applications',
+      id,
+      depth: 1,
+      overrideAccess: true,
+    })
+    if (!doc) return null
+    return await ownerBoardRowFromDoc(payload, doc as unknown as Record<string, unknown>, true)
+  } catch {
+    return null
+  }
 }
 
 /**

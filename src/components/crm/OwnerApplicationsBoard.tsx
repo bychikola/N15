@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, type FC } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import type { Dict } from '@/i18n/dictionaries'
 import type { OwnerBoardRow } from '@/lib/owner-service'
@@ -188,13 +189,23 @@ export const OwnerApplicationsBoard: FC<Props> = ({ t, rows, status }) => {
           return (
             <div key={row.id} style={cardStyle}>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'baseline', marginBottom: 8 }}>
-                <strong style={{ fontFamily: "'New Standard', Georgia, serif", fontWeight: 400, fontSize: 18 }}>
+                <Link
+                  href={`/crm/owner-applications/${row.id}`}
+                  style={{ fontFamily: "'New Standard', Georgia, serif", fontWeight: 400, fontSize: 18, color: '#25241f', textDecoration: 'none' }}
+                >
                   {row.ownerName || `Заявка #${row.id}`}
-                </strong>
+                </Link>
                 <span style={statusStyle(row.status)}>{row.statusLabel}</span>
                 <span style={{ fontSize: 11, color: '#817b70' }}>
                   {row.sourceLabel} · {deal} · {row.categoryTitle} · {money(row.price)}
                 </span>
+                {/* Полная карточка заявки: открывается целиком ещё до создания объекта */}
+                <Link
+                  href={`/crm/owner-applications/${row.id}`}
+                  style={{ ...btnStyle, marginLeft: 'auto', textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
+                >
+                  {t.crm.ownOpenFull}
+                </Link>
               </div>
 
               {/* Телефон собственника — с подтверждением: без него объект

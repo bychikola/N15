@@ -2512,6 +2512,26 @@ export const ru = {
     ownCommentSave: 'Сохранить комментарий',
     ownHistory: 'История заявки',
     ownActionFailed: 'Не удалось выполнить действие — попробуйте ещё раз',
+    // Полная карточка заявки (/crm/owner-applications/[id]): заявка и объект —
+    // разные сущности, карточка открывается целиком ещё до создания объекта
+    ownOpenFull: 'Открыть полностью',
+    ownBack: '← К списку заявок',
+    ownCardTitle: 'Карточка заявки',
+    ownApplication: 'Заявка',
+    ownPrice: 'Стоимость',
+    ownArea: 'Площадь',
+    ownPlotArea: 'Земельный участок',
+    ownRooms: 'Комнаты',
+    ownFloor: 'Этаж / этажность',
+    ownCategory: 'Категория',
+    ownDeal: 'Тип сделки',
+    ownDescription: 'Описание от собственника',
+    ownContact: 'Собственник',
+    ownPhotos: 'Фотографии',
+    ownConsentNo: 'не получено',
+    ownOpenObject: 'Открыть объект',
+    ownInternalComment: 'Внутренний комментарий',
+    ownHistoryEmpty: 'Событий пока нет',
     // «Источники объектов» — закрытый раздел администратора: очередь объектов
     // из внешних каналов (партнёрский JSON-фид, заявки собственников).
     // Публикации автоматически нет: кандидата одобряет сотрудник и переносит
@@ -5835,6 +5855,25 @@ const os: Dict = {
     ownCommentSave: 'Комментари бавæрын',
     ownHistory: 'Заявкæйы истори',
     ownActionFailed: 'Архайд нæ бантыст — ногæй бахонут',
+    // Полная карточка заявки (/crm/owner-applications/[id])
+    ownOpenFull: 'Æгасæй байгом кæнын',
+    ownBack: '← Заявкæты номхыгъдмæ',
+    ownCardTitle: 'Заявкæйы карточкæ',
+    ownApplication: 'Заявкæ',
+    ownPrice: 'Аргъ',
+    ownArea: 'Фæзуат',
+    ownPlotArea: 'Зæххы участок',
+    ownRooms: 'Уаттæ',
+    ownFloor: 'Æтаж / æтажтæ',
+    ownCategory: 'Категори',
+    ownDeal: 'Сделкайы тип',
+    ownDescription: 'Хицауы ныффыст',
+    ownContact: 'Хицау',
+    ownPhotos: 'Фотографитæ',
+    ownConsentNo: 'нæ райст',
+    ownOpenObject: 'Объект байгом кæнын',
+    ownInternalComment: 'Мидæггаг комментари',
+    ownHistoryEmpty: 'Цаутæ нырма нæй',
     // «Источники объектов» — строки ждут переводчика: пока русский текст
     navSources: 'Источники объектов',
     // «Застройщики» — раздел только для администратора: компании-застройщики
