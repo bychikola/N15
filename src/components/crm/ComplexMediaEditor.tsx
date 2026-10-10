@@ -5,10 +5,11 @@ import type { Dict } from '@/i18n/dictionaries'
 import { PHOTO_MAX_BYTES, PHOTO_MAX_LABEL, photoSizeLabel, isAllowedPhoto } from '@/lib/photo-rules'
 
 /**
- * Редактор раздела «Медиа и документы» карточки ЖК в CRM. Открывается кнопкой
- * «Редактировать» у комплекса в разделе /crm/developers (см. CrmDevelopers.tsx)
- * и правит поля коллекции complexes (см. src/payload/collections/Complexes.ts):
- * название и адрес комплекса, планировки, паркинг, кладовые, галерею,
+ * Редактор карточки ЖК в CRM. Открывается кнопкой «Редактировать» у комплекса
+ * в разделе /crm/developers (см. CrmDevelopers.tsx) и правит поля коллекции
+ * complexes (см. src/payload/collections/Complexes.ts): название и адрес,
+ * описание комплекса, планировки, сроки сдачи, паркинг, кладовые, способы
+ * приобретения, вопросы и ответы, карточку обратной связи, галерею,
  * PDF-презентацию и фотоотчёты строительства.
  *
  * Файлы грузятся кнопкой прямо в CRM — не ссылками:
@@ -56,6 +57,53 @@ interface MediaGroup {
   description: string
   photos: MediaLike[]
 }
+
+/** Срок сдачи по корпусу/очереди: квартал (код q1…q4) и год */
+interface CompletionItem {
+  key: string
+  building: string
+  quarter: string
+  year: string
+}
+
+/** Способы приобретения — набор флажков и свободное поле «другое» */
+interface PurchaseState {
+  mortgage: boolean
+  familyMortgage: boolean
+  militaryMortgage: boolean
+  installment: boolean
+  cash: boolean
+  other: string
+}
+
+/** Вопрос и ответ о комплексе */
+interface FaqItem {
+  key: string
+  question: string
+  answer: string
+}
+
+/** Карточка обратной связи: показ, заголовок, пояснение и подпись кнопки */
+interface FeedbackState {
+  enabled: boolean
+  title: string
+  text: string
+  buttonLabel: string
+}
+
+// Коды кварталов совпадают с select-полем completion коллекции complexes
+const QUARTER_CODES = ['q1', 'q2', 'q3', 'q4'] as const
+
+const emptyPurchase: PurchaseState = {
+  mortgage: false,
+  familyMortgage: false,
+  militaryMortgage: false,
+  installment: false,
+  cash: false,
+  other: '',
+}
+
+const emptyFeedback: FeedbackState = { enabled: true, title: '', text: '', buttonLabel: 'consultation' }
 
 type UploadResult = { ok: true; doc: MediaLike } | { ok: false; error: string }
 
@@ -193,6 +241,14 @@ export const ComplexMediaEditor: FC<Props> = ({ complexId, t, onClose, onSaved }
   const [presentation, setPresentation] = useState<MediaLike | null>(null)
   const [reports, setReports] = useState<ReportItem[]>([])
 
+  // Остальные блоки карточки ЖК: описание, сроки сдачи, способы приобретения,
+  // вопросы и ответы, карточка обратной связи (поля коллекции complexes)
+  const [description, setDescription] = useState('')
+  const [completion, setCompletion] = useState<CompletionItem[]>([])
+  const [purchase, setPurchase] = useState<PurchaseState>(emptyPurchase)
+  const [faq, setFaq] = useState<FaqItem[]>([])
+  const [feedback, setFeedback] = useState<FeedbackState>(emptyFeedback)
+
   const [busy, setBusy] = useState('')
   const [uploadError, setUploadError] = useState('')
   const [saving, setSaving] = useState(false)
@@ -257,6 +313,48 @@ export const ComplexMediaEditor: FC<Props> = ({ complexId, t, onClose, onSaved }
           }
         }),
       )
+      setDescription(String(doc.description || ''))
+      setCompletion(
+        (Array.isArray(doc.completion) ? doc.completion : []).map((raw) => {
+          const item = raw as Record<string, unknown>
+          return {
+            key: nextKey(),
+            building: String(item.building || ''),
+            // В базе хранится код квартала (q1…q4); чужое значение не берём
+            quarter: QUARTER_CODES.includes(item.quarter as (typeof QUARTER_CODES)[number])
+              ? String(item.quarter)
+              : '',
+            year: item.year != null && item.year !== '' ? String(item.year) : '',
+          }
+        }),
+      )
+      const purchaseDoc = (
+        doc.purchaseMethods && typeof doc.purchaseMethods === 'object' ? doc.purchaseMethods : {}
+      ) as Record<string, unknown>
+      setPurchase({
+        mortgage: purchaseDoc.mortgage === true,
+        familyMortgage: purchaseDoc.familyMortgage === true,
+        militaryMortgage: purchaseDoc.militaryMortgage === true,
+        installment: purchaseDoc.installment === true,
+        cash: purchaseDoc.cash === true,
+        other: String(purchaseDoc.other || ''),
+      })
+      setFaq(
+        (Array.isArray(doc.faq) ? doc.faq : []).map((raw) => {
+          const item = raw as Record<string, unknown>
+          return { key: nextKey(), question: String(item.question || ''), answer: String(item.answer || '') }
+        }),
+      )
+      const feedbackDoc = (
+        doc.feedback && typeof doc.feedback === 'object' ? doc.feedback : {}
+      ) as Record<string, unknown>
+      setFeedback({
+        // Незаполненная группа = карточка показывается (значение по умолчанию)
+        enabled: feedbackDoc.enabled !== false,
+        title: String(feedbackDoc.title || ''),
+        text: String(feedbackDoc.text || ''),
+        buttonLabel: feedbackDoc.buttonLabel === 'details' ? 'details' : 'consultation',
+      })
       setLoadError('')
     } catch {
       setLoadError(t.crm.complexLoadFailed)
@@ -334,6 +432,14 @@ export const ComplexMediaEditor: FC<Props> = ({ complexId, t, onClose, onSaved }
 
   const save = async () => {
     if (saving) return
+    // У вопроса и ответа обязательны оба поля: строку с одним заполненным
+    // Payload не пропустит — не сохраняем и говорим об этом прямо
+    const incompleteFaq = faq.some((f) => (f.question.trim() ? !f.answer.trim() : !!f.answer.trim()))
+    if (incompleteFaq) {
+      setSaveError(t.crm.faqIncomplete)
+      setSavedNote('')
+      return
+    }
     setSaving(true)
     setSaveError('')
     setSavedNote('')
@@ -366,6 +472,32 @@ export const ComplexMediaEditor: FC<Props> = ({ complexId, t, onClose, onSaved }
           stage: r.stage.trim() || null,
           photos: r.photos.map((p) => p.id),
         })),
+        // Описание, сроки сдачи, способы покупки, вопросы и карточка обратной связи
+        description: description.trim() || null,
+        completion: completion.map((c) => ({
+          building: c.building.trim() || null,
+          quarter: c.quarter || null,
+          year: c.year.trim() === '' ? null : Number(c.year.replace(',', '.')),
+        })),
+        purchaseMethods: {
+          mortgage: purchase.mortgage,
+          familyMortgage: purchase.familyMortgage,
+          militaryMortgage: purchase.militaryMortgage,
+          installment: purchase.installment,
+          cash: purchase.cash,
+          other: purchase.other.trim() || null,
+        },
+        // Пустые строки (без вопроса и ответа) не отправляем — иначе Payload
+        // отклонит документ: оба поля обязательны
+        faq: faq
+          .filter((f) => f.question.trim() && f.answer.trim())
+          .map((f) => ({ question: f.question.trim(), answer: f.answer.trim() })),
+        feedback: {
+          enabled: feedback.enabled,
+          title: feedback.title.trim() || null,
+          text: feedback.text.trim() || null,
+          buttonLabel: feedback.buttonLabel,
+        },
       }
       const res = await fetch(`/api/complexes/${complexId}`, {
         method: 'PATCH',
@@ -405,6 +537,18 @@ export const ComplexMediaEditor: FC<Props> = ({ complexId, t, onClose, onSaved }
   const patchReport = (key: string, patch: Partial<ReportItem>) =>
     setReports((prev) => prev.map((r) => (r.key === key ? { ...r, ...patch } : r)))
   const removeReport = (key: string) => setReports((prev) => prev.filter((r) => r.key !== key))
+
+  // ── Сроки сдачи ───────────────────────────────────────────────────────
+  const addCompletion = () => setCompletion((prev) => [...prev, { key: nextKey(), building: '', quarter: '', year: '' }])
+  const patchCompletion = (key: string, patch: Partial<CompletionItem>) =>
+    setCompletion((prev) => prev.map((c) => (c.key === key ? { ...c, ...patch } : c)))
+  const removeCompletion = (key: string) => setCompletion((prev) => prev.filter((c) => c.key !== key))
+
+  // ── Вопросы и ответы ──────────────────────────────────────────────────
+  const addFaq = () => setFaq((prev) => [...prev, { key: nextKey(), question: '', answer: '' }])
+  const patchFaq = (key: string, patch: Partial<FaqItem>) =>
+    setFaq((prev) => prev.map((f) => (f.key === key ? { ...f, ...patch } : f)))
+  const removeFaq = (key: string) => setFaq((prev) => prev.filter((f) => f.key !== key))
 
   /** Общая плитка фото: превью, стрелки порядка и удаление */
   const PhotoTile = ({ photo, index, total, onMove, onRemove }: {
@@ -463,6 +607,13 @@ export const ComplexMediaEditor: FC<Props> = ({ complexId, t, onClose, onSaved }
               {t.crm.devComplexStreet}
               <input value={street} onChange={(e) => setStreet(e.target.value)} style={inputStyle} />
             </label>
+          </div>
+
+          {/* ── Описание комплекса ── */}
+          <div style={sectionStyle}>
+            <div style={{ fontFamily: "'New Standard', Georgia, serif", fontSize: 15 }}>{t.crm.complexDescriptionTitle}</div>
+            <p style={{ margin: '6px 0 10px', color: '#9b958a', fontSize: 10 }}>{t.crm.complexDescriptionHint}</p>
+            <textarea rows={4} value={description} onChange={(e) => setDescription(e.target.value)} style={inputStyle} />
           </div>
 
           {/* Статус загрузки и ошибки — общие для всех секций */}
@@ -537,6 +688,45 @@ export const ComplexMediaEditor: FC<Props> = ({ complexId, t, onClose, onSaved }
             </div>
           </div>
 
+          {/* ── Сроки сдачи ── */}
+          <div style={sectionStyle}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <div style={{ fontFamily: "'New Standard', Georgia, serif", fontSize: 15 }}>{t.crm.completionTitle}</div>
+              <button type="button" onClick={addCompletion} style={smallBtnStyle}>+ {t.crm.completionAdd}</button>
+            </div>
+            <p style={{ margin: '6px 0 12px', color: '#9b958a', fontSize: 10 }}>{t.crm.completionHint}</p>
+            {completion.length === 0 && <p style={{ color: '#9b958a', fontSize: 11, margin: 0 }}>{t.crm.completionEmpty}</p>}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {completion.map((c, i) => (
+                <div key={c.key} style={{ border: '1px solid #eee9e1', borderRadius: 9, padding: 12, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
+                  <label style={labelStyle}>
+                    {t.crm.completionBuilding}
+                    <input value={c.building} placeholder={t.crm.completionBuildingPh} onChange={(e) => patchCompletion(c.key, { building: e.target.value })} style={inputStyle} />
+                  </label>
+                  <label style={labelStyle}>
+                    {t.crm.completionQuarter}
+                    <select value={c.quarter} onChange={(e) => patchCompletion(c.key, { quarter: e.target.value })} style={inputStyle}>
+                      <option value="">{t.crm.completionQuarterEmpty}</option>
+                      <option value="q1">{t.crm.quarterQ1}</option>
+                      <option value="q2">{t.crm.quarterQ2}</option>
+                      <option value="q3">{t.crm.quarterQ3}</option>
+                      <option value="q4">{t.crm.quarterQ4}</option>
+                    </select>
+                  </label>
+                  <label style={labelStyle}>
+                    {t.crm.completionYear}
+                    <input inputMode="numeric" value={c.year} onChange={(e) => patchCompletion(c.key, { year: e.target.value })} style={inputStyle} />
+                  </label>
+                  <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, flexWrap: 'wrap' }}>
+                    <button type="button" disabled={i === 0} onClick={() => setCompletion((prev) => move(prev, i, i - 1))} style={{ ...smallBtnStyle, opacity: i === 0 ? 0.4 : 1 }} aria-label={t.crm.mediaUp}>↑</button>
+                    <button type="button" disabled={i === completion.length - 1} onClick={() => setCompletion((prev) => move(prev, i, i + 1))} style={{ ...smallBtnStyle, opacity: i === completion.length - 1 ? 0.4 : 1 }} aria-label={t.crm.mediaDown}>↓</button>
+                    <button type="button" onClick={() => removeCompletion(c.key)} style={{ ...smallBtnStyle, color: '#9b4e43' }}>{t.crm.mediaRemove}</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
           {/* ── Паркинг ── */}
           <div style={sectionStyle}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
@@ -589,6 +779,96 @@ export const ComplexMediaEditor: FC<Props> = ({ complexId, t, onClose, onSaved }
                 ))}
               </div>
             )}
+          </div>
+
+          {/* ── Способы приобретения ── */}
+          <div style={sectionStyle}>
+            <div style={{ fontFamily: "'New Standard', Georgia, serif", fontSize: 15 }}>{t.crm.purchaseTitle}</div>
+            <p style={{ margin: '6px 0 10px', color: '#9b958a', fontSize: 10 }}>{t.crm.purchaseHint}</p>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 8 }}>
+              {([
+                ['mortgage', t.crm.purchaseMortgage],
+                ['familyMortgage', t.crm.purchaseFamilyMortgage],
+                ['militaryMortgage', t.crm.purchaseMilitaryMortgage],
+                ['installment', t.crm.purchaseInstallment],
+                ['cash', t.crm.purchaseCash],
+              ] as const).map(([field, label]) => (
+                <label key={field} style={{ ...labelStyle, flexDirection: 'row', alignItems: 'center', gap: 9, cursor: 'pointer', textTransform: 'none', letterSpacing: 0, fontSize: 12, color: '#25241f' }}>
+                  <input
+                    type="checkbox"
+                    checked={purchase[field]}
+                    onChange={(e) => setPurchase((prev) => ({ ...prev, [field]: e.target.checked }))}
+                    style={{ width: 16, height: 16, accentColor: '#a7814e', flex: 'none' }}
+                  />
+                  {label}
+                </label>
+              ))}
+              <label style={{ ...labelStyle, gridColumn: '1 / -1' }}>
+                {t.crm.purchaseOther}
+                <input value={purchase.other} placeholder={t.crm.purchaseOtherPh} onChange={(e) => setPurchase((prev) => ({ ...prev, other: e.target.value }))} style={inputStyle} />
+              </label>
+            </div>
+          </div>
+
+          {/* ── Вопросы и ответы ── */}
+          <div style={sectionStyle}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <div style={{ fontFamily: "'New Standard', Georgia, serif", fontSize: 15 }}>{t.crm.faqTitle}</div>
+              <button type="button" onClick={addFaq} style={smallBtnStyle}>+ {t.crm.faqAdd}</button>
+            </div>
+            <p style={{ margin: '6px 0 12px', color: '#9b958a', fontSize: 10 }}>{t.crm.faqHint}</p>
+            {faq.length === 0 && <p style={{ color: '#9b958a', fontSize: 11, margin: 0 }}>{t.crm.faqEmpty}</p>}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {faq.map((f, i) => (
+                <div key={f.key} style={{ border: '1px solid #eee9e1', borderRadius: 9, padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <label style={labelStyle}>
+                    {t.crm.faqQuestion}
+                    <input value={f.question} placeholder={t.crm.faqQuestionPh} onChange={(e) => patchFaq(f.key, { question: e.target.value })} style={inputStyle} />
+                  </label>
+                  <label style={labelStyle}>
+                    {t.crm.faqAnswer}
+                    <textarea rows={2} value={f.answer} placeholder={t.crm.faqAnswerPh} onChange={(e) => patchFaq(f.key, { answer: e.target.value })} style={inputStyle} />
+                  </label>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button type="button" disabled={i === 0} onClick={() => setFaq((prev) => move(prev, i, i - 1))} style={{ ...smallBtnStyle, opacity: i === 0 ? 0.4 : 1 }} aria-label={t.crm.mediaUp}>↑</button>
+                    <button type="button" disabled={i === faq.length - 1} onClick={() => setFaq((prev) => move(prev, i, i + 1))} style={{ ...smallBtnStyle, opacity: i === faq.length - 1 ? 0.4 : 1 }} aria-label={t.crm.mediaDown}>↓</button>
+                    <button type="button" onClick={() => removeFaq(f.key)} style={{ ...smallBtnStyle, color: '#9b4e43' }}>{t.crm.mediaRemove}</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* ── Контакты для обратной связи ── */}
+          <div style={sectionStyle}>
+            <div style={{ fontFamily: "'New Standard', Georgia, serif", fontSize: 15 }}>{t.crm.feedbackBlockTitle}</div>
+            <p style={{ margin: '6px 0 10px', color: '#9b958a', fontSize: 10 }}>{t.crm.feedbackHint}</p>
+            <label style={{ ...labelStyle, flexDirection: 'row', alignItems: 'center', gap: 9, cursor: 'pointer', textTransform: 'none', letterSpacing: 0, fontSize: 12, color: '#25241f' }}>
+              <input
+                type="checkbox"
+                checked={feedback.enabled}
+                onChange={(e) => setFeedback((prev) => ({ ...prev, enabled: e.target.checked }))}
+                style={{ width: 16, height: 16, accentColor: '#a7814e', flex: 'none' }}
+              />
+              {t.crm.feedbackEnabled}
+            </label>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, marginTop: 12 }}>
+              <label style={labelStyle}>
+                {t.crm.feedbackHeading}
+                <input value={feedback.title} placeholder={t.crm.feedbackHeadingPh} onChange={(e) => setFeedback((prev) => ({ ...prev, title: e.target.value }))} style={inputStyle} />
+              </label>
+              <label style={labelStyle}>
+                {t.crm.feedbackButton}
+                <select value={feedback.buttonLabel} onChange={(e) => setFeedback((prev) => ({ ...prev, buttonLabel: e.target.value }))} style={inputStyle}>
+                  <option value="consultation">{t.crm.feedbackButtonConsultation}</option>
+                  <option value="details">{t.crm.feedbackButtonDetails}</option>
+                </select>
+              </label>
+              <label style={{ ...labelStyle, gridColumn: '1 / -1' }}>
+                {t.crm.feedbackText}
+                <textarea rows={2} value={feedback.text} placeholder={t.crm.feedbackTextPh} onChange={(e) => setFeedback((prev) => ({ ...prev, text: e.target.value }))} style={inputStyle} />
+              </label>
+            </div>
           </div>
 
           {/* ── Галерея ЖК ── */}
