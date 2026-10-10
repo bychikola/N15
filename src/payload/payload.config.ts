@@ -60,6 +60,9 @@ import { AnalyticsAccess } from './collections/AnalyticsAccess'
 // (см. src/lib/owner-applications.ts, src/lib/owner-service.ts)
 import { OwnerApplications } from './collections/OwnerApplications'
 import { OwnerMaterials } from './collections/OwnerMaterials'
+// «Ссылки управления»: защищённый доступ собственника к своему объявлению
+// без личного кабинета (см. src/lib/owner-manage-link.ts)
+import { OwnerManageLinks } from './collections/OwnerManageLinks'
 // «Источники объектов»: очередь кандидатов из разрешённых источников. В каталог
 // объект попадает только после явного решения сотрудника — автосбор чужих
 // объявлений запрещён (см. src/lib/object-sources.ts)
@@ -134,7 +137,7 @@ export default buildConfig({
     abortOnLimit: true,
     responseOnLimit: `Файл больше ${PHOTO_MAX_LABEL} — допустимы ${PHOTO_FORMATS_LABEL} до ${PHOTO_MAX_LABEL}`,
   },
-  collections: [Users, Media, Objects, Agents, Applications, Tasks, Messages, Blog, News, NewsReviews, Pages, Customers, Emails, MailAttachments, AgentTasks, MarketListings, LegalDocuments, LegalReports, Advertisers, Advertisements, AdvertisingRequests, AdvertisingMaterials, BoardAds, BoardMaterials, Regions, Settlements, SiteVisits, Visitors, VisitorEvents, AnalyticsAccess, OwnerApplications, OwnerMaterials, SourceObjects, Developers, Complexes, ComplexDocuments, Reviews],
+  collections: [Users, Media, Objects, Agents, Applications, Tasks, Messages, Blog, News, NewsReviews, Pages, Customers, Emails, MailAttachments, AgentTasks, MarketListings, LegalDocuments, LegalReports, Advertisers, Advertisements, AdvertisingRequests, AdvertisingMaterials, BoardAds, BoardMaterials, Regions, Settlements, SiteVisits, Visitors, VisitorEvents, AnalyticsAccess, OwnerApplications, OwnerMaterials, OwnerManageLinks, SourceObjects, Developers, Complexes, ComplexDocuments, Reviews],
   globals: [SiteSettings, MailSettings, AgentSettings, NewsSettings, PlatformSettings, ObjectSourceSettings],
   editor: lexicalEditor(),
   i18n: {
