@@ -83,6 +83,29 @@ const cabinetIcon = (
   </svg>
 )
 
+// Иконка «Новости и статьи» (газета) — контурная, цвет берёт из currentColor
+// (золотой акцент), как у телефона, калькулятора и кабинета. В шапке пункт
+// «Блог» убран из текстового меню и обозначен этим значком: подпись остаётся
+// в подсказке (title) и у скринридеров (aria-label).
+const newsIcon = (
+  <svg
+    width="15"
+    height="15"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.8"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2" />
+    <path d="M18 14h-8" />
+    <path d="M15 18h-5" />
+    <path d="M10 6h8v4h-8V6Z" />
+  </svg>
+)
+
 export const Header: FC = () => {
   const [isOpen, setIsOpen] = useState(false)
   // Модальное окно ипотечного калькулятора (кнопка «Ипотечный калькулятор»
@@ -243,15 +266,14 @@ export const Header: FC = () => {
   // Направление, чей второй уровень раскрыт сейчас
   const activeDir = serviceDirs.find((dir) => dir.key === servicesDir)
 
-  // Остальные разделы верхнего меню — плоским списком после выпадающих.
-  // «Доска объявлений» идёт после «Контактов» — как последний пункт меню.
-  // Первым — «Как работает площадка»: этим пунктом заменили «Об агентстве»
-  // (сама страница агентства осталась, ссылка на неё — в подвале)
+  // Плоские пункты верхнего меню: в разметке стоят между «Недвижимостью»
+  // и «Услугами» — Доска объявлений → Посуточно → Партнёры. «Как работает
+  // площадка» перенесена в подвал, «Блог» обозначен значком газеты в правом
+  // блоке, «Контакты» — значком телефона там же (в текстовом меню их нет)
   const navLinks = [
-    { href: `/${lang}/how-it-works`, label: t.nav.howItWorks },
-    { href: `/${lang}/blog`, label: t.nav.blog },
-    { href: `/${lang}/contacts`, label: t.nav.contacts },
     { href: `/${lang}/board`, label: t.nav.board },
+    { href: `/${lang}/daily`, label: t.nav.daily },
+    { href: `/${lang}/partners`, label: t.nav.partners },
   ]
 
   // Страницы покупки в кредит — «Ипотека и выгодные условия» и «Рассрочка».
@@ -278,6 +300,15 @@ export const Header: FC = () => {
       active
         ? 'text-[var(--n15-white)] after:absolute after:left-0 after:right-0 after:-bottom-1 after:h-px after:bg-[var(--n15-green-gold)]'
         : 'text-[var(--n15-silver)] hover:text-[var(--n15-gold)]'
+    }`
+  // Иконочные ссылки правого блока (Новости и статьи, Контакты): активный
+  // раздел подсвечен золотой заливкой, как активный пункт текстового меню —
+  // но без подчёркивающей линии (она рассчитана на текст)
+  const iconLinkClass = (active: boolean) =>
+    `inline-flex items-center px-2.5 py-2.5 border transition-all duration-300 ${
+      active
+        ? 'border-[var(--n15-gold)]/60 bg-[var(--n15-gold)]/15 text-[var(--n15-gold)]'
+        : 'border-[var(--n15-gold)]/30 text-[var(--n15-gold)] hover:bg-[var(--n15-gold)]/8'
     }`
   // «Недвижимость» активна на страницах каталога, продажи и направлений,
   // «Услуги» — на страницах услуг: подсвечиваем и раскрытый раздел.
@@ -434,6 +465,18 @@ export const Header: FC = () => {
             )}
           </div>
 
+          {/* Плоские пункты верхнего меню: Доска объявлений → Посуточно →
+              Партнёры. Стоят между «Недвижимостью» и «Услугами» (см. navLinks) */}
+          {navLinks.map((link) => (
+            <Link
+              key={link.href}
+              href={link.href}
+              className={navItemClass(isActivePath(link.href))}
+            >
+              {link.label}
+            </Link>
+          ))}
+
           {/* «Услуги»: двухуровневое меню. Открывается по наведению и по
               клику, но показывается только первый уровень — пять
               направлений; подпункты при открытии не видны и по наведению
@@ -525,44 +568,47 @@ export const Header: FC = () => {
             )}
           </div>
 
-          {navLinks.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              className={navItemClass(isActivePath(link.href))}
-            >
-              {link.label}
-            </Link>
-          ))}
         </nav>
 
-        {/* Правый блок: звонок, калькулятор, кабинет и переключатели языка,
-            темы, музыки — одна группа с единым зазором 10.5px (gap-3), без
-            вложенных подгрупп: кнопки стоят в одном ритме с переключателями.
-            ml-auto прижимает блок к правому краю и забирает всё свободное
-            место шапки (auto-отступы разбирают его раньше justify-between),
-            поэтому меню остаётся у логотипа, а не уезжает к середине.
+        {/* Правый блок: поиск, «Новости и статьи», «Контакты», калькулятор,
+            кабинет и переключатели языка, темы, музыки — одна группа с единым
+            зазором 10.5px (gap-3), без вложенных подгрупп: кнопки стоят в
+            одном ритме с переключателями. ml-auto прижимает блок к правому
+            краю и забирает всё свободное место шапки (auto-отступы разбирают
+            его раньше justify-between), поэтому меню остаётся у логотипа.
 
-            Звонок — честная tel:-ссылка на общий номер 8-958-116-15-15
-            (открывает набор номера на телефоне, системную программу звонков —
-            на компьютере); сам номер текстом не выводится. До xl подпись
-            скрыта, чтобы не теснить меню на нешироких экранах */}
+            «Новости и статьи» и «Контакты» — компактные иконочные ссылки
+            (газета и телефон): в текстовом меню этих пунктов больше нет.
+            Подписи — в title и aria-label, как у остальных иконочных кнопок */}
         <div className="hidden lg:flex items-center gap-3 ml-auto">
           {/* Поиск по сайту — компактная иконка, как калькулятор и кабинет:
               раскрывает панель со строкой и найдёнными материалами
               (объекты, ЖК, застройщики, услуги, статьи) */}
           <SiteSearch />
-          <a
-            href={SITE_PHONE_TEL}
-            aria-label={t.nav.callUs}
-            title={t.nav.callUs}
-            // Цель Метрики «нажатие Позвонить» — сам номер в аналитику не уходит
-            onClick={() => reachGoal('call_click')}
-            className="n15-cta-green inline-flex items-center gap-2 px-2.5 py-2.5 xl:px-4 xl:py-2 text-sm tracking-wider uppercase border border-[var(--n15-gold)]/40 transition-all duration-300"
+
+          {/* «Новости и статьи» — значок газеты со ссылкой на блог. Заменяет
+              текстовый пункт «Блог» в верхнем меню */}
+          <Link
+            href={`/${lang}/blog`}
+            aria-label={t.nav.news}
+            title={t.nav.news}
+            className={iconLinkClass(isActivePath(`/${lang}/blog`))}
+          >
+            {newsIcon}
+          </Link>
+
+          {/* «Контакты» — простой значок телефона перед калькулятором:
+              открывает страницу контактов. Отдельной tel:-кнопки в шапке
+              больше нет — звонок в один тап остался в мобильном меню, а на
+              компьютере телефон — первым на странице контактов */}
+          <Link
+            href={`/${lang}/contacts`}
+            aria-label={t.nav.contacts}
+            title={t.nav.contacts}
+            className={iconLinkClass(isActivePath(`/${lang}/contacts`))}
           >
             {phoneIcon}
-            <span className="hidden xl:inline">{t.nav.callUs}</span>
-          </a>
+          </Link>
 
           {/* «Ипотечный калькулятор» — компактная иконка, как «Личный
               кабинет»: подпись занимала 238px (больше четырёх пунктов меню
@@ -680,6 +726,19 @@ export const Header: FC = () => {
               )}
             </div>
 
+            {/* Плоские пункты: Доска объявлений → Посуточно → Партнёры
+                (см. navLinks) — до «Услуг», как в шапке на компьютере */}
+            {navLinks.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                className={`py-2 ${navItemClass(isActivePath(link.href))}`}
+                onClick={() => setIsOpen(false)}
+              >
+                {link.label}
+              </Link>
+            ))}
+
             {/* «Услуги»: первый уровень — направления по нажатию; при
                 открытии подпункты не показываются. Второй уровень (услуги
                 направления) раскрывается нажатием по направлению —
@@ -770,16 +829,23 @@ export const Header: FC = () => {
               </Link>
             ))}
 
-            {navLinks.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                className={`py-2 ${navItemClass(isActivePath(link.href))}`}
-                onClick={() => setIsOpen(false)}
-              >
-                {link.label}
-              </Link>
-            ))}
+            {/* «Новости и статьи» и «Контакты»: в шапке на компьютере это
+                значки газеты и телефона, здесь — обычные пункты списка:
+                на телефоне текстовые строки удобнее иконок (§11) */}
+            <Link
+              href={`/${lang}/blog`}
+              className={`py-2 ${navItemClass(isActivePath(`/${lang}/blog`))}`}
+              onClick={() => setIsOpen(false)}
+            >
+              {t.nav.news}
+            </Link>
+            <Link
+              href={`/${lang}/contacts`}
+              className={`py-2 ${navItemClass(isActivePath(`/${lang}/contacts`))}`}
+              onClick={() => setIsOpen(false)}
+            >
+              {t.nav.contacts}
+            </Link>
             {/* Звонок — в мобильном меню (не сжимает строку навигации).
                 tel:-ссылка на общий номер; текст номера не показывается */}
             <a

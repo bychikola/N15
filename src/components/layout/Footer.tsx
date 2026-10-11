@@ -18,6 +18,8 @@ export const Footer: FC = () => {
 
   const companyItems: FooterItem[] = [
     { href: `/${lang}/about`, label: t.footer.about },
+    // «Как работает площадка» переехала из верхнего меню в подвал
+    { href: `/${lang}/how-it-works`, label: t.footer.howItWorks },
     { href: `/${lang}/about/agents`, label: t.footer.agents },
     { href: `/${lang}/blog`, label: t.footer.blog },
     { href: `/${lang}/contacts`, label: t.footer.contacts },
