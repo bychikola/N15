@@ -199,7 +199,11 @@ export default async function ObjectPage({ params }: PageProps) {
     }))
   const houseSources = Array.from(new Set(houseItems.map((i) => i.source).filter(Boolean)))
   const houseCheckedAt = houseItems.map((i) => i.checkedAt).filter(Boolean).sort().pop() || ''
-  const pricePerMeter = obj.area ? Math.round(obj.price / obj.area) : null
+  // Цена за метр — только у продажи и долгосрочной аренды. У посуточной
+  // аренды стоимость суток на площадь не делится: «83 ₽/м²» рядом с
+  // «₽/сутки» читалось бы как цена метра, а не ставка за сутки
+  // (см. тип сделки daily в src/lib/object-deal-types.ts)
+  const pricePerMeter = obj.type !== 'daily' && obj.area ? Math.round(obj.price / obj.area) : null
   // Площадь участка, введённая в сотках или гектарах, показывается «6 соток» /
   // «1,2 га» (как ввёл агент)
   const areaFmt = (n: number) => n.toLocaleString(t.locale, { maximumFractionDigits: 3 })

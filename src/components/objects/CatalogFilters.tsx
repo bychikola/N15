@@ -28,12 +28,18 @@ import { COMMERCIAL_TYPES, isCommercialType } from '@/lib/commercial-types'
 // Тип жилья квартиры — вторичное жильё или новостройка (поле market). Общий
 // справочник со схемой коллекции и формой CRM (см. src/lib/object-market.ts)
 import { OBJECT_MARKETS, OBJECT_MARKET_VALUES } from '@/lib/object-market'
+// Типы сделки — общий справочник со схемой коллекции (Objects.type) и формой
+// CRM: продажа, аренда и посуточная аренда (см. src/lib/object-deal-types.ts)
+import { OBJECT_DEAL_TYPE_VALUES } from '@/lib/object-deal-types'
 
 // Допустимые значения select-фильтров — опции одноимённых полей объекта
 // (src/payload/collections/Objects.ts). Где-запрос к /api/objects с чужим
 // значением (мусорный или устаревший параметр URL) падает серверной
 // ошибкой, поэтому такие значения отбрасываем, а не отправляем.
-export const OBJECT_TYPES = ['sale', 'rent']
+// Типы сделки берём из общего справочника: свой список ['sale','rent'] не
+// знал о посуточной аренде, и выбор «Посуточная аренда» в фильтре молча
+// отбрасывался — каталог показывал все объекты подряд.
+export const OBJECT_TYPES = OBJECT_DEAL_TYPE_VALUES
 export const OBJECT_CATEGORIES = OBJECT_CATEGORY_VALUES
 export const OBJECT_ROOMS = ['1', '2', '3', '4']
 
