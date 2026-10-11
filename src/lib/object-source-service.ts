@@ -1041,6 +1041,25 @@ export async function publishSourceCandidate(
     return { ok: false, error: 'В каталог переносится только одобренный объект — сначала одобрите кандидата' }
   }
 
+  // Кандидат из «Заявок собственников»: заявка могла быть перенесена в каталог
+  // или опубликована на доске уже после забора. Тогда второй объект не заводим,
+  // а после успешного переноса связываем заявку с созданным объектом — той же
+  // связью, что ставит CRM-действие «Создать объект» (см. owner-service.ts).
+  // Без этого заявка осталась бы без объекта: её снова взяли бы в очередь,
+  // а администратор не увидел бы связи в карточке
+  const ownerApplicationId =
+    String(doc.source || '') === 'owner'
+      ? relId((doc.raw as Record<string, unknown> | undefined)?.applicationId)
+      : null
+  if (ownerApplicationId != null) {
+    const application = (await payload
+      .findByID({ collection: 'owner-applications', id: ownerApplicationId, depth: 0, overrideAccess: true })
+      .catch(() => null)) as unknown as Record<string, unknown> | null
+    if (application && (relId(application.object) || relId(application.boardAd))) {
+      return { ok: false, error: 'Заявка собственника уже перенесена — второй объект не заводим' }
+    }
+  }
+
   const agent = await resolveResponsibleAgent(payload, userId, agentId)
   if (!agent.ok) return { ok: false, error: agent.error }
 
@@ -1109,6 +1128,36 @@ export async function publishSourceCandidate(
   } catch (e) {
     // Объект уже создан — бросать его без связи с кандидатом нельзя, сообщаем
     return { ok: false, error: e instanceof Error ? e.message : String(e) }
+  }
+
+  // Обратная связь заявки собственника с объектом: карточка заявки в CRM
+  // покажет созданный объект, а канал «Заявки собственников» больше не вернёт
+  // её в очередь (условие object: { exists: false }, см. object-sources.ts)
+  if (ownerApplicationId != null) {
+    try {
+      const application = (await payload
+        .findByID({ collection: 'owner-applications', id: ownerApplicationId, depth: 1, overrideAccess: true })
+        .catch(() => null)) as unknown as Record<string, unknown> | null
+      if (application && !relId(application.object)) {
+        const history = Array.isArray(application.history) ? [...application.history] : []
+        history.push({
+          at: new Date().toISOString(),
+          action: 'Одобрено: создан объект в базе',
+          note: `Объект №${objectId}, перенос из «Источников объектов»`,
+          by: userId ?? undefined,
+        })
+        await payload.update({
+          collection: 'owner-applications',
+          id: ownerApplicationId,
+          data: { object: objectId, agent: agent.id, status: 'approved', history },
+          depth: 0,
+          overrideAccess: true,
+        })
+      }
+    } catch (error) {
+      // Связь заявки — вспомогательная запись: сам перенос объекта уже состоялся
+      console.error('Перенос из «Источников объектов»: не удалось связать заявку собственника', error)
+    }
   }
   return { ok: true, objectId }
 }

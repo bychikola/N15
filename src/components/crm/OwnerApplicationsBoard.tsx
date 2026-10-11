@@ -345,9 +345,9 @@ export const OwnerApplicationsBoard: FC<Props> = ({ t, rows, status, agents }) =
                     href={`/ru/board/${row.boardAdId}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    style={{ color: '#927046' }}
+                    style={{ color: row.boardPublished ? '#3f6b34' : '#8d6b40' }}
                   >
-                    {t.crm.ownBoardPublished}
+                    {row.boardPublished ? t.crm.ownBoardPublished : t.crm.ownBoardAdNone}
                   </a>{' '}
                   · {t.crm.ownBoardOpen}
                 </p>
@@ -465,7 +465,7 @@ export const OwnerApplicationsBoard: FC<Props> = ({ t, rows, status, agents }) =
                 </button>
                 {/* Объект создаётся только вручную, только после подтверждения
                     телефона и с ответственным агентом */}
-                {!row.objectId && (
+                {!row.objectId && !row.boardPublished && (
                   <button
                     type="button"
                     onClick={() => void act(row.id, 'create_object', { agentId: Number(agentPick) || undefined })}

@@ -472,6 +472,15 @@ export async function createObjectFromApplication(
   if (app.status === 'rejected' || app.status === 'duplicate') {
     return { ok: false, error: 'Заявка закрыта: смените её статус, если решили вернуть её в работу' }
   }
+  // Доска и каталог — разные базы: объявление, уже опубликованное на доске,
+  // объектом агентства не становится (та же логика — в объектном канале
+  // «Источников объектов», см. fetchOwnerApplications в object-sources.ts).
+  // Иначе из одного предложения собственника вышли бы две карточки, а статус
+  // заявки «Опубликовано» откатился бы на «Одобрено» (см. status ниже)
+  const board = linkedBoardAd(app as Record<string, unknown>)
+  if (board && boardVisible(board as never)) {
+    return { ok: false, error: 'Заявка уже опубликована на доске — объект каталога из неё не заводится' }
+  }
 
   // Ответственный агент обязателен: без него validateResponsibleAgent
   // отклонит создание, а поле просто заполняется до проверки
@@ -577,6 +586,113 @@ async function copyOwnerPhotosToBoard(
 }
 
 /**
+ * Объявление доски, уже заведённое по заявке (связь ownerApplication), — или
+ * null. Нужно на случай, когда объявление создалось, но не связалось с заявкой:
+ * публикация сорвалась после создания, и повтор нашёл бы пустую связь и завёл
+ * второе объявление.
+ */
+async function findBoardAdByApplication(payload: Payload, applicationId: number): Promise<number | null> {
+  try {
+    const res = await payload.find({
+      collection: 'board-ads',
+      where: { ownerApplication: { equals: applicationId } },
+      sort: '-createdAt',
+      limit: 1,
+      depth: 0,
+      overrideAccess: true,
+    })
+    const adId = res.docs[0] ? Number(res.docs[0].id) : NaN
+    return Number.isInteger(adId) && adId > 0 ? adId : null
+  } catch {
+    return null
+  }
+}
+
+/** Снимок объявления доски для проверки видимости (null — не найдено) */
+async function readBoardAd(payload: Payload, id: number): Promise<Record<string, unknown> | null> {
+  try {
+    const doc = await payload.findByID({ collection: 'board-ads', id, depth: 0, overrideAccess: true })
+    return (doc || null) as unknown as Record<string, unknown> | null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Довести публикацию объявления по заявке до конца: связать заявку с
+ * объявлением, опубликовать его (если ещё не видно) и только после реально
+ * видимого результата поставить заявке «Опубликовано».
+ *
+ * Связь с заявкой ставится ДО публикации и безусловно: даже если публикация
+ * сорвётся, повторное нажатие найдёт это же объявление и не создаст второе
+ * (см. findBoardAdByApplication). Право публиковать и полноту объявления
+ * по-прежнему проверяет хук коллекции — модерация не обходится.
+ */
+async function finishOwnerBoardPublication(
+  payload: Payload,
+  app: Record<string, unknown>,
+  applicationId: number,
+  boardAdId: number,
+  user: OwnerActor,
+): Promise<OwnerActionResult> {
+  if (linkedBoardAdId(app) !== boardAdId) {
+    try {
+      await payload.update({
+        collection: 'owner-applications',
+        id: applicationId,
+        data: { boardAd: boardAdId },
+        depth: 0,
+        overrideAccess: true,
+      })
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) }
+    }
+  }
+
+  let board = await readBoardAd(payload, boardAdId)
+  if (!board) return { ok: false, error: 'Объявление на доске не найдено' }
+  if (!boardVisible(board as never)) {
+    const published = await publishBoardAd(payload, boardAdId, user)
+    if (!published.ok) {
+      return { ok: false, error: published.error || 'Не удалось опубликовать объявление на доске' }
+    }
+    board = await readBoardAd(payload, boardAdId)
+  }
+  if (!board || !boardVisible(board as never)) {
+    return {
+      ok: false,
+      error: 'Объявление создано, но не стало видно на доске — проверьте его в разделе «Доска»',
+    }
+  }
+
+  if (str(app.status) !== 'published') {
+    try {
+      await payload.update({
+        collection: 'owner-applications',
+        id: applicationId,
+        data: {
+          boardAd: boardAdId,
+          status: 'published',
+          history: [
+            ...historyOf(app),
+            historyEntry(
+              'Опубликовано на доске объявлений',
+              user,
+              `Объявление №${boardAdId}, контакт — собственник`,
+            ),
+          ],
+        },
+        depth: 0,
+        overrideAccess: true,
+      })
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) }
+    }
+  }
+  return { ok: true, boardAdId, status: 'published' }
+}
+
+/**
  * Публикация объявления собственника на доске объявлений.
  *
  * Заявка, которую владелец оставил сам через публичную форму (/sell), после
@@ -626,9 +742,12 @@ export async function publishOwnerApplicationToBoard(
   if (app.status === 'rejected' || app.status === 'duplicate') {
     return { ok: false, error: 'Заявка закрыта: смените её статус, если решили вернуть её в работу' }
   }
-  // Повторное нажатие безопасно: объявление уже опубликовано — отдаём его id
-  const already = linkedBoardAdId(app)
-  if (already) return { ok: true, boardAdId: already, status: 'published' }
+  // Объявление могло быть создано в прошлый раз, но не связаться с заявкой
+  // (публикация сорвалась после создания): ищем его по связи с заявкой и
+  // доводим публикацию до конца — второе объявление из-за повтора не появится.
+  // Штатный случай «связь уже есть» попадает сюда же
+  const existing = linkedBoardAdId(app) ?? (await findBoardAdByApplication(payload, id))
+  if (existing) return finishOwnerBoardPublication(payload, app as Record<string, unknown>, id, existing, user)
 
   // Автор объявления — администратор, который публикует: поле «Автор» в доске
   // обязательное. Публично объявление всё равно «От собственника» — вид
@@ -698,47 +817,12 @@ export async function publishOwnerApplicationToBoard(
     return { ok: false, error: error instanceof Error ? error.message : String(error) }
   }
 
-  // Публикация: копирует фото в media и ставит статус «Опубликовано».
-  // Право публиковать проверяет хук коллекции — передаём администратора
-  const published = await publishBoardAd(payload, boardAdId, user)
-  if (!published.ok) {
-    return { ok: false, error: published.error || 'Не удалось опубликовать объявление на доске' }
-  }
-
-  // «Опубликовано» — только если объявление реально видно на публичной доске
-  const board = (await payload
-    .findByID({ collection: 'board-ads', id: boardAdId, depth: 0, overrideAccess: true })
-    .catch(() => null)) as unknown as Record<string, unknown> | null
-  if (!board || !boardVisible(board as never)) {
-    return {
-      ok: false,
-      error: 'Объявление создано, но не стало видно на доске — проверьте его в разделе «Доска»',
-    }
-  }
-
-  try {
-    await payload.update({
-      collection: 'owner-applications',
-      id,
-      data: {
-        boardAd: boardAdId,
-        status: 'published',
-        history: [
-          ...historyOf(app as Record<string, unknown>),
-          historyEntry(
-            'Опубликовано на доске объявлений',
-            user,
-            `Объявление №${boardAdId}, контакт — собственник`,
-          ),
-        ],
-      },
-      depth: 0,
-      overrideAccess: true,
-    })
-  } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : String(error) }
-  }
-  return { ok: true, boardAdId, status: 'published' }
+  // Публикация: связываем заявку с объявлением, доводим публикацию до конца
+  // (копии фото в media, статус «Опубликовано») и только вслед за реально
+  // видимым результатом ставим заявке «Опубликовано» — см. finishOwnerBoardPublication.
+  // Право публиковать и полноту объявления проверяет хук коллекции: модерация
+  // не обходится ни при первом нажатии, ни при повторе
+  return finishOwnerBoardPublication(payload, app as Record<string, unknown>, id, boardAdId, user)
 }
 
 /**

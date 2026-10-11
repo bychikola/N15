@@ -478,7 +478,7 @@ export const OwnerApplicationCard: FC<Props> = ({ t, row, agents }) => {
         </button>
         {/* Объект заводится только вручную, только после подтверждения
             телефона и с ответственным агентом — до этого кнопка недоступна */}
-        {!objectId && (
+        {!objectId && !row.boardPublished && (
           <button
             type="button"
             onClick={() => {
