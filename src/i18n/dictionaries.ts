@@ -710,6 +710,22 @@ export const ru = {
       installment: 'Рассрочка',
       maternityCapital: 'Материнский капитал',
     },
+    // Условия посуточной аренды на странице объекта (тип daily): раздел
+    // показывается только когда агент заполнил условия в CRM, пустые поля
+    // скрыты. Стоимость суток, возвратный залог и сборы — отдельными строками
+    // (см. src/app/(site)/[lang]/catalog/[slug]/page.tsx)
+    dailyTitle: 'Условия проживания',
+    dailyMaxGuests: 'Максимум гостей',
+    dailySleepingPlaces: 'Спальные места',
+    dailyMinNights: 'Минимум ночей',
+    dailyCheckIn: 'Время заезда',
+    dailyCheckOut: 'Время выезда',
+    dailyAmenities: 'Удобства',
+    dailyHouseRules: 'Правила проживания',
+    dailyPaymentTitle: 'Стоимость и оплата',
+    dailyPerDayLabel: 'Стоимость за сутки',
+    dailyDeposit: 'Возвратный залог',
+    dailyExtraFees: 'Дополнительные сборы',
     phone: 'Позвонить',
     // Кнопка «Оставить заявку» в карточке объекта — ведёт к форме запроса
     // просмотра (заявка типа viewing уходит в CRM)
@@ -4618,6 +4634,20 @@ const os: Dict = {
       installment: 'Рассрочкæ',
       maternityCapital: 'Мады капитал',
     },
+    // Бон арендæйы уавæртæ объекты фарсы (тип daily). Осетинский текст ждёт
+    // переводчика — пока русский (см. §14 ux-ui-rules.md)
+    dailyTitle: 'Условия проживания',
+    dailyMaxGuests: 'Максимум гостей',
+    dailySleepingPlaces: 'Спальные места',
+    dailyMinNights: 'Минимум ночей',
+    dailyCheckIn: 'Время заезда',
+    dailyCheckOut: 'Время выезда',
+    dailyAmenities: 'Удобства',
+    dailyHouseRules: 'Правила проживания',
+    dailyPaymentTitle: 'Стоимость и оплата',
+    dailyPerDayLabel: 'Стоимость за сутки',
+    dailyDeposit: 'Возвратный залог',
+    dailyExtraFees: 'Дополнительные сборы',
     phone: 'Фæндыгон кæнын',
     requestButton: 'Заявкæ ныффыссын',
     telegram: 'Telegram-мæ фыссын',

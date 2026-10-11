@@ -128,6 +128,21 @@ export default async function ObjectPage({ params }: PageProps) {
     // Подтверждённые агентом варианты покупки (ипотека, рассрочка, маткапитал
     // и др.) — полный список показывается в карточке объекта
     purchaseOptions?: string[]
+    // Условия посуточной аренды (тип daily) — группа dailyRent коллекции
+    // Objects: вместимость, время заезда и выезда, удобства, правила,
+    // возвратный залог и сборы. У продажи и долгосрочной аренды группы нет
+    // (см. src/lib/object-deal-types.ts). Стоимость суток — в общем поле price
+    dailyRent?: {
+      maxGuests?: number | null
+      sleepingPlaces?: string | null
+      minNights?: number | null
+      checkInTime?: string | null
+      checkOutTime?: string | null
+      amenities?: { amenity?: string }[] | null
+      houseRules?: string | null
+      deposit?: number | null
+      extraFees?: string | null
+    }
     // Подтверждённые агентом характеристики дома (год постройки, материал
     // стен, этажность, серия, капремонт, УК, площадь) — заполняются в CRM
     // кнопкой «Искать в открытых источниках». Неподтверждённые значения и
@@ -204,6 +219,27 @@ export default async function ObjectPage({ params }: PageProps) {
   // «₽/сутки» читалось бы как цена метра, а не ставка за сутки
   // (см. тип сделки daily в src/lib/object-deal-types.ts)
   const pricePerMeter = obj.type !== 'daily' && obj.area ? Math.round(obj.price / obj.area) : null
+  // Условия посуточной аренды (тип daily): показываем только заполненные
+  // поля из CRM — пустые строки и блоки на сайт не попадают. Стоимость суток
+  // лежит в общем поле price (крупно показана в шапке), а возвратный залог и
+  // дополнительные сборы стоят отдельными строками: залог возвращается гостю
+  // и в стоимость суток не входит. Бронирования и оплаты на сайте нет
+  // (см. src/lib/object-deal-types.ts)
+  const isDaily = obj.type === 'daily'
+  const dailyRent = obj.dailyRent || {}
+  const dailyAmenities = (dailyRent.amenities || [])
+    .map((a) => (a.amenity || '').trim())
+    .filter(Boolean)
+  const dailySpecs = [
+    { label: t.object.dailyMaxGuests, value: dailyRent.maxGuests ? String(dailyRent.maxGuests) : null },
+    { label: t.object.dailySleepingPlaces, value: (dailyRent.sleepingPlaces || '').trim() || null },
+    { label: t.object.dailyMinNights, value: dailyRent.minNights ? String(dailyRent.minNights) : null },
+    { label: t.object.dailyCheckIn, value: (dailyRent.checkInTime || '').trim() || null },
+    { label: t.object.dailyCheckOut, value: (dailyRent.checkOutTime || '').trim() || null },
+  ].filter((f) => f.value)
+  const dailyHouseRules = (dailyRent.houseRules || '').trim()
+  const dailyExtraFees = (dailyRent.extraFees || '').trim()
+  const dailyDeposit = typeof dailyRent.deposit === 'number' && dailyRent.deposit > 0 ? dailyRent.deposit : null
   // Площадь участка, введённая в сотках или гектарах, показывается «6 соток» /
   // «1,2 га» (как ввёл агент)
   const areaFmt = (n: number) => n.toLocaleString(t.locale, { maximumFractionDigits: 3 })
@@ -363,6 +399,93 @@ export default async function ObjectPage({ params }: PageProps) {
               </div>
 
               <OrnamentDivider variant="simple" />
+
+              {/* Условия посуточной аренды (тип daily) — только заполненные
+                  поля из CRM. Пустые значения и целые блоки (удобства, правила)
+                  скрыты: если агент ничего не заполнил, раздела нет вовсе.
+                  Возвратный залог и сборы — отдельным блоком «Стоимость и
+                  оплата», не в одной строке со стоимостью суток: залог гостю
+                  возвращается. Бронирования и оплаты на сайте пока нет */}
+              {isDaily && (dailySpecs.length > 0 || dailyAmenities.length > 0 || dailyHouseRules || dailyDeposit !== null || dailyExtraFees) && (
+                <div className="my-10">
+                  <h2 className="text-xl font-[family-name:var(--font-display)] text-[var(--n15-white)] mb-4">{t.object.dailyTitle}</h2>
+
+                  {/* Вместимость, спальные места и время — парами, как в
+                      параметрах: подпись мелкая прописная, значение засечным */}
+                  {dailySpecs.length > 0 && (
+                    <dl className="grid grid-cols-1 md:grid-cols-2 border-t border-[var(--n15-gold)]/15">
+                      {dailySpecs.map((f, i) => (
+                        <div key={f.label}
+                          className={`flex justify-between items-baseline gap-4 py-4 border-b border-[var(--n15-gold)]/15 ${
+                            i % 2 === 0 ? 'md:pr-5 md:border-r md:border-[var(--n15-gold)]/15' : 'md:pl-5'
+                          }`}>
+                          <dt className="text-xs uppercase tracking-[0.16em] text-[var(--n15-muted)] font-semibold">{f.label}</dt>
+                          <dd className="font-[family-name:var(--font-display)] font-semibold text-[var(--n15-white)] text-base text-right">{f.value}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  )}
+
+                  {/* Удобства — плашками, как «Особенности»: у каждого объекта
+                      свой набор (Wi-Fi, кондиционер, парковка…) */}
+                  {dailyAmenities.length > 0 && (
+                    <div className="mt-8">
+                      <h3 className="text-xs uppercase tracking-[0.16em] text-[var(--n15-muted)] font-semibold mb-3">{t.object.dailyAmenities}</h3>
+                      <div className="flex flex-wrap gap-2">
+                        {dailyAmenities.map((a) => (
+                          <span key={a} className="text-sm px-4 py-2 border border-[var(--n15-gold)]/30 text-[var(--n15-white)]">{a}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Правила проживания — свободный текст из CRM: переносы
+                      строк сохраняем (whitespace-pre-line), длину ограничиваем
+                      классами текста, а не растягиваем на всю ширину */}
+                  {dailyHouseRules && (
+                    <div className="mt-8">
+                      <h3 className="text-xs uppercase tracking-[0.16em] text-[var(--n15-muted)] font-semibold mb-3">{t.object.dailyHouseRules}</h3>
+                      <p className="text-[var(--n15-silver)] leading-relaxed whitespace-pre-line">{dailyHouseRules}</p>
+                    </div>
+                  )}
+
+                  {/* Стоимость и оплата — отдельными строками: стоимость суток,
+                      возвратный залог (только если задан) и дополнительные
+                      сборы. На телефоне подпись и значение идут столбиком,
+                      на десктопе — по краям строки */}
+                  {(obj.price > 0 || dailyDeposit !== null || dailyExtraFees) && (
+                    <div className="mt-8 p-5 bg-[var(--n15-charcoal)] border border-[var(--n15-gold)]/10">
+                      <h3 className="text-xs uppercase tracking-[0.16em] text-[var(--n15-muted)] font-semibold mb-3">{t.object.dailyPaymentTitle}</h3>
+                      <dl className="flex flex-col gap-3">
+                        {obj.price > 0 && (
+                          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-baseline gap-1 sm:gap-4">
+                            <dt className="text-sm text-[var(--n15-silver)]">{t.object.dailyPerDayLabel}</dt>
+                            <dd className="font-[family-name:var(--font-display)] font-semibold text-[var(--n15-gold)] text-lg sm:text-right">
+                              {obj.price.toLocaleString(t.locale)} {t.object.currency}
+                            </dd>
+                          </div>
+                        )}
+                        {dailyDeposit !== null && (
+                          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-baseline gap-1 sm:gap-4">
+                            <dt className="text-sm text-[var(--n15-silver)]">{t.object.dailyDeposit}</dt>
+                            <dd className="font-[family-name:var(--font-display)] font-semibold text-[var(--n15-white)] text-base sm:text-right">
+                              {dailyDeposit.toLocaleString(t.locale)} {t.object.currency}
+                            </dd>
+                          </div>
+                        )}
+                        {dailyExtraFees && (
+                          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-baseline gap-1 sm:gap-4">
+                            <dt className="text-sm text-[var(--n15-silver)]">{t.object.dailyExtraFees}</dt>
+                            <dd className="font-[family-name:var(--font-display)] font-semibold text-[var(--n15-white)] text-base sm:text-right whitespace-pre-line">
+                              {dailyExtraFees}
+                            </dd>
+                          </div>
+                        )}
+                      </dl>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Параметры — парами «лейбл: значение» в 2 колонки, как на alaniadom */}
               <div className="my-10">
