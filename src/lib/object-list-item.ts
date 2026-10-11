@@ -14,7 +14,7 @@ export function objectToListItem(doc: Record<string, unknown>): ObjectListItem {
   return {
     id: doc.id as number,
     title: doc.title as string,
-    type: doc.type as 'sale' | 'rent',
+    type: doc.type as 'sale' | 'rent' | 'daily',
     category: doc.category as string,
     price: doc.price as number,
     slug: doc.slug as string | undefined,

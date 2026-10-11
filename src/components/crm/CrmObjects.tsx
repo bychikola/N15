@@ -59,6 +59,10 @@ import { floorLabel } from '@/lib/floor-format'
 // коммерции» — общие с коллекцией Objects, каталогом и страницей объекта
 // (см. src/lib/purchase-options.ts)
 import { PURCHASE_OPTIONS, isPurchaseOption, purchaseOptionsApply } from '@/lib/purchase-options'
+// Типы сделки (продажа / аренда / посуточная аренда) и признаки посуточной
+// аренды — общий справочник со схемой коллекции Objects и карточкой каталога
+// (см. src/lib/object-deal-types.ts)
+import { OBJECT_DEAL_TYPES, isDailyRent } from '@/lib/object-deal-types'
 // Подкатегории коммерции: готовый бизнес, офис, торговое помещение и т.д. —
 // общий справочник со схемой коллекции и фильтром каталога
 // (см. src/lib/commercial-types.ts)
@@ -443,6 +447,14 @@ const emptyForm = {
   // Особое предложение — отметка для блока на главной странице: объект
   // остаётся в каталоге и находится по всем фильтрам (см. t.landing.special*)
   urgentSale: false,
+  // Посуточная аренда (тип сделки daily): стоимость суток хранится в общем
+  // поле price, а здесь — условия проживания, возвратный залог и сборы.
+  // Поля показываются только у этого типа (см. isDailyRent): у продажи и
+  // долгосрочной аренды они пустые и в запрос не уходят. Залог и сборы —
+  // отдельно от стоимости суток (залог возвратный). Числа держим строками,
+  // как остальные поля формы; удобства — отдельным массивом (как features)
+  drMaxGuests: '', drSleepingPlaces: '', drMinNights: '', drCheckIn: '', drCheckOut: '',
+  drHouseRules: '', drDeposit: '', drExtraFees: '',
 }
 
 type FormState = typeof emptyForm
@@ -1093,6 +1105,11 @@ export const CrmObjects: FC<{
   const [loginError, setLoginError] = useState('')
   const [features, setFeatures] = useState<string[]>([])
   const [featureInput, setFeatureInput] = useState('')
+  // Удобства посуточной аренды — тот же приём, что у «Особенностей»: список
+  // строк, в схему уходит массивом dailyRent.amenities. Показываются только
+  // у типа daily (см. isDailyRent)
+  const [amenities, setAmenities] = useState<string[]>([])
+  const [amenityInput, setAmenityInput] = useState('')
   // Описания помещений по этажам дома: индекс массива — номер этажа минус
   // один («1 этаж» — floorDescs[0]). Сколько полей показывать, решает
   // этажность (form.floorsMode), в базу уходит floorDescriptions объекта.
@@ -1177,6 +1194,9 @@ export const CrmObjects: FC<{
   // («другое значение»), у остальных категорий — прежние поля «Этаж» и
   // «Этажей» (см. save и разметку формы ниже).
   const isHouse = isHouseCategory(form.category)
+  // Посуточная аренда: у объекта этого типа показан блок условий проживания,
+  // а подпись цены — «Стоимость за сутки» (см. src/lib/object-deal-types.ts)
+  const isDaily = isDailyRent(form.type)
   // Коммерция (база отдыха, гостиница, ресторан, туристический объект):
   // в карточке два блока — «Площадь объекта» (здание или комплекс) и
   // «Земельный участок» (площадь земли своей единицей + кадастровые
@@ -1250,7 +1270,7 @@ export const CrmObjects: FC<{
     }
     setDirty(true)
     setSaved(false)
-  }, [form, photos, features, floorDescs, uploads, modalOpen])
+  }, [form, photos, features, amenities, floorDescs, uploads, modalOpen])
 
   // Закрытие карточки: о несохранённых правках предупреждаем — иначе правки
   // формы и ещё не привязанные к объекту фото пропадут молча
@@ -1398,6 +1418,7 @@ export const CrmObjects: FC<{
     setCreatedByName('')
     setPhotos([])
     setFeatures([])
+    setAmenities([])
     setFloorDescs([])
     // Новый объект: блок участка у дома показываем сразу (см. hasPlot)
     setHasPlot(true)
@@ -1460,6 +1481,9 @@ export const CrmObjects: FC<{
     const addr = o.address as Record<string, unknown> | undefined
     const coords = o.coordinates as Record<string, unknown> | undefined
     const agentRel = o.agent as Record<string, unknown> | undefined
+    // Условия посуточной аренды — группа dailyRent документа (у прочих типов
+    // сделки её нет, тогда пустой объект)
+    const dr = (o.dailyRent as Record<string, unknown> | undefined) || {}
     // Кто завёл карточку: поле createdBy сервер отдаёт администратору (у
     // остальных его в ответе нет). На глубине связи приходит объект пользователя
     const createdRel = o.createdBy as { name?: string; email?: string } | number | undefined
@@ -1581,6 +1605,17 @@ export const CrmObjects: FC<{
       // в форме только отметки из общего списка
       purchaseOptions: ((o.purchaseOptions as string[] | undefined) || []).filter(isPurchaseOption),
       urgentSale: o.urgentSale === true,
+      // Условия посуточной аренды (группа dailyRent): восстанавливаем в форме
+      // при повторном открытии. У продажи и долгосрочной аренды группы в
+      // документе нет — поля остаются пустыми
+      drMaxGuests: dr.maxGuests != null ? String(dr.maxGuests) : '',
+      drSleepingPlaces: (dr.sleepingPlaces as string) || '',
+      drMinNights: dr.minNights != null ? String(dr.minNights) : '',
+      drCheckIn: (dr.checkInTime as string) || '',
+      drCheckOut: (dr.checkOutTime as string) || '',
+      drHouseRules: (dr.houseRules as string) || '',
+      drDeposit: dr.deposit != null ? String(dr.deposit) : '',
+      drExtraFees: (dr.extraFees as string) || '',
     })
     // Блок участка открываем, если у объекта уже есть его данные — площадь
     // или кадастровые сведения (у дома без участка блок остаётся скрытым).
@@ -1598,6 +1633,7 @@ export const CrmObjects: FC<{
     }
     setPhotos(all)
     setFeatures(((o.features as { feature?: string }[] | undefined) || []).map((f) => f.feature || '').filter(Boolean))
+    setAmenities(((dr.amenities as { amenity?: string }[] | undefined) || []).map((a) => a.amenity || '').filter(Boolean))
     setFloorDescs(floorDescsFromDoc(o))
     const rt = o.description as { root?: { children?: { children?: { text?: string }[] }[] } } | undefined
     const descText = (rt?.root?.children || []).map((p) => (p.children || []).map((c) => c.text || '').join('')).filter(Boolean).join('\n')
@@ -2121,6 +2157,22 @@ export const CrmObjects: FC<{
       // Особое предложение: отметка уходит всегда — снятая галочка снимает
       // показ в блоке на главной (как и прочие признаки карточки)
       urgentSale: form.urgentSale,
+      // Условия посуточной аренды — группа только у типа daily: у продажи и
+      // долгосрочной аренды её не отправляем, чтобы не затереть сохранённое
+      // (сервер и так снял бы группу при смене типа, см. Objects.ts). Пустые
+      // поля уходят null — стёртое значение сохраняется. Стоимость суток —
+      // в общем поле price выше, залог и сборы — здесь, отдельно от неё
+      dailyRent: isDailyRent(form.type) ? {
+        maxGuests: form.drMaxGuests.trim() ? Number(form.drMaxGuests) : null,
+        sleepingPlaces: form.drSleepingPlaces.trim() || null,
+        minNights: form.drMinNights.trim() ? Number(form.drMinNights) : null,
+        checkInTime: form.drCheckIn.trim() || null,
+        checkOutTime: form.drCheckOut.trim() || null,
+        amenities: amenities.filter(Boolean).map((amenity) => ({ amenity })),
+        houseRules: form.drHouseRules.trim() || null,
+        deposit: form.drDeposit.trim() ? Number(form.drDeposit) : null,
+        extraFees: form.drExtraFees.trim() || null,
+      } : undefined,
       status: form.status,
       // Источник / ответственный: «офис Н15» — объект агентства без личного
       // агента, «агент» — обычная карточка. Значение уходит всегда: объект
@@ -2370,7 +2422,16 @@ export const CrmObjects: FC<{
       ...prev,
       type: v,
       purchaseOptions: purchaseOptionsApply(v, prev.category) ? prev.purchaseOptions : [],
+      // Условия посуточной аренды относятся только к типу daily: при
+      // переключении на продажу или долгосрочную аренду поля блока очищаем —
+      // блок в форме скрывается, и скрытых значений в карточке оставаться не
+      // должно (как варианты покупки выше). Удобства — отдельным состоянием
+      ...(isDailyRent(v) ? {} : {
+        drMaxGuests: '', drSleepingPlaces: '', drMinNights: '', drCheckIn: '', drCheckOut: '',
+        drHouseRules: '', drDeposit: '', drExtraFees: '',
+      }),
     }))
+    if (!isDailyRent(v)) setAmenities([])
   }
 
   /**
@@ -2721,8 +2782,13 @@ export const CrmObjects: FC<{
             <div className="crm-property-form">
           <Field label={t.crm.objTitle}><input value={form.title} onChange={(e) => set('title', e.target.value)} style={inputStyle} /></Field>
           <Field label={t.crm.objType}>
+            {/* Типы сделки — общий справочник: продажа, аренда, посуточная
+                аренда (см. src/lib/object-deal-types.ts). Для посуточной
+                ниже появляются поля условий проживания, залога и сборов */}
             <select value={form.type} onChange={(e) => setType(e.target.value)} style={inputStyle}>
-              <option value="sale">Продажа</option><option value="rent">Аренда</option>
+              {OBJECT_DEAL_TYPES.map((dt) => (
+                <option key={dt.value} value={dt.value}>{dt.label}</option>
+              ))}
             </select>
           </Field>
           <Field label={t.crm.objCategory}>
@@ -2759,7 +2825,11 @@ export const CrmObjects: FC<{
               </select>
             </Field>
           )}
-          <Field label={t.crm.objPrice}><input type="number" value={form.price} onChange={(e) => set('price', e.target.value)} style={inputStyle} /></Field>
+          {/* Цена: у посуточной аренды это стоимость суток — подпись меняется,
+              а поле остаётся общим (price), чтобы карточка каталога, фильтры
+              и оценка читали его без развилок. Залог и сборы — отдельно, в
+              блоке условий посуточной аренды ниже */}
+          <Field label={isDaily ? 'Стоимость за сутки, ₽' : t.crm.objPrice}><input type="number" value={form.price} onChange={(e) => set('price', e.target.value)} style={inputStyle} /></Field>
           {/* Площадь: у земельного участка агент выбирает единицу (м², сотки
               или гектары; «6 соток» = 600 м², «1,2 га» = 12000 м², дробные
               значения разрешены); у квартир/домов/коммерции — только м².
@@ -3383,6 +3453,76 @@ export const CrmObjects: FC<{
               )}
             </Field>
           </div>
+
+          {/* Условия посуточной аренды — блок только у типа сделки «daily».
+              Стоимость суток задаётся выше, в поле цены (подпись там меняется),
+              а здесь — вместимость, время заезда/выезда, удобства и правила.
+              Залог и сборы стоят отдельными полями и отдельной строкой в
+              карточке: залог возвратный, показывать его вместе со стоимостью
+              суток нельзя. Блок правят агент у своего объекта и администратор
+              у любого; у чужой карточки fieldset disabled выше гасит и его */}
+          {isDaily && (
+            <div className="span-2" style={{ gridColumn: '1 / -1' }}>
+              <div className="crm-fields-block">
+                <div className="crm-block-head">
+                  <strong>Посуточная аренда</strong>
+                  <span>Стоимость суток — в поле цены выше. Возвратный залог и сборы — отдельно от неё</span>
+                </div>
+                <div className="crm-fields-grid">
+                  <Field label="Максимум гостей">
+                    <input type="number" min={1} value={form.drMaxGuests} onChange={(e) => set('drMaxGuests', e.target.value)} style={inputStyle} placeholder="Например: 4" />
+                  </Field>
+                  <Field label="Минимум ночей">
+                    <input type="number" min={1} value={form.drMinNights} onChange={(e) => set('drMinNights', e.target.value)} style={inputStyle} placeholder="Например: 2" />
+                  </Field>
+                  <Field label="Спальные места">
+                    <input value={form.drSleepingPlaces} onChange={(e) => set('drSleepingPlaces', e.target.value)} style={inputStyle} placeholder="Например: двуспальная кровать + диван" />
+                  </Field>
+                  <Field label="Время заезда">
+                    <input value={form.drCheckIn} onChange={(e) => set('drCheckIn', e.target.value)} style={inputStyle} placeholder="Например: после 14:00" />
+                  </Field>
+                  <Field label="Время выезда">
+                    <input value={form.drCheckOut} onChange={(e) => set('drCheckOut', e.target.value)} style={inputStyle} placeholder="Например: до 12:00" />
+                  </Field>
+                  {/* Возвратный залог — отдельно от стоимости суток */}
+                  <Field label="Возвратный залог, ₽">
+                    <input type="number" min={0} value={form.drDeposit} onChange={(e) => set('drDeposit', e.target.value)} style={inputStyle} />
+                  </Field>
+                </div>
+                {/* Удобства — свободный список, как «Особенности»: у каждой
+                    квартиры свой набор (Wi-Fi, кондиционер, парковка…) */}
+                <div style={{ marginTop: 10 }}>
+                  <Field label="Удобства (по одному)">
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <input value={amenityInput} onChange={(e) => setAmenityInput(e.target.value)} style={{ ...inputStyle, flex: 1 }} />
+                      <button type="button" onClick={() => { if (amenityInput.trim()) { setAmenities((prev) => [...prev, amenityInput.trim()]); setAmenityInput('') } }} style={{ border: 0, borderRadius: 7, background: '#a7814e', color: 'white', padding: '12px 16px', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.08em', cursor: 'pointer' }}>
+                        {t.crm.objFeatureAdd}
+                      </button>
+                    </div>
+                    {amenities.length > 0 && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                        {amenities.map((a, i) => (
+                          <span key={`${a}-${i}`} style={{ padding: '6px 10px', background: '#f2ede4', borderRadius: 999, fontSize: 11, color: '#716b62', cursor: 'pointer' }} onClick={() => setAmenities((prev) => prev.filter((_, idx) => idx !== i))}>
+                            {a} ✕
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </Field>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10 }}>
+                  <Field label="Правила проживания">
+                    <textarea rows={3} value={form.drHouseRules} onChange={(e) => set('drHouseRules', e.target.value)} style={inputStyle} placeholder="Например: без животных, не курить в помещении, тишина после 23:00" />
+                  </Field>
+                  {/* Дополнительные сборы — отдельно от стоимости суток (уборка,
+                      поздний выезд и т.п.) */}
+                  <Field label="Дополнительные сборы">
+                    <textarea rows={2} value={form.drExtraFees} onChange={(e) => set('drExtraFees', e.target.value)} style={inputStyle} placeholder="Например: уборка — 1000 ₽, поздний выезд — 500 ₽/час" />
+                  </Field>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Варианты покупки — множественный выбор отметками: ипотека
               (гражданская, семейная, военная), рассрочка, материнский
@@ -4308,7 +4448,7 @@ interface DupViewCardProps {
  */
 function DupViewCard({ t, view, err, notice, reported, reportBusy, onClose, onMine, onOther, onReport }: DupViewCardProps) {
   const o = view.object
-  const typeLabel = o.type === 'rent' ? t.typeLabels.rent : o.type === 'sale' ? t.typeLabels.sale : null
+  const typeLabel = t.typeLabels[o.type as keyof typeof t.typeLabels] ?? null
   const categoryLabel = o.category
     ? t.categoryLabels[o.category as keyof typeof t.categoryLabels] ?? o.category
     : null

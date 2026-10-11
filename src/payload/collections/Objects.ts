@@ -43,6 +43,9 @@ import { OBJECT_CATEGORIES, isPlotCategoryCode, isHouseCategoryCode } from '@/li
 // Рынок жилья (вторичное / новостройка) — общий справочник с формой CRM
 // (см. src/lib/object-market.ts): пометка только у квартир
 import { OBJECT_MARKETS, isObjectMarket } from '@/lib/object-market'
+// Типы сделки (продажа / аренда / посуточная аренда) — общий справочник с
+// формой CRM, карточкой каталога и фильтрами (см. src/lib/object-deal-types.ts)
+import { OBJECT_DEAL_TYPES, isDailyRent } from '@/lib/object-deal-types'
 import { COMMERCIAL_TYPES } from '@/lib/commercial-types'
 // Происхождение объекта (N15 / собственник / NMarket.PRO / застройщик /
 // партнёр / другая площадка) — общий справочник с формой CRM
@@ -876,6 +879,26 @@ export const Objects: CollectionConfig = {
         if (data.purchaseOptions !== undefined || data.type !== undefined || data.category !== undefined) {
           if (!purchaseOptionsApply(dealType, category)) data.purchaseOptions = []
         }
+        // Условия посуточной аренды (группа dailyRent) бывают только у типа
+        // «Посуточная аренда»: при смене типа на продажу или долгосрочную
+        // аренду прежние условия снимаем — иначе они остались бы скрытыми в
+        // карточке (как варианты покупки выше). Снимаем только когда тип
+        // пришёл в запросе: частичная правка без type поля не должна стирать
+        // сохранённые условия. Группу очищаем по подполям, а не нулём: null
+        // для group Payload не принимает (падает разбор условий поля)
+        if (data.type !== undefined && !isDailyRent(dealType)) {
+          data.dailyRent = {
+            maxGuests: null,
+            sleepingPlaces: null,
+            minNights: null,
+            checkInTime: null,
+            checkOutTime: null,
+            amenities: [],
+            houseRules: null,
+            deposit: null,
+            extraFees: null,
+          }
+        }
         // «Тип жилья» (вторичное / новостройка) бывает только у квартир: у
         // остальных категорий значение снимаем — как варианты покупки выше.
         // У квартиры присланное значение проверяем по справочнику (мусор не
@@ -991,10 +1014,10 @@ export const Objects: CollectionConfig = {
       name: 'type',
       type: 'select',
       label: 'Тип сделки',
-      options: [
-        { label: 'Продажа', value: 'sale' },
-        { label: 'Аренда', value: 'rent' },
-      ],
+      // Справочник типов — общий с формой CRM и карточкой каталога
+      // (см. src/lib/object-deal-types.ts). «Посуточная аренда» — отдельный
+      // тип со своими условиями (группа dailyRent ниже)
+      options: OBJECT_DEAL_TYPES.map((t) => ({ label: t.label, value: t.value })),
       required: true,
     },
     {
@@ -1065,6 +1088,90 @@ export const Objects: CollectionConfig = {
         },
         description: 'Отмечайте только подтверждённые варианты: одобрение банка не гарантируется',
       },
+    },
+    {
+      // Условия посуточной аренды — группа, видимая только у типа сделки
+      // «Посуточная аренда» (см. src/lib/object-deal-types.ts). Стоимость суток
+      // хранится в общем поле price (подпись в форме меняется на «Стоимость за
+      // сутки»), а залог и сборы — здесь: залог возвратный, поэтому показывать
+      // его вместе с ценой нельзя (правило «залог и сборы отдельно от
+      // стоимости суток»). Блок самостоятельный: оплаты и бронирования на этом
+      // этапе нет, поля только описывают условия проживания.
+      name: 'dailyRent',
+      type: 'group',
+      label: 'Посуточная аренда',
+      admin: {
+        // Блок только у посуточной аренды: у продажи и долгосрочной аренды
+        // этих условий нет
+        condition: (_data, siblingData) => isDailyRent((siblingData as { type?: string } | undefined)?.type),
+        description: 'Условия проживания при посуточной аренде: сколько гостей, когда заезд и выезд, что входит в стоимость',
+      },
+      fields: [
+        {
+          name: 'maxGuests',
+          type: 'number',
+          label: 'Максимум гостей',
+          min: 1,
+          admin: { description: 'Сколько человек может проживать: например 4' },
+        },
+        {
+          name: 'sleepingPlaces',
+          type: 'text',
+          label: 'Спальные места',
+          admin: { description: 'Например: «Двуспальная кровать + диван», «2 односпальные кровати»' },
+        },
+        {
+          name: 'minNights',
+          type: 'number',
+          label: 'Минимум ночей',
+          min: 1,
+          admin: { description: 'На сколько ночей минимум сдаётся объект: например 2' },
+        },
+        {
+          name: 'checkInTime',
+          type: 'text',
+          label: 'Время заезда',
+          admin: { description: 'Например: после 14:00' },
+        },
+        {
+          name: 'checkOutTime',
+          type: 'text',
+          label: 'Время выезда',
+          admin: { description: 'Например: до 12:00' },
+        },
+        {
+          // Удобства — свободный ввод списком, как «Особенности» (features):
+          // у каждой квартиры свой набор, готовый справочник его не покроет
+          name: 'amenities',
+          type: 'array',
+          label: 'Удобства',
+          fields: [
+            { name: 'amenity', type: 'text', label: 'Удобство' },
+          ],
+        },
+        {
+          name: 'houseRules',
+          type: 'textarea',
+          label: 'Правила проживания',
+          admin: { description: 'Например: «Без животных», «Не курить в помещении», «Тишина после 23:00»' },
+        },
+        {
+          // Возвратный залог — отдельно от стоимости суток: он не выручка, а
+          // обеспечение, которое возвращается гостю. Показываем отдельной
+          // строкой (см. форму CRM и карточку объекта)
+          name: 'deposit',
+          type: 'number',
+          label: 'Возвратный залог (₽)',
+          min: 0,
+          admin: { description: 'Сумма, которая возвращается гостю после выезда. Не входит в стоимость суток' },
+        },
+        {
+          name: 'extraFees',
+          type: 'textarea',
+          label: 'Дополнительные сборы',
+          admin: { description: 'Например: «Уборка — 1000 ₽», «Поздний выезд — 500 ₽/час». Отдельно от стоимости суток' },
+        },
+      ],
     },
     {
       // Статус готовности объекта новостройки — машино-места или

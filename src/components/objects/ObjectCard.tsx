@@ -15,7 +15,9 @@ export interface ObjectListItem {
   id: number
   slug?: string
   title: string
-  type: 'sale' | 'rent'
+  // Типы сделки: продажа, долгосрочная аренда и посуточная аренда
+  // (см. src/lib/object-deal-types.ts)
+  type: 'sale' | 'rent' | 'daily'
   category: string
   price: number
   area?: number
@@ -143,7 +145,7 @@ export default function ObjectCard({ obj, lang, t }: ObjectCardProps) {
         {/* Бейдж сделки и значки вариантов покупки — одной строкой у левого
             верхнего угла фото (см. .object-card__pills в globals.css) */}
         <span className="object-card__pills">
-          <span className="object-card__pill">{obj.type === 'sale' ? t.object.sale : t.object.rent}</span>
+          <span className="object-card__pill">{t.typeLabels[obj.type]}</span>
           {badges.map((badge) => (
             <span key={badge} className="object-card__badge">{badge}</span>
           ))}
@@ -151,7 +153,7 @@ export default function ObjectCard({ obj, lang, t }: ObjectCardProps) {
         <div className="object-card__overlay" />
         <div className="object-card__price-wrap absolute bottom-3 left-4 right-4 z-10">
           <div className="object-card__price text-[30px] leading-tight font-[family-name:var(--font-display)] font-semibold text-[var(--card-price-fg)]">
-            {obj.price?.toLocaleString(t.locale)} {obj.type === 'rent' ? t.catalog.perMonth : t.catalog.currency}
+            {obj.price?.toLocaleString(t.locale)} {obj.type === 'rent' ? t.catalog.perMonth : obj.type === 'daily' ? t.catalog.perDay : t.catalog.currency}
           </div>
         </div>
       </div>

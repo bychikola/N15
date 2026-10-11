@@ -755,7 +755,10 @@ export function evaluateValuation(
   const declared = norm(p.category as string) || ''
   const category = CATEGORY_FAMILY[declared] || declared
   const type = norm(p.type as string) || 'sale'
-  const sale = type !== 'rent'
+  // Посуточная аренда считается по арендной ветке, а не по продаже: иначе
+  // объект получал бы «рыночную стоимость» продажи. Ставок посуточной аренды
+  // в движке нет — оценка идёт по арендным справочникам (см. src/lib/valuation.ts)
+  const sale = type === 'sale'
   const used: string[] = []
   const missing: string[] = []
   const notes: string[] = []

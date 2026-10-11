@@ -4,6 +4,9 @@ import { useEffect, useMemo, useRef, useState, type FC } from 'react'
 import { useI18n } from '@/i18n/i18n-provider'
 import { loadYmaps, type Ymaps } from '@/lib/ymaps'
 import { categoryLabel } from '@/lib/object-categories'
+// Подпись типа сделки: продажа / аренда / посуточная аренда
+// (см. src/lib/object-deal-types.ts)
+import { dealTypeLabel } from '@/lib/object-deal-types'
 import type { ObjectMapArea, ObjectMapPoint } from '@/lib/object-map-point'
 import { APPROX_MAX_ZOOM } from '@/lib/object-approx-point'
 
@@ -157,10 +160,12 @@ export const CatalogMap: FC<Props> = ({ where, lang }) => {
      */
     const balloonItem = (point: ObjectMapPoint): string => {
       const price = point.price
-        ? `${point.price.toLocaleString(t.locale)} ${point.type === 'rent' ? t.catalog.perMonth : t.catalog.currency}`
+        ? `${point.price.toLocaleString(t.locale)} ${point.type === 'rent' ? t.catalog.perMonth : point.type === 'daily' ? t.catalog.perDay : t.catalog.currency}`
         : ''
       const kind = [
-        point.type === 'rent' ? t.object.rent : t.object.sale,
+        // Подпись типа — из словаря (сайт двуязычный); неизвестный код
+        // показываем как есть
+        point.type ? (t.typeLabels[point.type as keyof typeof t.typeLabels] ?? dealTypeLabel(point.type)) : '',
         point.category ? categoryLabel(point.category) : '',
       ]
         .filter(Boolean)

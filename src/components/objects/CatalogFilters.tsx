@@ -261,7 +261,7 @@ export const purchaseValues = (v: string): string[] => {
  * снимать его из-за этого нельзя.
  */
 const purchaseRelevant = (type: string, category: string): boolean =>
-  type !== 'rent' && (!category || purchaseCategoriesApply(category))
+  type !== 'rent' && type !== 'daily' && (!category || purchaseCategoriesApply(category))
 
 // Число из фильтра: позволяет и «600», и «11,5» (запятая — как вводят вручную)
 const numOf = (v: string): number | null => parseAreaNumber(v)

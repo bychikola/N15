@@ -125,7 +125,7 @@ export default async function HomePage({ params, searchParams }: PageProps) {
       // (см. src/lib/object-slug.ts)
       slug: o.slug as string | undefined,
       title: o.title as string,
-      type: (o.type as 'sale' | 'rent') || 'sale',
+      type: (o.type as 'sale' | 'rent' | 'daily') || 'sale',
       category: (o.category as string) || '',
       price: o.price as number,
       area: o.area as number | undefined,

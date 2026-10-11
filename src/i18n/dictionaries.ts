@@ -139,6 +139,8 @@ export const ru = {
   typeLabels: {
     sale: 'Продажа',
     rent: 'Аренда',
+    // Посуточная аренда — отдельный тип сделки (см. src/lib/object-deal-types.ts)
+    daily: 'Посуточная аренда',
   },
   categoryLabels: {
     apartment: 'Квартира',
@@ -188,6 +190,8 @@ export const ru = {
     nothingInRegion: 'Объекты в этом регионе пока подбираются. Оставьте заявку — мы найдём подходящий вариант',
     resetAll: 'Сбросить все фильтры',
     perMonth: '₽/мес',
+    // Единица цены посуточной аренды: стоимость суток (см. тип сделки daily)
+    perDay: '₽/сутки',
     currency: '₽',
     sqm: 'м²',
     rooms: 'комн.',
@@ -601,6 +605,8 @@ export const ru = {
     sale: 'Продажа',
     rent: 'Аренда',
     perMonth: '₽/мес',
+    // Единица цены посуточной аренды: стоимость суток (см. тип сделки daily)
+    perDay: '₽/сутки',
     currency: '₽',
     perMeter: '₽/м²',
     area: 'Площадь',
@@ -4104,6 +4110,7 @@ const os: Dict = {
   typeLabels: {
     sale: 'Уæй',
     rent: 'Арендæ',
+    daily: 'Бонмæ арендæ',
   },
   categoryLabels: {
     apartment: 'Квартирæ',
@@ -4149,6 +4156,7 @@ const os: Dict = {
     nothingInRegion: 'Ацы регионы объекттæ нырмæ æвзæрст цæуынц. Ныффыссут курдиат — мах уын ссардзыстæм æмбæлон вариант',
     resetAll: 'Æппæт фильтртæ аиуварс',
     perMonth: '₽/мæй',
+    perDay: '₽/бон',
     currency: '₽',
     sqm: 'м²',
     rooms: 'уат.',
@@ -4520,6 +4528,7 @@ const os: Dict = {
     sale: 'Уæй',
     rent: 'Арендæ',
     perMonth: '₽/мæй',
+    perDay: '₽/бон',
     currency: '₽',
     perMeter: '₽/м²',
     area: 'Фæзуат',

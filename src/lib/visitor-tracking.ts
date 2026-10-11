@@ -119,7 +119,7 @@ function filterValueLabel(param: string, value: string): string {
   if (param === 'category') return OBJECT_CATEGORIES.find((c) => c.value === value)?.label || value
   if (param === 'house_type') return HOUSE_TYPES.find((h) => h.value === value)?.label || value
   if (param === 'commercial_type') return COMMERCIAL_TYPES.find((c) => c.value === value)?.label || value
-  if (param === 'type') return value === 'rent' ? 'Аренда' : value === 'sale' ? 'Покупка' : value
+  if (param === 'type') return value === 'rent' ? 'Аренда' : value === 'daily' ? 'Посуточная аренда' : value === 'sale' ? 'Покупка' : value
   if (param === 'rooms') return value === '4' ? '4+ комнат' : `${value} комн.`
   if (param === 'district' || param === 'cityDistrict') return value
   if (param === 'purchase') return value.split(',').length > 1 ? `${value.split(',').length} варианта` : value
