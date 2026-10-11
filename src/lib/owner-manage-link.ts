@@ -23,6 +23,8 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
 import type { Payload } from 'payload'
 
+import { ownerContactConfirmed } from './owner-applications'
+
 /** Сколько живёт ссылка управления */
 export const OWNER_MANAGE_TTL_MS = 24 * 60 * 60_000
 
@@ -143,9 +145,11 @@ export async function issueOwnerManageLink(
   if (!application) return { ok: false, error: 'Заявка собственника не найдена — ссылку выдать нельзя' }
 
   // Ключевое условие этапа: ссылка выдаётся только после того, как
-  // администратор вручную подтвердил контакт с собственником. Без этого
-  // нельзя гарантировать, что номер принадлежит владельцу объявления
-  if (!application.contactConfirmedAt) {
+  // администратор вручную подтвердил контакт с собственником. Проверяем не
+  // просто дату, а подтверждение с автором: старая запись без администратора
+  // (см. ownerContactConfirmed) ссылку не открывает — иначе её нельзя было бы
+  // привязать к тому, кто связался с владельцем
+  if (!ownerContactConfirmed(application)) {
     return {
       ok: false,
       error: 'Сначала подтвердите контакт с собственником — после этого ссылку можно выдать',

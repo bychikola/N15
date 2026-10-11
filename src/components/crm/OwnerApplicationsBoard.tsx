@@ -200,7 +200,9 @@ export const OwnerApplicationsBoard: FC<Props> = ({ t, rows, status, agents }) =
           // или вторая ручная отметка) для доски тоже не нужно — единственный
           // способ подтверждения контакта и есть ручная отметка администратора
           // (см. publishOwnerApplicationToBoard)
-          const contactConfirmed = Boolean(row.contactConfirmedAt)
+          // Подтверждением считаем только запись с автором (см. ownerContactConfirmed):
+          // старая отметка без администратора публикацию не открывает
+          const contactConfirmed = row.contactConfirmed
           const canPublish = contactConfirmed
           const publishHint = !contactConfirmed ? t.crm.ownNeedContact : t.crm.ownBoardHint
           const deal = row.type === 'rent' ? t.crm.ownDealRent : t.crm.ownDealSale

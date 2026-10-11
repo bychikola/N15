@@ -79,7 +79,9 @@ const methodLabel = (t: Dict, value: string | null): string =>
 export const OwnerContactConfirm: FC<Props> = ({ t, row, busy, onAction }) => {
   const [method, setMethod] = useState(row.contactConfirmMethod || 'whatsapp')
 
-  const confirmed = Boolean(row.contactConfirmedAt)
+  // Подтверждением считаем только запись с автором: старая отметка без
+  // администратора (см. ownerContactConfirmed) здесь не засчитывается
+  const confirmed = row.contactConfirmed
   const digits = row.ownerPhone.replace(/\D/g, '')
   const telHref = row.ownerPhone ? `tel:${row.ownerPhone.replace(/[^\d+]/g, '')}` : ''
   // Готовый текст подтверждения: обращение по имени и просьба ответить «Да»

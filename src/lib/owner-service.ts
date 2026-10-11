@@ -20,6 +20,7 @@ import {
   findOwnerDuplicates,
   isOpenOwnerStatus,
   linkedObjectId,
+  ownerContactConfirmed,
   ownerObjectData,
   ownerObjectTitle,
   ownerSourceLabel,
@@ -319,8 +320,12 @@ export async function assignOwnerAgent(
  * и администратор. Без этого шага объявление на доске не выходит — это
  * единственное условие публикации (см. publishOwnerApplicationToBoard).
  *
- * Повторный вызов не сбрасывает уже проставленную дату: первый контакт и есть
- * момент подтверждения, а смена способа фиксируется в истории.
+ * Повторный вызов не сбрасывает уже проставленную настоящую дату: первый
+ * контакт и есть момент подтверждения, а смена способа фиксируется в истории.
+ * Но старую запись, оставшуюся без автора, настоящей не считаем (см.
+ * ownerContactConfirmed): для неё пишем свежую дату и администратора — иначе
+ * подтверждением нельзя было бы подтвердить, что с владельцем действительно
+ * связались.
  */
 export async function confirmOwnerContact(
   payload: Payload,
@@ -334,16 +339,24 @@ export async function confirmOwnerContact(
   if (!known) {
     return { ok: false, error: 'Выберите способ подтверждения: WhatsApp или телефонный звонок' }
   }
-  const now = new Date().toISOString()
+  // Новое подтверждение обязано записать автора: кто именно связался с
+  // собственником. Без учётной записи администратора действие не проводим
   const who = actorId(opts.user)
+  if (!who) {
+    return { ok: false, error: 'Не удалось определить администратора — войдите в CRM заново' }
+  }
+  const now = new Date().toISOString()
+  const already = ownerContactConfirmed(doc as Record<string, unknown>)
   try {
     await payload.update({
       collection: 'owner-applications',
       id,
       data: {
-        contactConfirmedAt: str(doc.contactConfirmedAt) || now,
+        // Настоящее прежнее подтверждение сохраняет свою дату (первый контакт
+        // и есть момент подтверждения); запись без автора перекрываем свежей
+        contactConfirmedAt: already ? str(doc.contactConfirmedAt) || now : now,
         contactConfirmMethod: method,
-        ...(who ? { contactConfirmedBy: who } : {}),
+        contactConfirmedBy: who,
         history: [
           ...historyOf(doc),
           historyEntry(`Контакт подтверждён: ${known.label}`, opts.user, opts.note),
@@ -734,9 +747,12 @@ export async function publishOwnerApplicationToBoard(
   if (!app) return { ok: false, error: 'Заявка не найдена' }
   // Ручное подтверждение контакта — обязательное условие публикации:
   // администратор должен быть уверен, что связался именно с владельцем.
-  // Согласие на показ номера не спрашиваем: номер собственника на сайте не
-  // публикуется, покупатель связывается через Н15 (см. boardShowsPublicPhone)
-  if (!app.contactConfirmedAt) {
+  // Старую отметку без автора подтверждением не считаем (см.
+  // ownerContactConfirmed): публикация открывается только по записи, где
+  // видно, кто связался с собственником и каким способом. Согласие на показ
+  // номера не спрашиваем: номер собственника на сайте не публикуется,
+  // покупатель связывается через Н15 (см. boardShowsPublicPhone)
+  if (!ownerContactConfirmed(app as Record<string, unknown>)) {
     return {
       ok: false,
       error: 'Сначала подтвердите контакт с собственником — позвоните или напишите в WhatsApp и отметьте это',
@@ -1014,6 +1030,12 @@ export interface OwnerBoardRow {
   contactConfirmMethod: string | null
   contactConfirmedById: number | null
   contactConfirmedByName: string | null
+  /**
+   * Контакт подтверждён настоящей записью: есть дата и автор (см.
+   * ownerContactConfirmed). Старая отметка без автора даёт false — по ней
+   * нельзя понять, кто связался с собственником
+   */
+  contactConfirmed: boolean
   /** Отдельное согласие собственника на показ номера в объявлении */
   publishPhoneConsent: boolean
   publishPhoneConsentAt: string | null
@@ -1131,6 +1153,7 @@ async function ownerBoardRowFromDoc(
     contactConfirmMethod: str(doc.contactConfirmMethod) || null,
     contactConfirmedById: contactConfirmedBy ? refId(doc.contactConfirmedBy) : null,
     contactConfirmedByName: contactConfirmedBy ? str(contactConfirmedBy.name) || null : null,
+    contactConfirmed: ownerContactConfirmed(doc),
     publishPhoneConsent: doc.publishPhoneConsent === true,
     publishPhoneConsentAt: str(doc.publishPhoneConsentAt) || null,
     consent: doc.consent === true,

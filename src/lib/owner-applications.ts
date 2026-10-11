@@ -93,6 +93,40 @@ export const OWNER_CONTACT_METHODS = [
 export const ownerContactMethodLabel = (value?: string | null): string =>
   OWNER_CONTACT_METHODS.find((m) => m.value === value)?.label || ''
 
+/** id связи из числа, строки или объекта { id }; null — связи нет */
+const relationId = (value: unknown): number | null => {
+  const raw = value && typeof value === 'object' ? (value as { id?: unknown }).id : value
+  const n = typeof raw === 'number' ? raw : Number(raw)
+  return Number.isInteger(n) && n > 0 ? n : null
+}
+
+const relationText = (value: unknown): string => (typeof value === 'string' ? value.trim() : '')
+
+/**
+ * Контакт подтверждён по-настоящему: стоит дата и известно, кто её поставил.
+ *
+ * Раньше отметка о контакте могла попасть в историю заявки без автора — по
+ * такой записи нельзя понять, кто связался с собственником, поэтому
+ * подтверждением она не считается (даже если дата в поле стоит). Новое
+ * подтверждение обязательно пишет дату, способ и администратора
+ * (см. confirmOwnerContact в src/lib/owner-service.ts), а старое засчитываем
+ * только тогда, когда в истории виден автор записи.
+ *
+ * Это единая проверка для публикации на доске, выдачи ссылки управления и
+ * кнопок в CRM: она не даёт «подтверждению» появиться из ниоткуда.
+ */
+export function ownerContactConfirmed(doc: Record<string, unknown> | null | undefined): boolean {
+  if (!doc || !relationText(doc.contactConfirmedAt)) return false
+  // Новое подтверждение: администратор записан отдельным полем
+  if (relationId(doc.contactConfirmedBy)) return true
+  // Старое подтверждение засчитываем, только если оно записано с автором
+  const history = Array.isArray(doc.history) ? doc.history : []
+  return history.some((item) => {
+    const entry = (item || {}) as Record<string, unknown>
+    return relationId(entry.by) != null && /^Контакт подтверждён/.test(relationText(entry.action))
+  })
+}
+
 /** Черновик объекта для формы: только те поля, что есть в заявке */
 export interface OwnerApplicationLike {
   id?: number

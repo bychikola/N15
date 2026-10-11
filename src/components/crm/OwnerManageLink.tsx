@@ -89,7 +89,7 @@ export const OwnerManageLink: FC<Props> = ({ t, row }) => {
   const [copied, setCopied] = useState(false)
 
   const hasBoardAd = Boolean(row.boardAdId)
-  const contactConfirmed = Boolean(row.contactConfirmedAt)
+  const contactConfirmed = row.contactConfirmed
   const canIssue = hasBoardAd && contactConfirmed
 
   // Выдача/перевыпуск (POST) и отзыв (DELETE) — один маршрут, разный метод

@@ -8,6 +8,7 @@ import type { OwnerBoardRow } from '@/lib/owner-service'
 import { OWNER_APPLICATION_STATUSES } from '@/lib/owner-applications'
 import { AgentPicker } from '@/components/crm/AgentPicker'
 import { OwnerContactConfirm } from '@/components/crm/OwnerContactConfirm'
+import { OwnerApplicationPhotos } from '@/components/crm/OwnerApplicationPhotos'
 import { OwnerManageLink } from '@/components/crm/OwnerManageLink'
 
 /**
@@ -139,7 +140,9 @@ export const OwnerApplicationCard: FC<Props> = ({ t, row, agents }) => {
   // собственника на сайте не публикуется, поэтому согласие на его показ не
   // требуется. Отдельное подтверждение телефона для доски тоже не нужно
   // (см. ниже про объект каталога)
-  const contactConfirmed = Boolean(row.contactConfirmedAt)
+  // Подтверждение контакта засчитываем только по записи с автором (см.
+  // ownerContactConfirmed): старая отметка без администратора публикацию не открывает
+  const contactConfirmed = row.contactConfirmed
   const canPublish = contactConfirmed
   const publishHint = !contactConfirmed ? t.crm.ownNeedContact : t.crm.ownBoardHint
   const deal = row.type === 'rent' ? t.crm.ownDealRent : t.crm.ownDealSale
@@ -230,7 +233,13 @@ export const OwnerApplicationCard: FC<Props> = ({ t, row, agents }) => {
         <Field label={t.crm.ownDeal} value={deal} />
       </div>
 
-      {row.photos.length > 0 && (
+      {/* Фотографии заявки: до публикации на доске администратор добавляет
+          снимки и выбирает главный (см. OwnerApplicationPhotos). У уже
+          опубликованного объявления снимки правятся в его карточке, а здесь
+          показываем набор-как-есть */}
+      {!row.boardAdId ? (
+        <OwnerApplicationPhotos t={t} applicationId={row.id} photos={row.photos} />
+      ) : row.photos.length > 0 ? (
         <div style={{ marginBottom: 18 }}>
           <div style={sectionTitle}>{t.crm.ownPhotos}</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
@@ -245,7 +254,7 @@ export const OwnerApplicationCard: FC<Props> = ({ t, row, agents }) => {
             ))}
           </div>
         </div>
-      )}
+      ) : null}
 
       <div style={{ marginBottom: 18 }}>
         <div style={sectionTitle}>{t.crm.ownAddress}</div>
