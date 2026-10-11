@@ -16,11 +16,14 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   return { title: t.howItWorks.metaTitle, description: t.howItWorks.metaDescription }
 }
 
+/** Пункт списка: обычный текст либо текст со ссылкой (например, на контакты) */
+type AudiencePoint = string | { text: string; linkText: string; href: string }
+
 /** Блок страницы: заголовок, короткое пояснение, список шагов и кнопка */
 interface AudienceBlock {
   title: string
   lead: string
-  points: readonly string[]
+  points: readonly AudiencePoint[]
   /** Адрес кнопки — собирается здесь, в словаре лежат только тексты */
   href: string
   cta: string
@@ -37,12 +40,29 @@ function AudienceCard({ block }: { block: AudienceBlock }) {
       {/* Шаги — маркер ромбом, как в карточках страницы «Об агентстве» */}
       <ul className="flex flex-col gap-3 mb-5">
         {block.points.map((point) => (
-          <li key={point} className="flex gap-2.5 text-xs text-[var(--n15-muted)] leading-relaxed">
+          <li
+            key={typeof point === 'string' ? point : point.text}
+            className="flex gap-2.5 text-xs text-[var(--n15-muted)] leading-relaxed"
+          >
             <span
               aria-hidden="true"
               className="mt-1.5 w-1.5 h-1.5 shrink-0 rotate-45 bg-[var(--n15-gold)]/60"
             />
-            <span>{point}</span>
+            <span>
+              {typeof point === 'string' ? (
+                point
+              ) : (
+                <>
+                  {point.text}{' '}
+                  <Link
+                    href={point.href}
+                    className="text-[var(--n15-gold)] underline underline-offset-2 hover:text-[var(--n15-white)] transition-colors duration-300"
+                  >
+                    {point.linkText}
+                  </Link>
+                </>
+              )}
+            </span>
           </li>
         ))}
       </ul>
@@ -83,7 +103,12 @@ export default async function HowItWorksPage({ params }: PageProps) {
     {
       title: s.partnersTitle,
       lead: s.partnersLead,
-      points: s.partnersPoints,
+      // Отдельного раздела «Партнёрам» нет: сотрудничество — через администратора,
+      // последний пункт ведёт на страницу контактов
+      points: [
+        ...s.partnersPoints,
+        { text: s.partnersContact, linkText: s.partnersContactLink, href: `/${lang}/contacts` },
+      ],
       href: `/${lang}/contacts`,
       cta: s.partnersCta,
     },
