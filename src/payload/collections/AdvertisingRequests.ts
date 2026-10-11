@@ -207,7 +207,7 @@ export const AdvertisingRequests: CollectionConfig = {
         {
           name: 'contactKind',
           type: 'select',
-          label: 'Как к вам обращаться?',
+          label: 'Как к Вам обращаться?',
           options: AD_CONTACT_KIND_OPTIONS,
           defaultValue: 'name',
           required: true,

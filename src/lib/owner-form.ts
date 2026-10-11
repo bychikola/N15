@@ -83,7 +83,7 @@ export function parseOwnerApplicationForm(
   form: FormData,
 ): { ok: true; data: OwnerApplicationInput } | { ok: false; error: string } {
   const ownerName = text(form.get('ownerName'), NAME_MAX)
-  if (ownerName.length < 2) return { ok: false, error: 'Укажите имя — как к вам обращаться' }
+  if (ownerName.length < 2) return { ok: false, error: 'Укажите имя — как к Вам обращаться' }
 
   const ownerPhone = ownerPhoneDigits(form.get('ownerPhone'))
   if (!ownerPhone) {

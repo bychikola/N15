@@ -82,7 +82,7 @@ export async function POST(req: NextRequest) {
     if (user.role !== 'admin') {
       const mine = await myAgentIds(payload, user.id)
       if (!isOwnObjectDoc(doc, user, mine)) {
-        return NextResponse.json({ error: 'Это не ваш объект — управление доступно его агенту или администратору' }, { status: 403 })
+        return NextResponse.json({ error: 'Это не Ваш объект — управление доступно его агенту или администратору' }, { status: 403 })
       }
     }
     const prev = ((doc as unknown as { placements?: unknown }).placements || {}) as PlacementsGroup

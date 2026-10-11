@@ -120,7 +120,7 @@ export async function POST(req: NextRequest) {
       return bad('Выберите тип объекта')
     }
     if (data.contactKind && !(data.contactKind in AD_CONTACT_KIND_LABELS)) {
-      return bad('Выберите, как к вам обращаться')
+      return bad('Выберите, как к Вам обращаться')
     }
     // Физлицо-собственник: название организации не спрашиваем и не храним —
     // лишние данные заявке не нужны (152-ФЗ, ст. 5), форма это поле скрывает.

@@ -484,7 +484,7 @@ export const LegalCheckBlock: FC<{ objectId: number; onClose: () => void; focus?
         <div style={{ marginTop: 16, border: '1px solid #e5dfd3', borderRadius: 10, background: '#fff', padding: '18px 16px' }}>
           <p style={{ margin: 0, fontSize: 13, lineHeight: 1.55 }}>
             Документы, выписка ЕГРН и отчёт юридической экспертизы доступны только администратору.
-            Если вам нужен отчёт — обратитесь к нему.
+            Если Вам нужен отчёт — обратитесь к нему.
           </p>
         </div>
       ) : (

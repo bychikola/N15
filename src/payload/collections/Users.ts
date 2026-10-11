@@ -206,7 +206,7 @@ export const Users: CollectionConfig = {
           user?.role === 'admin' || (user != null && String(id) === String(user.id)),
       },
       admin: {
-        description: 'Номер телефона — логин для входа. По нему подтягиваются ваши заявки.',
+        description: 'Номер телефона — логин для входа. По нему подтягиваются Ваши заявки.',
       },
     },
     {

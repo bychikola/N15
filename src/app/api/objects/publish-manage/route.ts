@@ -107,7 +107,7 @@ export async function POST(req: NextRequest) {
     if (user.role !== 'admin') {
       const mine = await myAgentIds(payload, user.id)
       if (!isOwnObjectDoc(doc, user, mine)) {
-        return NextResponse.json({ error: 'Это не ваш объект — публикация доступна его агенту или администратору' }, { status: 403 })
+        return NextResponse.json({ error: 'Это не Ваш объект — публикация доступна его агенту или администратору' }, { status: 403 })
       }
     }
     // Объект в архиве = снят с продажи: новые публикации запрещены (снятие — можно)

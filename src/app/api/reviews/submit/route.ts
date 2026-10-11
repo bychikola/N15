@@ -91,7 +91,7 @@ export async function POST(req: NextRequest) {
     const service = String(body.service ?? '').trim()
     const rating = reviewRating(body.rating)
 
-    if (!name) return NextResponse.json({ error: 'Напишите, как вас подписать' }, { status: 400 })
+    if (!name) return NextResponse.json({ error: 'Напишите, как Вас подписать' }, { status: 400 })
     if (name.length > REVIEW_TEXT_LIMITS.name) {
       return NextResponse.json({ error: `Имя длиннее ${REVIEW_TEXT_LIMITS.name} знаков` }, { status: 400 })
     }

@@ -185,7 +185,7 @@ export async function POST(req: NextRequest) {
         overrideAccess: true,
       })
       if (!known.totalDocs) {
-        return NextResponse.json({ error: 'Этот покупатель вам не писал' }, { status: 403 })
+        return NextResponse.json({ error: 'Этот покупатель Вам не писал' }, { status: 403 })
       }
     }
 
