@@ -97,21 +97,12 @@ function BlockTitle({ children }: { children: React.ReactNode }) {
   )
 }
 
-/** Плитка-чип «что есть»: паркинг, ипотека и другие отметки комплекса */
-function Chip({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="inline-flex items-center gap-2 border border-[var(--n15-gold)]/15 px-4 py-2 text-xs text-[var(--n15-silver)]">
-      <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 bg-[var(--n15-gold)]" />
-      {children}
-    </span>
-  )
-}
-
 /**
  * Публичная страница жилого комплекса (страница
  * /[lang]/newbuildings/complexes/[id]): описание, планировочные решения, сроки
- * сдачи, помещения и инфраструктура, способы приобретения, вопросы и ответы,
- * карточка обратной связи и фотоотчёты со стройки.
+ * сдачи, объекты новостройки (машино-места и коммерческие помещения с
+ * описанием паркинга), вопросы и ответы со способами приобретения, карточка
+ * обратной связи и фотоотчёты со стройки.
  *
  * Комплекс открывается только у опубликованного застройщика: у компании
  * выключен «Показывать на сайте» или статус «Архивный» — отдаём 404, как
@@ -188,13 +179,12 @@ export default async function ComplexPage({ params }: PageProps) {
   const galleryMain = galleryAll.find((g) => g.isMain) || null
   const gallery = galleryMain ? [galleryMain, ...galleryAll.filter((g) => g !== galleryMain)] : galleryAll
 
-  // Паркинг и кладовые: описание и фотографии — показываются в разделе помещений
+  // Паркинг: описание и фотографии из «Медиа и документы» ЖК. Показываются
+  // во вкладке «Паркинг» раздела машино-мест и коммерческих помещений — даже
+  // когда доступных машино-мест нет
   const parking = (doc.parking && typeof doc.parking === 'object' ? doc.parking : {}) as Record<string, unknown>
   const parkingText = String(parking.description || '').trim()
   const parkingPhotos = slideList(parking.photos)
-  const storerooms = (doc.storerooms && typeof doc.storerooms === 'object' ? doc.storerooms : {}) as Record<string, unknown>
-  const storeroomsText = String(storerooms.description || '').trim()
-  const storeroomsPhotos = slideList(storerooms.photos)
 
   // Презентация ЖК: PDF-файл, на странице — кнопка «Смотреть презентацию»
   const presentation = fileOf(doc.presentation)
@@ -210,15 +200,13 @@ export default async function ComplexPage({ params }: PageProps) {
     })
     .filter((item) => item.building || item.period)
 
-  // Помещения и инфраструктура, способы приобретения — чипами. Паркинг и
-  // коммерческие помещения здесь не чипами: это активные кнопки раздела
-  // объектов новостройки ниже (ComplexUnits) — они открывают подборку
-  // машино-мест и помещений этого ЖК
+  // Отметки комплекса «что есть» (premises) задают, какие вкладки показывать
+  // в разделе объектов новостройки (ComplexUnits): «Паркинг» и «Коммерческие
+  // помещения» — это активные подборки машино-мест и помещений этого ЖК
   const premises = (doc.premises && typeof doc.premises === 'object' ? doc.premises : {}) as Record<string, unknown>
-  const premiseItems: string[] = []
-  if (premises.storage) premiseItems.push(t.complex.premisesStorage)
-  if (String(premises.other || '').trim()) premiseItems.push(String(premises.other).trim())
 
+  // Способы приобретения — их показывает раскрывающийся пункт блока «Вопросы
+  // и ответы» ниже (отдельной карточки у них нет)
   const purchaseMethods = (
     doc.purchaseMethods && typeof doc.purchaseMethods === 'object' ? doc.purchaseMethods : {}
   ) as Record<string, unknown>
@@ -285,15 +273,24 @@ export default async function ComplexPage({ params }: PageProps) {
   const unitItems = unitDocs.map(unitOf).filter((u): u is ComplexUnit => u !== null)
   const parkingUnits = unitItems.filter((u) => u.category === 'garage')
   const commercialUnits = unitItems.filter((u) => u.category === 'commercial')
-  // Кнопку типа показываем, если он помечен в комплексе или уже заведены
-  // объекты: без этого тип с объектами, но без отметки, пропал бы
-  const showParkingUnits = premises.parking === true || parkingUnits.length > 0
+  // Кнопку типа показываем, если он помечен в комплексе, уже заведены объекты
+  // или есть описание/фото паркинга: без этого тип с объектами, но без отметки,
+  // пропал бы, а информация о паркинге не показывалась бы без машино-мест
+  const showParkingUnits =
+    premises.parking === true || parkingUnits.length > 0 || Boolean(parkingText) || parkingPhotos.length > 0
   const showCommercialUnits = premises.commercial === true || commercialUnits.length > 0
 
-  // Вопросы и ответы — общий аккордеон сайта (PurchaseFaq)
+  // Вопросы и ответы — общий аккордеон сайта (PurchaseFaq). Последним пунктом
+  // идут способы приобретения комплекса: отдельной карточки у них нет
   const faq = ((Array.isArray(doc.faq) ? doc.faq : []) as Record<string, unknown>[])
     .map((item) => ({ q: String(item.question || '').trim(), a: String(item.answer || '').trim() }))
     .filter((item) => item.q && item.a)
+  if (purchaseItems.length > 0) {
+    faq.push({
+      q: t.complex.purchaseFaqQuestion,
+      a: `${t.complex.purchaseFaqLead}: ${purchaseItems.join(', ')}.`,
+    })
+  }
 
   // Фотоотчёты: дата и подпись этапа строительства + фотографии
   const photoReports = ((Array.isArray(doc.photoReports) ? doc.photoReports : []) as Record<string, unknown>[])
@@ -457,90 +454,20 @@ export default async function ComplexPage({ params }: PageProps) {
             </section>
           )}
 
-          {/* Помещения и инфраструктура / способы приобретения — двумя карточками.
-              В карточке помещений — отметки «что есть» чипами, ниже паркинг и
-              кладовые с описанием и кнопкой-галереей фото («Паркинг · Фото»,
-              «Кладовые · Фото» — раздел «Медиа и документы») */}
-          {(premiseItems.length > 0 ||
-            purchaseItems.length > 0 ||
-            parkingText ||
-            parkingPhotos.length > 0 ||
-            storeroomsText ||
-            storeroomsPhotos.length > 0) && (
-            <section className="mb-14 grid gap-6 md:grid-cols-2">
-              {(premiseItems.length > 0 || parkingText || parkingPhotos.length > 0 || storeroomsText || storeroomsPhotos.length > 0) && (
-                <div className="border border-[var(--n15-gold)]/10 p-6">
-                  {/* Заголовок карточки показываем всегда, когда она есть:
-                      чипов может и не остаться (паркинг и коммерция ушли
-                      кнопками в раздел объектов новостройки), а описания
-                      паркинга и кладовых — нет */}
-                  <h3 className="mb-4 text-lg font-[family-name:var(--font-display)] text-[var(--n15-white)]">
-                    {t.complex.premisesTitle}
-                  </h3>
-                  {premiseItems.length > 0 && (
-                    <div className="flex flex-wrap gap-2">
-                      {premiseItems.map((item, index) => (
-                        <Chip key={index}>{item}</Chip>
-                      ))}
-                    </div>
-                  )}
-                  {(parkingText || parkingPhotos.length > 0) && (
-                    <div className={premiseItems.length > 0 ? 'mt-6 border-t border-[var(--n15-gold)]/10 pt-5' : ''}>
-                      <h4 className="mb-3 font-[family-name:var(--font-display)] text-base text-[var(--n15-white)]">
-                        {t.complex.parkingTitle}
-                      </h4>
-                      {parkingText && (
-                        <p className="mb-3 text-sm leading-relaxed text-[var(--n15-muted)] whitespace-pre-line">
-                          {parkingText}
-                        </p>
-                      )}
-                      {parkingPhotos.length > 0 && (
-                        <PhotoGrid slides={parkingPhotos} triggerLabel={t.complex.parkingPhotosButton} />
-                      )}
-                    </div>
-                  )}
-                  {(storeroomsText || storeroomsPhotos.length > 0) && (
-                    <div className={premiseItems.length > 0 || parkingText || parkingPhotos.length > 0 ? 'mt-6 border-t border-[var(--n15-gold)]/10 pt-5' : ''}>
-                      <h4 className="mb-3 font-[family-name:var(--font-display)] text-base text-[var(--n15-white)]">
-                        {t.complex.storeroomsTitle}
-                      </h4>
-                      {storeroomsText && (
-                        <p className="mb-3 text-sm leading-relaxed text-[var(--n15-muted)] whitespace-pre-line">
-                          {storeroomsText}
-                        </p>
-                      )}
-                      {storeroomsPhotos.length > 0 && (
-                        <PhotoGrid slides={storeroomsPhotos} triggerLabel={t.complex.storeroomsPhotosButton} />
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-              {purchaseItems.length > 0 && (
-                <div className="border border-[var(--n15-gold)]/10 p-6">
-                  <h3 className="mb-4 text-lg font-[family-name:var(--font-display)] text-[var(--n15-white)]">
-                    {t.complex.purchaseTitle}
-                  </h3>
-                  <div className="flex flex-wrap gap-2">
-                    {purchaseItems.map((item, index) => (
-                      <Chip key={index}>{item}</Chip>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </section>
-          )}
-
           {/* Объекты новостройки: кнопки «Паркинг» и «Коммерческие помещения»
               открывают только машино-места и помещения этого ЖК. Реализованные
               объекты сюда не попадают, у пустого типа — «Предложения скоро
-              появятся» без перехода в общий каталог (см. ComplexUnits) */}
+              появятся» без перехода в общий каталог. Описание и фото паркинга
+              показываются во вкладке «Паркинг» даже без машино-мест
+              (см. ComplexUnits) */}
           {(showParkingUnits || showCommercialUnits) && (
             <ComplexUnits
               parking={parkingUnits}
               commercial={commercialUnits}
               parkingVisible={showParkingUnits}
               commercialVisible={showCommercialUnits}
+              parkingText={parkingText}
+              parkingPhotos={parkingPhotos}
             />
           )}
 

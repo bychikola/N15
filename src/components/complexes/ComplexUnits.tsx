@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { PhotoGrid } from '@/components/ui/PhotoGrid'
 import { useI18n } from '@/i18n/i18n-provider'
 
 /**
@@ -14,6 +15,10 @@ import { useI18n } from '@/i18n/i18n-provider'
  * Если у типа ещё нет объектов, показываем «Предложения скоро появятся» —
  * в общий каталог не отправляем: подборка была бы чужой. Карточки ведут на
  * публичную страницу объекта (slug), где есть полная карточка и планировка.
+ *
+ * Во вкладке «Паркинг» под карточками (или вместо них, машино-мест может и не
+ * быть) показываем описание и кнопку-галерею «Паркинг · Фото» — из раздела
+ * «Медиа и документы» комплекса.
  */
 export interface ComplexUnit {
   id: number
@@ -35,12 +40,24 @@ export interface ComplexUnit {
   floorPlan?: { url: string; full: string; pdf: boolean }
 }
 
+/** Слайд галереи паркинга — как у PhotoGrid (см. src/components/ui/PhotoGrid) */
+interface ParkingSlide {
+  url: string
+  alt: string
+  thumb?: string
+  tile?: string
+}
+
 interface Props {
   parking: ComplexUnit[]
   commercial: ComplexUnit[]
   /** Показывать ли кнопку типа: помечен в комплексе или уже есть объекты */
   parkingVisible: boolean
   commercialVisible: boolean
+  /** Описание паркинга из «Медиа и документы» ЖК — показывается во вкладке «Паркинг» */
+  parkingText?: string
+  /** Фотографии паркинга: за кнопкой-галереей «Паркинг · Фото» */
+  parkingPhotos?: ParkingSlide[]
 }
 
 /** Плитка-заглушка, когда у объекта нет фото (как в карточке каталога) */
@@ -173,7 +190,14 @@ function UnitCard({ unit, lang }: { unit: ComplexUnit; lang: string }) {
  * ожидания вместо сетки. Если показывать нечего и типов нет — раздел не
  * рендерится вовсе (родитель его и не вызовет).
  */
-export default function ComplexUnits({ parking, commercial, parkingVisible, commercialVisible }: Props) {
+export default function ComplexUnits({
+  parking,
+  commercial,
+  parkingVisible,
+  commercialVisible,
+  parkingText,
+  parkingPhotos,
+}: Props) {
   const { lang, t } = useI18n()
   // Кнопки типов: показываем только те, что заданы (флаг комплекса или
   // наличие объектов), в порядке «паркинг → коммерция»
@@ -223,6 +247,22 @@ export default function ComplexUnits({ parking, commercial, parkingVisible, comm
           {current.items.map((unit) => (
             <UnitCard key={unit.id} unit={unit} lang={lang} />
           ))}
+        </div>
+      )}
+
+      {/* Описание и фото паркинга (из «Медиа и документы» ЖК) — во вкладке
+          «Паркинг» и когда машино-мест ещё нет: это рассказ о самом паркинге,
+          а не о конкретных предложениях */}
+      {current.key === 'parking' && (parkingText || (parkingPhotos?.length ?? 0) > 0) && (
+        <div className="mt-8 border-t border-[var(--n15-gold)]/10 pt-6">
+          {parkingText && (
+            <p className="mb-4 max-w-3xl text-sm leading-relaxed text-[var(--n15-muted)] whitespace-pre-line">
+              {parkingText}
+            </p>
+          )}
+          {parkingPhotos && parkingPhotos.length > 0 && (
+            <PhotoGrid slides={parkingPhotos} triggerLabel={t.complex.parkingPhotosButton} />
+          )}
         </div>
       )}
     </section>
