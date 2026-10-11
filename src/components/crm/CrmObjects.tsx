@@ -31,7 +31,12 @@ import { AgentPicker, type AgentOption } from '@/components/crm/AgentPicker'
 // объектов остаётся именем агента («Лана»). В карточке объекта рядом с именем
 // агента добавляем и вариант «Администратор Н15» — тем же профилем (см.
 // src/lib/responsible-display.ts).
-import { n15AdminAgentId } from '@/lib/responsible-display'
+import {
+  n15AdminAgentId,
+  isResponsibleRole,
+  RESPONSIBLE_ROLE_ADMIN,
+  RESPONSIBLE_ROLE_AGENT,
+} from '@/lib/responsible-display'
 // Категории объектов: полный список значений, правила участка и домовых
 // категорий — общий справочник схемы коллекции (src/lib/object-categories.ts)
 import { OBJECT_CATEGORIES, isHouseCategoryCode, isPlotCategoryCode, isPrivateHouseCode } from '@/lib/object-categories'
@@ -103,11 +108,24 @@ import {
 
 /**
  * Ключ варианта «Администратор Н15» в поле ответственного. Это не отдельный
- * сотрудник, а тот же профиль администратора Н15 под другой подписью: при
- * сохранении карточка переводит ключ в реальный id профиля (см. save), поэтому
- * ответственный хранится связью и не теряется при повторном открытии.
+ * сотрудник, а тот же профиль администратора Н15 под другой подписью: в связь
+ * agent уходит реальный id профиля, а выбранная подпись хранится отдельным
+ * полем agentRole (см. save) — иначе при повторном открытии карточка показала
+ * бы имя агента и выбор «Администратор Н15» терялся бы.
  */
 const N15_ADMIN_AGENT_OPTION = 'admin'
+
+/**
+ * Подпись ответственного в списке объектов: та же, что выбрана в карточке.
+ * Роль «Администратор Н15» — это профиль администратора под своей подписью,
+ * иначе показываем имя агента. Объект офиса Н15 личного ответственного не
+ * показывает — вызывающий код сам подставляет «Офис Н15».
+ */
+const responsibleOwnerLabel = (
+  role: string | undefined,
+  agentName: string | undefined,
+  adminLabel: string,
+): string => (role === RESPONSIBLE_ROLE_ADMIN ? adminLabel : agentName || '—')
 
 interface ObjectRow {
   id: number
@@ -116,6 +134,11 @@ interface ObjectRow {
   price: number | null
   status: string
   agentName?: string
+  /**
+   * Обозначение ответственного (Objects.agentRole): 'admin' — тот же профиль
+   * под подписью «Администратор Н15», иначе имя агента (см. responsible-display)
+   */
+  agentRole?: string
   /** Владелец карточки: 'office' — объект офиса Н15 (см. object-ownership) */
   ownership?: string
   thumb?: string
@@ -399,6 +422,11 @@ const emptyForm = {
   // Н15 (без личного агента, см. src/lib/object-ownership.ts)
   ownership: 'agent' as string,
   agent: '',
+  // Обозначение ответственного — отдельно от связи agent: «Администратор
+  // Н15» и «Лана Козырева» это один профиль (см. responsible-display.ts), и
+  // без отдельного поля повторно открытая карточка показала бы имя агента
+  // вместо выбранной подписи. 'agent' — своим именем, 'admin' — «Администратор Н15»
+  agentRole: 'agent' as string,
   // Застройщик и его жилой комплекс — необязательная связь объекта со
   // справочником «Застройщики» (раздел CRM /crm/developers). В списке
   // комплексов показываются только комплексы выбранного застройщика; у
@@ -1260,6 +1288,9 @@ export const CrmObjects: FC<{
           price: o.price as number | null,
           status: o.status as string,
           agentName: agent?.name,
+          // Обозначение ответственного: в списке показываем ту же подпись,
+          // что выбрана в карточке (см. responsibleOwnerLabel)
+          agentRole: o.agentRole as string | undefined,
           ownership: o.ownership as string | undefined,
           thumb: img?.url,
           // Адрес объекта — сотруднику сервер отдаёт и номер дома с квартирой
@@ -1512,6 +1543,13 @@ export const CrmObjects: FC<{
       // старых карточек владелец не проставлен — считаем «Агент»
       ownership: isObjectOwnership(o.ownership) ? o.ownership : 'agent',
       agent: agentRel?.id != null ? String(agentRel.id) : '',
+      // Обозначение ответственного читаем из своего поля: одна и та же связь
+      // id 1 — это и «Лана Козырева», и «Администратор Н15», по связи подпись
+      // не восстановить. Без агента обозначение не имеет смысла — «Агент»
+      agentRole:
+        agentRel?.id != null && isResponsibleRole(o.agentRole) && o.agentRole === RESPONSIBLE_ROLE_ADMIN
+          ? RESPONSIBLE_ROLE_ADMIN
+          : RESPONSIBLE_ROLE_AGENT,
       // Застройщик и жилой комплекс — связи объекта: в ответе с depth это
       // объекты { id, name }, поэтому берём id. У объектов без привязки пусто
       developer: relationshipId(o.developer) != null ? String(relationshipId(o.developer)) : '',
@@ -2092,17 +2130,25 @@ export const CrmObjects: FC<{
       // (в поле выбора это строка «—»), у остальных агент не участвует в
       // запросе — своего агента агенту проставляет хук коллекции при создании.
       // Вариант «Администратор Н15» — тот же профиль под другой подписью: в
-      // связь уходит его реальный id, а не ключ строки (иначе сервер отклонил
-      // бы значение и ответственный не сохранился бы).
+      // связь уходит его реальный id (форма кладёт его в agent при выборе строки,
+      // см. нижнюю разметку), а сама подпись хранится полем agentRole ниже.
       // У объекта офиса агент не отправляется (у администратора — null, чтобы
       // снять прежнего ответственного): личного агента у такого объекта нет
       agent: isOfficeOwnership(form.ownership)
         ? (isAdmin ? null : undefined)
-        : form.agent === N15_ADMIN_AGENT_OPTION
-          ? (n15AdminId ?? (isAdmin ? null : undefined))
-          : form.agent
-            ? Number(form.agent)
-            : isAdmin ? null : undefined,
+        : form.agent
+          ? Number(form.agent)
+          : isAdmin ? null : undefined,
+      // Обозначение ответственного — отдельно от связи agent: «Администратор
+      // Н15» и «Лана Козырева» ведут к одному профилю (id 1), и связь не
+      // сохранит, какую подпись выбрали. Поле правит только администратор; у
+      // объекта офиса личного ответственного нет — обозначение не отправляем,
+      // у остальных сотрудников поле не трогаем, чтобы не затереть чужой выбор
+      agentRole: isOfficeOwnership(form.ownership)
+        ? undefined
+        : isAdmin
+          ? (form.agentRole === RESPONSIBLE_ROLE_ADMIN ? RESPONSIBLE_ROLE_ADMIN : RESPONSIBLE_ROLE_AGENT)
+          : undefined,
       // Застройщик и жилой комплекс — необязательная связь со справочником
       // «Застройщики». Пусто уходит null: снятый выбор сохраняется. В чужом
       // объекте поля не отправляем (access полей в коллекции Objects), чтобы
@@ -2551,6 +2597,14 @@ export const CrmObjects: FC<{
     else options.push(adminOption)
     return options
   })()
+  // Что показывает поле ответственного: ключ варианта «Администратор Н15»,
+  // если сохранена эта подпись, иначе id профиля (имя агента найдёт AgentPicker).
+  // Связь проверяем тоже: с ролью admin, но без профиля администратора в данных
+  // (старая или чужая карточка) показываем имя агента, а не чужую подпись
+  const agentPickerValue =
+    form.agentRole === RESPONSIBLE_ROLE_ADMIN && String(n15AdminId) === form.agent
+      ? N15_ADMIN_AGENT_OPTION
+      : form.agent
 
   return (
     <div>
@@ -3441,8 +3495,27 @@ export const CrmObjects: FC<{
                 // фамилии (см. AgentPicker). Строка «—» снимает ответственного —
                 // это же значение сохраняет карточка (см. agent в save).
                 // agentOptions — агенты и вариант «Администратор Н15» тем же
-                // профилем администратора (см. n15AdminId выше)
-                <AgentPicker t={t} agents={agentOptions} value={form.agent} onChange={(id) => set('agent', id)} />
+                // профилем администратора (см. n15AdminId выше). Значение —
+                // ключ варианта (agentPickerValue), а в форму кладём и связь
+                // agent (реальный id), и выбранную подпись agentRole: «Лана
+                // Козырева» и «Администратор Н15» — один профиль, по связи
+                // подпись не восстановить
+                <AgentPicker
+                  t={t}
+                  agents={agentOptions}
+                  value={agentPickerValue}
+                  onChange={(id) => {
+                    if (id === N15_ADMIN_AGENT_OPTION) {
+                      setForm((prev) => ({
+                        ...prev,
+                        agent: n15AdminId != null ? String(n15AdminId) : '',
+                        agentRole: RESPONSIBLE_ROLE_ADMIN,
+                      }))
+                    } else {
+                      setForm((prev) => ({ ...prev, agent: id, agentRole: RESPONSIBLE_ROLE_AGENT }))
+                    }
+                  }}
+                />
               ) : (
                 <input
                   value={agents.find((a) => String(a.id) === form.agent)?.name || (form.agent ? form.agent : '—')}
@@ -3952,7 +4025,9 @@ export const CrmObjects: FC<{
                     (см. src/lib/object-ownership.ts) */}
                 {(o.agentName || isOfficeOwnership(o.ownership)) && (
                   <span style={{ fontSize: 10, color: '#8a857b' }}>
-                    {isOfficeOwnership(o.ownership) ? t.crm.objOwnershipOffice : o.agentName}
+                    {isOfficeOwnership(o.ownership)
+                      ? t.crm.objOwnershipOffice
+                      : responsibleOwnerLabel(o.agentRole, o.agentName, t.crm.ownAdminName)}
                   </span>
                 )}
               </div>
@@ -4316,6 +4391,8 @@ function DupViewCard({ t, view, err, notice, reported, reportBusy, onClose, onMi
           </div>
           <div style={fieldStyle}>
             <div style={fieldLabel}>{t.crm.objAgent}</div>
+            {/* Просмотр пересекающегося объекта — только на чтение, обозначение
+                ответственного в нём не показываем (свой ответ — без agentRole) */}
             <div style={{ ...small, color: '#25241f', marginTop: 3 }}>{o.agentName || '—'}</div>
           </div>
           {floors && (
