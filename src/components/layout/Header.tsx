@@ -9,6 +9,7 @@ import { ThemeSwitcher } from '@/components/ui/ThemeSwitcher'
 import { MusicPlayer } from '@/components/layout/MusicPlayer'
 import CabinetBadge from '@/components/layout/CabinetBadge'
 import MortgageCalculator from '@/components/layout/MortgageCalculator'
+import { SiteSearch } from '@/components/layout/SiteSearch'
 import { reachGoal } from '@/lib/metrika'
 // Общий номер агентства — один на весь сайт: та же ссылка, что у кнопки
 // «Позвонить» в карточке объекта, когда номер агента клиенту не показывается
@@ -547,6 +548,10 @@ export const Header: FC = () => {
             на компьютере); сам номер текстом не выводится. До xl подпись
             скрыта, чтобы не теснить меню на нешироких экранах */}
         <div className="hidden lg:flex items-center gap-3 ml-auto">
+          {/* Поиск по сайту — компактная иконка, как калькулятор и кабинет:
+              раскрывает панель со строкой и найдёнными материалами
+              (объекты, ЖК, застройщики, услуги, статьи) */}
+          <SiteSearch />
           <a
             href={SITE_PHONE_TEL}
             aria-label={t.nav.callUs}
@@ -637,6 +642,9 @@ export const Header: FC = () => {
       {isOpen && (
         <div className="lg:hidden bg-[var(--n15-charcoal)] border-b border-[var(--n15-gold)]/10">
           <nav className="n15-container flex flex-col py-6 gap-4">
+            {/* Поиск по сайту — первым в мобильном меню: до него один тап,
+                панель раскрывается на месте, переход закрывает меню */}
+            <SiteSearch variant="mobile" onNavigate={() => setIsOpen(false)} />
             {/* «Недвижимость»: подразделы раскрываются по нажатию */}
             <div className="flex flex-col">
               <button
