@@ -14,10 +14,15 @@ interface DirectionPageProps {
   t: Dict
   /** Тексты направления (directions.newbuildings / interregional / foreign) */
   direction: Dict['directions']['newbuildings']
-  /** Главная кнопка призыва — на каталог или на заявку */
-  primary: Cta
+  /** Главная кнопка призыва — на каталог или на заявку. Не нужна, когда
+   *  действия рисует слот actions (см. ниже) */
+  primary?: Cta
   /** Дополнительная кнопка (необязательно) */
   secondary?: Cta
+  /** Свой блок действий вместо стандартных кнопок: у «Новостроек» это
+   *  клиентская кнопка «Подбор» с раскрывающейся таблицей
+   *  (src/components/newbuildings/NewbuildingsPick.tsx) */
+  actions?: ReactNode
   /** Содержимое направления между шагами и кнопками: у межрегиональных
    *  объектов — справочник регионов и населённых пунктов */
   children?: ReactNode
@@ -27,7 +32,7 @@ interface DirectionPageProps {
 // объекты, зарубежная недвижимость). Единая структура в стиле страниц услуг:
 // заголовок, описание направления, шаги подбора и кнопки CTA. Шаги общие
 // для всех направлений (t.directions.step*).
-export function DirectionPage({ t, direction, primary, secondary, children }: DirectionPageProps) {
+export function DirectionPage({ t, direction, primary, secondary, actions, children }: DirectionPageProps) {
   const steps = [
     { step: '01', title: t.directions.step1Title, desc: t.directions.step1Desc },
     { step: '02', title: t.directions.step2Title, desc: t.directions.step2Desc },
@@ -58,12 +63,14 @@ export function DirectionPage({ t, direction, primary, secondary, children }: Di
             ))}
           </div>
           {children}
-          <div className="flex flex-wrap justify-center gap-4">
-            <Button variant="primary" href={primary.href}>{primary.label}</Button>
-            {secondary && (
-              <Button variant="outline" href={secondary.href}>{secondary.label}</Button>
-            )}
-          </div>
+          {actions ?? (
+            <div className="flex flex-wrap justify-center gap-4">
+              {primary && <Button variant="primary" href={primary.href}>{primary.label}</Button>}
+              {secondary && (
+                <Button variant="outline" href={secondary.href}>{secondary.label}</Button>
+              )}
+            </div>
+          )}
         </SectionWrapper>
       </main>
       <Footer />

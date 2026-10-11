@@ -389,7 +389,7 @@ const emptyForm = {
   // справочником «Застройщики» (раздел CRM /crm/developers). В списке
   // комплексов показываются только комплексы выбранного застройщика; у
   // объектов, заведённых до появления справочника, оба поля пусты
-  developer: '', complex: '',
+  developer: '', complex: '', building: '',
   ownerName: '', ownerPhone: '', cadastralNumber: '',
   // Внутренние сведения агентства (закрытые поля объекта): происхождение
   // карточки, комиссия, партнёрские условия и заметка для команды. На сайте
@@ -1499,6 +1499,10 @@ export const CrmObjects: FC<{
       // объекты { id, name }, поэтому берём id. У объектов без привязки пусто
       developer: relationshipId(o.developer) != null ? String(relationshipId(o.developer)) : '',
       complex: relationshipId(o.complex) != null ? String(relationshipId(o.complex)) : '',
+      // Публичный дом/корпус в ЖК (Objects.building) — в отличие от «Дома» и
+      // «Корпуса» в блоке адреса, эти поля закрытые. Здесь — обозначение
+      // корпуса застройщика, его показывает подбор новостроек
+      building: (o.building as string) || '',
       ownerName: (o.ownerName as string) || '',
       // Номер показываем в том же виде, что и маска ввода («+7 (918) …»):
       // хук коллекции отдаёт его уже приведённым, повторное приведение
@@ -2081,6 +2085,9 @@ export const CrmObjects: FC<{
       // не затереть сохранённую привязку
       developer: canEditPrivate ? (form.developer ? Number(form.developer) : null) : undefined,
       complex: canEditPrivate ? (form.complex ? Number(form.complex) : null) : undefined,
+      // Публичный дом/корпус в ЖК: пустое поле уходит null — стёртое значение
+      // сохраняется; в чужом объекте не отправляем (как developer/complex)
+      building: canEditPrivate ? form.building.trim() || null : undefined,
       primaryImage: mediaIds[0],
       images: mediaIds.slice(1),
       // Поля собственника и кадастровый номер правят только администраторы:
@@ -3107,9 +3114,21 @@ export const CrmObjects: FC<{
                     ))}
                   </select>
                 </Field>
+                {/* Публичный дом/корпус в ЖК — открытое поле: его показывает
+                    подбор новостроек. Не путать с «Домом» и «Корпусом» в
+                    блоке «Адрес» (закрытые, точный адрес собственника) */}
+                <Field label={t.crm.devFieldBuilding}>
+                  <input
+                    value={form.building}
+                    onChange={(e) => set('building', e.target.value)}
+                    placeholder={t.crm.devFieldBuildingPh}
+                    style={inputStyle}
+                  />
+                </Field>
               </div>
+              <p style={{ margin: '10px 0 0', color: '#817b70', fontSize: 11 }}>{t.crm.devFieldBuildingHint}</p>
               {form.developer && complexesForDeveloper.length === 0 && (
-                <p style={{ margin: '10px 0 0', color: '#817b70', fontSize: 11 }}>{t.crm.devFieldComplexNone}</p>
+                <p style={{ margin: '6px 0 0', color: '#817b70', fontSize: 11 }}>{t.crm.devFieldComplexNone}</p>
               )}
             </div>
           )}
