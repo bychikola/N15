@@ -204,7 +204,7 @@ export const OwnerApplicationsBoard: FC<Props> = ({ t, rows, status, agents }) =
           const canPublish = contactConfirmed
           const publishHint = !contactConfirmed ? t.crm.ownNeedContact : t.crm.ownBoardHint
           const deal = row.type === 'rent' ? t.crm.ownDealRent : t.crm.ownDealSale
-          // Ответственный агент: без него заявку не подтвердить и объект не завести
+          // Ответственный администратор: без него заявку не подтвердить и объект не завести
           const agentPick = agentPicks[row.id] ?? (row.agentId ? String(row.agentId) : '')
           const agentPicked = Number(agentPick) > 0
           const agentSaved = row.agentId != null && String(row.agentId) === agentPick
@@ -248,9 +248,11 @@ export const OwnerApplicationsBoard: FC<Props> = ({ t, rows, status, agents }) =
                   {confirmLabel(t, row.phoneConfirmMethod)}
                   {confirmed && row.phoneConfirmedAt ? ` · ${dateText(row.phoneConfirmedAt)}` : ''}
                 </span>
-                {/* Ответственный агент: нужен только для объекта каталога —
-                    по нему маршрутизируются звонки клиентов. Для публикации
-                    на доске агент не требуется: там контакт собственника */}
+                {/* Ответственный администратор: нужен только для объекта
+                    каталога — по нему маршрутизируются звонки клиентов. Для
+                    публикации на доске он не требуется: там контакт
+                    собственника. Аккаунт администратора Н15 здесь подписан
+                    «Администратор Н15» (см. responsible-display.ts) */}
                 <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#817b70', fontSize: 11 }}>
                   {t.crm.ownAgent}:
                   <select

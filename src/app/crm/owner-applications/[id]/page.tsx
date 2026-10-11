@@ -7,6 +7,7 @@ import { canAccessCrm, getCrmUser } from '../../auth'
 import { CrmShell } from '@/components/crm/CrmShell'
 import { OwnerApplicationCard } from '@/components/crm/OwnerApplicationCard'
 import { loadOwnerApplication } from '@/lib/owner-service'
+import { isN15AdminAccount } from '@/lib/responsible-display'
 
 export const dynamic = 'force-dynamic'
 
@@ -54,8 +55,21 @@ export default async function CrmOwnerApplicationCardPage({ params }: PageProps)
       overrideAccess: true,
     })
     agents = res.docs
-      .map((doc) => ({ id: Number(doc.id), name: String((doc as { name?: unknown }).name || '').trim() }))
+      .map((doc) => ({
+        id: Number(doc.id),
+        name: String((doc as { name?: unknown }).name || '').trim(),
+        email: (doc as { email?: unknown }).email,
+      }))
       .filter((agent) => Number.isFinite(agent.id) && agent.name)
+      // Подпись ответственного зависит от раздела: в «Заявках собственников»
+      // аккаунт администратора Н15 показывается как «Администратор Н15», а в
+      // каталоге объектов тот же аккаунт остаётся именем агента («Лана»).
+      // Права и маршрутизация звонков не меняются — это только подпись
+      // (см. src/lib/responsible-display.ts)
+      .map((agent) => ({
+        id: agent.id,
+        name: isN15AdminAccount(agent.email) ? t.crm.ownAdminName : agent.name,
+      }))
   } catch (e) {
     console.error('Заявки собственников: не удалось прочитать список агентов:', e)
   }

@@ -7,6 +7,7 @@ import { CrmShell } from '@/components/crm/CrmShell'
 import { OwnerApplicationsBoard } from '@/components/crm/OwnerApplicationsBoard'
 import { loadOwnerBoard } from '@/lib/owner-service'
 import { OWNER_APPLICATION_STATUSES } from '@/lib/owner-applications'
+import { isN15AdminAccount } from '@/lib/responsible-display'
 
 export const dynamic = 'force-dynamic'
 
@@ -61,8 +62,21 @@ export default async function CrmOwnerApplicationsPage({ searchParams }: PagePro
       overrideAccess: true,
     })
     agents = res.docs
-      .map((doc) => ({ id: Number(doc.id), name: String((doc as { name?: unknown }).name || '').trim() }))
+      .map((doc) => ({
+        id: Number(doc.id),
+        name: String((doc as { name?: unknown }).name || '').trim(),
+        email: (doc as { email?: unknown }).email,
+      }))
       .filter((agent) => Number.isFinite(agent.id) && agent.name)
+      // Подпись ответственного зависит от раздела: в «Заявках собственников»
+      // аккаунт администратора Н15 показывается как «Администратор Н15», а в
+      // каталоге объектов тот же аккаунт остаётся именем агента («Лана»).
+      // Права и маршрутизация звонков не меняются — это только подпись
+      // (см. src/lib/responsible-display.ts)
+      .map((agent) => ({
+        id: agent.id,
+        name: isN15AdminAccount(agent.email) ? t.crm.ownAdminName : agent.name,
+      }))
   } catch (e) {
     // Без списка агентов подтвердить заявку и завести объект нельзя: раздел
     // не роняем — сервер вернёт понятную ошибку (см. resolveOwnerAgent)

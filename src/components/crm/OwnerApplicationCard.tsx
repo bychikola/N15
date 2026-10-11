@@ -128,7 +128,7 @@ export const OwnerApplicationCard: FC<Props> = ({ t, row, agents }) => {
   const [error, setError] = useState('')
   const [comment, setComment] = useState(row.internalComment ?? '')
   const [status, setStatus] = useState(row.status)
-  // Ответственный агент по заявке: выбранный в поле id строкой ('' — не выбран)
+  // Ответственный администратор по заявке: выбранный в поле id строкой ('' — не выбран)
   const [agent, setAgent] = useState(row.agentId ? String(row.agentId) : '')
   // Объект, созданный прямо сейчас: ссылку «Открыть объект» показываем сразу,
   // не дожидаясь обновления страницы
@@ -149,6 +149,11 @@ export const OwnerApplicationCard: FC<Props> = ({ t, row, agents }) => {
   // (там контакт собственника). Сохранённым считаем выбор, совпавший с заявкой
   const agentPicked = Number(agent) > 0
   const agentSaved = row.agentId != null && String(row.agentId) === agent
+  // Имя сохранённого ответственного берём из списка раздела: у аккаунта
+  // администратора Н15 здесь подпись «Администратор Н15», а в каталоге
+  // объектов тот же аккаунт остаётся именем агента («Лана») — см.
+  // src/lib/responsible-display.ts
+  const savedAgentName = agents.find((a) => a.id === row.agentId)?.name ?? row.agentName
 
   const act = async (
     action: string,
@@ -301,9 +306,11 @@ export const OwnerApplicationCard: FC<Props> = ({ t, row, agents }) => {
       />
 
 
-      {/* Ответственный агент по заявке: нужен только для объекта каталога —
-          по нему маршрутизируются звонки клиентов. Для публикации на доске
-          агент не нужен: там покупатель связывается через Н15 */}
+      {/* Ответственный администратор по заявке: нужен только для объекта
+          каталога — по нему маршрутизируются звонки клиентов. Для публикации
+          на доске он не нужен: там покупатель связывается через Н15. Аккаунт
+          администратора Н15 здесь подписан «Администратор Н15»
+          (см. responsible-display.ts) */}
       <div style={{ border: '1px solid #f0e8da', borderRadius: 10, padding: '12px 14px', marginBottom: 18, background: '#fdfbf7' }}>
         <div style={sectionTitle}>{t.crm.ownAgent}</div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
@@ -318,8 +325,8 @@ export const OwnerApplicationCard: FC<Props> = ({ t, row, agents }) => {
           >
             {t.crm.ownAgentSave}
           </button>
-          {row.agentName && agentSaved && (
-            <span style={{ fontSize: 11, color: '#3f6b34' }}>{row.agentName}</span>
+          {savedAgentName && agentSaved && (
+            <span style={{ fontSize: 11, color: '#3f6b34' }}>{savedAgentName}</span>
           )}
         </div>
         <p style={{ margin: '8px 0 0', fontSize: 11, color: '#817b70' }}>{t.crm.ownAgentHint}</p>

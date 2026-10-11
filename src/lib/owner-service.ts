@@ -73,12 +73,15 @@ const linkedBoardAdId = (doc: Record<string, unknown>): number | null =>
   refId(doc.boardAd ?? null)
 
 /**
- * Ответственный агент по заявке. У нового объекта каталога агент обязателен
- * (validateResponsibleAgent в Objects.ts): по нему маршрутизируются звонки
- * клиентов (см. src/lib/call-routing.ts) и строится доступ к карточке.
- * Порядок: агент, выбранный администратором сейчас (explicit), затем уже
- * сохранённый в заявке (doc.agent). Если агента нет или профиль не найден —
- * понятная ошибка: и подтвердить заявку, и завести объект без агента нельзя.
+ * Ответственный по заявке. В «Заявках собственников» он подписан
+ * «Ответственный администратор» (см. src/lib/responsible-display.ts): аккаунт
+ * один с каталогом, роль зависит от раздела. У нового объекта каталога агент
+ * обязателен (validateResponsibleAgent в Objects.ts): по нему
+ * маршрутизируются звонки клиентов (см. src/lib/call-routing.ts) и строится
+ * доступ к карточке. Порядок: ответственный, выбранный администратором сейчас
+ * (explicit), затем уже сохранённый в заявке (doc.agent). Если его нет или
+ * профиль не найден — понятная ошибка: и подтвердить заявку, и завести объект
+ * без ответственного нельзя.
  */
 async function resolveOwnerAgent(
   payload: Payload,
@@ -87,13 +90,13 @@ async function resolveOwnerAgent(
 ): Promise<{ ok: true; id: number } | { ok: false; error: string }> {
   const id = refId(explicit) ?? refId(doc.agent)
   if (id == null) {
-    return { ok: false, error: 'Выберите ответственного агента — без него объект из заявки не заводится' }
+    return { ok: false, error: 'Выберите ответственного администратора — без него объект из заявки не заводится' }
   }
   try {
     const agent = await payload.findByID({ collection: 'agents', id, depth: 0, overrideAccess: true })
-    if (!agent?.id) return { ok: false, error: 'Ответственный агент не найден — выберите агента из списка' }
+    if (!agent?.id) return { ok: false, error: 'Ответственный администратор не найден — выберите ответственного из списка' }
   } catch {
-    return { ok: false, error: 'Ответственный агент не найден — выберите агента из списка' }
+    return { ok: false, error: 'Ответственный администратор не найден — выберите ответственного из списка' }
   }
   return { ok: true, id }
 }
@@ -1016,7 +1019,8 @@ export interface OwnerBoardRow {
   publishPhoneConsentAt: string | null
   consent: boolean
   consentAt: string | null
-  /** Ответственный агент: нужен только для объекта каталога, для доски не обязателен */
+  /** Ответственный: в разделе подписан «Ответственный администратор». Нужен
+   *  только для объекта каталога, для доски не обязателен */
   agentId: number | null
   agentName: string | null
   /** Объявление доски, собранное из этой заявки (null — заявка на доску не выкладывалась) */
