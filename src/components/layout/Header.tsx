@@ -243,9 +243,11 @@ export const Header: FC = () => {
   const activeDir = serviceDirs.find((dir) => dir.key === servicesDir)
 
   // Остальные разделы верхнего меню — плоским списком после выпадающих.
-  // «Доска объявлений» идёт после «Контактов» — как последний пункт меню
+  // «Доска объявлений» идёт после «Контактов» — как последний пункт меню.
+  // Первым — «Как работает площадка»: этим пунктом заменили «Об агентстве»
+  // (сама страница агентства осталась, ссылка на неё — в подвале)
   const navLinks = [
-    { href: `/${lang}/about`, label: t.nav.about },
+    { href: `/${lang}/how-it-works`, label: t.nav.howItWorks },
     { href: `/${lang}/blog`, label: t.nav.blog },
     { href: `/${lang}/contacts`, label: t.nav.contacts },
     { href: `/${lang}/board`, label: t.nav.board },
