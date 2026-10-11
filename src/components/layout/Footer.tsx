@@ -125,9 +125,21 @@ export const Footer: FC = () => {
         {/* Нижняя строка: переносы включены, чтобы длинные подписи на узких
             экранах не обрезались, а уходили на следующую строку */}
         <div className="mt-12 pt-6 border-t border-[var(--n15-gold)]/10 flex flex-wrap items-center justify-between gap-x-10 gap-y-3">
-          <p className="text-base text-[var(--n15-silver)]">
-            &copy; {new Date().getFullYear()} Н15. {t.footer.rights}
-          </p>
+          {/* Копирайт и мелкая подпись о дате создания сайта держим одним
+              блоком: в общей строке с justify-between они не разъезжаются
+              по краям и на телефоне переносятся вместе */}
+          <div className="min-w-0">
+            <p className="text-base text-[var(--n15-silver)]">
+              &copy; {new Date().getFullYear()} Н15. {t.footer.rights}
+            </p>
+            {/* Мелкая подпись: text-xs = 10.5 px при корневом кегле 14 px
+                (§0, §7 — подписи не мельче 10–11 px). Цвет --n15-muted на
+                зелёном футере даёт контраст 6.5:1 в светлой теме и 5.7:1
+                в тёмной — AA для мелкого текста соблюдён (§6) */}
+            <p className="mt-1 text-xs text-[var(--n15-muted)]">
+              {t.footer.siteCreated}
+            </p>
+          </div>
           <p className="text-base text-[var(--n15-silver)]">
             {t.footer.made}
           </p>
