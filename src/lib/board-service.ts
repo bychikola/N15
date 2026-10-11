@@ -449,6 +449,8 @@ export interface BoardQueueRow {
   rulesVersion: string
   /** Почему нельзя опубликовать (null — можно) */
   issue: string | null
+  /** Источник: 'owner' — объявление из заявки собственника, 'board' — подача с сайта */
+  source: string
   /** Фотографии: до публикации — из закрытого хранилища, после — копии в media */
   photos: BoardPhoto[]
   videoLinks: string
@@ -514,6 +516,7 @@ export async function loadBoardQueue(
       consentAt: str(doc.consentAt) || null,
       rulesVersion: str(doc.rulesVersion),
       issue: boardPublishIssue(doc as never),
+      source: str(doc.source) || 'board',
       // До публикации показываем присланные фото (они в закрытом хранилище),
       // после — копии в media: модератору важно видеть то, что уже на сайте
       photos: boardVisible(doc as never) ? photosOf(doc.publicPhotos) : photosOf(doc.photos),

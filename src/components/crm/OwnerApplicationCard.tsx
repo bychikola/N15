@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, type FC, type ReactNode } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import type { Dict } from '@/i18n/dictionaries'
 import type { OwnerBoardRow } from '@/lib/owner-service'
@@ -355,6 +356,14 @@ export const OwnerApplicationCard: FC<Props> = ({ t, row, agents }) => {
             >
               {t.crm.ownBoardOpen}
             </a>
+            {/* Правка содержания объявления администратором: заголовок, описание,
+                параметры, стоимость и фотографии (см. OwnerBoardAdEdit) */}
+            <Link
+              href={`/crm/board/owner/${row.boardAdId}`}
+              style={{ ...btnStyle, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
+            >
+              {t.crm.ownEditAd}
+            </Link>
           </div>
         ) : (
           <span style={{ fontSize: 13, color: '#817b70' }}>{t.crm.ownBoardAdNone}</span>

@@ -49,7 +49,7 @@ export default async function CrmBoardPage({ searchParams }: PageProps) {
       <p style={{ margin: '0 0 18px', color: '#817b70', fontSize: 11, lineHeight: 1.55, maxWidth: 720 }}>
         {t.crm.boardSubtitle}
       </p>
-      <BoardModeration t={t} rows={rows} status={filter} />
+      <BoardModeration t={t} rows={rows} status={filter} isAdmin={user.role === 'admin'} />
     </CrmShell>
   )
 }

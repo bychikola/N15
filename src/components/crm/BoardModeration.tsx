@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, type FC } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import type { Dict } from '@/i18n/dictionaries'
 import type { BoardQueueRow } from '@/lib/board-service'
@@ -25,6 +26,12 @@ interface Props {
   rows: BoardQueueRow[]
   /** Выбранный фильтр статуса ('' — все) */
   status: string
+  /**
+   * Смотрит администратор. Правка содержания объявления собственника доступна
+   * только ему (см. маршрут /api/crm/board/owner-ad) — очередь открыта всей
+   * команде, поэтому кнопка показывается под ролью
+   */
+  isAdmin: boolean
 }
 
 /** Цвет плашки статуса — как у остальных статусов CRM */
@@ -81,7 +88,7 @@ const dateText = (iso: string | null): string => {
 
 const money = (v: number | null): string => (v == null ? '—' : `${new Intl.NumberFormat('ru-RU').format(v)} ₽`)
 
-export const BoardModeration: FC<Props> = ({ t, rows, status }) => {
+export const BoardModeration: FC<Props> = ({ t, rows, status, isAdmin }) => {
   const router = useRouter()
   // Пояснение пишется в карточке и используется кнопками «уточнения» и «отклонить»
   const [notes, setNotes] = useState<Record<number, string>>({})
@@ -348,6 +355,16 @@ export const BoardModeration: FC<Props> = ({ t, rows, status }) => {
                       {t.crm.boardUnpublish}
                     </button>
                   </>
+                )}
+                {/* Правка объявления собственника: доступна только администратору,
+                    меняет содержание, не разрывая связь с заявкой владельца */}
+                {isAdmin && row.source === 'owner' && (
+                  <Link
+                    href={`/crm/board/owner/${row.id}`}
+                    style={{ ...btnStyle, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
+                  >
+                    {t.crm.ownEditAd}
+                  </Link>
                 )}
               </div>
             </div>
