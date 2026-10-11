@@ -35,7 +35,16 @@ export default async function BoardPage({ params }: PageProps) {
               <h1 className="text-3xl md:text-4xl font-[family-name:var(--font-display)] text-[var(--n15-white)]">
                 {t.board.title}
               </h1>
-              <p className="text-[var(--n15-muted)] max-w-xl mt-2">{t.board.subtitle}</p>
+              {/* Подпись под заголовком — короткая и мелкая: у доски длинное
+                  описание заменено на «Объявления от собственников», чтобы
+                  первый экран не спорил с выдачей (§7: подписи 12 px).
+                  Цвет — фирменное золото, смешанное с цветом заголовков:
+                  чистое золото на кремовом даёт 4.3:1 и не дотягивает до AA,
+                  а подмешанный --n15-white (тёмный в светлой теме, светлый
+                  в тёмной) поднимает контраст в обеих темах */}
+              <p className="text-[12px] tracking-[0.12em] text-[color-mix(in_srgb,var(--n15-gold)_80%,var(--n15-white))] mt-2">
+                {t.board.subtitle}
+              </p>
             </div>
             <Link
               href={`/${lang}/board/new`}
