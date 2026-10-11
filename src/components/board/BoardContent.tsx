@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useI18n } from '@/i18n/i18n-provider'
 import { BoardAdCard } from '@/components/board/BoardAdCard'
@@ -262,7 +263,19 @@ export function BoardContent({ initialTotal = 0 }: BoardContentProps) {
               {t.catalog.resetAll}
             </button>
           ) : (
-            <p className="text-sm text-[var(--n15-muted)] max-w-xl mx-auto leading-relaxed">{t.board.emptyText}</p>
+            <>
+              <p className="text-sm text-[var(--n15-muted)] max-w-xl mx-auto leading-relaxed mb-6">
+                {t.board.emptyText}
+              </p>
+              {/* Пусто на доске — не отправляем в каталог агентства, а зовём
+                  подать своё объявление: форма /board/new открыта каждому */}
+              <Link
+                href={`/${lang}/board/new`}
+                className="n15-cta-green inline-flex items-center px-4 py-2.5 text-xs tracking-wider uppercase border border-[var(--n15-gold)]/40 transition-all duration-300"
+              >
+                {t.board.placeCta}
+              </Link>
+            </>
           )}
         </div>
       ) : (

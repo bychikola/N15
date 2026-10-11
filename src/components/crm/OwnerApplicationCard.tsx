@@ -135,16 +135,13 @@ export const OwnerApplicationCard: FC<Props> = ({ t, row, agents }) => {
   const [createdObjectId, setCreatedObjectId] = useState<number | null>(null)
 
   const confirmed = Boolean(row.phoneConfirmedAt)
-  // Публикация на доске: контакт подтверждён вручную и получено отдельное
-  // согласие на показ номера — иначе кнопка недоступна. Отдельное
-  // подтверждение телефона для доски не требуется (см. ниже про объект каталога)
+  // Публикация на доске: достаточно подтверждённого вручную контакта — номер
+  // собственника на сайте не публикуется, поэтому согласие на его показ не
+  // требуется. Отдельное подтверждение телефона для доски тоже не нужно
+  // (см. ниже про объект каталога)
   const contactConfirmed = Boolean(row.contactConfirmedAt)
-  const canPublish = contactConfirmed && row.publishPhoneConsent
-  const publishHint = !contactConfirmed
-    ? t.crm.ownNeedContact
-    : !row.publishPhoneConsent
-      ? t.crm.ownNeedPhoneConsent
-      : t.crm.ownBoardHint
+  const canPublish = contactConfirmed
+  const publishHint = !contactConfirmed ? t.crm.ownNeedContact : t.crm.ownBoardHint
   const deal = row.type === 'rent' ? t.crm.ownDealRent : t.crm.ownDealSale
   const objectId = row.objectId ?? createdObjectId
   const objectTitle = row.objectTitle || (objectId ? `Объект №${objectId}` : '')
@@ -306,7 +303,7 @@ export const OwnerApplicationCard: FC<Props> = ({ t, row, agents }) => {
 
       {/* Ответственный агент по заявке: нужен только для объекта каталога —
           по нему маршрутизируются звонки клиентов. Для публикации на доске
-          агент не нужен: там покупатель звонит самому собственнику */}
+          агент не нужен: там покупатель связывается через Н15 */}
       <div style={{ border: '1px solid #f0e8da', borderRadius: 10, padding: '12px 14px', marginBottom: 18, background: '#fdfbf7' }}>
         <div style={sectionTitle}>{t.crm.ownAgent}</div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
@@ -502,9 +499,9 @@ export const OwnerApplicationCard: FC<Props> = ({ t, row, agents }) => {
           </button>
         )}
         {/* Публикация на доске: агент не нужен, объект каталога не заводится —
-            объявление выходит с телефоном собственника. Доступна после ручного
-            подтверждения контакта и отдельного согласия на показ номера — и
-            только пока объявления нет */}
+            объявление выходит от собственника, но с контактом через Н15.
+            Доступна после ручного подтверждения контакта и только пока
+            объявления нет */}
         {!row.boardAdId && (
           <button
             type="button"

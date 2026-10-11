@@ -16,9 +16,9 @@ import { OwnerContactConfirm } from '@/components/crm/OwnerContactConfirm'
  * администратор видит телефон и адрес собственника, источник, дату
  * поступления, фотографии, найденные совпадения с базой и историю — и ведёт
  * заявку по статусам: подтверждает телефон вручную (если SMS не ушла),
- * вручную подтверждает контакт (WhatsApp или звонок, с согласием на показ
- * номера — см. OwnerContactConfirm), ставит «На проверке», «Подтверждён
- * собственник», создаёт объект (черновик) или связывает заявку с дублем.
+ * вручную подтверждает контакт (WhatsApp или звонок — см. OwnerContactConfirm),
+ * ставит «На проверке», «Подтверждён собственник», создаёт объект (черновик)
+ * или связывает заявку с дублем.
  *
  * Все действия идут маршрутом /api/crm/owner-applications/action: он ещё раз
  * проверяет, что вошедший — администратор, и только потом меняет данные
@@ -194,18 +194,15 @@ export const OwnerApplicationsBoard: FC<Props> = ({ t, rows, status, agents }) =
       ) : (
         rows.map((row) => {
           const confirmed = Boolean(row.phoneConfirmedAt)
-          // Публикация на доске: контакт подтверждён вручную и есть отдельное
-          // согласие на показ номера. Отдельное подтверждение телефона (SMS-код
-          // или вторая ручная отметка) для доски не требуется — единственный
+          // Публикация на доске: достаточно ручного подтверждения контакта.
+          // Согласие на показ номера не требуется — номер собственника на
+          // сайте не публикуется. Отдельное подтверждение телефона (SMS-код
+          // или вторая ручная отметка) для доски тоже не нужно — единственный
           // способ подтверждения контакта и есть ручная отметка администратора
           // (см. publishOwnerApplicationToBoard)
           const contactConfirmed = Boolean(row.contactConfirmedAt)
-          const canPublish = contactConfirmed && row.publishPhoneConsent
-          const publishHint = !contactConfirmed
-            ? t.crm.ownNeedContact
-            : !row.publishPhoneConsent
-              ? t.crm.ownNeedPhoneConsent
-              : t.crm.ownBoardHint
+          const canPublish = contactConfirmed
+          const publishHint = !contactConfirmed ? t.crm.ownNeedContact : t.crm.ownBoardHint
           const deal = row.type === 'rent' ? t.crm.ownDealRent : t.crm.ownDealSale
           // Ответственный агент: без него заявку не подтвердить и объект не завести
           const agentPick = agentPicks[row.id] ?? (row.agentId ? String(row.agentId) : '')
@@ -485,9 +482,9 @@ export const OwnerApplicationsBoard: FC<Props> = ({ t, rows, status, agents }) =
                   </button>
                 )}
                 {/* Публикация на доске: объект каталога не заводится, агент не
-                    нужен — объявление выходит с телефоном собственника. Кнопка
-                    активна после ручного подтверждения контакта и отдельного
-                    согласия на номер — и только до публикации */}
+                    нужен — объявление выходит от собственника, связь через Н15.
+                    Кнопка активна после ручного подтверждения контакта — и
+                    только до публикации */}
                 {!row.boardAdId && (
                   <button
                     type="button"

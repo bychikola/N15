@@ -11,11 +11,10 @@ import type { OwnerBoardRow } from '@/lib/owner-service'
  * открывает чат с готовым текстом подтверждения, «Позвонить» — набирает номер.
  * Затем выбирается способ (WhatsApp или телефонный звонок) и нажимается
  * «Контакт подтверждён»: сервис сохраняет дату, способ и администратора
- * (см. confirmOwnerContact). Ниже — отдельное согласие на показ номера:
- * без него и без подтверждённого контакта публикация на доске закрыта.
- * Это единственный способ подтверждения для доски: ни код из SMS, ни вторая
- * ручная отметка «Подтвердить телефон» для публикации объявления не нужны —
- * администратор уже связался с владельцем по этому номеру.
+ * (см. confirmOwnerContact). Это единственное условие публикации на доске:
+ * ни код из SMS, ни вторая ручная отметка «Подтвердить телефон», ни согласие
+ * на показ номера не нужны — администратор уже связался с владельцем по этому
+ * номеру, а сам номер на сайте не публикуется (см. boardShowsPublicPhone).
  *
  * Блок один и тот же в списке заявок и в полной карточке: действия выглядят
  * одинаково в обоих местах (см. OwnerApplicationsBoard, OwnerApplicationCard).
@@ -79,7 +78,6 @@ const methodLabel = (t: Dict, value: string | null): string =>
 
 export const OwnerContactConfirm: FC<Props> = ({ t, row, busy, onAction }) => {
   const [method, setMethod] = useState(row.contactConfirmMethod || 'whatsapp')
-  const [consent, setConsent] = useState(row.publishPhoneConsent)
 
   const confirmed = Boolean(row.contactConfirmedAt)
   const digits = row.ownerPhone.replace(/\D/g, '')
@@ -152,43 +150,6 @@ export const OwnerContactConfirm: FC<Props> = ({ t, row, busy, onAction }) => {
                 .filter(Boolean)
                 .join(' · ')
             : t.crm.ownContactNotConfirmed}
-        </span>
-      </div>
-
-      {/* Отдельное согласие на показ номера — самостоятельное условие публикации */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', marginTop: 10 }}>
-        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#25241f' }}>
-          <input
-            type="checkbox"
-            checked={consent}
-            onChange={(e) => setConsent(e.target.checked)}
-            style={{ width: 16, height: 16, cursor: 'pointer' }}
-          />
-          {t.crm.ownPhoneConsent}
-        </label>
-        <button
-          type="button"
-          onClick={() => onAction('phone_consent', { consent })}
-          disabled={busy || consent === row.publishPhoneConsent}
-          style={{
-            ...btnStyle,
-            opacity: busy || consent === row.publishPhoneConsent ? 0.45 : 1,
-            cursor: consent === row.publishPhoneConsent ? 'not-allowed' : 'pointer',
-          }}
-        >
-          {t.crm.ownPhoneConsentSave}
-        </button>
-        <span
-          style={{
-            fontSize: 10,
-            color: row.publishPhoneConsent ? '#3f6b34' : '#9b4e43',
-            textTransform: 'uppercase',
-            letterSpacing: '.06em',
-          }}
-        >
-          {row.publishPhoneConsent
-            ? `${t.crm.ownPhoneConsentYes}${row.publishPhoneConsentAt ? ` · ${dateText(row.publishPhoneConsentAt)}` : ''}`
-            : t.crm.ownPhoneConsentNo}
         </span>
       </div>
 
