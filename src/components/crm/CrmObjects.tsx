@@ -25,7 +25,13 @@ import { sortAgents } from '@/lib/agents-sort'
 // /api/objects, см. src/lib/object-filters.ts
 import { OBJECT_FILTER_OFFICE, objectListWhere, type ObjectListFilters } from '@/lib/object-filters'
 // Ответственный агент — поле с поиском по агентам (см. AgentPicker)
-import { AgentPicker } from '@/components/crm/AgentPicker'
+import { AgentPicker, type AgentOption } from '@/components/crm/AgentPicker'
+// Подпись ответственного зависит от раздела, аккаунт один: профиль
+// администратора Н15 в заявках подписан «Администратор Н15», а в каталоге
+// объектов остаётся именем агента («Лана»). В карточке объекта рядом с именем
+// агента добавляем и вариант «Администратор Н15» — тем же профилем (см.
+// src/lib/responsible-display.ts).
+import { n15AdminAgentId } from '@/lib/responsible-display'
 // Категории объектов: полный список значений, правила участка и домовых
 // категорий — общий справочник схемы коллекции (src/lib/object-categories.ts)
 import { OBJECT_CATEGORIES, isHouseCategoryCode, isPlotCategoryCode, isPrivateHouseCode } from '@/lib/object-categories'
@@ -94,6 +100,14 @@ import {
   isAllowedPhoto,
   photoSizeLabel,
 } from '@/lib/photo-rules'
+
+/**
+ * Ключ варианта «Администратор Н15» в поле ответственного. Это не отдельный
+ * сотрудник, а тот же профиль администратора Н15 под другой подписью: при
+ * сохранении карточка переводит ключ в реальный id профиля (см. save), поэтому
+ * ответственный хранится связью и не теряется при повторном открытии.
+ */
+const N15_ADMIN_AGENT_OPTION = 'admin'
 
 interface ObjectRow {
   id: number
@@ -1027,7 +1041,7 @@ export const CrmObjects: FC<{
   autoEdit?: number | null
 }> = ({ t, isAdmin, myAgentId = null, ownObjectIds = [], autoOpen = false, autoEdit = null }) => {
   const [rows, setRows] = useState<ObjectRow[]>([])
-  const [agents, setAgents] = useState<{ id: number; name: string }[]>([])
+  const [agents, setAgents] = useState<{ id: number; name: string; email?: string }[]>([])
   // Справочник застройщиков и их комплексов для полей карточки объекта
   // (раздел CRM «Застройщики»). Архивных застройщиков в выборе помечаем —
   // привязка к ним у старых объектов остаётся видимой
@@ -1258,8 +1272,11 @@ export const CrmObjects: FC<{
         }
       }),
     )
-    // Агенты в алфавитном порядке по фамилии (единый порядок для сайта и CRM)
-    setAgents(sortAgents(((agentsData.docs || []) as { id: number; name: string }[]).map((a) => ({ id: a.id, name: a.name }))))
+    // Агенты в алфавитном порядке по фамилии (единый порядок для сайта и CRM).
+    // Почту сохраняем в списке: по ней узнаём профиль администратора Н15, чтобы
+    // рядом с именем агента дать вариант «Администратор Н15» (см. agentOptions).
+    // Поле email сервер отдаёт сотруднику CRM (см. access в коллекции Agents)
+    setAgents(sortAgents(((agentsData.docs || []) as { id: number; name: string; email?: string }[]).map((a) => ({ id: a.id, name: a.name, email: a.email }))))
     setLoading(false)
   }, [])
 
@@ -2074,11 +2091,18 @@ export const CrmObjects: FC<{
       // Ответственный агент: у администратора пустое значение очищает поле
       // (в поле выбора это строка «—»), у остальных агент не участвует в
       // запросе — своего агента агенту проставляет хук коллекции при создании.
+      // Вариант «Администратор Н15» — тот же профиль под другой подписью: в
+      // связь уходит его реальный id, а не ключ строки (иначе сервер отклонил
+      // бы значение и ответственный не сохранился бы).
       // У объекта офиса агент не отправляется (у администратора — null, чтобы
       // снять прежнего ответственного): личного агента у такого объекта нет
       agent: isOfficeOwnership(form.ownership)
         ? (isAdmin ? null : undefined)
-        : form.agent ? Number(form.agent) : isAdmin ? null : undefined,
+        : form.agent === N15_ADMIN_AGENT_OPTION
+          ? (n15AdminId ?? (isAdmin ? null : undefined))
+          : form.agent
+            ? Number(form.agent)
+            : isAdmin ? null : undefined,
       // Застройщик и жилой комплекс — необязательная связь со справочником
       // «Застройщики». Пусто уходит null: снятый выбор сохраняется. В чужом
       // объекте поля не отправляем (access полей в коллекции Objects), чтобы
@@ -2509,6 +2533,24 @@ export const CrmObjects: FC<{
     setPlErr('')
     await load()
   }
+
+  // Профиль администратора Н15 — по почте учётной записи (см. responsible-display).
+  // Ответственных в карточке объекта подписываем как в заявках: рядом с именем
+  // агента «Лана Козырева» у того же профиля появляется вариант «Администратор
+  // Н15». Личные объекты администратор по-прежнему может отдать «Лане» — обе
+  // подписи ведут к одному реальному профилю, поэтому выбор сохраняется связью.
+  const n15AdminId = n15AdminAgentId(agents)
+  const agentOptions: AgentOption[] = (() => {
+    const options: AgentOption[] = agents.map((a) => ({ id: a.id, name: a.name }))
+    if (n15AdminId == null || !isAdmin) return options
+    const adminOption: AgentOption = { id: n15AdminId, name: t.crm.ownAdminName, key: N15_ADMIN_AGENT_OPTION }
+    // Держим вариант рядом с профилем администратора, а не в конце списка:
+    // агенты отсортированы по фамилии, и «Лана Козырева» уже на своём месте
+    const at = options.findIndex((option) => option.id === n15AdminId)
+    if (at >= 0) options.splice(at + 1, 0, adminOption)
+    else options.push(adminOption)
+    return options
+  })()
 
   return (
     <div>
@@ -3397,8 +3439,10 @@ export const CrmObjects: FC<{
               {isAdmin ? (
                 // Поле с поиском по агентам: список длинный, нужного ищут по
                 // фамилии (см. AgentPicker). Строка «—» снимает ответственного —
-                // это же значение сохраняет карточка (см. agent в save)
-                <AgentPicker t={t} agents={agents} value={form.agent} onChange={(id) => set('agent', id)} />
+                // это же значение сохраняет карточка (см. agent в save).
+                // agentOptions — агенты и вариант «Администратор Н15» тем же
+                // профилем администратора (см. n15AdminId выше)
+                <AgentPicker t={t} agents={agentOptions} value={form.agent} onChange={(id) => set('agent', id)} />
               ) : (
                 <input
                   value={agents.find((a) => String(a.id) === form.agent)?.name || (form.agent ? form.agent : '—')}

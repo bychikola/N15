@@ -20,3 +20,19 @@ const normEmail = (value: unknown): string =>
 
 /** Профиль агента, который в «Заявках собственников» подписан «Администратор Н15» */
 export const isN15AdminAccount = (email: unknown): boolean => normEmail(email) === N15_ADMIN_EMAIL
+
+/**
+ * id профиля агента администратора Н15 в списке ответственных — по почте
+ * учётной записи. null — профиля с такой почтой в списке нет: подписи
+ * «Администратор Н15» тогда взяться неоткуда, и вариант не показываем.
+ *
+ * Список приходит из /api/agents: поле email сервер отдаёт только сотруднику
+ * CRM (см. access поля в коллекции Agents), поэтому проверка имеет смысл
+ * именно там, где список собирает администратор.
+ */
+export const n15AdminAgentId = (
+  agents: { id: number; email?: unknown }[],
+): number | null => {
+  const found = agents.find((agent) => isN15AdminAccount(agent.email))
+  return found ? found.id : null
+}

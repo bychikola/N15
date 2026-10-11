@@ -25,11 +25,19 @@ export interface AgentOption {
   name: string
   /** Должность — показываем подсказкой в строке списка */
   position?: string
+  /**
+   * Ключ строки списка, если у одного профиля агента их несколько. Так у
+   * карточки объекта рядом с именем агента может стоять вариант «Администратор
+   * Н15» — тот же сотрудник, другая подпись (см. src/lib/responsible-display.ts).
+   * Значение поля — этот ключ; по умолчанию id агента строкой. Связь в базе всё
+   * равно остаётся id профиля: карточка переводит ключ в id при сохранении.
+   */
+  key?: string
 }
 
-/** Строка выпадающего списка: id агента строкой ('' — строка «—») */
+/** Строка выпадающего списка: ключ варианта ('' — строка «—») */
 interface Row {
-  id: string
+  value: string
   name: string
   position?: string
 }
@@ -64,14 +72,14 @@ export const AgentPicker: FC<Props> = ({ t, agents, value, onChange }) => {
   // id списка для aria-controls: на странице может быть несколько полей выбора
   const listId = useId()
 
-  const selected = agents.find((a) => String(a.id) === value)
+  const selected = agents.find((a) => (a.key ?? String(a.id)) === value)
   const q = norm(query)
-  // Строки списка: «—» (снять выбор) и подходящие под поиск агенты — id
-  // строкой, как значение поля
+  // Строки списка: «—» (снять выбор) и подходящие под поиск варианты — их
+  // ключом (id агента строкой, а у «Администратора Н15» — особым ключом)
   const items: Row[] = agents
     .filter((a) => !q || norm(a.name).includes(q) || norm(a.position || '').includes(q))
-    .map((a) => ({ id: String(a.id), name: a.name, position: a.position }))
-  const rows: Row[] = [{ id: '', name: '—' }, ...items]
+    .map((a) => ({ value: a.key ?? String(a.id), name: a.name, position: a.position }))
+  const rows: Row[] = [{ value: '', name: '—' }, ...items]
   // Выбор агента, которого нет в списке (снят с публикации, удалён), — показываем
   // номер, чтобы поле не выглядело пустым при сохранённом значении
   const selectedText = selected?.name || (value ? `#${value}` : '')
@@ -80,8 +88,8 @@ export const AgentPicker: FC<Props> = ({ t, agents, value, onChange }) => {
   const shown = open ? query : selectedText
   const placeholder = open && selectedText ? selectedText : t.crm.objAgentPh
 
-  const pick = (id: string) => {
-    onChange(id)
+  const pick = (value: string) => {
+    onChange(value)
     setQuery('')
     setActive(-1)
     setOpen(false)
@@ -106,7 +114,7 @@ export const AgentPicker: FC<Props> = ({ t, agents, value, onChange }) => {
       const row = rows[active] ?? (rows.length === 2 ? rows[1] : undefined)
       if (open && row) {
         e.preventDefault()
-        pick(row.id)
+        pick(row.value)
       }
     }
   }
@@ -145,10 +153,10 @@ export const AgentPicker: FC<Props> = ({ t, agents, value, onChange }) => {
       {open && (
         <div className="crm-suggest" role="listbox" id={listId}>
           {rows.map((row, i) => {
-            const isSelected = row.id === value && row.id !== ''
+            const isSelected = row.value === value && row.value !== ''
             return (
               <button
-                key={row.id || 'none'}
+                key={row.value || 'none'}
                 type="button"
                 role="option"
                 aria-selected={isSelected}
@@ -156,7 +164,7 @@ export const AgentPicker: FC<Props> = ({ t, agents, value, onChange }) => {
                 // mousedown раньше blur: выбор не теряется при клике и на телефоне
                 onMouseDown={(e) => {
                   e.preventDefault()
-                  pick(row.id)
+                  pick(row.value)
                 }}
                 onMouseEnter={() => setActive(i)}
               >
