@@ -14,13 +14,20 @@ import type { Dict } from '@/i18n/dictionaries'
  *
  * Ответ автор пишет из личного кабинета; покупатель читает переписку там же —
  * в разделе «Мои объявления» (см. /lk/board).
+ *
+ * У объявления собственника (agency) сообщение уходит не владельцу напрямую, а
+ * сотруднику Н15 — он и есть посредник: переписку ведёт агентство, а оно уже
+ * передаёт заявку собственнику. Подписи под полем в этом случае говорят про
+ * Н15, а не про автора: иначе покупатель ждал бы ответа от владельца.
  */
-export const BoardMessageForm: FC<{ t: Dict; adId: number; loggedIn: boolean; lang: string }> = ({
-  t,
-  adId,
-  loggedIn,
-  lang,
-}) => {
+export const BoardMessageForm: FC<{
+  t: Dict
+  adId: number
+  loggedIn: boolean
+  lang: string
+  /** Объявление собственника: пишем в Н15 (посредник), а не владельцу напрямую */
+  agency?: boolean
+}> = ({ t, adId, loggedIn, lang, agency = false }) => {
   const [text, setText] = useState('')
   const [sent, setSent] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -58,7 +65,9 @@ export const BoardMessageForm: FC<{ t: Dict; adId: number; loggedIn: boolean; la
   if (!loggedIn) {
     return (
       <div>
-        <p className="text-[11px] leading-relaxed text-[var(--n15-muted)] mb-3">{t.board.msgLoginHint}</p>
+        <p className="text-[11px] leading-relaxed text-[var(--n15-muted)] mb-3">
+          {agency ? t.board.msgLoginHintAgency : t.board.msgLoginHint}
+        </p>
         <Link
           href={`/${lang}/login`}
           className="block w-full text-center px-4 py-3 text-xs tracking-wider uppercase border border-[var(--n15-gold)]/30 text-[var(--n15-gold)] hover:bg-[var(--n15-gold)]/8 transition-all duration-300"
@@ -73,7 +82,9 @@ export const BoardMessageForm: FC<{ t: Dict; adId: number; loggedIn: boolean; la
     return (
       <div>
         <p className="text-sm text-[var(--n15-gold)] mb-2">{t.board.msgSent}</p>
-        <p className="text-[11px] leading-relaxed text-[var(--n15-muted)] mb-3">{t.board.msgSentHint}</p>
+        <p className="text-[11px] leading-relaxed text-[var(--n15-muted)] mb-3">
+          {agency ? t.board.msgSentHintAgency : t.board.msgSentHint}
+        </p>
         <button
           type="button"
           onClick={() => setSent(false)}
@@ -102,7 +113,9 @@ export const BoardMessageForm: FC<{ t: Dict; adId: number; loggedIn: boolean; la
       >
         {busy ? t.board.msgSending : t.board.msgSend}
       </button>
-      <p className="mt-2 text-[11px] leading-relaxed text-[var(--n15-muted)]">{error || t.board.msgHint}</p>
+      <p className="mt-2 text-[11px] leading-relaxed text-[var(--n15-muted)]">
+        {error || (agency ? t.board.msgHintAgency : t.board.msgHint)}
+      </p>
     </div>
   )
 }

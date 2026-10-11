@@ -22,6 +22,7 @@ import {
   boardAdAddress,
   boardPublicAddress,
   boardPublishIssue,
+  boardShowsPublicPhone,
   boardVisible,
   type BoardAddressLike,
 } from './board'
@@ -299,12 +300,18 @@ export async function loadBoardAd(
  * Телефон автора по кнопке «Показать телефон». Отдаём только у опубликованного
  * и не истёкшего объявления: телефон автора — персональные данные, и в разметке
  * страницы его нет вовсе (как у агентов, см. /api/agents/contact).
+ *
+ * У объявления из заявки собственника (source: 'owner') номер не отдаётся
+ * никогда: он не публикуется на сайте, а связь с владельцем идёт через Н15
+ * (см. boardShowsPublicPhone в src/lib/board.ts). Проверка стоит здесь, а не
+ * только в кнопке: так номер собственника не утечёт и при прямом вызове маршрута.
  */
 export async function boardAdPhone(payload: Payload, id: number): Promise<string | null> {
   const doc = (await payload
     .findByID({ collection: 'board-ads', id, depth: 0, overrideAccess: true })
     .catch(() => null)) as unknown as Record<string, unknown> | null
   if (!doc || !boardVisible(doc as never)) return null
+  if (!boardShowsPublicPhone(doc as never)) return null
   return str(doc.phone) || null
 }
 

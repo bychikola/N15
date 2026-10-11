@@ -8,6 +8,7 @@ import { Header } from '@/components/layout/Header'
 import { Footer } from '@/components/layout/Footer'
 import { PhotoGrid } from '@/components/ui/PhotoGrid'
 import { BoardPhoneButton } from '@/components/board/BoardPhoneButton'
+import { BoardOwnerContact } from '@/components/board/BoardOwnerContact'
 import { BoardMessageForm } from '@/components/board/BoardMessageForm'
 import { BoardAdCard } from '@/components/board/BoardAdCard'
 import { getDictionary } from '@/i18n/dictionaries'
@@ -204,8 +205,10 @@ export default async function BoardAdPage({ params }: PageProps) {
                 </div>
               </div>
 
-              {/* Автор и связь с ним: телефон отдаётся кнопкой, номер в разметке
-                  страницы не выводится */}
+              {/* Автор и связь с ним. У обычной подачи телефон отдаётся кнопкой
+                  (номер в разметке не выводится); у объявления собственника
+                  номера владельца нет вовсе — связаться с ним помогает Н15
+                  (см. BoardOwnerContact и boardShowsPublicPhone) */}
               <aside className="lg:col-span-1">
                 <div className="lg:sticky lg:top-24 border border-[var(--n15-gold)]/20 bg-[var(--n15-black)]/40 p-5">
                   <p className="text-[10px] tracking-[0.2em] uppercase text-[var(--n15-muted)] mb-2">
@@ -221,14 +224,15 @@ export default async function BoardAdPage({ params }: PageProps) {
                         ? t.board.authorOwnerHint
                         : t.board.authorPrivateHint}
                   </p>
-                  <BoardPhoneButton t={t} adId={ad.id} />
+                  {isOwner ? <BoardOwnerContact t={t} /> : <BoardPhoneButton t={t} adId={ad.id} />}
 
                   {/* Переписка: покупатель пишет автору, ответ приходит
-                      в личный кабинет. Автору своей же объявление писать
-                      не предлагаем — он и есть вторая сторона */}
+                      в личный кабинет. У объявления собственника посредником
+                      выступает Н15 — подписи под полем говорят про агентство.
+                      Автору своего же объявления писать не предлагаем */}
                   {!ad.viewerIsAuthor && (
                     <div className="mt-4 pt-4 border-t border-[var(--n15-gold)]/15">
-                      <BoardMessageForm t={t} adId={ad.id} loggedIn={Boolean(user)} lang={lang} />
+                      <BoardMessageForm t={t} adId={ad.id} loggedIn={Boolean(user)} lang={lang} agency={isOwner} />
                     </div>
                   )}
                   <p className="mt-4 text-[11px] text-[var(--n15-muted)]">

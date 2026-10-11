@@ -111,6 +111,8 @@ export interface BoardAdLike {
   consentRules?: boolean | null
   author?: unknown
   authorKind?: string | null
+  /** board — подача на доске, owner — объявление из заявки собственника */
+  source?: string | null
   publishedAt?: string | null
   expiresAt?: string | null
   /** Согласие собственника показывать точный адрес (см. boardShowsExactAddress) */
@@ -206,6 +208,25 @@ export const boardShowsExactAddress = (
   ad: Pick<BoardAdLike, 'showExactAddress'>,
   viewer?: { isStaff?: boolean; isAuthor?: boolean } | null,
 ): boolean => ad.showExactAddress === true || viewer?.isStaff === true || viewer?.isAuthor === true
+
+/**
+ * Показывать ли телефон автора публично — кнопкой «Показать телефон».
+ *
+ * У объявления из заявки собственника (source: 'owner') номер владельца не
+ * публикуется вовсе: собственник оставлял телефон для связи с Н15, а не для
+ * открытой доски, и кнопка «Показать телефон» со ссылками tel: и WhatsApp
+ * раскрыла бы его любому — это не полное скрытие. Связь с владельцем идёт
+ * через посредника: покупатель звонит или пишет в Н15, а сотрудник соединяет
+ * его с собственником (см. BoardOwnerContact на странице объявления).
+ *
+ * Обычная подача на доске (source: 'board') этот номер показывает по-прежнему:
+ * там автор сам ставит телефон для связи, и кнопка — часть договора с ним.
+ * Проверка одна на всех: по ней и страница решает, что показать вместо номера,
+ * и маршрут /api/board/ads/phone отказывается отдавать номер собственника
+ * (см. boardAdPhone).
+ */
+export const boardShowsPublicPhone = (ad: Pick<BoardAdLike, 'source'>): boolean =>
+  adValue(ad.source) !== 'owner'
 
 /**
  * Адрес объявления для показа. Номер дома на доске по умолчанию не показываем:

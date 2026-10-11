@@ -430,7 +430,10 @@ export const BoardAds: CollectionConfig = {
                   type: 'text',
                   label: 'Телефон',
                   required: true,
-                  admin: { description: 'На сайте номер не публикуется — отдаётся по кнопке' },
+                  admin: {
+                    description:
+                      'На сайте номер не публикуется — отдаётся по кнопке. У объявления собственника (Источник: «От собственника») номер не отдаётся вовсе: связь идёт через Н15',
+                  },
                 },
                 { name: 'email', type: 'email', label: 'Почта' },
               ],
