@@ -126,6 +126,11 @@ export const Header: FC = () => {
   // Области выпадающих панелей — для закрытия по клику вне меню
   const servicesWrapRef = useRef<HTMLDivElement>(null)
   const realtyWrapRef = useRef<HTMLDivElement>(null)
+  // Те же разделы в мобильном меню — отдельные узлы: аккордеон на телефоне
+  // не вложен в десктопные обёртки, и без этого нажатие на подпункт
+  // считалось кликом «вне меню» и закрывало список до перехода по ссылке
+  const mobileServicesWrapRef = useRef<HTMLDivElement>(null)
+  const mobileRealtyWrapRef = useRef<HTMLDivElement>(null)
   // Выпадающее меню «Услуги» — для оценки ширины при переключении
   // направлений (ширина панели после переключения ещё не отрисована)
   const servicesPanelRef = useRef<HTMLDivElement>(null)
@@ -383,8 +388,14 @@ export const Header: FC = () => {
     if (!servicesOpen && !realtyOpen) return
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Node
-      const inServices = servicesWrapRef.current?.contains(target) ?? false
-      const inRealty = realtyWrapRef.current?.contains(target) ?? false
+      // Учитываем и десктопные панели, и мобильные аккордеоны: на телефоне
+      // подпункты живут вне десктопных обёрток
+      const inServices =
+        (servicesWrapRef.current?.contains(target) ?? false) ||
+        (mobileServicesWrapRef.current?.contains(target) ?? false)
+      const inRealty =
+        (realtyWrapRef.current?.contains(target) ?? false) ||
+        (mobileRealtyWrapRef.current?.contains(target) ?? false)
       if (!inServices && !inRealty) {
         setServicesOpen(false)
         setRealtyOpen(false)
@@ -688,7 +699,7 @@ export const Header: FC = () => {
                 панель раскрывается на месте, переход закрывает меню */}
             <SiteSearch variant="mobile" onNavigate={() => setIsOpen(false)} />
             {/* «Недвижимость»: подразделы раскрываются по нажатию */}
-            <div className="flex flex-col">
+            <div className="flex flex-col" ref={mobileRealtyWrapRef}>
               <button
                 type="button"
                 onClick={() => toggleRealty()}
@@ -739,7 +750,7 @@ export const Header: FC = () => {
                 открытии подпункты не показываются. Второй уровень (услуги
                 направления) раскрывается нажатием по направлению —
                 отдельным блоком под ним */}
-            <div className="flex flex-col">
+            <div className="flex flex-col" ref={mobileServicesWrapRef}>
               <button
                 type="button"
                 onClick={() => toggleServices()}
