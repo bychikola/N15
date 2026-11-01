@@ -254,15 +254,22 @@ export default async function HomePage({ params, searchParams }: PageProps) {
         <AboutSection t={t} />
         {/* Отзывы — перед контактами: клиент видит, как прошли сделки других,
             и может оставить свой отзыв, не уходя со страницы (полный список —
-            на странице /reviews). Персональные данные форма не собирает */}
-        <ReviewsSection
-          reviews={reviews}
-          stats={stats}
-          limit={3}
-          allHref={`/${lang}/reviews`}
-          heading={t.reviews.title}
-          lead={t.reviews.lead}
-        />
+            на странице /reviews). Персональные данные форма не собирает.
+            Пока нет ни одного опубликованного отзыва, блок целиком скрыт —
+            пустая витрина с заглушкой выглядит как неработающий раздел.
+            loadPublishedReviews отдаёт только опубликованные модератором
+            отзывы, и страница собирается при каждом запросе (force-dynamic),
+            поэтому после первой публикации блок появится сам */}
+        {reviews.length > 0 && (
+          <ReviewsSection
+            reviews={reviews}
+            stats={stats}
+            limit={3}
+            allHref={`/${lang}/reviews`}
+            heading={t.reviews.title}
+            lead={t.reviews.lead}
+          />
+        )}
         <ContactSection t={t} phone={phone} />
         <footer className="lp-footer">
           <a className="lp-brand" href="#top">
