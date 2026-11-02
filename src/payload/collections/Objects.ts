@@ -45,7 +45,7 @@ import { OBJECT_CATEGORIES, isPlotCategoryCode, isHouseCategoryCode } from '@/li
 import { OBJECT_MARKETS, isObjectMarket } from '@/lib/object-market'
 // Типы сделки (продажа / аренда / посуточная аренда) — общий справочник с
 // формой CRM, карточкой каталога и фильтрами (см. src/lib/object-deal-types.ts)
-import { OBJECT_DEAL_TYPES, isDailyRent } from '@/lib/object-deal-types'
+import { DAILY_RENT_PUBLIC_ENABLED, OBJECT_DEAL_TYPES, isDailyRent, publicDealTypeWhere } from '@/lib/object-deal-types'
 import { COMMERCIAL_TYPES } from '@/lib/commercial-types'
 // Происхождение объекта (N15 / собственник / NMarket.PRO / застройщик /
 // партнёр / другая площадка) — общий справочник с формой CRM
@@ -739,9 +739,16 @@ export const Objects: CollectionConfig = {
     // по id (Payload объединяет его с запросом, см. findByID).
     read: async ({ req }) => {
       const staff = req.user as AccessReq['user'] | undefined
-      if (!staff) return { status: { equals: 'published' } }
+      // Публичная выдача: только опубликованные и, пока раздел «Посуточно»
+      // скрыт, без объектов daily. Условие действует и на REST, и на гостевые
+      // страницы (карточка объекта, избранное клиента). Сотрудники ниже видят
+      // объекты как раньше: CRM и раздел «Посуточно» в ней не затрагиваются
+      const publicWhere: Where = DAILY_RENT_PUBLIC_ENABLED
+        ? { status: { equals: 'published' } }
+        : { and: [{ status: { equals: 'published' } }, ...publicDealTypeWhere()] }
+      if (!staff) return publicWhere
       if (staff.role === 'admin') return true
-      if (staff.role !== 'agent') return { status: { equals: 'published' } }
+      if (staff.role !== 'agent') return publicWhere
       const mine = await myAgentIds(req)
       return ownObjectsWhere(staff.id, mine) ?? false
     },

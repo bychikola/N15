@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { notFound } from 'next/navigation'
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { Header } from '@/components/layout/Header'
@@ -9,6 +10,7 @@ import { Button } from '@/components/ui/Button'
 import ObjectCard from '@/components/objects/ObjectCard'
 import { getDictionary } from '@/i18n/dictionaries'
 import { objectToListItem } from '@/lib/object-list-item'
+import { DAILY_RENT_PUBLIC_ENABLED } from '@/lib/object-deal-types'
 
 interface PageProps {
   params: Promise<{ lang: string }>
@@ -26,7 +28,13 @@ const DAILY_LIMIT = 12
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { lang } = await params
   const t = getDictionary(lang)
-  return { title: t.daily.metaTitle, description: t.daily.metaDescription }
+  return {
+    title: t.daily.metaTitle,
+    description: t.daily.metaDescription,
+    // Пока раздел скрыт, страницу не индексируем: прямые ссылки из старых
+    // закладок отдают 404, но поисковик не должен держать её в выдаче
+    ...(DAILY_RENT_PUBLIC_ENABLED ? {} : { robots: { index: false, follow: false } }),
+  }
 }
 
 /**
@@ -40,6 +48,10 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
  */
 export default async function DailyPage({ params }: PageProps) {
   const { lang } = await params
+  // Раздел временно скрыт из публичной части: прямые ссылки отдают 404,
+  // объекты и условия проживания остаются в CRM. Вернуть раздел — включить
+  // DAILY_RENT_PUBLIC_ENABLED (см. src/lib/object-deal-types.ts)
+  if (!DAILY_RENT_PUBLIC_ENABLED) notFound()
   const t = getDictionary(lang)
   const s = t.daily
   const payload = await getPayload({ config })

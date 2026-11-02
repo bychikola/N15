@@ -15,6 +15,9 @@
 import type { Payload } from 'payload'
 import type { Dict } from '@/i18n/dictionaries'
 import { publicAddressOf, publicAddressText } from './object-public-address'
+// Посуточная аренда временно скрыта из публичной части (см. object-deal-types):
+// её объекты не должны находиться и в поиске по сайту
+import { publicDealTypeWhere } from './object-deal-types'
 import {
   bestSearchSnippet,
   richTextToPlain,
@@ -113,7 +116,9 @@ export async function searchSite(
   // этого ЖК, даже если в самой карточке его название не написано ---
   const { docs: objectDocs } = await payload.find({
     collection: 'objects',
-    where: { status: { equals: 'published' } },
+    where: {
+      and: [{ status: { equals: 'published' } }, ...publicDealTypeWhere()],
+    },
     limit: LIMIT_OBJECTS,
     depth: 1,
     overrideAccess: true,

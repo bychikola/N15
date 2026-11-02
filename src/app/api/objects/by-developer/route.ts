@@ -1,6 +1,9 @@
 import { getPayload } from 'payload'
 import config from '@payload-config'
 import { NextRequest, NextResponse } from 'next/server'
+// Пока раздел «Посуточно» скрыт, объекты daily не попадают в подборку
+// застройщика на сайте (см. src/lib/object-deal-types.ts)
+import { publicDealTypeWhere } from '@/lib/object-deal-types'
 
 /**
  * id опубликованных объектов выбранного застройщика — для подборки каталога
@@ -67,6 +70,7 @@ export async function GET(req: NextRequest) {
           and: [
             { status: { equals: 'published' } },
             { developer: { equals: developerId } },
+            ...publicDealTypeWhere(),
           ],
         },
         sort: '-createdAt',

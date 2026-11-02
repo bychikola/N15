@@ -14,6 +14,9 @@ import { getDictionary } from '@/i18n/dictionaries'
 // Категории объектов новостройки — машино-места и коммерческие помещения
 // (см. src/lib/complex-units.ts)
 import { UNIT_CATEGORIES } from '@/lib/complex-units'
+// Пока раздел «Посуточно» скрыт, объекты daily не показываются в подборке ЖК
+// (см. src/lib/object-deal-types.ts)
+import { publicDealTypeWhere } from '@/lib/object-deal-types'
 
 export const dynamic = 'force-dynamic'
 
@@ -231,6 +234,7 @@ export default async function ComplexPage({ params }: PageProps) {
         { status: { equals: 'published' } },
         { complex: { equals: complexId } },
         { category: { in: [...UNIT_CATEGORIES] } },
+        ...publicDealTypeWhere(),
       ],
     },
     sort: '-createdAt',

@@ -34,6 +34,9 @@ import { approximatePoint } from '@/lib/object-approx-point'
 import { validCoordinates } from '@/lib/object-map-point'
 // Документ объекта → карточка каталога: адрес без номера дома (см. модуль)
 import { objectToListItem } from '@/lib/object-list-item'
+// Пока раздел «Посуточно» скрыт, карточка объекта daily гостю не открывается,
+// а похожие объекты не подставляют daily (см. src/lib/object-deal-types.ts)
+import { DAILY_RENT_PUBLIC_ENABLED, isDailyRent, publicDealTypeWhere } from '@/lib/object-deal-types'
 
 interface PageProps {
   params: Promise<{ lang: string; slug: string }>
@@ -97,6 +100,10 @@ export default async function ObjectPage({ params }: PageProps) {
 
   const object = docs[0]
   if (!object) notFound()
+  // Пока раздел «Посуточно» скрыт, гость не открывает карточку daily и по
+  // прямой ссылке. Сотруднику оставляем просмотр — объект живёт в CRM и
+  // вернётся на сайт вместе с флагом DAILY_RENT_PUBLIC_ENABLED
+  if (!DAILY_RENT_PUBLIC_ENABLED && !staff && isDailyRent((object as { type?: string }).type)) notFound()
 
   // Сотрудник открыл числовой адрес — переводим на публичный
   const objectSlug = (object as unknown as { slug?: string }).slug
@@ -298,6 +305,7 @@ export default async function ObjectPage({ params }: PageProps) {
         { category: { equals: obj.category } },
         { id: { not_equals: obj.id } },
         { status: { equals: 'published' } },
+        ...publicDealTypeWhere(),
       ],
     },
     limit: 3,

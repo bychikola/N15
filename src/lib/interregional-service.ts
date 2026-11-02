@@ -40,6 +40,9 @@ import {
 // где уже есть опубликованные объекты
 import { LOCALITY_OPTIONS } from './districts'
 import { translitSlug } from './slug'
+// Пока раздел «Посуточно» скрыт, объекты daily не учитываются в счётчиках
+// населённых пунктов и не показываются на их страницах (см. object-deal-types)
+import { publicDealTypeWhere } from './object-deal-types'
 
 /** Сколько объектов показываем на странице населённого пункта (остальные — в каталоге) */
 export const SETTLEMENT_OBJECTS_LIMIT = 24
@@ -72,7 +75,9 @@ const str = (v: unknown): string => (typeof v === 'string' ? v : '')
 async function publishedObjectRows(payload: Payload): Promise<PublishedObjectRow[]> {
   const { docs } = await payload.find({
     collection: 'objects',
-    where: { status: { equals: 'published' } },
+    where: {
+      and: [{ status: { equals: 'published' } }, ...publicDealTypeWhere()],
+    },
     select: { address: { city: true, locality: true }, category: true, type: true },
     depth: 0,
     pagination: false,

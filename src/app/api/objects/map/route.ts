@@ -6,6 +6,9 @@ import { geocodeAddressCached } from '@/lib/geocode-server'
 import { sanitizeObjectsWhere, type ObjectsWhere } from '@/lib/objects-where'
 import { mapAreasOf, mapGeocodeText, validCoordinates, type FoundObject } from '@/lib/object-map-point'
 import { approximatePoint } from '@/lib/object-approx-point'
+// Пока раздел «Посуточно» скрыт, объекты daily не показываются и областями
+// на карте (см. src/lib/object-deal-types.ts)
+import { publicDealTypeWhere } from '@/lib/object-deal-types'
 
 /**
  * Области объектов для публичной карты каталога (режим «На карте», см.
@@ -73,8 +76,12 @@ export async function GET(req: NextRequest) {
   try {
     const payload = await getPayload({ config })
     // Статус ставим сами: черновики и архив на сайте не показываются
-    // (см. buildWhere в каталоге), и карта не должна выдавать их областями
-    const published = { status: { equals: 'published' } }
+    // (см. buildWhere в каталоге), и карта не должна выдавать их областями.
+    // Посуточная аренда скрыта вместе со своим разделом — даже если клиент
+    // прислал условия без этого ограничения
+    const published: Where = {
+      and: [{ status: { equals: 'published' } }, ...publicDealTypeWhere()],
+    }
     const where = (Object.keys(clientWhere).length ? { and: [published, clientWhere] } : published) as Where
     const { docs, totalDocs } = await payload.find({
       collection: 'objects',

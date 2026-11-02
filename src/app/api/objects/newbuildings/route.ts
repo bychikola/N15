@@ -2,6 +2,9 @@ import { getPayload } from 'payload'
 import type { Where } from 'payload'
 import config from '@payload-config'
 import { NextRequest, NextResponse } from 'next/server'
+// Пока раздел «Посуточно» скрыт, объекты daily не попадают в подборку
+// новостроек (см. src/lib/object-deal-types.ts)
+import { publicDealTypeWhere } from '@/lib/object-deal-types'
 
 /**
  * id квартир-новостроек — для подборки «Новостройки» каталога
@@ -74,6 +77,7 @@ export async function GET(req: NextRequest) {
       { status: { equals: 'published' } },
       { category: { equals: 'apartment' } },
       { market: { equals: 'new' } },
+      ...publicDealTypeWhere(),
     ]
     if (developerId !== null) conds.push({ developer: { equals: developerId } })
     if (complexId !== null) conds.push({ complex: { equals: complexId } })

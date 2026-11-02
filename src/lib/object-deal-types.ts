@@ -36,3 +36,30 @@ export const dealTypeLabel = (value: string): string =>
 
 /** Посуточная аренда: у объекта с таким типом показаны условия проживания */
 export const isDailyRent = (type?: string | null): boolean => type === 'daily'
+
+/**
+ * Показ посуточной аренды в публичной части сайта.
+ *
+ * false — раздел временно скрыт: пункт меню «Посуточно», страница /daily,
+ * фильтр по типу сделки, карточки объектов и условия проживания не показываются
+ * гостям. Данные в CRM не меняются: тип сделки, группа dailyRent и публикация
+ * объекта остаются на месте. Чтобы вернуть раздел, достаточно поставить true —
+ * витрина снова соберётся из тех же данных.
+ */
+export const DAILY_RENT_PUBLIC_ENABLED = false
+
+/**
+ * Типы сделки для публичного фильтра каталога: daily скрывается, пока раздел
+ * выключен. CRM и схема коллекции берут полный справочник OBJECT_DEAL_TYPES.
+ */
+export const PUBLIC_OBJECT_DEAL_TYPE_VALUES: readonly string[] = OBJECT_DEAL_TYPES
+  .filter((t) => DAILY_RENT_PUBLIC_ENABLED || t.value !== 'daily')
+  .map((t) => t.value)
+
+/**
+ * Условия публичных выдач объектов: пока раздел скрыт, объекты посуточной
+ * аренды не попадают ни в каталог, ни в карточки главной, ни в поиск, ни на
+ * карту. Пустой список — раздел включён, дополнительное условие не нужно.
+ */
+export const publicDealTypeWhere = (): { type: { not_equals: 'daily' } }[] =>
+  DAILY_RENT_PUBLIC_ENABLED ? [] : [{ type: { not_equals: 'daily' } }]

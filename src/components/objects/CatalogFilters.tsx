@@ -29,8 +29,10 @@ import { COMMERCIAL_TYPES, isCommercialType } from '@/lib/commercial-types'
 // справочник со схемой коллекции и формой CRM (см. src/lib/object-market.ts)
 import { OBJECT_MARKETS, OBJECT_MARKET_VALUES } from '@/lib/object-market'
 // Типы сделки — общий справочник со схемой коллекции (Objects.type) и формой
-// CRM: продажа, аренда и посуточная аренда (см. src/lib/object-deal-types.ts)
-import { OBJECT_DEAL_TYPE_VALUES } from '@/lib/object-deal-types'
+// CRM: продажа, аренда и посуточная аренда (см. src/lib/object-deal-types.ts).
+// На публичном сайте types берём из PUBLIC_OBJECT_DEAL_TYPE_VALUES: пока раздел
+// «Посуточно» скрыт, daily в фильтре нет
+import { PUBLIC_OBJECT_DEAL_TYPE_VALUES, publicDealTypeWhere } from '@/lib/object-deal-types'
 
 // Допустимые значения select-фильтров — опции одноимённых полей объекта
 // (src/payload/collections/Objects.ts). Где-запрос к /api/objects с чужим
@@ -39,7 +41,7 @@ import { OBJECT_DEAL_TYPE_VALUES } from '@/lib/object-deal-types'
 // Типы сделки берём из общего справочника: свой список ['sale','rent'] не
 // знал о посуточной аренде, и выбор «Посуточная аренда» в фильтре молча
 // отбрасывался — каталог показывал все объекты подряд.
-export const OBJECT_TYPES = OBJECT_DEAL_TYPE_VALUES
+export const OBJECT_TYPES = PUBLIC_OBJECT_DEAL_TYPE_VALUES
 export const OBJECT_CATEGORIES = OBJECT_CATEGORY_VALUES
 export const OBJECT_ROOMS = ['1', '2', '3', '4']
 
@@ -322,6 +324,10 @@ export function buildWhere(
   const conds: Record<string, unknown>[] = []
   // На сайте показываем только опубликованные (черновики и архив скрыты)
   conds.push({ status: { equals: 'published' } })
+  // Посуточная аренда временно скрыта из публичной витрины (см.
+  // DAILY_RENT_PUBLIC_ENABLED): объекты daily не попадают в каталог и на карту,
+  // даже если ссылка со старым ?type=daily пришла из закладок
+  conds.push(...publicDealTypeWhere())
   // Select-поля фильтруем только значениями из их опций (см. isKnown выше)
   if (f.type && isKnown(f.type, OBJECT_TYPES)) conds.push({ type: { equals: f.type } })
   // Категория: подкатегория дома её и задаёт («дом с участком» — та же
@@ -929,7 +935,11 @@ export default function CatalogFilters({ state, onChange, t, cityRegions, knownC
     }
   }, [openId])
 
-  const typeOptions = Object.entries(t.typeLabels).map(([value, label]) => ({ value, label }))
+  // Пункты фильтра — только публичные типы сделки: подпись daily остаётся в
+  // словаре для CRM и вернётся в фильтр вместе с разделом
+  const typeOptions = Object.entries(t.typeLabels)
+    .filter(([value]) => OBJECT_TYPES.includes(value))
+    .map(([value, label]) => ({ value, label }))
   const categoryOptions = Object.entries(t.categoryLabels).map(([value, label]) => ({ value, label }))
   // Тип жилья квартиры: подборка целиком — вторичное жильё или новостройки.
   // Коды общие со схемой коллекции (OBJECT_MARKETS), подписи — из словаря

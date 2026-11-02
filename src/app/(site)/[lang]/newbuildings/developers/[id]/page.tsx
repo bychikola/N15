@@ -9,6 +9,9 @@ import { Button } from '@/components/ui/Button'
 import ObjectCard, { type ObjectListItem } from '@/components/objects/ObjectCard'
 import { objectToListItem } from '@/lib/object-list-item'
 import { getDictionary } from '@/i18n/dictionaries'
+// Пока раздел «Посуточно» скрыт, объекты daily не показываются среди объектов
+// застройщика (см. src/lib/object-deal-types.ts)
+import { publicDealTypeWhere } from '@/lib/object-deal-types'
 
 export const dynamic = 'force-dynamic'
 
@@ -106,6 +109,7 @@ export default async function DeveloperPage({ params }: PageProps) {
       and: [
         { developer: { equals: devId } },
         { status: { equals: 'published' } },
+        ...publicDealTypeWhere(),
       ],
     },
     sort: '-createdAt',

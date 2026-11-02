@@ -30,6 +30,9 @@ import { DISTRICT_OPTIONS, CITY_DISTRICT_OPTIONS } from '@/lib/districts'
 import { SNT_AREAS } from '@/components/home/landing-data'
 // Категории объектов — общий справочник схемы и фильтров
 import { OBJECT_CATEGORY_VALUES } from '@/lib/object-categories'
+// Показ посуточной аренды на публичном сайте: пока раздел скрыт, объекты daily
+// не показываются и в блоках главной (см. src/lib/object-deal-types.ts)
+import { publicDealTypeWhere } from '@/lib/object-deal-types'
 // Регионы «Межрегиональной недвижимости» для блока на главной — из CRM
 import { loadInterregionalRegions } from '@/lib/interregional-service'
 // Телефон шапки/подвала — единственное витринное поле настроек, нужное главной
@@ -144,12 +147,22 @@ export default async function HomePage({ params, searchParams }: PageProps) {
     }
   }
 
+  // Посуточная аренда временно скрыта с публичной витрины: условие общее с
+  // каталогом (см. publicDealTypeWhere). Данные объектов в CRM остаются
+  const hiddenDaily = publicDealTypeWhere()
+
   // Особые предложения — объекты с отметкой «Особое предложение» в CRM
   // (поле urgentSale). Блок показываем, только когда такие объекты есть:
   // пустой блок с заглушками читался бы как обещание, которого нет
   const { docs: specialDocs } = await payload.find({
     collection: 'objects',
-    where: { status: { equals: 'published' }, urgentSale: { equals: true } },
+    where: {
+      and: [
+        { status: { equals: 'published' } },
+        { urgentSale: { equals: true } },
+        ...hiddenDaily,
+      ],
+    },
     sort: '-createdAt',
     limit: 4,
     depth: 1,
@@ -159,7 +172,9 @@ export default async function HomePage({ params, searchParams }: PageProps) {
   // Блок «Актуальные объекты»: только опубликованные (черновики скрыты).
   // Проданные, снятые с публикации и архивные в CRM переводятся в статус
   // «Архив» — такой объект автоматически исчезает из блока.
-  const where: Where = { status: { equals: 'published' } }
+  const where: Where = hiddenDaily.length
+    ? { and: [{ status: { equals: 'published' } }, ...hiddenDaily] }
+    : { status: { equals: 'published' } }
   if (qCategory) where.category = { equals: qCategory }
   if (qRooms === '4') where.rooms = { greater_than_equal: 4 }
   else if (qRooms) where.rooms = { equals: parseInt(qRooms, 10) }

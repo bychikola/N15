@@ -18,6 +18,9 @@
  * (номер дома и корпус из блока «Адрес» — закрытые поля) в строках нет.
  */
 import type { Payload } from 'payload'
+// Пока раздел «Посуточно» скрыт, объекты daily не показываются в подборе
+// новостроек на публичной странице (см. src/lib/object-deal-types.ts)
+import { publicDealTypeWhere } from './object-deal-types'
 
 export interface NewbuildingRow {
   id: number
@@ -69,6 +72,7 @@ export async function loadNewbuildingRows(payload: Payload): Promise<Newbuilding
         { status: { equals: 'published' } },
         { category: { equals: 'apartment' } },
         { market: { equals: 'new' } },
+        ...publicDealTypeWhere(),
       ],
     },
     sort: '-createdAt',
