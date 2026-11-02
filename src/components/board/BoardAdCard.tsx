@@ -11,7 +11,7 @@ import { isHouseCategoryCode } from '@/lib/object-categories'
  * Оформление — то же, что у карточки каталога (классы .object-card* в
  * globals.css): размер 4/3, бейдж сделки, цена поверх фото, мета строкой.
  * Разница по существу одна: вместо агента показан тот, кто разместил, —
- * имя собственника (для подачи частного лица) или «Агентство Н15»; по этой
+ * имя собственника (для подачи частного лица) или «Агентство N15»; по этой
  * подписи покупатель сразу понимает, с кем имеет дело. Данные агентства чужому
  * объявлению не подставляются. Телефон в карточке не показывается вовсе —
  * он отдаётся кнопкой на странице объявления.
@@ -27,6 +27,11 @@ export const BoardAdCard: FC<BoardAdCardProps> = ({ ad, lang, t }) => {
   const areaWords = { are: t.catalog.areaUnits, ha: t.catalog.hectareUnits }
   const areaLabel = areaHuman(ad.area, ad.areaUnit as AreaUnit, areaWords, areaFmt)
   const plotAreaLabel = areaHuman(ad.plotArea, (ad.plotAreaUnit || undefined) as AreaUnit | undefined, areaWords, areaFmt)
+  // У земли площадь участка и есть площадь объекта — второй раз её не выводим.
+  // У дома и коммерции подписываем участок, чтобы «10 м²» не читалось как
+  // вторая площадь здания.
+  const isLand = ad.category === 'land'
+  const plotAreaMeta = plotAreaLabel && !isLand ? `${t.object.plotArea}: ${plotAreaLabel}` : ''
 
   // Этажность: у дома — «2 этажа», у квартиры — «5/9 этаж» (как в каталоге)
   const isHouse = isHouseCategoryCode(ad.category)
@@ -39,10 +44,12 @@ export const BoardAdCard: FC<BoardAdCardProps> = ({ ad, lang, t }) => {
       : ''
 
   const categoryLabel = t.categoryLabels[ad.category as keyof typeof t.categoryLabels] || ad.category
+  const titleKey = ad.title.trim().toLocaleLowerCase(t.locale)
+  const categoryKey = categoryLabel.trim().toLocaleLowerCase(t.locale)
   const meta = [
-    categoryLabel,
+    categoryKey !== titleKey ? categoryLabel : '',
     areaLabel,
-    plotAreaLabel,
+    plotAreaMeta,
     ad.rooms && `${ad.rooms} ${t.catalog.rooms}`,
     floorsLabel,
   ].filter(Boolean).join(' • ')
@@ -104,7 +111,7 @@ export const BoardAdCard: FC<BoardAdCardProps> = ({ ad, lang, t }) => {
         {meta && <p className="object-card__meta text-[10px] tracking-[0.18em] uppercase text-[var(--n15-muted)] mb-2">{meta}</p>}
         <div className="object-card__agent flex items-center gap-2 mt-auto pt-2">
           <span className="object-card__avatar w-7 h-7 rounded-full bg-[var(--n15-charcoal)] border border-[var(--n15-gold)]/20 flex items-center justify-center text-[10px] font-[family-name:var(--font-display)] text-[var(--n15-gold)]">
-            {isAgency ? 'Н15' : (ad.authorName || '—').trim().split(' ').map((n) => n[0]).join('').slice(0, 2)}
+            {isAgency ? 'N15' : (ad.authorName || '—').trim().split(' ').map((n) => n[0]).join('').slice(0, 2)}
           </span>
           <span className="object-card__agent-name text-xs text-[var(--n15-muted)]">
             {/* Имя того, кто разместил объявление: собственник или агентство.

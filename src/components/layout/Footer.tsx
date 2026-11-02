@@ -57,10 +57,10 @@ export const Footer: FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-[1.6fr_1fr] lg:grid-cols-[1.6fr_1fr_1fr] gap-x-14 gap-y-12 items-start">
           {/* Блок N15: описание агентства, девиз и строка о работе */}
           <div className="min-w-0">
-            <a href={`/${lang}`} className="inline-flex" aria-label="Н15 — на главную">
+            <a href={`/${lang}`} className="inline-flex" aria-label="N15 — на главную">
               <img
                 src="/logo.png"
-                alt="Н15"
+                alt="N15"
                 width={48}
                 height={32}
                 className="h-9 w-auto"
@@ -130,7 +130,7 @@ export const Footer: FC = () => {
               по краям и на телефоне переносятся вместе */}
           <div className="min-w-0">
             <p className="text-base text-[var(--n15-silver)]">
-              &copy; {new Date().getFullYear()} Н15. {t.footer.rights}
+              &copy; {new Date().getFullYear()} N15. {t.footer.rights}
             </p>
             {/* Мелкая подпись: text-xs = 10.5 px при корневом кегле 14 px
                 (§0, §7 — подписи не мельче 10–11 px). Цвет --n15-muted на

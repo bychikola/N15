@@ -99,7 +99,7 @@ export default function LKDashboard() {
           {isStaff && (
             <div className="mb-10 bg-[var(--n15-charcoal)] border border-[var(--n15-gold)]/25 p-6 md:p-8">
               <div className="text-[10px] tracking-[0.2em] uppercase text-[var(--n15-gold)]">
-                Н15 · CRM
+                N15 · CRM
               </div>
               <h2 className="mt-2 text-xl md:text-2xl font-[family-name:var(--font-display)] text-[var(--n15-white)]">
                 {t.lk.crmWorkspace}

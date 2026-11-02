@@ -263,7 +263,7 @@ export default async function HomePage({ params, searchParams }: PageProps) {
             возврата; его место занимает «Межрегиональная недвижимость» */}
         <InterregionalGuide t={t} lang={lang} regions={interregionalRegions} />
         <ServicesAccordion t={t} lang={lang} />
-        {/* Блок собственникам — после услуг: владельцу важно, как Н15 продаёт
+        {/* Блок собственникам — после услуг: владельцу важно, как N15 продаёт
             его объект (тексты и условия — со страницы направления) */}
         <OwnersSection t={t} lang={lang} />
         <AboutSection t={t} />
@@ -288,7 +288,7 @@ export default async function HomePage({ params, searchParams }: PageProps) {
         <ContactSection t={t} phone={phone} />
         <footer className="lp-footer">
           <a className="lp-brand" href="#top">
-            <img src="/logo.png" alt="Н15" />
+            <img src="/logo.png" alt="N15" />
             <span className="lp-brand-caption">{t.landing.footerCaption}</span>
           </a>
           <p>
@@ -306,7 +306,7 @@ export default async function HomePage({ params, searchParams }: PageProps) {
             {phone || '8 958 116-15-15'}
           </GoalLink>
           <Link className="lp-team-login" href="/crm">{t.landing.footerTeam}</Link>
-          <p>© {new Date().getFullYear()} Н15</p>
+          <p>© {new Date().getFullYear()} N15</p>
         </footer>
       </main>
     </>

@@ -419,10 +419,10 @@ export const Header: FC = () => {
     <header className="n15-header fixed top-0 left-0 right-0 z-50 bg-[var(--n15-black)]/80 backdrop-blur-md border-b border-[var(--n15-gold)]/10">
       <div className="n15-container flex items-center justify-between h-20">
         {/* Logo */}
-        <Link href={`/${lang}`} className="flex items-center group" aria-label="Н15 — на главную">
+        <Link href={`/${lang}`} className="flex items-center group" aria-label="N15 — на главную">
           <img
             src="/logo.png"
-            alt="Н15"
+            alt="N15"
             width={54}
             height={36}
             className="h-9 w-auto transition-transform duration-500 group-hover:scale-105"

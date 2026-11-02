@@ -110,10 +110,11 @@ export const unitWord = (value: number, words: AreaUnitWords): string =>
 export const areUnitWord = (sotki: number, words: AreaUnitWords): string => unitWord(sotki, words)
 
 /**
- * Площадь одной строкой для показа на сайте: м² — как есть (без разделителей
- * разрядов, как показывали раньше), участки, сохранённые в сотках или
- * гектарах, — «6 соток» / «1,2 га» (как ввёл агент). numFmt — форматирование
- * числа (например, ru-RU с запятой); null — если площади нет.
+ * Площадь одной строкой для показа на сайте: м² и участки в сотках или
+ * гектарах — «36,7 м²» / «6 соток» / «1,2 га». Число проходит через numFmt:
+ * ru-RU даёт запятую в дробной части и разделители разрядов, иначе на сайте
+ * появлялось бы «36.7 м²» — с точкой, как в машинной записи. null — если
+ * площади нет.
  */
 export function areaHuman(
   areaM2: number | null | undefined,
@@ -123,8 +124,8 @@ export function areaHuman(
 ): string | null {
   if (areaM2 == null || !Number.isFinite(areaM2) || areaM2 <= 0) return null
   const u = areaUnitOf(unit)
-  if (u === 'sqm') return `${areaM2} м²`
+  if (u === 'sqm') return `${numFmt(areaM2)} м²`
   const value = sqmToUnit(areaM2, u)
   const words = unitWordsFor(u, forms)
-  return words ? `${numFmt(value)} ${unitWord(value, words)}` : `${areaM2} м²`
+  return words ? `${numFmt(value)} ${unitWord(value, words)}` : `${numFmt(areaM2)} м²`
 }

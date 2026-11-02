@@ -50,7 +50,7 @@ export interface ObjectListItem {
     name?: string
     photo?: { url?: string; focalPoint?: { x?: number; y?: number }; sizes?: { thumbnail?: { url?: string } } }
   }
-  /** Владелец карточки: 'office' — объект офиса Н15 (личного агента нет),
+  /** Владелец карточки: 'office' — объект офиса N15 (личного агента нет),
    *  на карточке показывается агентство (см. src/lib/object-ownership.ts) */
   ownership?: string
 }
@@ -70,25 +70,32 @@ interface ObjectCardProps {
 
 export default function ObjectCard({ obj, lang, t }: ObjectCardProps) {
   // Участок, сохранённый в сотках или гектарах, показываем «6 соток» / «1,2 га»
-  // (как ввёл агент); м² и остальные категории — как раньше: «600 м²»
+  // (как ввёл агент); м² и остальные категории — «36,7 м²» с запятой
   const areaFmt = (n: number) => n.toLocaleString(t.locale, { maximumFractionDigits: 3 })
   const areaWords = { are: t.catalog.areaUnits, ha: t.catalog.hectareUnits }
   const areaLabel = areaHuman(obj.area, obj.areaUnit, areaWords, areaFmt)
-  // Домовые категории: площадь дома и площадь участка — разные строки меты
+  // Домовые категории: площадь дома и площадь участка — разные строки меты.
+  // У земли площадь участка уже показана как площадь объекта, второй раз её
+  // не выводим: иначе в мете стояли бы две одинаковые площади.
   const isHouse = isHouseCategoryCode(obj.category)
+  const isLand = obj.category === 'land'
   const plotAreaLabel = areaHuman(obj.plotArea, obj.plotAreaUnit, areaWords, areaFmt)
+  const plotAreaMeta = plotAreaLabel && !isLand ? `${t.object.plotArea}: ${plotAreaLabel}` : ''
   // Домовые категории — этажность дома («2 этажа»); у остальных —
   // как раньше: «этаж / всего этажей» (этаж квартиры в доме)
   const floorsLabel = isHouse
     ? floorHuman(obj.totalFloors, t.object.floorUnits, (n) => n.toLocaleString(t.locale))
     : (obj.floor || obj.totalFloors) && `${obj.floor || '?'}/${obj.totalFloors || '?'} ${t.object.floor.toLowerCase()}`
   // Тип объекта (квартира, дом, участок…) — первой строкой меты: по обложке
-  // видно, что за объект, не открывая карточку
+  // видно, что за объект, не открывая карточку. Если заголовок карточки уже
+  // совпадает с типом («Дом»), не повторяем его второй раз.
   const categoryLabel = t.categoryLabels[obj.category as keyof typeof t.categoryLabels] || obj.category
+  const titleKey = obj.title.trim().toLocaleLowerCase(t.locale)
+  const categoryKey = categoryLabel.trim().toLocaleLowerCase(t.locale)
   const meta = [
-    categoryLabel,
+    categoryKey !== titleKey ? categoryLabel : '',
     areaLabel,
-    plotAreaLabel,
+    plotAreaMeta,
     obj.rooms && `${obj.rooms} ${t.catalog.rooms}`,
     floorsLabel,
   ].filter(Boolean).join(' • ')
@@ -105,10 +112,10 @@ export default function ObjectCard({ obj, lang, t }: ObjectCardProps) {
     ? obj.agent.name.split(' ').map((n) => n[0]).join('').slice(0, 2)
     : ''
 
-  // Объект офиса Н15: принадлежит агентству — вместо имени сотрудника
+  // Объект офиса N15: принадлежит агентству — вместо имени сотрудника
   // показываем агентство, даже если на карточке остался прежний ответственный
   // (владелец важнее связи; см. src/lib/object-ownership.ts). Фото в блоке нет:
-  // подставлять чужое лицо нельзя, поэтому монограмма «Н15».
+  // подставлять чужое лицо нельзя, поэтому монограмма «N15».
   const isOfficeObject = obj.ownership === 'office'
 
   // Публичный адрес карточки — человекочитаемый slug
@@ -178,7 +185,7 @@ export default function ObjectCard({ obj, lang, t }: ObjectCardProps) {
               <img src={obj.agent.photo.sizes?.thumbnail?.url || obj.agent.photo.url} alt={obj.agent.name} style={focalPosition(obj.agent.photo.focalPoint)} className="w-7 h-7 rounded-full object-cover" />
             ) : (
               <span className="object-card__avatar w-7 h-7 rounded-full bg-[var(--n15-charcoal)] border border-[var(--n15-gold)]/20 flex items-center justify-center text-[10px] font-[family-name:var(--font-display)] text-[var(--n15-gold)]">
-                {isOfficeObject ? 'Н15' : agentInitials}
+                {isOfficeObject ? 'N15' : agentInitials}
               </span>
             )}
             <span className="object-card__agent-name text-xs text-[var(--n15-muted)]">

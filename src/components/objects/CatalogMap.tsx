@@ -162,11 +162,16 @@ export const CatalogMap: FC<Props> = ({ where, lang }) => {
       const price = point.price
         ? `${point.price.toLocaleString(t.locale)} ${point.type === 'rent' ? t.catalog.perMonth : point.type === 'daily' ? t.catalog.perDay : t.catalog.currency}`
         : ''
+      const pointCategory = point.category ? categoryLabel(point.category) : ''
+      // Категорию не повторяем, если она уже стоит заголовком объекта («Дом»):
+      // в облачке остаётся тип сделки, название и цена
+      const categoryRepeatsTitle =
+        pointCategory.trim().toLocaleLowerCase(t.locale) === point.title.trim().toLocaleLowerCase(t.locale)
       const kind = [
         // Подпись типа — из словаря (сайт двуязычный); неизвестный код
         // показываем как есть
         point.type ? (t.typeLabels[point.type as keyof typeof t.typeLabels] ?? dealTypeLabel(point.type)) : '',
-        point.category ? categoryLabel(point.category) : '',
+        categoryRepeatsTitle ? '' : pointCategory,
       ]
         .filter(Boolean)
         .join(' · ')

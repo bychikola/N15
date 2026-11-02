@@ -83,6 +83,7 @@ export default async function BoardAdPage({ params }: PageProps) {
   const areaLabel = areaHuman(ad.area, ad.areaUnit as AreaUnit, areaWords, areaFmt)
   const plotAreaLabel = areaHuman(ad.plotArea, (ad.plotAreaUnit || undefined) as AreaUnit | undefined, areaWords, areaFmt)
   const isHouse = isHouseCategoryCode(ad.category)
+  const isLand = ad.category === 'land'
   const floorsLabel = isHouse
     ? ad.totalFloors
       ? floorHuman(ad.totalFloors, t.object.floorUnits, areaFmt)
@@ -96,12 +97,17 @@ export default async function BoardAdPage({ params }: PageProps) {
   // контакт — телефон владельца, а не агентства (см. publishOwnerApplicationToBoard)
   const isOwner = ad.source === 'owner'
   const categoryLabel = t.categoryLabels[ad.category as keyof typeof t.categoryLabels] || ad.category
+  // Если заголовок объявления уже совпадает с категорией («Дом»), бейдж
+  // категории не повторяем; в характеристиках подпись «Категория» остаётся.
+  const categoryRepeatsTitle =
+    categoryLabel.trim().toLocaleLowerCase(t.locale) === ad.title.trim().toLocaleLowerCase(t.locale)
 
-  // Характеристики — парами «подпись — значение», пустые не показываем
+  // Характеристики — парами «подпись — значение», пустые не показываем.
+  // У земли площадь участка — это и есть площадь объекта, второй строки нет.
   const rows = [
     { label: t.board.paramCategory, value: categoryLabel },
     { label: t.board.paramArea, value: areaLabel || '' },
-    { label: t.board.paramPlot, value: plotAreaLabel || '' },
+    { label: t.board.paramPlot, value: isLand ? '' : plotAreaLabel || '' },
     { label: t.board.paramRooms, value: ad.rooms ? String(ad.rooms) : '' },
     { label: t.board.paramFloor, value: floorsLabel },
   ].filter((p) => p.value)
@@ -138,9 +144,11 @@ export default async function BoardAdPage({ params }: PageProps) {
               <span className="text-[10px] tracking-[0.2em] uppercase text-[var(--n15-black)] bg-[var(--n15-gold)] px-3 py-1">
                 {ad.dealType === 'rent' ? t.object.rent : t.object.sale}
               </span>
-              <span className="text-[10px] tracking-[0.2em] uppercase text-[var(--n15-white)] border border-[var(--n15-gold)]/30 px-3 py-1">
-                {categoryLabel}
-              </span>
+              {!categoryRepeatsTitle && (
+                <span className="text-[10px] tracking-[0.2em] uppercase text-[var(--n15-white)] border border-[var(--n15-gold)]/30 px-3 py-1">
+                  {categoryLabel}
+                </span>
+              )}
               <span className="text-[10px] tracking-[0.2em] uppercase text-[var(--n15-white)] border border-[var(--n15-gold)]/30 px-3 py-1">
                 {isAgency ? t.board.authorAgency : isOwner ? t.board.authorOwner : t.board.authorPrivate}
               </span>

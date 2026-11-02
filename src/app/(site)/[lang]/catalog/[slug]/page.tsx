@@ -167,7 +167,7 @@ export default async function ObjectPage({ params }: PageProps) {
       position?: string
       photo?: { url?: string; focalPoint?: { x?: number; y?: number } }
     }
-    // Владелец карточки: 'office' — объект офиса Н15 (личного агента нет),
+    // Владелец карточки: 'office' — объект офиса N15 (личного агента нет),
     // в блоке «Ваш агент» показывается агентство (src/lib/object-ownership.ts)
     ownership?: string
     primaryImage?: { id: number; url?: string; alt?: string; filename?: string; sizes?: { thumbnail?: { url?: string }; card?: { url?: string } } }
@@ -262,10 +262,17 @@ export default async function ObjectPage({ params }: PageProps) {
   // как раньше: «этаж / всего этажей»
   const isHouse = isHouseCategoryCode(obj.category)
   const isLand = obj.category === 'land'
+  // Подпись типа объекта — в бейдже и характеристиках. Если заголовок уже
+  // называется так же («Дом»), бейдж не дублируем: тип виден из самого H1.
+  const categoryName = obj.category
+    ? t.categoryLabels[obj.category as keyof typeof t.categoryLabels] || obj.category
+    : ''
+  const categoryRepeatsTitle =
+    categoryName.trim().toLocaleLowerCase(t.locale) === obj.title.trim().toLocaleLowerCase(t.locale)
   // Коммерция: в «Площади» — здание или комплекс, участок идёт отдельной
   // строкой «Площадь участка»
   const isCommercial = obj.category === 'commercial'
-  // Объект офиса Н15: принадлежит агентству — вместо имени сотрудника
+  // Объект офиса N15: принадлежит агентству — вместо имени сотрудника
   // показывается агентство, а звонок и WhatsApp ведут на основной контакт
   // офиса, даже если в старых данных остался прежний ответственный
   // (см. src/lib/object-ownership.ts и call-routing.ts)
@@ -322,6 +329,21 @@ export default async function ObjectPage({ params }: PageProps) {
   // попадают — их на сайте не показываем, точный адрес клиент уточняет
   // у агента (см. src/lib/object-public-address.ts)
   const publicAddress = publicAddressOf(obj.address)
+  // Город и населённый пункт в документах часто совпадают («Владикавказ» в
+  // обоих полях) — в строке адреса показываем каждое значение один раз
+  const publicAddressLine = [
+    publicAddress?.city,
+    publicAddress?.locality,
+    publicAddress?.cityDistrict ? `${publicAddress.cityDistrict} район` : publicAddress?.district,
+    publicAddress?.snt,
+    publicAddress?.street,
+  ]
+    .filter((part): part is string => Boolean(part))
+    .filter(
+      (part, index, all) =>
+        all.findIndex((p) => p.toLocaleLowerCase(t.locale) === part.toLocaleLowerCase(t.locale)) === index,
+    )
+    .join(', ')
 
   // Map inputs: manual coordinates (priority) or geocode by address.
   // Точки-метки у объекта на публичной карте нет: карта показывает примерную
@@ -371,9 +393,11 @@ export default async function ObjectPage({ params }: PageProps) {
                 <span className="text-[10px] tracking-[0.2em] uppercase text-[var(--n15-black)] bg-[var(--n15-gold)] px-3 py-1">
                   {t.typeLabels[obj.type as keyof typeof t.typeLabels] ?? t.object.sale}
                 </span>
-                <span className="text-[10px] tracking-[0.2em] uppercase text-[var(--n15-white)] border border-[var(--n15-gold)]/30 px-3 py-1">
-                  {t.categoryLabels[obj.category as keyof typeof t.categoryLabels] || obj.category}
-                </span>
+                {!categoryRepeatsTitle && categoryName && (
+                  <span className="text-[10px] tracking-[0.2em] uppercase text-[var(--n15-white)] border border-[var(--n15-gold)]/30 px-3 py-1">
+                    {categoryName}
+                  </span>
+                )}
                 {isCommercial && obj.commercialType
                   ? <span className="text-[10px] tracking-[0.2em] uppercase text-[var(--n15-white)] border border-[var(--n15-gold)]/30 px-3 py-1">
                       {t.catalog.commercialTypes[obj.commercialType as keyof typeof t.catalog.commercialTypes] || obj.commercialType}
@@ -391,13 +415,7 @@ export default async function ObjectPage({ params }: PageProps) {
                     в селе адрес без него читался бы как городской. Номера дома
                     в строке нет: точный адрес знает только агент, клиент
                     уточняет его при просмотре (publicAddressOf) */}
-                {[
-                  publicAddress?.city,
-                  publicAddress?.locality,
-                  publicAddress?.cityDistrict ? `${publicAddress.cityDistrict} район` : publicAddress?.district,
-                  publicAddress?.snt,
-                  publicAddress?.street,
-                ].filter(Boolean).join(', ')}
+                {publicAddressLine}
               </p>
 
               {/* Hero price */}
@@ -500,16 +518,17 @@ export default async function ObjectPage({ params }: PageProps) {
                 <h2 className="text-xl font-[family-name:var(--font-display)] text-[var(--n15-white)] mb-4">{t.object.params}</h2>
                 <dl className="grid grid-cols-1 md:grid-cols-2 border-t border-[var(--n15-gold)]/15">
                   {[
-                    { label: t.object.objectType, value: obj.category ? t.categoryLabels[obj.category as keyof typeof t.categoryLabels] : null },
+                    { label: t.object.objectType, value: categoryName || null },
                     // Площадь объекта и площадь земли — раздельно: у земельного
                     // участка «Площадь» и есть площадь участка, у дома —
                     // площадь дома, у коммерции — площадь здания или комплекса,
-                    // а участок идёт отдельной строкой
-                    { label: isLand ? t.object.plotArea : isHouse ? t.object.houseArea : isCommercial ? t.object.objectArea : t.object.area, value: areaHumanLabel },
-                    { label: t.object.plotArea, value: plotAreaHumanLabel },
+                    // а участок идёт отдельной строкой. У земли второй строки
+                    // с участком нет — иначе одна и та же площадь дважды.
+                    { label: isLand ? t.object.plotArea : isHouse ? t.object.houseArea : isCommercial ? t.object.objectArea : t.object.area, value: isLand ? areaHumanLabel || plotAreaHumanLabel : areaHumanLabel },
+                    { label: t.object.plotArea, value: isLand ? null : plotAreaHumanLabel },
                     // У земли «Жилая» — это площадь строения на участке
-                    { label: isLand ? t.object.houseArea : t.object.living, value: obj.livingArea ? `${obj.livingArea} ${t.catalog.sqm}` : null },
-                    { label: t.object.kitchen, value: obj.kitchenArea ? `${obj.kitchenArea} ${t.catalog.sqm}` : null },
+                    { label: isLand ? t.object.houseArea : t.object.living, value: obj.livingArea ? `${areaFmt(obj.livingArea)} ${t.catalog.sqm}` : null },
+                    { label: t.object.kitchen, value: obj.kitchenArea ? `${areaFmt(obj.kitchenArea)} ${t.catalog.sqm}` : null },
                     { label: t.object.rooms, value: obj.rooms?.toString() },
                     ...floorSpecs,
                     { label: t.object.buildingType, value: buildTypeLabel(t, obj.buildingType) },
@@ -695,7 +714,7 @@ export default async function ObjectPage({ params }: PageProps) {
                   </a>
                 </div>
 
-                {/* ВАШ МЕНЕДЖЕР. У объекта офиса Н15 личного агента нет —
+                {/* ВАШ МЕНЕДЖЕР. У объекта офиса N15 личного агента нет —
                     вместо имени сотрудника показываем агентство, кнопки ведут
                     на основной контакт офиса (см. isOfficeObject) */}
                 {(obj.agent || isOfficeObject) && (
@@ -710,7 +729,7 @@ export default async function ObjectPage({ params }: PageProps) {
                         ) : (
                           <div className="w-14 h-14 rounded-full bg-[var(--n15-charcoal)] border border-[var(--n15-gold)]/20 flex items-center justify-center">
                             <span className="text-lg font-[family-name:var(--font-display)] text-[var(--n15-gold)]">
-                              {isOfficeObject ? 'Н15' : obj.agent?.name?.split(' ').map((n) => n[0]).join('').slice(0, 2) || 'Н15'}
+                              {isOfficeObject ? 'N15' : obj.agent?.name?.split(' ').map((n) => n[0]).join('').slice(0, 2) || 'N15'}
                             </span>
                           </div>
                         )}

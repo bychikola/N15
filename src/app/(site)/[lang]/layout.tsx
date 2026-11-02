@@ -21,13 +21,15 @@ export async function generateMetadata({ params }: LayoutProps): Promise<Metadat
   const { lang } = await params
   const t = getDictionary(lang)
   return {
-    title: { default: t.meta.title, template: '%s | Н15' },
+    // meta.title — название без бренда, поэтому шаблон добавляет «| N15»:
+    // на всех страницах бренд встречается в заголовке один раз
+    title: { default: t.meta.title, template: '%s | N15' },
     description: t.meta.description,
     openGraph: {
       type: 'website',
       locale: t.meta.ogLocale,
-      siteName: 'Н15',
-      title: t.meta.title,
+      siteName: 'N15',
+      title: `N15 — ${t.meta.title}`,
       description: t.meta.description,
     },
   }
