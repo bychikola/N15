@@ -1,11 +1,17 @@
+import { notFound } from 'next/navigation'
 import { ServiceDirectionPage } from '@/components/services/ServiceDirectionPage'
 import { getDictionary } from '@/i18n/dictionaries'
+import { isPublicDirectionHidden } from '@/lib/public-directions'
 
 interface PageProps {
   params: Promise<{ lang: string }>
 }
 
 export default async function DesignServicesPage({ params }: PageProps) {
+  // Направление временно скрыто из публичной части: прямые ссылки отдают 404,
+  // тексты и данные остаются в словаре и CRM. Вернуть — убрать ключ design
+  // из PUBLIC_HIDDEN_DIRECTIONS (см. src/lib/public-directions.ts)
+  if (isPublicDirectionHidden('design')) notFound()
   const { lang } = await params
   const t = getDictionary(lang)
   const design = t.services.design

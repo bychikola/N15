@@ -19,6 +19,9 @@ import { SNT_AREAS } from '@/components/home/landing-data'
 // Иерархия фильтра «Город»: регионы с населёнными пунктами (см. city-filter.ts)
 import type { CityFilterRegion } from '@/lib/city-filter'
 import { objectToListItem } from '@/lib/object-list-item'
+// Временно скрытые направления: «Зарубежная недвижимость» не показывается
+// и ссылкой под выдачей каталога (данные и страница остаются)
+import { isPublicDirectionHidden } from '@/lib/public-directions'
 
 const PAGE_SIZE = 12
 
@@ -471,11 +474,14 @@ export default function CatalogContent({ cityRegions, knownCities, developers, c
 
   // Разделы каталога со своими страницами: новостройки, межрегиональная
   // и зарубежная недвижимость. В полосе категорий их нет — там только
-  // категории объектов одного города, поэтому ссылки стоят под выдачей
+  // категории объектов одного города, поэтому ссылки стоят под выдачей.
+  // «Зарубежная недвижимость» временно скрыта (isPublicDirectionHidden)
   const sections = [
     { href: `/${lang}/newbuildings`, label: t.nav.newBuildings },
     { href: `/${lang}/interregional`, label: t.nav.interregional },
-    { href: `/${lang}/foreign`, label: t.nav.foreign },
+    ...(isPublicDirectionHidden('foreign')
+      ? []
+      : [{ href: `/${lang}/foreign`, label: t.nav.foreign }]),
   ]
 
   const clearAll = useCallback(() => {

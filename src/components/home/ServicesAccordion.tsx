@@ -1,4 +1,7 @@
 import type { Dict } from '@/i18n/dictionaries'
+// Направления «Дизайн интерьера» и «Строительство частных домов» временно
+// скрыты: карточка «Дизайн и ремонт под ключ» не показывается посетителям
+import { isPublicDirectionHidden } from '@/lib/public-directions'
 
 // Карточки-гармошки направлений на главной: «Юридические услуги», «Ипотека» и
 // «Дизайн и ремонт под ключ» — три компактных прямоугольника в один ряд, той
@@ -121,9 +124,14 @@ function ServicesCard({
 }
 
 export default function ServicesAccordion({ t, lang }: { t: Dict; lang: string }) {
+  // Карточка «Дизайн и ремонт под ключ» объединяет два направления — дизайн
+  // и строительство. Пока скрыто хотя бы одно, карточки нет: иначе её строки
+  // вели бы на закрытые страницы. Оставшиеся две карточки делят ряд поровну
+  // (класс lp-services-grid--two, см. globals.css)
+  const showDesign = !isPublicDirectionHidden('design') && !isPublicDirectionHidden('build')
   return (
     <section className="lp-section lp-services">
-      <div className="lp-services-grid">
+      <div className={showDesign ? 'lp-services-grid' : 'lp-services-grid lp-services-grid--two'}>
         <ServicesCard
           lang={lang}
           id="legal"
@@ -139,12 +147,14 @@ export default function ServicesAccordion({ t, lang }: { t: Dict; lang: string }
           items={mortgageItems(t)}
           cta={{ label: t.services.ctaConsult, href: '#contact' }}
         />
-        <ServicesCard
-          lang={lang}
-          id="design"
-          title={`${t.landing.servicesTitle1} ${t.landing.servicesTitle2}`}
-          items={designItems(t)}
-        />
+        {showDesign && (
+          <ServicesCard
+            lang={lang}
+            id="design"
+            title={`${t.landing.servicesTitle1} ${t.landing.servicesTitle2}`}
+            items={designItems(t)}
+          />
+        )}
       </div>
     </section>
   )

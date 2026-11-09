@@ -12,6 +12,10 @@
  * Файл без побочных эффектов: работает и на сервере, и в клиентском коде.
  */
 
+// Временно скрытые направления не попадают в выдачу поиска: посетитель не
+// должен находить ссылку на закрытую страницу (см. public-directions.ts)
+import { isPublicDirectionHidden } from '@/lib/public-directions'
+
 /** Вид материала в выдаче — подпись берётся из словаря (search.types) */
 export type SearchResultType = 'complex' | 'developer' | 'object' | 'service' | 'article'
 
@@ -132,8 +136,12 @@ export function serviceSearchEntries(t: import('@/i18n/dictionaries').Dict, lang
     { title: s.mortgage.title, href: p('/services/mortgage'), keywords: 'ипотека кредит банк заявка документы расчет' },
     { title: s.broker.title, href: p('/services/broker'), keywords: 'брокер кредит ипотека сопровождение' },
     { title: s.legal.title, href: p('/services/legal'), keywords: 'юридические услуги проверка объекта перепланировка приватизация наследство риски' },
-    { title: s.design.title, href: p('/services/design'), keywords: 'дизайн интерьер проект планировка визуализация комплектация надзор' },
-    { title: s.build.title, href: p('/services/build'), keywords: 'строительство дом подряд проектирование смета отделка коммуникации' },
+    ...(isPublicDirectionHidden('design')
+      ? []
+      : [{ title: s.design.title, href: p('/services/design'), keywords: 'дизайн интерьер проект планировка визуализация комплектация надзор' }]),
+    ...(isPublicDirectionHidden('build')
+      ? []
+      : [{ title: s.build.title, href: p('/services/build'), keywords: 'строительство дом подряд проектирование смета отделка коммуникации' }]),
     { title: s.valuation.title, href: p('/services/valuation'), keywords: 'оценка недвижимости квартира дом участок коммерческая' },
     { title: nav.mortgage, href: p('/mortgage'), keywords: 'ипотека кредит выгодные условия' },
     { title: nav.installment, href: p('/installment'), keywords: 'рассрочка платежи' },

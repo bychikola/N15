@@ -966,6 +966,11 @@ html[data-theme='dark'] span.theme-icon-moon { display: block; }
   display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px;
   align-items: start;
 }
+/* Две карточки услуг вместо трёх: направление «Дизайн и ремонт под ключ»
+   временно скрыто (см. Components/home/ServicesAccordion). Оставшиеся
+   карточки делят ряд поровну, без пустой третьей колонки. На телефоне
+   правила медиазапросов ниже всё равно задают 2 и 1 колонку. */
+.lp-services-grid--two { grid-template-columns: repeat(2, 1fr); }
 .lp-category-card, .lp-services-card {
   box-sizing: border-box;
   background: rgba(255, 255, 255, .58); border: 1px solid #d8d1c4;

@@ -2,6 +2,9 @@
 
 import { useRef, useState } from 'react'
 import type { Dict } from '@/i18n/dictionaries'
+// «Зарубежная недвижимость» временно скрыта с главной — вместе с пунктом
+// раскрытия в блоке «О компании» (текст и страница остаются)
+import { isPublicDirectionHidden } from '@/lib/public-directions'
 
 export default function AboutSection({ t }: { t: Dict }) {
   // Карточка-история Фатимы: на десктопе её показывает CSS-:hover
@@ -51,14 +54,16 @@ export default function AboutSection({ t }: { t: Dict }) {
           <span>{t.landing.aboutSignature}</span>
           <p>{t.landing.aboutSignatureText}</p>
         </div>
-        <div className="lp-directions">
-          <details>
-            <summary>
-              {t.landing.aboutDirections} <i>+</i>
-            </summary>
-            <p>{t.landing.aboutDirectionsText}</p>
-          </details>
-        </div>
+        {!isPublicDirectionHidden('foreign') && (
+          <div className="lp-directions">
+            <details>
+              <summary>
+                {t.landing.aboutDirections} <i>+</i>
+              </summary>
+              <p>{t.landing.aboutDirectionsText}</p>
+            </details>
+          </div>
+        )}
       </div>
     </section>
   )

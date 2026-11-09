@@ -4,6 +4,9 @@ import { SectionWrapper } from '@/components/ui/SectionWrapper'
 import { OrnamentBorder } from '@/components/ui/OrnamentBorder'
 import { Button } from '@/components/ui/Button'
 import { getDictionary } from '@/i18n/dictionaries'
+// Временно скрытые направления: «Дизайн интерьера» и «Строительство частных
+// домов» не показываются карточками раздела «Услуги» (страницы остаются)
+import { isPublicDirectionHidden } from '@/lib/public-directions'
 
 interface PageProps {
   params: Promise<{ lang: string }>
@@ -23,18 +26,27 @@ export default async function ServicesPage({ params }: PageProps) {
     { title: t.services.tenants.title, desc: t.services.tenants.desc, href: `/${lang}/services/tenants`, accent: 'gold' },
   ]
 
-  // Шесть услуг раздела «Услуги» — карточки-ссылки на страницы услуг,
+  // Услуги раздела «Услуги» — карточки-ссылки на страницы услуг,
   // где раскрыт полный перечень услуг внутри каждой. Порядок — как в
   // вертикальном списке меню шапки (см. Header.tsx). Покупка, продажа
-  // и аренда живут только в разделе «Недвижимость».
+  // и аренда живут только в разделе «Недвижимость». «Дизайн интерьера» и
+  // «Строительство частных домов» временно скрыты (isPublicDirectionHidden)
   const directions = [
     { title: t.services.mortgage.title, desc: t.services.mortgage.desc, href: `/${lang}/services/mortgage`, accent: 'burgundy' },
     { title: t.services.broker.title, desc: t.services.broker.desc, href: `/${lang}/services/broker`, accent: 'gold' },
     { title: t.services.legal.title, desc: t.services.legal.desc, href: `/${lang}/services/legal`, accent: 'burgundy' },
-    { title: t.services.design.title, desc: t.services.design.desc, href: `/${lang}/services/design`, accent: 'gold' },
-    { title: t.services.build.title, desc: t.services.build.desc, href: `/${lang}/services/build`, accent: 'burgundy' },
+    ...(isPublicDirectionHidden('design')
+      ? []
+      : [{ title: t.services.design.title, desc: t.services.design.desc, href: `/${lang}/services/design`, accent: 'gold' }]),
+    ...(isPublicDirectionHidden('build')
+      ? []
+      : [{ title: t.services.build.title, desc: t.services.build.desc, href: `/${lang}/services/build`, accent: 'burgundy' }]),
     { title: t.services.valuation.title, desc: t.services.valuation.desc, href: `/${lang}/services/valuation`, accent: 'gold' },
   ]
+  // Колонки подбираем по числу карточек: при остатке 1 в ряду из трёх
+  // карточка висела бы одна в половине строки — для четырёх карточек
+  // ровнее сетка 2×2. Полный набор из шести снова даёт три колонки.
+  const directionsColumns = directions.length % 3 === 1 ? 'lg:grid-cols-2' : 'lg:grid-cols-3'
 
   return (
     <>
@@ -74,8 +86,9 @@ export default async function ServicesPage({ params }: PageProps) {
             ))}
           </div>
 
-          {/* Шесть услуг: 1 колонка на телефоне, 2 на планшете, 3 на десктопе */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {/* Услуги: 1 колонка на телефоне, 2 на планшете; на десктопе —
+              3 колонки (2, если после скрытия направлений остаётся 4) */}
+          <div className={`grid grid-cols-1 md:grid-cols-2 ${directionsColumns} gap-6`}>
             {directions.map((s) => (
               <OrnamentBorder key={s.href} cornerOrnament>
                 <div className="p-8 group">
